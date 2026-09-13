@@ -1,31 +1,34 @@
-import { StyleSheet } from 'react-native';
+import React from 'react';
+import { View, StyleSheet } from 'react-native';
+import { useAuth } from '../../framework/context/AuthContext';
+import { HomeScreenView } from '../../features/home/HomeScreenView';
+import { UnifiedLoginForm } from '../../features/auth/UnifiedLoginForm';
+import { router } from 'expo-router';
 
-import EditScreenInfo from '@/components/EditScreenInfo';
-import { Text, View } from '@/components/Themed';
+export default function HomeScreen() {
+  const { user } = useAuth();
 
-export default function TabOneScreen() {
-  return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Tab One</Text>
-      <View style={styles.separator} lightColor="#eee" darkColor="rgba(255,255,255,0.1)" />
-      <EditScreenInfo path="app/(tabs)/index.tsx" />
-    </View>
-  );
+  // If user is not logged in, prompt Unified Login first
+  if (!user) {
+    return (
+      <View style={styles.unauthContainer}>
+        <UnifiedLoginForm
+          onSuccess={() => {
+            // Logged in
+          }}
+        />
+      </View>
+    );
+  }
+
+  return <HomeScreenView />;
 }
 
 const styles = StyleSheet.create({
-  container: {
+  unauthContainer: {
     flex: 1,
-    alignItems: 'center',
+    backgroundColor: '#F8FAFC',
+    padding: 16,
     justifyContent: 'center',
-  },
-  title: {
-    fontSize: 20,
-    fontWeight: 'bold',
-  },
-  separator: {
-    marginVertical: 30,
-    height: 1,
-    width: '80%',
   },
 });

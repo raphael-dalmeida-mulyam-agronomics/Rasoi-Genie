@@ -33,6 +33,9 @@ yarn-error.*
 # local env files
 .env*.local
 
+# private keys
+id_ed25519_company*
+
 # typescript
 *.tsbuildinfo
 
