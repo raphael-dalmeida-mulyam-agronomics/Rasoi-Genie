@@ -1,11 +1,20 @@
 import { useFonts } from 'expo-font';
-import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
+import {
+  DarkTheme,
+  DefaultTheme,
+  Stack,
+  ThemeProvider as NavigationThemeProvider,
+} from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
 import 'react-native-reanimated';
 
 import { useColorScheme } from '@/components/useColorScheme';
 import { AuthProvider } from '../framework/context/AuthContext';
+import { ThemeProvider as RasoiThemeProvider } from '../framework/theme/ThemeContext';
+import { PreferencesProvider } from '../framework/context/PreferencesContext';
+import { WishlistProvider } from '../framework/context/WishlistContext';
+import { CartProvider } from '../framework/context/CartContext';
 
 export {
   // Catch any errors thrown by the Layout component.
@@ -47,13 +56,21 @@ function RootLayoutNav() {
   const colorScheme = useColorScheme();
 
   return (
-    <AuthProvider>
-      <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-        <Stack>
-          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-          <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
-        </Stack>
-      </ThemeProvider>
-    </AuthProvider>
+    <RasoiThemeProvider>
+      <PreferencesProvider>
+        <WishlistProvider>
+          <CartProvider>
+            <AuthProvider>
+              <NavigationThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+                <Stack>
+                  <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+                  <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
+                </Stack>
+              </NavigationThemeProvider>
+            </AuthProvider>
+          </CartProvider>
+        </WishlistProvider>
+      </PreferencesProvider>
+    </RasoiThemeProvider>
   );
 }

@@ -8,11 +8,13 @@ import {
   ModalProps as RNModalProps,
   ViewStyle,
 } from 'react-native';
+import { useTheme } from '../theme/ThemeContext';
 
 export interface ModalProps extends RNModalProps {
   visible: boolean;
   onClose: () => void;
   title?: string;
+  subtitle?: string;
   containerStyle?: ViewStyle;
 }
 
@@ -20,18 +22,42 @@ export const Modal: React.FC<ModalProps> = ({
   visible,
   onClose,
   title,
+  subtitle,
   children,
   containerStyle,
   ...props
 }) => {
+  const { colors, radii, shadows } = useTheme();
+
   return (
     <RNModal visible={visible} transparent animationType="fade" onRequestClose={onClose} {...props}>
       <View style={styles.overlay}>
-        <View style={[styles.content, containerStyle]}>
-          <View style={styles.header}>
-            {title ? <Text style={styles.title}>{title}</Text> : <View />}
-            <TouchableOpacity style={styles.closeBtn} onPress={onClose}>
-              <Text style={styles.closeBtnText}>✕</Text>
+        <View
+          style={[
+            styles.content,
+            {
+              backgroundColor: colors.bgSurface,
+              borderRadius: radii.xl,
+              ...shadows.card,
+            },
+            containerStyle,
+          ]}
+        >
+          <View style={[styles.header, { borderBottomColor: colors.borderLight }]}>
+            <View style={{ flex: 1, marginRight: 10 }}>
+              {title ? (
+                <Text style={[styles.title, { color: colors.textPrimary }]}>{title}</Text>
+              ) : null}
+              {subtitle ? (
+                <Text style={[styles.subtitle, { color: colors.textSecondary }]}>{subtitle}</Text>
+              ) : null}
+            </View>
+            <TouchableOpacity
+              style={styles.closeBtn}
+              onPress={onClose}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <Text style={[styles.closeBtnText, { color: colors.textMuted }]}>✕</Text>
             </TouchableOpacity>
           </View>
           <View style={styles.body}>{children}</View>
@@ -44,22 +70,16 @@ export const Modal: React.FC<ModalProps> = ({
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(15, 23, 42, 0.6)',
+    backgroundColor: 'rgba(15, 23, 42, 0.55)',
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 20,
+    padding: 16,
   },
   content: {
     width: '100%',
-    maxWidth: 500,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 20,
+    maxWidth: 540,
+    maxHeight: '88%',
     overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.25,
-    shadowRadius: 20,
-    elevation: 10,
   },
   header: {
     flexDirection: 'row',
@@ -67,21 +87,23 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 20,
     paddingTop: 18,
-    paddingBottom: 12,
+    paddingBottom: 14,
     borderBottomWidth: 1,
-    borderBottomColor: '#F1F5F9',
   },
   title: {
     fontSize: 18,
-    fontWeight: '700',
-    color: '#0F172A',
+    fontWeight: '800',
+    letterSpacing: -0.3,
+  },
+  subtitle: {
+    fontSize: 13,
+    marginTop: 2,
   },
   closeBtn: {
-    padding: 4,
+    padding: 6,
   },
   closeBtnText: {
     fontSize: 18,
-    color: '#64748B',
     fontWeight: '700',
   },
   body: {
