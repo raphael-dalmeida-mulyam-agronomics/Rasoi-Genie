@@ -1,34 +1,111 @@
 import { SymbolView } from 'expo-symbols';
 import { Tabs } from 'expo-router';
-import Colors from '@/constants/Colors';
-import { useColorScheme } from '@/components/useColorScheme';
-import { useClientOnlyValue } from '@/components/useClientOnlyValue';
+import { View } from 'react-native';
 import { useAuth } from '../../framework/context/AuthContext';
+import { useTheme } from '../../framework/theme/ThemeContext';
+import { useCart } from '../../framework/context/CartContext';
+import { AuthGuard } from '../../features/auth/AuthGuard';
 
 export default function TabLayout() {
-  const colorScheme = useColorScheme();
   const { user, isAdmin } = useAuth();
+  const { colors } = useTheme();
+  const { totalCount } = useCart();
+
+  if (!user) {
+    return (
+      <View style={{ flex: 1, backgroundColor: colors.bgPrimary }}>
+        <AuthGuard isRootGate>
+          <></>
+        </AuthGuard>
+      </View>
+    );
+  }
 
   return (
     <Tabs
       screenOptions={{
-        tabBarActiveTintColor: Colors[colorScheme].tint,
-        headerShown: useClientOnlyValue(false, true),
+        tabBarActiveTintColor: colors.primary,
+        tabBarInactiveTintColor: colors.textMuted,
+        tabBarStyle: {
+          backgroundColor: colors.bgSurface,
+          borderTopColor: colors.borderLight,
+        },
+        headerShown: false,
       }}
     >
       <Tabs.Screen
         name="index"
         options={{
-          title: user ? 'Home' : 'Sign In',
+          title: 'Explore',
           tabBarIcon: ({ color }) => (
             <SymbolView
               name={{
-                ios: user ? 'house' : 'person.crop.circle',
-                android: user ? 'home' : 'person',
-                web: user ? 'home' : 'person',
+                ios: 'fork.knife',
+                android: 'restaurant',
+                web: 'restaurant',
               }}
               tintColor={color}
-              size={24}
+              size={22}
+            />
+          ),
+        }}
+      />
+
+      <Tabs.Screen
+        name="search"
+        options={{
+          title: 'Search',
+          tabBarIcon: ({ color }) => (
+            <SymbolView
+              name={{
+                ios: 'magnifyingglass',
+                android: 'search',
+                web: 'search',
+              }}
+              tintColor={color}
+              size={22}
+            />
+          ),
+        }}
+      />
+
+      <Tabs.Screen
+        name="cart"
+        options={{
+          title: 'Basket',
+          tabBarBadge: totalCount > 0 ? totalCount : undefined,
+          tabBarBadgeStyle: {
+            backgroundColor: colors.primary,
+            fontSize: 10,
+            fontWeight: '800',
+          },
+          tabBarIcon: ({ color }) => (
+            <SymbolView
+              name={{
+                ios: 'cart',
+                android: 'shopping_cart',
+                web: 'shopping_cart',
+              }}
+              tintColor={color}
+              size={22}
+            />
+          ),
+        }}
+      />
+
+      <Tabs.Screen
+        name="orders"
+        options={{
+          title: 'My Orders',
+          tabBarIcon: ({ color }) => (
+            <SymbolView
+              name={{
+                ios: 'clock.arrow.circlepath',
+                android: 'history',
+                web: 'history',
+              }}
+              tintColor={color}
+              size={22}
             />
           ),
         }}
@@ -37,7 +114,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="login"
         options={{
-          title: user ? 'Account' : 'Login',
+          title: user ? 'Account' : 'Sign In',
           tabBarIcon: ({ color }) => (
             <SymbolView
               name={{
@@ -46,7 +123,7 @@ export default function TabLayout() {
                 web: 'person',
               }}
               tintColor={color}
-              size={24}
+              size={22}
             />
           ),
         }}
@@ -56,7 +133,6 @@ export default function TabLayout() {
         name="admin"
         options={{
           title: 'Admin Dash',
-          // Show Admin tab ONLY for @mulyam.in admin users
           href: isAdmin ? '/admin' : null,
           tabBarIcon: ({ color }) => (
             <SymbolView
@@ -66,7 +142,7 @@ export default function TabLayout() {
                 web: 'bar_chart',
               }}
               tintColor={color}
-              size={24}
+              size={22}
             />
           ),
         }}

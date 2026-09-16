@@ -1,25 +1,48 @@
 import React from 'react';
 import { View, StyleSheet, ViewProps, ViewStyle } from 'react-native';
+import { useTheme } from '../theme/ThemeContext';
 
 export interface CardProps extends ViewProps {
   style?: ViewStyle;
-  variant?: 'elevated' | 'outlined' | 'flat';
+  variant?: 'elevated' | 'outlined' | 'flat' | 'warm';
 }
 
 export const Card: React.FC<CardProps> = ({ children, style, variant = 'elevated', ...props }) => {
+  const { colors, radii, shadows } = useTheme();
+
   const getVariantStyle = (): ViewStyle => {
     switch (variant) {
       case 'outlined':
-        return styles.outlined;
+        return {
+          backgroundColor: colors.bgSurface,
+          borderWidth: 1,
+          borderColor: colors.border,
+        };
       case 'flat':
-        return styles.flat;
-      default:
-        return styles.elevated;
+        return {
+          backgroundColor: colors.bgSubtle,
+          borderWidth: 1,
+          borderColor: colors.borderLight,
+        };
+      case 'warm':
+        return {
+          backgroundColor: colors.primaryLight,
+          borderWidth: 1,
+          borderColor: colors.primary + '25',
+          ...shadows.soft,
+        };
+      default: // elevated
+        return {
+          backgroundColor: colors.bgSurface,
+          borderWidth: 1,
+          borderColor: colors.borderLight,
+          ...shadows.card,
+        };
     }
   };
 
   return (
-    <View style={[styles.base, getVariantStyle(), style]} {...props}>
+    <View style={[styles.base, { borderRadius: radii.xl }, getVariantStyle(), style]} {...props}>
       {children}
     </View>
   );
@@ -27,24 +50,7 @@ export const Card: React.FC<CardProps> = ({ children, style, variant = 'elevated
 
 const styles = StyleSheet.create({
   base: {
-    borderRadius: 16,
     padding: 16,
-    backgroundColor: '#FFFFFF',
-  },
-  elevated: {
-    shadowColor: '#0F172A',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    elevation: 3,
-    borderWidth: 1,
-    borderColor: '#F1F5F9',
-  },
-  outlined: {
-    borderWidth: 1.5,
-    borderColor: '#E2E8F0',
-  },
-  flat: {
-    backgroundColor: '#F8FAFC',
+    overflow: 'hidden',
   },
 });

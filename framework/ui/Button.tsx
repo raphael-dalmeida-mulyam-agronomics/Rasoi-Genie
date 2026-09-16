@@ -8,66 +8,142 @@ import {
   ViewStyle,
   TextStyle,
 } from 'react-native';
+import { useTheme } from '../theme/ThemeContext';
 
 export interface ButtonProps extends TouchableOpacityProps {
   title: string;
-  variant?: 'primary' | 'secondary' | 'danger' | 'outline';
+  variant?: 'primary' | 'secondary' | 'accent' | 'danger' | 'outline' | 'ghost';
+  size?: 'sm' | 'md' | 'lg';
   loading?: boolean;
   style?: ViewStyle;
   textStyle?: TextStyle;
+  icon?: React.ReactNode;
 }
 
 export const Button: React.FC<ButtonProps> = ({
   title,
   variant = 'primary',
+  size = 'md',
   loading = false,
   disabled,
   style,
   textStyle,
+  icon,
   ...props
 }) => {
+  const { colors, radii, shadows } = useTheme();
+
   const getContainerStyle = (): ViewStyle => {
     switch (variant) {
       case 'secondary':
-        return styles.secondaryContainer;
+        return {
+          backgroundColor: colors.bgSubtle,
+          borderWidth: 1,
+          borderColor: colors.border,
+        };
+      case 'accent':
+        return {
+          backgroundColor: colors.accent,
+          ...shadows.soft,
+        };
       case 'danger':
-        return styles.dangerContainer;
+        return {
+          backgroundColor: colors.danger,
+        };
       case 'outline':
-        return styles.outlineContainer;
-      default:
-        return styles.primaryContainer;
+        return {
+          backgroundColor: 'transparent',
+          borderWidth: 1.5,
+          borderColor: colors.primary,
+        };
+      case 'ghost':
+        return {
+          backgroundColor: 'transparent',
+        };
+      default: // primary
+        return {
+          backgroundColor: colors.primary,
+          ...shadows.soft,
+        };
     }
   };
 
   const getTextStyle = (): TextStyle => {
     switch (variant) {
       case 'secondary':
-        return styles.secondaryText;
+        return { color: colors.textPrimary };
+      case 'accent':
+        return { color: colors.textInverse };
       case 'danger':
-        return styles.dangerText;
+        return { color: colors.textInverse };
       case 'outline':
-        return styles.outlineText;
+        return { color: colors.primary };
+      case 'ghost':
+        return { color: colors.textSecondary };
       default:
-        return styles.primaryText;
+        return { color: colors.textInverse };
     }
   };
+
+  const getSizeStyle = (): { container: ViewStyle; text: TextStyle } => {
+    switch (size) {
+      case 'sm':
+        return {
+          container: {
+            paddingVertical: 8,
+            paddingHorizontal: 14,
+            minHeight: 36,
+            borderRadius: radii.md,
+          },
+          text: { fontSize: 13, fontWeight: '700' },
+        };
+      case 'lg':
+        return {
+          container: {
+            paddingVertical: 16,
+            paddingHorizontal: 24,
+            minHeight: 54,
+            borderRadius: radii.lg,
+          },
+          text: { fontSize: 17, fontWeight: '800' },
+        };
+      default:
+        return {
+          container: {
+            paddingVertical: 12,
+            paddingHorizontal: 18,
+            minHeight: 46,
+            borderRadius: radii.lg,
+          },
+          text: { fontSize: 15, fontWeight: '700' },
+        };
+    }
+  };
+
+  const { container: sizeContainer, text: sizeText } = getSizeStyle();
 
   return (
     <TouchableOpacity
       style={[
         styles.baseContainer,
+        sizeContainer,
         getContainerStyle(),
         (disabled || loading) && styles.disabled,
         style,
       ]}
       disabled={disabled || loading}
-      activeOpacity={0.8}
+      activeOpacity={0.82}
       {...props}
     >
       {loading ? (
-        <ActivityIndicator color={variant === 'outline' ? '#FF6B00' : '#FFFFFF'} />
+        <ActivityIndicator
+          color={variant === 'outline' || variant === 'ghost' ? colors.primary : '#FFFFFF'}
+        />
       ) : (
-        <Text style={[styles.baseText, getTextStyle(), textStyle]}>{title}</Text>
+        <>
+          {icon ? <>{icon}</> : null}
+          <Text style={[styles.baseText, sizeText, getTextStyle(), textStyle]}>{title}</Text>
+        </>
       )}
     </TouchableOpacity>
   );
@@ -75,49 +151,16 @@ export const Button: React.FC<ButtonProps> = ({
 
 const styles = StyleSheet.create({
   baseContainer: {
-    paddingVertical: 14,
-    paddingHorizontal: 20,
-    borderRadius: 12,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    minHeight: 50,
-  },
-  primaryContainer: {
-    backgroundColor: '#FF6B00', // RasoiGenie vibrant spice orange
-    shadowColor: '#FF6B00',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 3,
-  },
-  secondaryContainer: {
-    backgroundColor: '#1E293B',
-  },
-  dangerContainer: {
-    backgroundColor: '#EF4444',
-  },
-  outlineContainer: {
-    backgroundColor: 'transparent',
-    borderWidth: 1.5,
-    borderColor: '#FF6B00',
+    gap: 8,
   },
   disabled: {
     opacity: 0.5,
   },
   baseText: {
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  primaryText: {
-    color: '#FFFFFF',
-  },
-  secondaryText: {
-    color: '#FFFFFF',
-  },
-  dangerText: {
-    color: '#FFFFFF',
-  },
-  outlineText: {
-    color: '#FF6B00',
+    textAlign: 'center',
+    letterSpacing: 0.2,
   },
 });
