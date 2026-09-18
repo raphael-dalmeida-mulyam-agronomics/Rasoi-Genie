@@ -127,7 +127,7 @@ export const MONTHLY_TRENDS: TrendDataPoint[] = [
 
 export interface CrossTabFilter {
   stateName: string;
-  dietType: 'all' | 'veg' | 'nonveg';
+  dietType: 'all' | DietTag;
   cuisine: string;
 }
 
@@ -136,8 +136,8 @@ export function getCrossTabAnalytics(filter: CrossTabFilter) {
   let filtered = kits;
 
   if (filter.dietType !== 'all') {
-    filtered = filtered.filter((k) =>
-      filter.dietType === 'veg' ? k.diet === 'veg' : k.diet === 'nonveg',
+    filtered = filtered.filter(
+      (k) => k.diet === filter.dietType || k.dietaryTags.includes(filter.dietType as DietTag),
     );
   }
 

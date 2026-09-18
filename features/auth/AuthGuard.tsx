@@ -5,6 +5,9 @@ import { useTheme } from '../../framework/theme/ThemeContext';
 import { UnifiedLoginForm } from './UnifiedLoginForm';
 import { ThemeSwitcher } from '../../framework/theme/ThemeSwitcher';
 
+import { CoverScreenView } from './CoverScreenView';
+import { TouchableOpacity } from 'react-native';
+
 export interface AuthGuardProps {
   children: React.ReactNode;
   pageTitle?: string;
@@ -20,13 +23,35 @@ export const AuthGuard: React.FC<AuthGuardProps> = ({
 }) => {
   const { user } = useAuth();
   const { colors, radii, shadows } = useTheme();
+  const [showLoginForm, setShowLoginForm] = React.useState(false);
 
   if (user) {
     return <>{children}</>;
   }
 
+  // When user is not logged in and hasn't clicked "Get Started", show the stunning Cover Screen
+  if (!showLoginForm) {
+    return <CoverScreenView onGetStarted={() => setShowLoginForm(true)} />;
+  }
+
   return (
     <View style={[styles.container, { backgroundColor: colors.bgPrimary }]}>
+      {/* Back to Cover Navigation Button */}
+      <View style={styles.topNavRow}>
+        <TouchableOpacity
+          onPress={() => setShowLoginForm(false)}
+          style={[
+            styles.backToCoverBtn,
+            { backgroundColor: colors.bgSurface, borderColor: colors.borderLight },
+          ]}
+          activeOpacity={0.7}
+        >
+          <Text style={[styles.backToCoverText, { color: colors.textPrimary }]}>
+            ← Back to Welcome
+          </Text>
+        </TouchableOpacity>
+      </View>
+
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         {/* Brand Banner */}
         <View style={styles.bannerContainer}>
@@ -136,5 +161,24 @@ const styles = StyleSheet.create({
   formWrapper: {
     width: '100%',
     maxWidth: 440,
+  },
+  topNavRow: {
+    paddingHorizontal: 20,
+    paddingTop: 45,
+    paddingBottom: 6,
+    width: '100%',
+    maxWidth: 440,
+    alignSelf: 'center',
+  },
+  backToCoverBtn: {
+    alignSelf: 'flex-start',
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 20,
+    borderWidth: 1,
+  },
+  backToCoverText: {
+    fontSize: 13,
+    fontWeight: '700',
   },
 });

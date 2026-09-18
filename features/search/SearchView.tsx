@@ -19,7 +19,7 @@ import {
   SpiceLevel,
   DietTag,
 } from '../../framework/services/mealKitsService';
-import { Badge } from '../../framework/ui/Badge';
+import { Badge, getDietBadgeInfo } from '../../framework/ui/Badge';
 import { Button } from '../../framework/ui/Button';
 import { PillTag } from '../../framework/ui/PillTag';
 import { MealDetailModal } from '../meal-detail/MealDetailModal';
@@ -53,7 +53,7 @@ export const SearchView: React.FC = () => {
   ]);
 
   // Filters
-  const [dietFilter, setDietFilter] = useState<'all' | 'veg' | 'nonveg'>('all');
+  const [dietFilter, setDietFilter] = useState<'all' | DietTag>('all');
   const [selectedCuisine, setSelectedCuisine] = useState<CuisineType | 'All'>('All');
   const [selectedSpice, setSelectedSpice] = useState<SpiceLevel | 'All'>('All');
   const [selectedDietTag, setSelectedDietTag] = useState<DietTag | 'all'>('all');
@@ -134,37 +134,61 @@ export const SearchView: React.FC = () => {
             size="sm"
           />
           <PillTag
-            label="🥬 Veg"
+            label="Veg"
             selected={dietFilter === 'veg'}
-            onPress={() => setDietFilter('veg')}
+            onPress={() => setDietFilter(dietFilter === 'veg' ? 'all' : 'veg')}
             size="sm"
           />
           <PillTag
-            label="🍗 Non-Veg"
+            label="Non-Veg"
             selected={dietFilter === 'nonveg'}
-            onPress={() => setDietFilter('nonveg')}
+            onPress={() => setDietFilter(dietFilter === 'nonveg' ? 'all' : 'nonveg')}
             size="sm"
           />
           <PillTag
-            label="Italian 🍕🍝"
+            label="Vegan"
+            selected={dietFilter === 'vegan'}
+            onPress={() => setDietFilter(dietFilter === 'vegan' ? 'all' : 'vegan')}
+            size="sm"
+          />
+          <PillTag
+            label="Keto"
+            selected={dietFilter === 'keto'}
+            onPress={() => setDietFilter(dietFilter === 'keto' ? 'all' : 'keto')}
+            size="sm"
+          />
+          <PillTag
+            label="Jain"
+            selected={dietFilter === 'jain'}
+            onPress={() => setDietFilter(dietFilter === 'jain' ? 'all' : 'jain')}
+            size="sm"
+          />
+          <PillTag
+            label="Gluten-Free"
+            selected={dietFilter === 'gluten-free'}
+            onPress={() => setDietFilter(dietFilter === 'gluten-free' ? 'all' : 'gluten-free')}
+            size="sm"
+          />
+          <PillTag
+            label="Italian"
             selected={selectedCuisine === 'Italian'}
             onPress={() => setSelectedCuisine(selectedCuisine === 'Italian' ? 'All' : 'Italian')}
             size="sm"
           />
           <PillTag
-            label="Mexican 🌮🌯"
+            label="Mexican"
             selected={selectedCuisine === 'Mexican'}
             onPress={() => setSelectedCuisine(selectedCuisine === 'Mexican' ? 'All' : 'Mexican')}
             size="sm"
           />
           <PillTag
-            label="American 🍔"
+            label="American"
             selected={selectedCuisine === 'American'}
             onPress={() => setSelectedCuisine(selectedCuisine === 'American' ? 'All' : 'American')}
             size="sm"
           />
           <PillTag
-            label="North Indian 🍛"
+            label="North Indian"
             selected={selectedCuisine === 'North Indian'}
             onPress={() =>
               setSelectedCuisine(selectedCuisine === 'North Indian' ? 'All' : 'North Indian')
@@ -172,7 +196,7 @@ export const SearchView: React.FC = () => {
             size="sm"
           />
           <PillTag
-            label="Hyderabadi 🍲"
+            label="Hyderabadi"
             selected={selectedCuisine === 'Hyderabadi'}
             onPress={() =>
               setSelectedCuisine(selectedCuisine === 'Hyderabadi' ? 'All' : 'Hyderabadi')
@@ -180,21 +204,9 @@ export const SearchView: React.FC = () => {
             size="sm"
           />
           <PillTag
-            label="Coastal 🦐"
+            label="Coastal"
             selected={selectedCuisine === 'Coastal'}
             onPress={() => setSelectedCuisine(selectedCuisine === 'Coastal' ? 'All' : 'Coastal')}
-            size="sm"
-          />
-          <PillTag
-            label="Jain Friendly"
-            selected={selectedDietTag === 'jain'}
-            onPress={() => setSelectedDietTag(selectedDietTag === 'jain' ? 'all' : 'jain')}
-            size="sm"
-          />
-          <PillTag
-            label="Keto"
-            selected={selectedDietTag === 'keto'}
-            onPress={() => setSelectedDietTag(selectedDietTag === 'keto' ? 'all' : 'keto')}
             size="sm"
           />
         </ScrollView>
@@ -310,11 +322,10 @@ export const SearchView: React.FC = () => {
                 <Image source={{ uri: kit.heroImage }} style={styles.resultImg} />
                 <View style={styles.resultDetails}>
                   <View style={styles.resultTopRow}>
-                    <Badge
-                      label={kit.diet === 'veg' ? 'Veg' : 'Non-Veg'}
-                      variant={kit.diet === 'veg' ? 'veg' : 'nonveg'}
-                      size="sm"
-                    />
+                    {(() => {
+                      const badge = getDietBadgeInfo(kit.diet);
+                      return <Badge label={badge.label} variant={badge.variant} size="sm" />;
+                    })()}
                     <TouchableOpacity
                       onPress={() => toggleWishlist(kit.id)}
                       hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}

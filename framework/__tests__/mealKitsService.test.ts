@@ -82,4 +82,22 @@ describe('mealKitsService', () => {
     const burgerDishes = searchAndFilterMealKits({ dishCategory: 'Burgers & Sliders' });
     expect(burgerDishes.every((k) => k.cuisine === 'American')).toBe(true);
   });
+
+  it('filters meal kits by specialized diets (vegan, keto, jain, gluten-free)', () => {
+    const veganKits = searchAndFilterMealKits({ diet: 'vegan' });
+    expect(veganKits.length).toBeGreaterThan(0);
+    veganKits.forEach((k) => expect(k.dietaryTags).toContain('vegan'));
+
+    const ketoKits = searchAndFilterMealKits({ diet: 'keto' });
+    expect(ketoKits.length).toBeGreaterThan(0);
+    ketoKits.forEach((k) => expect(k.dietaryTags).toContain('keto'));
+
+    const jainKits = searchAndFilterMealKits({ diet: 'jain' });
+    expect(jainKits.length).toBeGreaterThan(0);
+    jainKits.forEach((k) => expect(k.dietaryTags).toContain('jain'));
+
+    const gfKits = searchAndFilterMealKits({ diet: 'gluten-free' });
+    expect(gfKits.length).toBeGreaterThan(0);
+    gfKits.forEach((k) => expect(k.dietaryTags).toContain('gluten-free'));
+  });
 });

@@ -15,7 +15,7 @@ import { useTheme } from '../../framework/theme/ThemeContext';
 import { useCart } from '../../framework/context/CartContext';
 import { useWishlist } from '../../framework/context/WishlistContext';
 import { usePreferences } from '../../framework/context/PreferencesContext';
-import { Badge } from '../../framework/ui/Badge';
+import { Badge, getDietBadgeInfo } from '../../framework/ui/Badge';
 import { Button } from '../../framework/ui/Button';
 import { RatingStars } from '../../framework/ui/RatingStars';
 import { QuantityStepper } from '../../framework/ui/QuantityStepper';
@@ -48,6 +48,18 @@ export const MealDetailModal: React.FC<MealDetailModalProps> = ({
   const [activeTimers, setActiveTimers] = useState<Record<number, number>>({});
   const [runningTimers, setRunningTimers] = useState<Record<number, boolean>>({});
 
+  // Customization: Serving size and Spice level
+  const [selectedServings, setSelectedServings] = useState<number>(kit?.servings || 2);
+  const [selectedSpiceLevel, setSelectedSpiceLevel] = useState<string>(kit?.spiceLevel || 'Medium');
+
+  // Sync state if kit changes
+  useEffect(() => {
+    if (kit) {
+      setSelectedServings(kit.servings || 2);
+      setSelectedSpiceLevel(kit.spiceLevel || 'Medium');
+    }
+  }, [kit?.id]);
+
   // Countdown timer effect
   useEffect(() => {
     const interval = setInterval(() => {
@@ -73,6 +85,23 @@ export const MealDetailModal: React.FC<MealDetailModalProps> = ({
   const isFavorite = isInWishlist(kit.id);
   const isAvailableInRegion = kit.availableRegions.includes(preferences.regionHub);
 
+  // Dynamic calculations based on selected servings
+  const baseServings = kit.servings || 2;
+  const servingRatio = selectedServings / baseServings;
+  const effectiveUnitPrice = Math.round((kit.price / baseServings) * selectedServings);
+
+  const scaleQuantity = (quantityStr: string, ratio: number): string => {
+    if (ratio === 1) return quantityStr;
+    const match = quantityStr.match(/^(\d+(?:\.\d+)?)\s*(.*)$/);
+    if (match && match[1]) {
+      const num = parseFloat(match[1]);
+      const unit = match[2] || '';
+      const scaled = Math.round(num * ratio * 10) / 10;
+      return `${scaled} ${unit}`.trim();
+    }
+    return `${quantityStr} (x${ratio})`;
+  };
+
   const handleStartTimer = (stepNumber: number, initialSeconds: number) => {
     if (activeTimers[stepNumber] === undefined) {
       setActiveTimers((prev) => ({ ...prev, [stepNumber]: initialSeconds }));
@@ -81,8 +110,11 @@ export const MealDetailModal: React.FC<MealDetailModalProps> = ({
   };
 
   const handleAddToCart = () => {
-    addItem(kit, quantity);
-    Alert.alert('Added to Cart! 🛒', `${quantity}x ${kit.name} added to your basket.`);
+    addItem(kit, quantity, selectedServings, selectedSpiceLevel);
+    Alert.alert(
+      'Added to Cart! 🛒',
+      `${quantity}x ${kit.name} (${selectedServings} Servings, ${selectedSpiceLevel} Spice) added to your basket.`,
+    );
     onClose();
   };
 
@@ -131,12 +163,12 @@ export const MealDetailModal: React.FC<MealDetailModalProps> = ({
               style={styles.heroImage}
               resizeMode="cover"
             />
-            {/* Veg / Non-Veg Pill */}
+            {/* Diet Pill */}
             <View style={styles.floatingBadge}>
-              <Badge
-                label={kit.diet === 'veg' ? '100% Pure Veg' : 'Non-Vegetarian'}
-                variant={kit.diet === 'veg' ? 'veg' : 'nonveg'}
-              />
+              {(() => {
+                const badge = getDietBadgeInfo(kit.diet);
+                return <Badge label={badge.label} variant={badge.variant} />;
+              })()}
             </View>
 
             {/* Thumbnail Row */}
@@ -191,8 +223,8 @@ export const MealDetailModal: React.FC<MealDetailModalProps> = ({
               <View style={styles.regionIndicator}>
                 <Text style={{ fontSize: 13 }}>
                   {isAvailableInRegion
-                    ? '🟢 In Stock (Same Day Delivery)'
-                    : '🟠 Limited Availability in Region'}
+                    ? 'In Stock (Same Day Delivery)'
+                    : 'Limited Availability in Region'}
                 </Text>
               </View>
             </View>
@@ -202,7 +234,6 @@ export const MealDetailModal: React.FC<MealDetailModalProps> = ({
               style={[styles.specBar, { backgroundColor: colors.bgSubtle, borderRadius: radii.lg }]}
             >
               <View style={styles.specItem}>
-                <Text style={styles.specIcon}>⏱️</Text>
                 <Text style={[styles.specLabel, { color: colors.textMuted }]}>PREP & COOK</Text>
                 <Text style={[styles.specVal, { color: colors.textPrimary }]}>
                   {kit.prepTimeMinutes + kit.cookTimeMinutes} mins
@@ -212,7 +243,6 @@ export const MealDetailModal: React.FC<MealDetailModalProps> = ({
               <View style={styles.specDivider} />
 
               <View style={styles.specItem}>
-                <Text style={styles.specIcon}>🌶️</Text>
                 <Text style={[styles.specLabel, { color: colors.textMuted }]}>SPICE</Text>
                 <Text style={[styles.specVal, { color: colors.textPrimary }]}>
                   {kit.spiceLevel}
@@ -222,7 +252,6 @@ export const MealDetailModal: React.FC<MealDetailModalProps> = ({
               <View style={styles.specDivider} />
 
               <View style={styles.specItem}>
-                <Text style={styles.specIcon}>👨‍🍳</Text>
                 <Text style={[styles.specLabel, { color: colors.textMuted }]}>SKILL</Text>
                 <Text style={[styles.specVal, { color: colors.textPrimary }]}>
                   {kit.difficulty}
@@ -232,11 +261,136 @@ export const MealDetailModal: React.FC<MealDetailModalProps> = ({
               <View style={styles.specDivider} />
 
               <View style={styles.specItem}>
-                <Text style={styles.specIcon}>🍽️</Text>
                 <Text style={[styles.specLabel, { color: colors.textMuted }]}>PORTION</Text>
                 <Text style={[styles.specVal, { color: colors.textPrimary }]}>
-                  {kit.servings} Servings
+                  {selectedServings} Servings
                 </Text>
+              </View>
+            </View>
+
+            {/* Interactive Customization: Serving Size & Spice Level */}
+            <View
+              style={[
+                styles.customizationBox,
+                {
+                  backgroundColor: colors.bgSubtle,
+                  borderColor: colors.borderLight,
+                  borderRadius: radii.lg,
+                },
+              ]}
+            >
+              <View style={styles.customHeaderRow}>
+                <Text style={[styles.customHeading, { color: colors.textPrimary }]}>
+                  Customize Portion & Taste
+                </Text>
+                <Badge label={`₹${effectiveUnitPrice}/kit`} variant="accent" />
+              </View>
+
+              {/* Serving Size Options */}
+              <Text style={[styles.customSectionLabel, { color: colors.textSecondary }]}>
+                SERVING SIZE:
+              </Text>
+              <View style={styles.pillsRow}>
+                {[
+                  { count: 2, label: '2 Servings', desc: 'Couple' },
+                  { count: 4, label: '4 Servings', desc: 'Family' },
+                  { count: 6, label: '6 Servings', desc: 'Party' },
+                ].map((s) => {
+                  const isSelected = selectedServings === s.count;
+                  return (
+                    <TouchableOpacity
+                      key={s.count}
+                      activeOpacity={0.7}
+                      onPress={() => setSelectedServings(s.count)}
+                      style={[
+                        styles.portionPill,
+                        {
+                          backgroundColor: isSelected ? colors.primary : colors.bgSurface,
+                          borderColor: isSelected ? colors.primary : colors.borderLight,
+                          borderRadius: radii.md,
+                        },
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.portionPillText,
+                          { color: isSelected ? '#FFFFFF' : colors.textPrimary },
+                        ]}
+                      >
+                        {s.label}
+                      </Text>
+                      <Text
+                        style={[
+                          styles.portionPillDesc,
+                          { color: isSelected ? 'rgba(255,255,255,0.85)' : colors.textMuted },
+                        ]}
+                      >
+                        {s.desc}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+
+              {/* Spice Level Options */}
+              <View style={{ marginTop: 12 }}>
+                <View
+                  style={{
+                    flexDirection: 'row',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    marginBottom: 6,
+                  }}
+                >
+                  <Text
+                    style={[
+                      styles.customSectionLabel,
+                      { color: colors.textSecondary, marginBottom: 0 },
+                    ]}
+                  >
+                    SPICE LEVEL:
+                  </Text>
+                  <Text style={{ fontSize: 11, fontWeight: '700', color: colors.primary }}>
+                    {selectedSpiceLevel === 'Mild' && 'Mild (Kid-friendly)'}
+                    {selectedSpiceLevel === 'Medium' && 'Medium (Classic Balance)'}
+                    {selectedSpiceLevel === 'Spicy' && 'Spicy (Desi Tadka)'}
+                    {selectedSpiceLevel === 'Fiery' && 'Fiery (Extra Hot)'}
+                  </Text>
+                </View>
+                <View style={styles.pillsRow}>
+                  {[
+                    { level: 'Mild', label: 'Mild' },
+                    { level: 'Medium', label: 'Medium' },
+                    { level: 'Spicy', label: 'Spicy' },
+                    { level: 'Fiery', label: 'Fiery' },
+                  ].map((sp) => {
+                    const isSelected = selectedSpiceLevel === sp.level;
+                    return (
+                      <TouchableOpacity
+                        key={sp.level}
+                        activeOpacity={0.7}
+                        onPress={() => setSelectedSpiceLevel(sp.level)}
+                        style={[
+                          styles.spicePill,
+                          {
+                            backgroundColor: isSelected ? colors.primary : colors.bgSurface,
+                            borderColor: isSelected ? colors.primary : colors.borderLight,
+                            borderRadius: radii.pill,
+                          },
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.spicePillText,
+                            { color: isSelected ? '#FFFFFF' : colors.textPrimary },
+                          ]}
+                        >
+                          {sp.label}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
               </View>
             </View>
           </View>
@@ -273,11 +427,11 @@ export const MealDetailModal: React.FC<MealDetailModalProps> = ({
 
               <View style={styles.sachetCallout}>
                 <Text style={[styles.sachetCalloutHeading, { color: colors.primary }]}>
-                  ✨ Pre-Portioned Masala Sachets Included:
+                  Pre-Portioned Masala Sachets Included:
                 </Text>
                 {kit.masalaSachets.map((sachet, idx) => (
                   <View key={idx} style={styles.sachetBullet}>
-                    <Text style={[styles.sachetBulletDot, { color: colors.primary }]}>✓</Text>
+                    <Text style={[styles.sachetBulletDot, { color: colors.primary }]}>-</Text>
                     <Text style={[styles.sachetBulletText, { color: colors.textPrimary }]}>
                       {sachet}
                     </Text>
@@ -292,7 +446,7 @@ export const MealDetailModal: React.FC<MealDetailModalProps> = ({
                     { backgroundColor: '#FEF3C7', borderRadius: radii.md },
                   ]}
                 >
-                  <Text style={styles.allergenTitle}>⚠️ Allergen Information:</Text>
+                  <Text style={styles.allergenTitle}>Allergen Information:</Text>
                   <Text style={styles.allergenText}>{kit.allergens.join(', ')}</Text>
                 </View>
               )}
@@ -449,7 +603,7 @@ export const MealDetailModal: React.FC<MealDetailModalProps> = ({
                     </Text>
                   </View>
                   <Badge
-                    label={ing.quantity}
+                    label={scaleQuantity(ing.quantity, servingRatio)}
                     variant={ing.isMasalaSachet ? 'primary' : 'neutral'}
                   />
                 </View>
@@ -613,7 +767,7 @@ export const MealDetailModal: React.FC<MealDetailModalProps> = ({
           <View style={styles.bottomTotalCol}>
             <Text style={[styles.qtyLabel, { color: colors.textMuted }]}>TOTAL</Text>
             <Text style={[styles.bottomTotal, { color: colors.primary }]}>
-              ₹{kit.price * quantity}
+              ₹{effectiveUnitPrice * quantity}
             </Text>
           </View>
 
@@ -770,6 +924,60 @@ const styles = StyleSheet.create({
     width: 1,
     height: 28,
     backgroundColor: '#E2E8F0',
+  },
+  customizationBox: {
+    marginTop: 14,
+    padding: 14,
+    borderWidth: 1,
+  },
+  customHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 10,
+  },
+  customHeading: {
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  customSectionLabel: {
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+    marginBottom: 6,
+  },
+  pillsRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  portionPill: {
+    flex: 1,
+    paddingVertical: 8,
+    paddingHorizontal: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+  },
+  portionPillText: {
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  portionPillDesc: {
+    fontSize: 10,
+    fontWeight: '600',
+    marginTop: 2,
+  },
+  spicePill: {
+    flex: 1,
+    paddingVertical: 7,
+    paddingHorizontal: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+  },
+  spicePillText: {
+    fontSize: 11,
+    fontWeight: '700',
   },
   tabBarSection: {
     paddingHorizontal: 16,

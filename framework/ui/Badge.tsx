@@ -7,12 +7,36 @@ export type BadgeVariant =
   | 'accent'
   | 'veg'
   | 'nonveg'
+  | 'vegan'
+  | 'keto'
+  | 'jain'
+  | 'gluten-free'
   | 'warning'
   | 'info'
   | 'success'
   | 'danger'
   | 'neutral'
   | 'outline';
+
+export function getDietBadgeInfo(diet: string): { label: string; variant: BadgeVariant } {
+  const d = diet.toLowerCase();
+  switch (d) {
+    case 'veg':
+      return { label: 'Pure Veg', variant: 'veg' };
+    case 'nonveg':
+      return { label: 'Non-Veg', variant: 'nonveg' };
+    case 'vegan':
+      return { label: 'Vegan', variant: 'vegan' };
+    case 'keto':
+      return { label: 'Keto', variant: 'keto' };
+    case 'jain':
+      return { label: 'Jain', variant: 'jain' };
+    case 'gluten-free':
+      return { label: 'Gluten-Free', variant: 'gluten-free' };
+    default:
+      return { label: diet.toUpperCase(), variant: 'accent' };
+  }
+}
 
 export interface BadgeProps {
   label: string;
@@ -43,6 +67,14 @@ export const Badge: React.FC<BadgeProps> = ({
         return { bg: colors.vegLight, text: colors.veg, border: colors.veg + '40' };
       case 'nonveg':
         return { bg: colors.nonVegLight, text: colors.nonVeg, border: colors.nonVeg + '40' };
+      case 'vegan':
+        return { bg: '#DCFCE7', text: '#15803D', border: '#86EFAC' };
+      case 'keto':
+        return { bg: '#FEF3C7', text: '#B45309', border: '#FDE68A' };
+      case 'jain':
+        return { bg: '#F0FDF4', text: '#059669', border: '#6EE7B7' };
+      case 'gluten-free':
+        return { bg: '#E0F2FE', text: '#0284C7', border: '#7DD3FC' };
       case 'warning':
         return { bg: '#FEF3C7', text: '#92400E', border: '#FDE68A' };
       case 'info':

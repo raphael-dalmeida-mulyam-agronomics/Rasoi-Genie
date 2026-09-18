@@ -17,20 +17,20 @@ export interface DietaryPreferencesModalProps {
 }
 
 const DIET_TYPES: { id: DietTag | 'all'; label: string; icon: string; desc: string }[] = [
-  { id: 'veg', label: 'Vegetarian', icon: '🥬', desc: '100% vegetarian dishes, paneer & dairy' },
-  { id: 'nonveg', label: 'Non-Vegetarian', icon: '🍗', desc: 'Chicken, seafood, meats & poultry' },
-  { id: 'jain', label: 'Jain Friendly', icon: '🌱', desc: 'No root vegetables, onions or garlic' },
-  { id: 'vegan', label: 'Vegan', icon: '🥑', desc: 'Plant-based, 100% dairy-free' },
+  { id: 'veg', label: 'Vegetarian', icon: '', desc: '100% vegetarian dishes, paneer & dairy' },
+  { id: 'nonveg', label: 'Non-Vegetarian', icon: '', desc: 'Chicken, seafood, meats & poultry' },
+  { id: 'jain', label: 'Jain Friendly', icon: '', desc: 'No root vegetables, onions or garlic' },
+  { id: 'vegan', label: 'Vegan', icon: '', desc: 'Plant-based, 100% dairy-free' },
   {
     id: 'keto',
     label: 'Keto Low-Carb',
-    icon: '🍳',
+    icon: '',
     desc: 'High protein, healthy fats, under 15g net carbs',
   },
   {
     id: 'gluten-free',
     label: 'Gluten-Free',
-    icon: '🌾',
+    icon: '',
     desc: 'Zero wheat, gluten-free grains & flours',
   },
 ];
@@ -47,10 +47,10 @@ const ALLERGY_OPTIONS = [
 ];
 
 const SPICE_LEVELS: { id: SpiceLevel; label: string; icon: string }[] = [
-  { id: 'Mild', label: 'Mild (Child Friendly)', icon: '🟢' },
-  { id: 'Medium', label: 'Medium (Balanced Heat)', icon: '🟡' },
-  { id: 'Spicy', label: 'Spicy (Authentic Dhaba)', icon: '🌶️' },
-  { id: 'Fiery', label: 'Fiery (Kolhapuri / Andhra)', icon: '🔥' },
+  { id: 'Mild', label: 'Mild (Child Friendly)', icon: '' },
+  { id: 'Medium', label: 'Medium (Balanced Heat)', icon: '' },
+  { id: 'Spicy', label: 'Spicy (Authentic Dhaba)', icon: '' },
+  { id: 'Fiery', label: 'Fiery (Kolhapuri / Andhra)', icon: '' },
 ];
 
 const CUISINES: CuisineType[] = [
@@ -171,7 +171,7 @@ export const DietaryPreferencesModal: React.FC<DietaryPreferencesModalProps> = (
                     onPress={() => setDietType(dt.id)}
                     activeOpacity={0.8}
                   >
-                    <Text style={styles.dietIcon}>{dt.icon}</Text>
+                    {dt.icon ? <Text style={styles.dietIcon}>{dt.icon}</Text> : null}
                     <Text
                       style={[
                         styles.dietLabel,
@@ -216,7 +216,7 @@ export const DietaryPreferencesModal: React.FC<DietaryPreferencesModalProps> = (
                     ]}
                     onPress={() => setSpiceTolerance(sp.id)}
                   >
-                    <Text style={{ fontSize: 20 }}>{sp.icon}</Text>
+                    {sp.icon ? <Text style={{ fontSize: 20 }}>{sp.icon}</Text> : null}
                     <Text
                       style={[
                         styles.spiceText,

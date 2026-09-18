@@ -28,6 +28,7 @@ import {
   deleteMealKit,
   updateMealKitStock,
   RegionHub,
+  DietTag,
 } from '../../framework/services/mealKitsService';
 import {
   INDIAN_STATES_ANALYTICS,
@@ -54,8 +55,9 @@ import {
   ManagedUser,
 } from '../../framework/services/userManagementService';
 import { Card } from '../../framework/ui/Card';
-import { Badge, BadgeVariant } from '../../framework/ui/Badge';
+import { Badge, BadgeVariant, getDietBadgeInfo } from '../../framework/ui/Badge';
 import { Button } from '../../framework/ui/Button';
+import { AddMealKitWizardModal } from './AddMealKitWizardModal';
 
 type AdminTab =
   'orders' | 'kits' | 'inventory' | 'analytics' | 'users' | 'coupons' | 'revenue' | 'reviews';
@@ -95,16 +97,10 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
   const [kits, setKits] = useState<MealKit[]>(getMealKits());
   const [kitModalVisible, setKitModalVisible] = useState(false);
   const [editingKit, setEditingKit] = useState<MealKit | null>(null);
-  const [kitName, setKitName] = useState('');
-  const [kitPrice, setKitPrice] = useState('');
-  const [kitTagline, setKitTagline] = useState('');
-  const [kitDiet, setKitDiet] = useState<'veg' | 'nonveg'>('veg');
-  const [kitPrepMins, setKitPrepMins] = useState('20');
-  const [kitSpice, setKitSpice] = useState<'Mild' | 'Medium' | 'Spicy' | 'Fiery'>('Medium');
 
   // Regional Analytics State
   const [selectedState, setSelectedState] = useState('Maharashtra');
-  const [crossTabDiet, setCrossTabDiet] = useState<'all' | 'veg' | 'nonveg'>('veg');
+  const [crossTabDiet, setCrossTabDiet] = useState<'all' | DietTag>('all');
 
   // Coupons State
   const [coupons, setCoupons] = useState<Coupon[]>(getCoupons());
@@ -154,81 +150,6 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
     await issueRefund(refundOrder.id, amt, refundReason);
     setRefundModalVisible(false);
     Alert.alert('Refund Issued 💳', `₹${amt} refunded for Order ${refundOrder.id}.`);
-  };
-
-  const handleSaveKit = () => {
-    if (!kitName.trim() || !kitPrice.trim()) {
-      Alert.alert('Incomplete Form', 'Please provide kit name and price.');
-      return;
-    }
-
-    if (editingKit) {
-      updateMealKit(editingKit.id, {
-        name: kitName.trim(),
-        price: parseInt(kitPrice) || 299,
-        tagline: kitTagline.trim(),
-        diet: kitDiet,
-        spiceLevel: kitSpice,
-        prepTimeMinutes: parseInt(kitPrepMins) || 20,
-      });
-      Alert.alert('Meal Kit Updated', `${kitName} updated successfully.`);
-    } else {
-      const newKitId = 'kit-' + Math.floor(200 + Math.random() * 800);
-      addMealKit({
-        id: newKitId,
-        name: kitName.trim(),
-        slug: kitName.toLowerCase().replace(/\s+/g, '-'),
-        tagline: kitTagline.trim() || 'Chef handcrafted gourmet pre-portioned meal kit',
-        description:
-          'Authentic Indian recipe prepared with farm-fresh produce and artisanal masala sachets.',
-        heroImage:
-          'https://images.unsplash.com/photo-1631452180519-c014fe946bc7?auto=format&fit=crop&w=800&q=80',
-        galleryImages: [
-          'https://images.unsplash.com/photo-1631452180519-c014fe946bc7?auto=format&fit=crop&w=800&q=80',
-        ],
-        price: parseInt(kitPrice) || 299,
-        servings: 2,
-        prepTimeMinutes: 5,
-        cookTimeMinutes: parseInt(kitPrepMins) || 20,
-        diet: kitDiet,
-        cuisine: 'North Indian',
-        spiceLevel: kitSpice,
-        difficulty: 'Easy',
-        dietaryTags: [kitDiet],
-        availableRegions: ['North', 'South', 'West', 'East'],
-        stockByRegion: { North: 50, South: 50, West: 50, East: 50 },
-        rating: 5.0,
-        reviewCount: 1,
-        nutrition: { calories: 420, protein: 18, carbs: 32, fat: 20, fiber: 4 },
-        allergens: ['Dairy'],
-        ingredients: [
-          { name: 'Fresh Pre-Portioned Produce', quantity: '300g' },
-          { name: 'Sachet 1: Whole Khada Spices', quantity: '10g', isMasalaSachet: true },
-          { name: 'Sachet 2: Chef Gravy Base', quantity: '20g', isMasalaSachet: true },
-        ],
-        masalaSachets: ['Whole Spices Pot', 'Signature Gravy Premix'],
-        recipeSteps: [
-          {
-            stepNumber: 1,
-            title: 'Temper Spices',
-            instruction: 'Heat ghee and empty Sachet 1 until crackling.',
-            timerSeconds: 60,
-          },
-          {
-            stepNumber: 2,
-            title: 'Simmer & Finish',
-            instruction: 'Add ingredients, Sachet 2, and simmer.',
-            timerSeconds: 600,
-          },
-        ],
-        reviews: [],
-        salesByRegion: { Maharashtra: 100, Karnataka: 120, 'Delhi NCR': 80 },
-      });
-      Alert.alert('Meal Kit Created! ✨', `${kitName} published to live catalog.`);
-    }
-
-    setKits(getMealKits());
-    setKitModalVisible(false);
   };
 
   const handleStockAdjust = (kitId: string, region: RegionHub, delta: number) => {
@@ -534,9 +455,6 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
                 size="sm"
                 onPress={() => {
                   setEditingKit(null);
-                  setKitName('');
-                  setKitPrice('299');
-                  setKitTagline('');
                   setKitModalVisible(true);
                 }}
               />
@@ -567,10 +485,10 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
                       {kit.cuisine} • {kit.diet.toUpperCase()} • {kit.spiceLevel} • ₹{kit.price}
                     </Text>
                   </View>
-                  <Badge
-                    label={kit.diet === 'veg' ? 'Veg' : 'Non-Veg'}
-                    variant={kit.diet === 'veg' ? 'veg' : 'nonveg'}
-                  />
+                  {(() => {
+                    const badge = getDietBadgeInfo(kit.diet);
+                    return <Badge label={badge.label} variant={badge.variant} />;
+                  })()}
                 </View>
 
                 <View style={styles.kitActionsRow}>
@@ -581,12 +499,6 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
                     style={{ marginRight: 8 }}
                     onPress={() => {
                       setEditingKit(kit);
-                      setKitName(kit.name);
-                      setKitPrice(kit.price.toString());
-                      setKitTagline(kit.tagline);
-                      setKitDiet(kit.diet === 'nonveg' ? 'nonveg' : 'veg');
-                      setKitSpice(kit.spiceLevel);
-                      setKitPrepMins(kit.cookTimeMinutes.toString());
                       setKitModalVisible(true);
                     }}
                   />
@@ -830,31 +742,47 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
               <Text style={[styles.crossTabTitle, { color: colors.textPrimary }]}>
                 Cross-Tab: Top Meals Among {crossTabDiet.toUpperCase()} in {selectedState}
               </Text>
-              <View style={styles.crossTabToggleRow}>
-                {(['all', 'veg', 'nonveg'] as const).map((d) => (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={{ marginBottom: 12 }}
+                contentContainerStyle={{ gap: 6 }}
+              >
+                {(
+                  [
+                    { id: 'all', label: 'ALL DIETS' },
+                    { id: 'veg', label: 'VEG' },
+                    { id: 'nonveg', label: 'NON-VEG' },
+                    { id: 'vegan', label: 'VEGAN' },
+                    { id: 'keto', label: 'KETO' },
+                    { id: 'jain', label: 'JAIN' },
+                    { id: 'gluten-free', label: 'GLUTEN-FREE' },
+                  ] as { id: 'all' | DietTag; label: string }[]
+                ).map((d) => (
                   <TouchableOpacity
-                    key={d}
+                    key={d.id}
                     style={[
                       styles.crossTabBtn,
                       {
-                        backgroundColor: crossTabDiet === d ? colors.primary : colors.bgSubtle,
+                        backgroundColor: crossTabDiet === d.id ? colors.primary : colors.bgSubtle,
                         borderRadius: radii.pill,
+                        paddingHorizontal: 12,
                       },
                     ]}
-                    onPress={() => setCrossTabDiet(d)}
+                    onPress={() => setCrossTabDiet(d.id)}
                   >
                     <Text
                       style={{
-                        color: crossTabDiet === d ? '#fff' : colors.textPrimary,
+                        color: crossTabDiet === d.id ? '#fff' : colors.textPrimary,
                         fontSize: 11,
                         fontWeight: '700',
                       }}
                     >
-                      {d.toUpperCase()}
+                      {d.label}
                     </Text>
                   </TouchableOpacity>
                 ))}
-              </View>
+              </ScrollView>
 
               {crossTabResult.topItems.slice(0, 4).map((item, idx) => (
                 <View
@@ -1269,122 +1197,25 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
         </View>
       </Modal>
 
-      {/* ADD/EDIT MEAL KIT MODAL */}
-      <Modal visible={kitModalVisible} transparent animationType="fade">
-        <View style={styles.modalOverlay}>
-          <View
-            style={[
-              styles.modalBox,
-              {
-                backgroundColor: colors.bgSurface,
-                borderRadius: radii.xl,
-                ...shadows.card,
-              },
-            ]}
-          >
-            <Text style={[styles.modalHeading, { color: colors.textPrimary }]}>
-              {editingKit ? 'Edit Meal Kit' : 'Add New Meal Kit'}
-            </Text>
-
-            <TextInput
-              style={[
-                styles.modalInput,
-                {
-                  backgroundColor: colors.bgSubtle,
-                  borderColor: colors.border,
-                  borderRadius: radii.md,
-                },
-              ]}
-              placeholder="Kit Name (e.g. Kashmiri Rogan Josh Kit)"
-              value={kitName}
-              onChangeText={setKitName}
-            />
-
-            <TextInput
-              style={[
-                styles.modalInput,
-                {
-                  backgroundColor: colors.bgSubtle,
-                  borderColor: colors.border,
-                  borderRadius: radii.md,
-                },
-              ]}
-              placeholder="Tagline (e.g. Slow cooked lamb with fennel sachet)"
-              value={kitTagline}
-              onChangeText={setKitTagline}
-            />
-
-            <View style={{ flexDirection: 'row', gap: 10 }}>
-              <TextInput
-                style={[
-                  styles.modalInput,
-                  {
-                    flex: 1,
-                    backgroundColor: colors.bgSubtle,
-                    borderColor: colors.border,
-                    borderRadius: radii.md,
-                  },
-                ]}
-                placeholder="Price (₹)"
-                value={kitPrice}
-                onChangeText={setKitPrice}
-                keyboardType="numeric"
-              />
-              <TextInput
-                style={[
-                  styles.modalInput,
-                  {
-                    flex: 1,
-                    backgroundColor: colors.bgSubtle,
-                    borderColor: colors.border,
-                    borderRadius: radii.md,
-                  },
-                ]}
-                placeholder="Prep Time (mins)"
-                value={kitPrepMins}
-                onChangeText={setKitPrepMins}
-                keyboardType="numeric"
-              />
-            </View>
-
-            <View style={{ flexDirection: 'row', gap: 8, marginVertical: 8 }}>
-              {(['veg', 'nonveg'] as const).map((d) => (
-                <TouchableOpacity
-                  key={d}
-                  style={[
-                    styles.tagOption,
-                    {
-                      backgroundColor: kitDiet === d ? colors.primary : colors.bgSubtle,
-                      borderColor: kitDiet === d ? colors.primary : colors.border,
-                      borderRadius: radii.pill,
-                    },
-                  ]}
-                  onPress={() => setKitDiet(d)}
-                >
-                  <Text
-                    style={{
-                      color: kitDiet === d ? '#fff' : colors.textPrimary,
-                      fontWeight: '700',
-                    }}
-                  >
-                    {d === 'veg' ? 'Pure Veg 🥬' : 'Non-Veg 🍗'}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            <View style={{ flexDirection: 'row', marginTop: 14 }}>
-              <Button
-                title="Cancel"
-                variant="secondary"
-                style={{ flex: 1, marginRight: 8 }}
-                onPress={() => setKitModalVisible(false)}
-              />
-              <Button title="Save Meal Kit" style={{ flex: 1.2 }} onPress={handleSaveKit} />
-            </View>
-          </View>
-        </View>
-      </Modal>
+      {/* CHEF FRIENDLY ADD / EDIT MEAL KIT WIZARD */}
+      <AddMealKitWizardModal
+        visible={kitModalVisible}
+        onClose={() => {
+          setKitModalVisible(false);
+          setEditingKit(null);
+        }}
+        initialKit={editingKit}
+        onSaveKit={(savedKit) => {
+          if (editingKit) {
+            updateMealKit(editingKit.id, savedKit);
+          } else {
+            addMealKit(savedKit);
+          }
+          setKits(getMealKits());
+          setKitModalVisible(false);
+          setEditingKit(null);
+        }}
+      />
 
       {/* ADD COUPON MODAL */}
       <Modal visible={couponModalVisible} transparent animationType="fade">
