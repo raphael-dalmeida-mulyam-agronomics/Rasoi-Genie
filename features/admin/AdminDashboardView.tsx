@@ -70,17 +70,7 @@ import {
   subscribeToPendingApprovalCount,
   playOrderAlertSound,
 } from '../../framework/services/notificationService';
-
-type AdminTab =
-  | 'overview'
-  | 'orders'
-  | 'kits'
-  | 'inventory'
-  | 'analytics'
-  | 'users'
-  | 'coupons'
-  | 'revenue'
-  | 'reviews';
+import { AdminNavigationMenu, AdminTab } from './AdminNavigationMenu';
 
 const STATUS_FILTERS: (OrderStatus | 'All')[] = [
   'All',
@@ -332,64 +322,17 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
         <Button title="Logout" variant="outline" size="sm" onPress={logout} />
       </View>
 
-      {/* Admin Module Navigation Tabs */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        scrollEventThrottle={16}
-        style={[
-          styles.tabsBar,
-          { backgroundColor: colors.bgSurface, borderBottomColor: colors.borderLight },
-        ]}
-        contentContainerStyle={styles.tabsContent}
-      >
-        {(
-          [
-            { id: 'overview', label: '🏠 Overview' },
-            {
-              id: 'orders',
-              label:
-                pendingApprovalCount > 0
-                  ? `📦 Orders (${orders.length}) 🚨 ${pendingApprovalCount} Awaiting Approval`
-                  : `📦 Orders (${orders.length})`,
-            },
-            { id: 'kits', label: `🍲 Meal Kits (${kits.length})` },
-            { id: 'inventory', label: '📦 Inventory Hub' },
-            { id: 'analytics', label: '📊 Regional Analytics 🇮🇳' },
-            { id: 'users', label: `👥 Users (${users.length})` },
-            { id: 'coupons', label: `🏷️ Coupons (${coupons.length})` },
-            { id: 'revenue', label: '📈 Revenue Dash' },
-            { id: 'reviews', label: `⭐ Reviews (${moderationReviews.length})` },
-          ] as { id: AdminTab; label: string }[]
-        ).map((tab) => {
-          const isSelected = activeTab === tab.id;
-          return (
-            <TouchableOpacity
-              key={tab.id}
-              style={[
-                styles.tabPill,
-                {
-                  backgroundColor: isSelected ? colors.primary : colors.bgSubtle,
-                  borderRadius: radii.pill,
-                },
-              ]}
-              onPress={() => setActiveTab(tab.id)}
-            >
-              <Text
-                style={[
-                  styles.tabPillText,
-                  {
-                    color: isSelected ? '#FFFFFF' : colors.textPrimary,
-                    fontWeight: isSelected ? '800' : '600',
-                  },
-                ]}
-              >
-                {tab.label}
-              </Text>
-            </TouchableOpacity>
-          );
-        })}
-      </ScrollView>
+      {/* Admin Module Navigation Menu Component */}
+      <AdminNavigationMenu
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
+        ordersCount={orders.length}
+        pendingApprovalCount={pendingApprovalCount}
+        kitsCount={kits.length}
+        usersCount={users.length}
+        couponsCount={coupons.length}
+        reviewsCount={moderationReviews.length}
+      />
 
       <ScrollView contentContainerStyle={styles.scrollBody} showsVerticalScrollIndicator={false}>
         {/* MODULE 0: CONTROL CENTER OVERVIEW / HOME */}
@@ -1774,24 +1717,6 @@ const styles = StyleSheet.create({
   adminUserEmail: {
     fontSize: 12,
     marginTop: 2,
-  },
-  tabsBar: {
-    height: 52,
-    flexGrow: 0,
-    borderBottomWidth: 1,
-  },
-  tabsContent: {
-    flexDirection: 'row',
-    paddingHorizontal: 16,
-    alignItems: 'center',
-    gap: 8,
-  },
-  tabPill: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-  },
-  tabPillText: {
-    fontSize: 12,
   },
   scrollBody: {
     padding: 16,

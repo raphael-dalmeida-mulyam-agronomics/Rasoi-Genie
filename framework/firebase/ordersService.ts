@@ -362,7 +362,7 @@ export async function createOrder(
     items: params.items,
     subtotal: params.subtotal,
     discount: params.discount || 0,
-    couponCode: params.couponCode,
+    couponCode: params.couponCode || '',
     deliveryFee: params.deliveryFee || 0,
     totalAmount: params.totalAmount,
     status: 'Placed',
@@ -380,13 +380,13 @@ export async function createOrder(
       {
         status: 'Confirmed',
         title: 'Order Confirmed',
-        description: 'Nearest regional fulfillment kitchen accepted your order.',
-        timestamp: 'Within 10 mins',
+        description: 'RasoiGenie kitchen confirmed order. Fresh preparation underway.',
+        timestamp: 'Pending',
         completed: false,
       },
       {
         status: 'Preparing',
-        title: 'Preparing Masalas & Meal Kit',
+        title: 'Fresh Prep & Vacuum Pack',
         description: 'Pre-portioned fresh ingredients and spice sachets packed.',
         timestamp: 'Pending',
         completed: false,
@@ -394,14 +394,14 @@ export async function createOrder(
       {
         status: 'Out for Delivery',
         title: 'Out for Delivery',
-        description: 'Assigned to delivery executive.',
+        description: 'Handed over to cold-chain delivery agent with temperature monitor.',
         timestamp: 'Pending',
         completed: false,
       },
       {
         status: 'Delivered',
-        title: 'Delivered to Doorstep',
-        description: 'Delivered in thermal-sealed freshness pouch.',
+        title: 'Delivered Fresh to Doorstep',
+        description: 'Customer accepted order. Ready to cook in 25 mins!',
         timestamp: 'Pending',
         completed: false,
       },
@@ -412,7 +412,8 @@ export async function createOrder(
 
   try {
     const ordersCol = collection(db, 'orders');
-    const docRef = await addDoc(ordersCol, newOrder);
+    const cleanDoc = JSON.parse(JSON.stringify(newOrder));
+    const docRef = await addDoc(ordersCol, cleanDoc);
     newOrder.id = docRef.id;
   } catch (err) {
     console.warn('[ordersService] Firestore addDoc failed, using local store:', err);
