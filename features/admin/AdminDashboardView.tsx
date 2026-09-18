@@ -72,7 +72,15 @@ import {
 } from '../../framework/services/notificationService';
 
 type AdminTab =
-  'orders' | 'kits' | 'inventory' | 'analytics' | 'users' | 'coupons' | 'revenue' | 'reviews';
+  | 'overview'
+  | 'orders'
+  | 'kits'
+  | 'inventory'
+  | 'analytics'
+  | 'users'
+  | 'coupons'
+  | 'revenue'
+  | 'reviews';
 
 const STATUS_FILTERS: (OrderStatus | 'All')[] = [
   'All',
@@ -92,7 +100,7 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
   const { user, isAdmin, logout } = useAuth();
   const { colors, radii, shadows } = useTheme();
 
-  const [activeTab, setActiveTab] = useState<AdminTab>('orders');
+  const [activeTab, setActiveTab] = useState<AdminTab>('overview');
   const [orders, setOrders] = useState<Order[]>([]);
   const [selectedStatusFilter, setSelectedStatusFilter] = useState<OrderStatus | 'All'>('All');
   const [updatingOrderId, setUpdatingOrderId] = useState<string | null>(null);
@@ -328,6 +336,7 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
+        scrollEventThrottle={16}
         style={[
           styles.tabsBar,
           { backgroundColor: colors.bgSurface, borderBottomColor: colors.borderLight },
@@ -336,20 +345,21 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
       >
         {(
           [
+            { id: 'overview', label: '🏠 Overview' },
             {
               id: 'orders',
               label:
                 pendingApprovalCount > 0
-                  ? `Orders (${orders.length}) 🚨 ${pendingApprovalCount} Awaiting Approval`
-                  : `Orders (${orders.length})`,
+                  ? `📦 Orders (${orders.length}) 🚨 ${pendingApprovalCount} Awaiting Approval`
+                  : `📦 Orders (${orders.length})`,
             },
-            { id: 'kits', label: `Meal Kits (${kits.length})` },
-            { id: 'inventory', label: 'Inventory Hub' },
-            { id: 'analytics', label: 'Regional Analytics 🇮🇳' },
-            { id: 'users', label: `Users (${users.length})` },
-            { id: 'coupons', label: `Coupons (${coupons.length})` },
-            { id: 'revenue', label: 'Revenue Dash' },
-            { id: 'reviews', label: `Reviews (${moderationReviews.length})` },
+            { id: 'kits', label: `🍲 Meal Kits (${kits.length})` },
+            { id: 'inventory', label: '📦 Inventory Hub' },
+            { id: 'analytics', label: '📊 Regional Analytics 🇮🇳' },
+            { id: 'users', label: `👥 Users (${users.length})` },
+            { id: 'coupons', label: `🏷️ Coupons (${coupons.length})` },
+            { id: 'revenue', label: '📈 Revenue Dash' },
+            { id: 'reviews', label: `⭐ Reviews (${moderationReviews.length})` },
           ] as { id: AdminTab; label: string }[]
         ).map((tab) => {
           const isSelected = activeTab === tab.id;
@@ -382,6 +392,224 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
       </ScrollView>
 
       <ScrollView contentContainerStyle={styles.scrollBody} showsVerticalScrollIndicator={false}>
+        {/* MODULE 0: CONTROL CENTER OVERVIEW / HOME */}
+        {activeTab === 'overview' && (
+          <View>
+            {/* Realtime Pending Approval Alert Banner */}
+            {pendingApprovalCount > 0 && (
+              <View
+                style={{
+                  backgroundColor: '#FEF2F2',
+                  borderColor: '#F87171',
+                  borderWidth: 1.5,
+                  borderRadius: radii.lg,
+                  padding: 16,
+                  marginBottom: 16,
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  ...shadows.card,
+                }}
+              >
+                <View style={{ flex: 1, marginRight: 10 }}>
+                  <Text
+                    style={{
+                      fontSize: 15,
+                      fontWeight: '800',
+                      color: '#991B1B',
+                      marginBottom: 2,
+                    }}
+                  >
+                    🚨 {pendingApprovalCount} New Order(s) Awaiting Approval!
+                  </Text>
+                  <Text style={{ fontSize: 12, color: '#B91C1C' }}>
+                    Customer orders are currently in 'Placed' status. Click to approve and confirm.
+                  </Text>
+                </View>
+                <Button
+                  title="Review Orders ➔"
+                  size="sm"
+                  onPress={() => setActiveTab('orders')}
+                  style={{ backgroundColor: '#DC2626' }}
+                />
+              </View>
+            )}
+
+            {/* Quick Metrics KPI Cards */}
+            <View style={styles.metricsGrid}>
+              <TouchableOpacity
+                style={[
+                  styles.metricCard,
+                  { backgroundColor: colors.bgSurface, borderRadius: radii.xl, ...shadows.card },
+                ]}
+                onPress={() => setActiveTab('orders')}
+                activeOpacity={0.8}
+              >
+                <Text
+                  style={[
+                    styles.metricVal,
+                    { color: pendingApprovalCount > 0 ? '#DC2626' : colors.primary },
+                  ]}
+                >
+                  {orders.length}
+                </Text>
+                <Text style={[styles.metricLabel, { color: colors.textMuted }]}>
+                  {pendingApprovalCount > 0
+                    ? `ORDERS (${pendingApprovalCount} PENDING)`
+                    : 'TOTAL ORDERS'}
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.metricCard,
+                  { backgroundColor: colors.bgSurface, borderRadius: radii.xl, ...shadows.card },
+                ]}
+                onPress={() => setActiveTab('kits')}
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.metricVal, { color: colors.textPrimary }]}>
+                  {kits.length}
+                </Text>
+                <Text style={[styles.metricLabel, { color: colors.textMuted }]}>MEAL KITS</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.metricCard,
+                  { backgroundColor: colors.bgSurface, borderRadius: radii.xl, ...shadows.card },
+                ]}
+                onPress={() => setActiveTab('users')}
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.metricVal, { color: colors.textPrimary }]}>
+                  {users.length}
+                </Text>
+                <Text style={[styles.metricLabel, { color: colors.textMuted }]}>USERS</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* All Modules Hub Grid */}
+            <Text
+              style={[
+                styles.moduleSectionTitle,
+                { color: colors.textPrimary, marginTop: 14, marginBottom: 12 },
+              ]}
+            >
+              Control Center Modules
+            </Text>
+
+            <View style={styles.modulesGrid}>
+              {[
+                {
+                  id: 'orders' as AdminTab,
+                  title: 'Orders & Live Approvals',
+                  desc: 'Real-time order feed, approval workflow, status changes & customer refunds',
+                  icon: '📦',
+                  badge:
+                    pendingApprovalCount > 0
+                      ? `${pendingApprovalCount} Awaiting Approval`
+                      : `${orders.length} Orders`,
+                  badgeVariant: pendingApprovalCount > 0 ? ('danger' as BadgeVariant) : ('primary' as BadgeVariant),
+                },
+                {
+                  id: 'kits' as AdminTab,
+                  title: 'Meal Kits & Recipes',
+                  desc: 'Publish chef-crafted recipes, modify spice levels, servings, ingredients & prices',
+                  icon: '🍲',
+                  badge: `${kits.length} Kits Active`,
+                  badgeVariant: 'success' as BadgeVariant,
+                },
+                {
+                  id: 'inventory' as AdminTab,
+                  title: 'Regional Inventory Hub',
+                  desc: 'Monitor cold-chain safety buffer stocks across South, West, North & East Hubs',
+                  icon: '🏭',
+                  badge: '4 Hubs',
+                  badgeVariant: 'neutral' as BadgeVariant,
+                },
+                {
+                  id: 'analytics' as AdminTab,
+                  title: 'Regional Analytics 🇮🇳',
+                  desc: 'State-by-state consumption trends, dietary split, and downloadable CSV exports',
+                  icon: '📊',
+                  badge: 'India Live',
+                  badgeVariant: 'accent' as BadgeVariant,
+                },
+                {
+                  id: 'users' as AdminTab,
+                  title: 'User Management',
+                  desc: 'View real customer accounts, manage staff permissions and platform roles',
+                  icon: '👥',
+                  badge: `${users.length} Users`,
+                  badgeVariant: 'info' as BadgeVariant,
+                },
+                {
+                  id: 'coupons' as AdminTab,
+                  title: 'Promotions & Coupons',
+                  desc: 'Create discount codes, flat reductions, and minimum cart value requirements',
+                  icon: '🏷️',
+                  badge: `${coupons.length} Coupons`,
+                  badgeVariant: 'warning' as BadgeVariant,
+                },
+                {
+                  id: 'revenue' as AdminTab,
+                  title: 'Revenue & Financials',
+                  desc: 'Monthly sales metrics, Average Order Value (AOV), and customer repeat rates',
+                  icon: '📈',
+                  badge: 'Financials',
+                  badgeVariant: 'success' as BadgeVariant,
+                },
+                {
+                  id: 'reviews' as AdminTab,
+                  title: 'Review Moderation',
+                  desc: 'Inspect customer meal kit reviews, verify feedback, and moderate flagged entries',
+                  icon: '⭐',
+                  badge: `${moderationReviews.length} Reviews`,
+                  badgeVariant: 'neutral' as BadgeVariant,
+                },
+              ].map((mod) => (
+                <TouchableOpacity
+                  key={mod.id}
+                  style={[
+                    styles.moduleCard,
+                    {
+                      backgroundColor: colors.bgSurface,
+                      borderColor: colors.borderLight,
+                      borderRadius: radii.xl,
+                      ...shadows.card,
+                    },
+                  ]}
+                  onPress={() => setActiveTab(mod.id)}
+                  activeOpacity={0.7}
+                >
+                  <View style={styles.moduleCardTop}>
+                    <Text style={{ fontSize: 26, marginRight: 12 }}>{mod.icon}</Text>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.moduleCardTitle, { color: colors.textPrimary }]}>
+                        {mod.title}
+                      </Text>
+                      <Text
+                        style={[styles.moduleCardDesc, { color: colors.textSecondary }]}
+                        numberOfLines={2}
+                      >
+                        {mod.desc}
+                      </Text>
+                    </View>
+                  </View>
+
+                  <View style={styles.moduleCardBottom}>
+                    <Badge label={mod.badge} variant={mod.badgeVariant} size="sm" />
+                    <Text style={[styles.moduleCardArrow, { color: colors.primary }]}>
+                      Open Module ➔
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        )}
+
         {/* MODULE 1: ORDERS MANAGEMENT */}
         {activeTab === 'orders' && (
           <View>
@@ -995,64 +1223,85 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
               </View>
             </View>
 
-            {users.map((u) => (
+            {users.length === 0 ? (
               <View
-                key={u.id}
                 style={[
-                  styles.userCard,
+                  styles.emptyStateCard,
                   {
                     backgroundColor: colors.bgSurface,
-                    borderRadius: radii.xl,
                     borderColor: colors.borderLight,
-                    ...shadows.card,
+                    borderRadius: radii.xl,
                   },
                 ]}
               >
-                <View style={styles.userTopRow}>
-                  <View>
-                    <Text style={[styles.userNameText, { color: colors.textPrimary }]}>
-                      {u.name}
-                    </Text>
-                    <Text style={[styles.userEmailText, { color: colors.textSecondary }]}>
-                      {u.email}
-                    </Text>
-                  </View>
-                  <Badge
-                    label={u.role.toUpperCase()}
-                    variant={u.role === 'admin' ? 'info' : 'neutral'}
-                  />
-                </View>
-
-                <Text style={[styles.userStats, { color: colors.textMuted }]}>
-                  City: {u.city} • Orders: {u.ordersCount} • Total Spend: ₹{u.totalSpend} • Joined:{' '}
-                  {u.joinedDate}
+                <Text style={styles.emptyStateIcon}>👥</Text>
+                <Text style={[styles.emptyStateTitle, { color: colors.textPrimary }]}>
+                  No Users Registered
                 </Text>
-
-                <View style={styles.userActionRow}>
-                  <Button
-                    title={
-                      u.role === 'admin' ? 'Demote to Customer' : 'Promote to Admin (@mulyam.in)'
-                    }
-                    variant="outline"
-                    size="sm"
-                    onPress={() => {
-                      toggleUserAdminRole(u.id);
-                      setUsers(getManagedUsers());
-                    }}
-                    style={{ marginRight: 8 }}
-                  />
-                  <Button
-                    title={u.status === 'active' ? 'Suspend' : 'Activate'}
-                    variant={u.status === 'active' ? 'danger' : 'secondary'}
-                    size="sm"
-                    onPress={() => {
-                      toggleUserStatus(u.id);
-                      setUsers(getManagedUsers());
-                    }}
-                  />
-                </View>
+                <Text style={[styles.emptyStateSubtitle, { color: colors.textSecondary }]}>
+                  Mock users have been removed. Real registered customer accounts will appear here once authenticated.
+                </Text>
               </View>
-            ))}
+            ) : (
+              users.map((u) => (
+                <View
+                  key={u.id}
+                  style={[
+                    styles.userCard,
+                    {
+                      backgroundColor: colors.bgSurface,
+                      borderRadius: radii.xl,
+                      borderColor: colors.borderLight,
+                      ...shadows.card,
+                    },
+                  ]}
+                >
+                  <View style={styles.userTopRow}>
+                    <View>
+                      <Text style={[styles.userNameText, { color: colors.textPrimary }]}>
+                        {u.name}
+                      </Text>
+                      <Text style={[styles.userEmailText, { color: colors.textSecondary }]}>
+                        {u.email}
+                      </Text>
+                    </View>
+                    <Badge
+                      label={u.role.toUpperCase()}
+                      variant={u.role === 'admin' ? 'info' : 'neutral'}
+                    />
+                  </View>
+
+                  <Text style={[styles.userStats, { color: colors.textMuted }]}>
+                    City: {u.city} • Orders: {u.ordersCount} • Total Spend: ₹{u.totalSpend} • Joined:{' '}
+                    {u.joinedDate}
+                  </Text>
+
+                  <View style={styles.userActionRow}>
+                    <Button
+                      title={
+                        u.role === 'admin' ? 'Demote to Customer' : 'Promote to Admin (@mulyam.in)'
+                      }
+                      variant="outline"
+                      size="sm"
+                      onPress={() => {
+                        toggleUserAdminRole(u.id);
+                        setUsers(getManagedUsers());
+                      }}
+                      style={{ marginRight: 8 }}
+                    />
+                    <Button
+                      title={u.status === 'suspended' ? 'Activate' : 'Suspend'}
+                      variant={u.status === 'suspended' ? 'primary' : 'danger'}
+                      size="sm"
+                      onPress={() => {
+                        toggleUserStatus(u.id);
+                        setUsers(getManagedUsers());
+                      }}
+                    />
+                  </View>
+                </View>
+              ))
+            )}
           </View>
         )}
 
@@ -1223,74 +1472,95 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
               </View>
             </View>
 
-            {moderationReviews.map((rev) => (
+            {moderationReviews.length === 0 ? (
               <View
-                key={rev.id}
                 style={[
-                  styles.reviewModCard,
+                  styles.emptyStateCard,
                   {
                     backgroundColor: colors.bgSurface,
+                    borderColor: colors.borderLight,
                     borderRadius: radii.xl,
-                    borderColor: rev.status === 'flagged' ? colors.warning : colors.borderLight,
-                    borderWidth: rev.status === 'flagged' ? 2 : 1,
-                    ...shadows.card,
                   },
                 ]}
               >
-                <View style={styles.reviewModTop}>
-                  <View>
-                    <Text style={[styles.reviewKitName, { color: colors.textPrimary }]}>
-                      {rev.mealKitName}
-                    </Text>
-                    <Text style={[styles.reviewAuthor, { color: colors.textSecondary }]}>
-                      {rev.userName} ({rev.userCity}) • Rating: {rev.rating}★
-                    </Text>
-                  </View>
-                  <Badge
-                    label={rev.status.toUpperCase()}
-                    variant={
-                      rev.status === 'approved'
-                        ? 'success'
-                        : rev.status === 'flagged'
-                          ? 'warning'
-                          : 'danger'
-                    }
-                  />
-                </View>
-
-                <Text style={[styles.reviewCommentText, { color: colors.textPrimary }]}>
-                  "{rev.comment}"
+                <Text style={styles.emptyStateIcon}>⭐</Text>
+                <Text style={[styles.emptyStateTitle, { color: colors.textPrimary }]}>
+                  No Reviews to Moderate
                 </Text>
-
-                {rev.reportReason && (
-                  <Text style={[styles.flaggedReason, { color: colors.danger }]}>
-                    Flag reason: {rev.reportReason}
-                  </Text>
-                )}
-
-                <View style={styles.reviewActionRow}>
-                  <Button
-                    title="Approve Review"
-                    variant="outline"
-                    size="sm"
-                    style={{ marginRight: 8 }}
-                    onPress={() => {
-                      moderateReview(rev.id, 'approved');
-                      setModerationReviews(getAllReviewsForModeration());
-                    }}
-                  />
-                  <Button
-                    title="Hide Review"
-                    variant="danger"
-                    size="sm"
-                    onPress={() => {
-                      moderateReview(rev.id, 'hidden');
-                      setModerationReviews(getAllReviewsForModeration());
-                    }}
-                  />
-                </View>
+                <Text style={[styles.emptyStateSubtitle, { color: colors.textSecondary }]}>
+                  Mock reviews have been removed. Verified customer feedback will appear here as orders are delivered and reviewed.
+                </Text>
               </View>
-            ))}
+            ) : (
+              moderationReviews.map((rev) => (
+                <View
+                  key={rev.id}
+                  style={[
+                    styles.reviewModCard,
+                    {
+                      backgroundColor: colors.bgSurface,
+                      borderRadius: radii.xl,
+                      borderColor: rev.status === 'flagged' ? colors.warning : colors.borderLight,
+                      borderWidth: rev.status === 'flagged' ? 2 : 1,
+                      ...shadows.card,
+                    },
+                  ]}
+                >
+                  <View style={styles.reviewModTop}>
+                    <View>
+                      <Text style={[styles.reviewKitName, { color: colors.textPrimary }]}>
+                        {rev.mealKitName}
+                      </Text>
+                      <Text style={[styles.reviewAuthor, { color: colors.textSecondary }]}>
+                        {rev.userName} ({rev.userCity}) • Rating: {rev.rating}★
+                      </Text>
+                    </View>
+                    <Badge
+                      label={rev.status.toUpperCase()}
+                      variant={
+                        rev.status === 'approved'
+                          ? 'success'
+                          : rev.status === 'flagged'
+                            ? 'warning'
+                            : 'danger'
+                      }
+                    />
+                  </View>
+
+                  <Text style={[styles.reviewCommentText, { color: colors.textPrimary }]}>
+                    "{rev.comment}"
+                  </Text>
+
+                  {rev.reportReason && (
+                    <Text style={[styles.flaggedReason, { color: colors.danger }]}>
+                      Flag reason: {rev.reportReason}
+                    </Text>
+                  )}
+
+                  <View style={styles.reviewActionRow}>
+                    <Button
+                      title="Approve Review"
+                      variant="outline"
+                      size="sm"
+                      style={{ marginRight: 8 }}
+                      onPress={() => {
+                        moderateReview(rev.id, 'approved');
+                        setModerationReviews(getAllReviewsForModeration());
+                      }}
+                    />
+                    <Button
+                      title="Hide Review"
+                      variant="danger"
+                      size="sm"
+                      onPress={() => {
+                        moderateReview(rev.id, 'hidden');
+                        setModerationReviews(getAllReviewsForModeration());
+                      }}
+                    />
+                  </View>
+                </View>
+              ))
+            )}
           </View>
         )}
       </ScrollView>
@@ -1506,10 +1776,12 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   tabsBar: {
-    maxHeight: 52,
+    height: 52,
+    flexGrow: 0,
     borderBottomWidth: 1,
   },
   tabsContent: {
+    flexDirection: 'row',
     paddingHorizontal: 16,
     alignItems: 'center',
     gap: 8,
@@ -1950,5 +2222,65 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderWidth: 1,
+  },
+  moduleSectionTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+  },
+  modulesGrid: {
+    gap: 12,
+  },
+  moduleCard: {
+    padding: 16,
+    borderWidth: 1,
+    marginBottom: 10,
+  },
+  moduleCardTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  moduleCardTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    marginBottom: 2,
+  },
+  moduleCardDesc: {
+    fontSize: 12,
+    lineHeight: 16,
+  },
+  moduleCardBottom: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 6,
+  },
+  moduleCardArrow: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  emptyStateCard: {
+    padding: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    marginVertical: 16,
+  },
+  emptyStateIcon: {
+    fontSize: 40,
+    marginBottom: 10,
+  },
+  emptyStateTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    marginBottom: 4,
+    textAlign: 'center',
+  },
+  emptyStateSubtitle: {
+    fontSize: 13,
+    textAlign: 'center',
+    lineHeight: 18,
+    maxWidth: 320,
   },
 });

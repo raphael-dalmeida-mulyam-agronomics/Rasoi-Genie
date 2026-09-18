@@ -65,7 +65,7 @@ export const CartView: React.FC = () => {
   const [newTag, setNewTag] = useState<'Home' | 'Work' | 'Other'>('Home');
 
   // UPI Input
-  const [upiId, setUpiId] = useState('priya@okhdfcbank');
+  const [upiId, setUpiId] = useState('');
 
   // Checkout flow states
   const [isCheckingOut, setIsCheckingOut] = useState(false);
