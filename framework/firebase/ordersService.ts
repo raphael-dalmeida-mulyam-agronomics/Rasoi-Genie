@@ -65,7 +65,7 @@ export interface Order {
 }
 
 // Initial mock orders to populate if Firestore is empty in dev mode
-const INITIAL_MOCK_ORDERS: Order[] = [
+export const INITIAL_MOCK_ORDERS: Order[] = [
   {
     id: 'ORD-9821',
     userId: 'user_phone_9876543210',

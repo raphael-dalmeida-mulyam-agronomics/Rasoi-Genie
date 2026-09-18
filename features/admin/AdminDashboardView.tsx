@@ -58,6 +58,18 @@ import { Card } from '../../framework/ui/Card';
 import { Badge, BadgeVariant, getDietBadgeInfo } from '../../framework/ui/Badge';
 import { Button } from '../../framework/ui/Button';
 import { AddMealKitWizardModal } from './AddMealKitWizardModal';
+import {
+  fetchAllOrdersFromSupabase,
+  approveOrderInSupabase,
+  subscribeToOrdersRealtime,
+  refreshPendingApprovalCount,
+} from '../../framework/services/supabaseOrdersService';
+import { saveMealKitToSupabase } from '../../framework/services/supabaseMealKitsService';
+import { seedSupabaseDatabase } from '../../framework/services/supabaseSeedService';
+import {
+  subscribeToPendingApprovalCount,
+  playOrderAlertSound,
+} from '../../framework/services/notificationService';
 
 type AdminTab =
   'orders' | 'kits' | 'inventory' | 'analytics' | 'users' | 'coupons' | 'revenue' | 'reviews';
@@ -121,18 +133,82 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
   const isMulyamAdmin =
     user && user.role === 'admin' && user.email && validateAdminEmail(user.email);
 
+  const [pendingApprovalCount, setPendingApprovalCount] = useState<number>(0);
+  const [isSeedingSupabase, setIsSeedingSupabase] = useState<boolean>(false);
+
+  const reloadSupabaseOrders = async () => {
+    try {
+      const sbOrders = await fetchAllOrdersFromSupabase();
+      if (sbOrders && sbOrders.length > 0) {
+        setOrders(sbOrders);
+      }
+    } catch (err) {
+      console.warn('[AdminDashboard] Error loading Supabase orders:', err);
+    }
+  };
+
   useEffect(() => {
     if (!isMulyamAdmin) return;
-    const unsubscribe = subscribeToOrders((updatedOrders) => {
+
+    reloadSupabaseOrders();
+    refreshPendingApprovalCount();
+
+    const unsubscribeRealtime = subscribeToOrdersRealtime(() => {
+      reloadSupabaseOrders();
+    });
+
+    const unsubscribeCount = subscribeToPendingApprovalCount((cnt) => {
+      setPendingApprovalCount(cnt);
+    });
+
+    const unsubscribeFb = subscribeToOrders((updatedOrders) => {
       setOrders(updatedOrders);
     });
-    return () => unsubscribe();
+
+    return () => {
+      unsubscribeRealtime();
+      unsubscribeCount();
+      unsubscribeFb();
+    };
   }, [isMulyamAdmin]);
+
+  const handleApproveOrder = async (orderId: string) => {
+    setUpdatingOrderId(orderId);
+    try {
+      await approveOrderInSupabase(orderId, user?.displayName || user?.email || 'Admin');
+      await updateOrderStatus(orderId, 'Confirmed');
+      await reloadSupabaseOrders();
+      Alert.alert(
+        'Order Approved! ✅',
+        `Order ${orderId} has been confirmed. Chef packing team has been notified.`,
+      );
+    } catch (err: any) {
+      Alert.alert('Approval Error', err?.message || 'Could not approve order.');
+    } finally {
+      setUpdatingOrderId(null);
+    }
+  };
+
+  const handleSeedSupabase = async () => {
+    setIsSeedingSupabase(true);
+    try {
+      const result = await seedSupabaseDatabase(true);
+      if (result.success) {
+        Alert.alert('Supabase Synced! ☁️', result.message);
+        await reloadSupabaseOrders();
+      } else {
+        Alert.alert('Sync Incomplete', result.error || result.message);
+      }
+    } finally {
+      setIsSeedingSupabase(false);
+    }
+  };
 
   const handleStatusChange = async (orderId: string, newStatus: OrderStatus) => {
     setUpdatingOrderId(orderId);
     try {
       await updateOrderStatus(orderId, newStatus);
+      await reloadSupabaseOrders();
     } finally {
       setUpdatingOrderId(null);
     }
@@ -260,7 +336,13 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
       >
         {(
           [
-            { id: 'orders', label: `Orders (${orders.length})` },
+            {
+              id: 'orders',
+              label:
+                pendingApprovalCount > 0
+                  ? `Orders (${orders.length}) 🚨 ${pendingApprovalCount} Awaiting Approval`
+                  : `Orders (${orders.length})`,
+            },
             { id: 'kits', label: `Meal Kits (${kits.length})` },
             { id: 'inventory', label: 'Inventory Hub' },
             { id: 'analytics', label: 'Regional Analytics 🇮🇳' },
@@ -303,6 +385,45 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
         {/* MODULE 1: ORDERS MANAGEMENT */}
         {activeTab === 'orders' && (
           <View>
+            {/* Realtime Pending Approval Alert Banner */}
+            {pendingApprovalCount > 0 && (
+              <View
+                style={{
+                  backgroundColor: '#FEF2F2',
+                  borderColor: '#F87171',
+                  borderWidth: 1.5,
+                  borderRadius: radii.lg,
+                  padding: 12,
+                  marginBottom: 14,
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                }}
+              >
+                <View style={{ flex: 1, marginRight: 10 }}>
+                  <Text style={{ color: '#991B1B', fontWeight: '800', fontSize: 13 }}>
+                    🚨 {pendingApprovalCount} New Order(s) Awaiting Approval!
+                  </Text>
+                  <Text style={{ color: '#B91C1C', fontSize: 11, marginTop: 2 }}>
+                    Review customer recipe orders and approve them to start kitchen prep.
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  style={{
+                    backgroundColor: '#DC2626',
+                    paddingHorizontal: 12,
+                    paddingVertical: 6,
+                    borderRadius: radii.sm,
+                  }}
+                  onPress={() => setSelectedStatusFilter('Placed')}
+                >
+                  <Text style={{ color: '#FFFFFF', fontSize: 11, fontWeight: '800' }}>
+                    View Placed
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
             {/* Filter pills */}
             <ScrollView
               horizontal
@@ -367,6 +488,45 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
                 <Text style={[styles.adminOrderSlot, { color: colors.textMuted }]}>
                   Slot: {order.deliverySlot} • Paid: ₹{order.totalAmount} via {order.paymentMethod}
                 </Text>
+
+                {/* Direct Action Required Approval Section */}
+                {order.status === 'Placed' && (
+                  <View
+                    style={{
+                      marginVertical: 10,
+                      padding: 12,
+                      backgroundColor: '#FEF2F2',
+                      borderRadius: radii.md,
+                      borderWidth: 1.5,
+                      borderColor: '#F87171',
+                    }}
+                  >
+                    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
+                      <Text style={{ fontSize: 16, marginRight: 6 }}>⏳</Text>
+                      <View style={{ flex: 1 }}>
+                        <Text style={{ color: '#991B1B', fontWeight: '800', fontSize: 12 }}>
+                          Awaiting Admin Approval
+                        </Text>
+                        <Text style={{ color: '#B91C1C', fontSize: 11 }}>
+                          Customer placed this order. Approve to confirm and begin fresh ingredient
+                          packaging.
+                        </Text>
+                      </View>
+                    </View>
+                    <Button
+                      title={
+                        updatingOrderId === order.id
+                          ? 'Approving Order...'
+                          : 'Approve Order (Placed ➔ Confirmed) ✅'
+                      }
+                      variant="primary"
+                      size="sm"
+                      loading={updatingOrderId === order.id}
+                      style={{ backgroundColor: '#16A34A' }}
+                      onPress={() => handleApproveOrder(order.id)}
+                    />
+                  </View>
+                )}
 
                 {/* Status transition buttons */}
                 <View style={styles.orderActionsRow}>
@@ -450,14 +610,23 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
                   Manage recipes, ingredients, sachets & prices
                 </Text>
               </View>
-              <Button
-                title="+ Add Meal Kit"
-                size="sm"
-                onPress={() => {
-                  setEditingKit(null);
-                  setKitModalVisible(true);
-                }}
-              />
+              <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+                <Button
+                  title={isSeedingSupabase ? 'Syncing...' : 'Seed to Supabase ☁️'}
+                  variant="outline"
+                  size="sm"
+                  loading={isSeedingSupabase}
+                  onPress={handleSeedSupabase}
+                />
+                <Button
+                  title="+ Add Meal Kit"
+                  size="sm"
+                  onPress={() => {
+                    setEditingKit(null);
+                    setKitModalVisible(true);
+                  }}
+                />
+              </View>
             </View>
 
             {kits.map((kit) => (
@@ -1205,12 +1374,13 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
           setEditingKit(null);
         }}
         initialKit={editingKit}
-        onSaveKit={(savedKit) => {
+        onSaveKit={async (savedKit) => {
           if (editingKit) {
             updateMealKit(editingKit.id, savedKit);
           } else {
             addMealKit(savedKit);
           }
+          await saveMealKitToSupabase(savedKit, true);
           setKits(getMealKits());
           setKitModalVisible(false);
           setEditingKit(null);

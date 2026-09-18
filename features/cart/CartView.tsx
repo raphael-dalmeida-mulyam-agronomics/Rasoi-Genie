@@ -16,6 +16,7 @@ import { usePreferences, AddressItem } from '../../framework/context/Preferences
 import { useAuth } from '../../framework/context/AuthContext';
 import { useTheme } from '../../framework/theme/ThemeContext';
 import { createOrder, Order } from '../../framework/firebase/ordersService';
+import { createOrderInSupabase } from '../../framework/services/supabaseOrdersService';
 import { Button } from '../../framework/ui/Button';
 import { Card } from '../../framework/ui/Card';
 import { Badge } from '../../framework/ui/Badge';
@@ -112,19 +113,20 @@ export const CartView: React.FC = () => {
 
     setIsCheckingOut(true);
     try {
-      const order = await createOrder({
+      const orderData = {
         userId: user?.uid || 'guest_user_' + Date.now(),
         customerPhone: user?.phoneNumber || activeAddress.phone || '+91 9876543210',
         customerName: user?.displayName || activeAddress.name || 'Valued Chef',
         customerEmail: user?.email || undefined,
         deliveryAddress: `${activeAddress.flatAndStreet}, ${activeAddress.areaAndLandmark}, ${activeAddress.city} - ${activeAddress.pincode}`,
-        addressTag: activeAddress.tag,
         deliverySlot: selectedSlot,
         items: items.map((i) => ({
-          id: i.kit.id,
+          kitId: i.kit.id,
           name: i.kit.name,
           quantity: i.quantity,
           price: i.unitPrice ?? i.kit.price,
+          servings: i.servings,
+          spiceLevel: i.spiceLevel,
           masalaSachets: i.kit.masalaSachets,
           imageUrl: i.kit.heroImage,
         })),
@@ -134,6 +136,23 @@ export const CartView: React.FC = () => {
         deliveryFee,
         totalAmount: total,
         paymentMethod: selectedPaymentMethod,
+      };
+
+      // 1. Create order in Supabase backend (triggers real-time alert, sound chime, admin_notifications)
+      await createOrderInSupabase(orderData);
+
+      // 2. Also keep Firebase local store in sync
+      const order = await createOrder({
+        ...orderData,
+        addressTag: activeAddress.tag,
+        items: orderData.items.map((it) => ({
+          id: it.kitId,
+          name: it.name,
+          quantity: it.quantity,
+          price: it.price,
+          masalaSachets: it.masalaSachets || [],
+          imageUrl: it.imageUrl,
+        })),
       });
 
       setConfirmedOrder(order);

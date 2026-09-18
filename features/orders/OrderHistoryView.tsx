@@ -5,6 +5,10 @@ import { useAuth } from '../../framework/context/AuthContext';
 import { useTheme } from '../../framework/theme/ThemeContext';
 import { useCart } from '../../framework/context/CartContext';
 import { Order, subscribeToOrders, OrderStatus } from '../../framework/firebase/ordersService';
+import {
+  fetchAllOrdersFromSupabase,
+  subscribeToOrdersRealtime,
+} from '../../framework/services/supabaseOrdersService';
 import { Badge, BadgeVariant } from '../../framework/ui/Badge';
 import { Button } from '../../framework/ui/Button';
 import { Card } from '../../framework/ui/Card';
@@ -22,10 +26,27 @@ export const OrderHistoryView: React.FC = () => {
   const [trackingModalVisible, setTrackingModalVisible] = useState(false);
 
   useEffect(() => {
-    const unsubscribe = subscribeToOrders((allOrders) => {
-      setOrders(allOrders);
+    const loadOrders = async () => {
+      const sbOrders = await fetchAllOrdersFromSupabase();
+      if (sbOrders && sbOrders.length > 0) {
+        setOrders(sbOrders);
+      }
+    };
+
+    loadOrders();
+
+    const unsubRealtime = subscribeToOrdersRealtime(() => {
+      loadOrders();
     });
-    return () => unsubscribe();
+
+    const unsubscribeFb = subscribeToOrders((allOrders) => {
+      setOrders((prev) => (prev.length > 0 ? prev : allOrders));
+    });
+
+    return () => {
+      unsubRealtime();
+      unsubscribeFb();
+    };
   }, []);
 
   const handleReorder = (order: Order) => {

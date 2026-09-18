@@ -11,11 +11,18 @@ import { DietaryPreferencesModal } from '../onboarding/DietaryPreferencesModal';
 import { NotificationsView } from '../notifications/NotificationsView';
 import { SupportView } from '../support/SupportView';
 import { SubscriptionPlanView } from '../subscription/SubscriptionPlanView';
+import { subscribeToPendingApprovalCount } from '../../framework/services/notificationService';
 
 export const ProfileView: React.FC = () => {
   const { user, isAdmin, logout } = useAuth();
   const { colors, radii, shadows, isDark, toggleColorMode } = useTheme();
   const { preferences, defaultAddress } = usePreferences();
+  const [pendingApprovalCount, setPendingApprovalCount] = useState<number>(0);
+
+  React.useEffect(() => {
+    const unsub = subscribeToPendingApprovalCount((count) => setPendingApprovalCount(count));
+    return () => unsub();
+  }, []);
 
   // Subview navigation states
   const [subView, setSubView] = useState<
@@ -121,10 +128,17 @@ export const ProfileView: React.FC = () => {
 
           {isAdmin && (
             <Button
-              title="Open Company Admin Panel ⚙️"
-              variant="secondary"
+              title={
+                pendingApprovalCount > 0
+                  ? `Open Admin Panel ⚙️ (${pendingApprovalCount} Awaiting Approval)`
+                  : 'Open Company Admin Panel ⚙️'
+              }
+              variant={pendingApprovalCount > 0 ? 'primary' : 'secondary'}
               size="sm"
-              style={{ marginTop: 14 }}
+              style={{
+                marginTop: 14,
+                backgroundColor: pendingApprovalCount > 0 ? '#DC2626' : undefined,
+              }}
               onPress={() => router.push('/(tabs)/admin' as any)}
             />
           )}

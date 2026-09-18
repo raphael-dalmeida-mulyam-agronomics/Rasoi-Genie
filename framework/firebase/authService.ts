@@ -2,8 +2,10 @@ import {
   signInWithPopup,
   signOut,
   sendSignInLinkToEmail,
+  onAuthStateChanged,
   User as FirebaseUser,
 } from 'firebase/auth';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { auth, googleProvider } from './config';
 
 export interface UserProfile {
@@ -59,6 +61,7 @@ export async function loginWithGoogle(): Promise<AuthResult> {
         createdAt: new Date().toISOString(),
       };
 
+      await saveStoredUser(userProfile);
       return {
         success: true,
         user: userProfile,
@@ -76,6 +79,7 @@ export async function loginWithGoogle(): Promise<AuthResult> {
         createdAt: new Date().toISOString(),
       };
 
+      await saveStoredUser(userProfile);
       return {
         success: true,
         user: userProfile,
@@ -192,6 +196,7 @@ export async function verifyEmailOTP(email: string, otpCode: string): Promise<Au
       createdAt: new Date().toISOString(),
     };
 
+    await saveStoredUser(user);
     return {
       success: true,
       user,
@@ -296,6 +301,7 @@ export async function verifyPhoneOTP(
       createdAt: new Date().toISOString(),
     };
 
+    await saveStoredUser(user);
     return {
       success: true,
       user,
@@ -308,11 +314,92 @@ export async function verifyPhoneOTP(
   }
 }
 
+export const AUTH_STORAGE_KEY = '@rasoi_auth_user';
+
+/**
+ * Persists user profile to AsyncStorage and localStorage so session survives app close and page reloads.
+ */
+export async function saveStoredUser(user: UserProfile): Promise<void> {
+  try {
+    const json = JSON.stringify(user);
+    if (typeof window !== 'undefined' && window.localStorage) {
+      window.localStorage.setItem(AUTH_STORAGE_KEY, json);
+    }
+    await AsyncStorage.setItem(AUTH_STORAGE_KEY, json);
+  } catch (err) {
+    console.warn('[AuthService] Error saving stored user session:', err);
+  }
+}
+
+/**
+ * Retrieves persisted user profile from storage.
+ */
+export async function getStoredUser(): Promise<UserProfile | null> {
+  try {
+    // 1. Try instantaneous web localStorage first
+    if (typeof window !== 'undefined' && window.localStorage) {
+      const webData = window.localStorage.getItem(AUTH_STORAGE_KEY);
+      if (webData) {
+        return JSON.parse(webData) as UserProfile;
+      }
+    }
+    // 2. Try AsyncStorage (cross-platform Native / Web)
+    const nativeData = await AsyncStorage.getItem(AUTH_STORAGE_KEY);
+    if (nativeData) {
+      return JSON.parse(nativeData) as UserProfile;
+    }
+  } catch (err) {
+    console.warn('[AuthService] Error reading stored user session:', err);
+  }
+  return null;
+}
+
+/**
+ * Removes persisted user profile from all storage mechanisms upon logout.
+ */
+export async function clearStoredUser(): Promise<void> {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      window.localStorage.removeItem(AUTH_STORAGE_KEY);
+    }
+    await AsyncStorage.removeItem(AUTH_STORAGE_KEY);
+  } catch (err) {
+    console.warn('[AuthService] Error clearing stored user session:', err);
+  }
+}
+
+/**
+ * Subscribes to Firebase Auth state changes for automatic token refresh and persistence.
+ */
+export function subscribeToFirebaseAuthChanges(
+  callback: (user: UserProfile | null) => void,
+): () => void {
+  return onAuthStateChanged(auth, (fbUser) => {
+    if (fbUser) {
+      const email = fbUser.email || '';
+      const isAdmin = validateAdminEmail(email);
+      const profile: UserProfile = {
+        uid: fbUser.uid,
+        email,
+        phoneNumber: fbUser.phoneNumber,
+        role: isAdmin ? 'admin' : 'customer',
+        displayName: fbUser.displayName || email.split('@')[0] || 'User',
+        photoURL: fbUser.photoURL,
+        createdAt: new Date().toISOString(),
+      };
+      saveStoredUser(profile);
+      callback(profile);
+    }
+  });
+}
+
 /**
  * Log out current session.
+ * Clears stored local user session and signs out of Firebase.
  */
 export async function logoutUser(): Promise<void> {
   try {
+    await clearStoredUser();
     await signOut(auth);
   } catch {
     // Silent catch for local session clear

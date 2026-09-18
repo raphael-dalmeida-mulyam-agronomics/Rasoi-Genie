@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState } from 'react';
+import React, { createContext, useContext, useState, useEffect } from 'react';
 import {
   UserProfile,
   loginWithGoogle,
@@ -8,6 +8,9 @@ import {
   verifyPhoneOTP,
   logoutUser,
   validateAdminEmail,
+  getStoredUser,
+  subscribeToFirebaseAuthChanges,
+  AUTH_STORAGE_KEY,
 } from '../firebase/authService';
 
 interface AuthContextType {
@@ -34,12 +37,52 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<UserProfile | null>(null);
+  const [user, setUser] = useState<UserProfile | null>(() => {
+    // Instant synchronous restoration for Web / browser reloads
+    if (typeof window !== 'undefined' && window.localStorage) {
+      try {
+        const stored = window.localStorage.getItem(AUTH_STORAGE_KEY);
+        if (stored) {
+          return JSON.parse(stored) as UserProfile;
+        }
+      } catch {
+        // Fallback to async storage
+      }
+    }
+    return null;
+  });
   const [loading, setLoading] = useState<boolean>(false);
   const [verificationId, setVerificationId] = useState<string | null>(null);
   const [phoneNumber, setPhoneNumber] = useState<string | null>(null);
   const [emailAddress, setEmailAddress] = useState<string | null>(null);
   const [activeOtpHint, setActiveOtpHint] = useState<string | null>(null);
+
+  // Restore persisted session on native app startup / mount
+  useEffect(() => {
+    let isMounted = true;
+    (async () => {
+      try {
+        const storedUser = await getStoredUser();
+        if (storedUser && isMounted) {
+          setUser((prev) => prev || storedUser);
+        }
+      } catch (err) {
+        console.warn('[AuthContext] Error restoring session on startup:', err);
+      }
+    })();
+
+    // Listen to Firebase auth state persistence (Google OAuth)
+    const unsubscribeFirebase = subscribeToFirebaseAuthChanges((fbProfile) => {
+      if (isMounted && fbProfile) {
+        setUser(fbProfile);
+      }
+    });
+
+    return () => {
+      isMounted = false;
+      unsubscribeFirebase();
+    };
+  }, []);
 
   const isAdmin = !!(user && user.role === 'admin' && user.email && validateAdminEmail(user.email));
 

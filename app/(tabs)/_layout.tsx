@@ -1,3 +1,4 @@
+import React, { useState, useEffect } from 'react';
 import { SymbolView } from 'expo-symbols';
 import { Tabs } from 'expo-router';
 import { View } from 'react-native';
@@ -5,11 +6,22 @@ import { useAuth } from '../../framework/context/AuthContext';
 import { useTheme } from '../../framework/theme/ThemeContext';
 import { useCart } from '../../framework/context/CartContext';
 import { AuthGuard } from '../../features/auth/AuthGuard';
+import { subscribeToPendingApprovalCount } from '../../framework/services/notificationService';
+import { refreshPendingApprovalCount } from '../../framework/services/supabaseOrdersService';
 
 export default function TabLayout() {
   const { user, isAdmin } = useAuth();
   const { colors } = useTheme();
   const { totalCount } = useCart();
+  const [pendingApprovalCount, setPendingApprovalCount] = useState<number>(0);
+
+  useEffect(() => {
+    refreshPendingApprovalCount();
+    const unsubscribe = subscribeToPendingApprovalCount((count) => {
+      setPendingApprovalCount(count);
+    });
+    return () => unsubscribe();
+  }, []);
 
   if (!user) {
     return (
@@ -134,6 +146,13 @@ export default function TabLayout() {
         options={{
           title: 'Admin Dash',
           href: isAdmin ? '/admin' : null,
+          tabBarBadge: pendingApprovalCount > 0 ? pendingApprovalCount : undefined,
+          tabBarBadgeStyle: {
+            backgroundColor: '#DC2626',
+            color: '#FFFFFF',
+            fontSize: 10,
+            fontWeight: '800',
+          },
           tabBarIcon: ({ color }) => (
             <SymbolView
               name={{

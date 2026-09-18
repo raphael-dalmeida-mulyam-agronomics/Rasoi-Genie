@@ -1,3 +1,19 @@
+const mockStorage = new Map<string, string>();
+jest.mock('@react-native-async-storage/async-storage', () => ({
+  setItem: jest.fn(async (key: string, value: string) => {
+    mockStorage.set(key, value);
+  }),
+  getItem: jest.fn(async (key: string) => {
+    return mockStorage.get(key) || null;
+  }),
+  removeItem: jest.fn(async (key: string) => {
+    mockStorage.delete(key);
+  }),
+  clear: jest.fn(async () => {
+    mockStorage.clear();
+  }),
+}));
+
 import {
   validateAdminEmail,
   loginWithGoogle,
@@ -5,6 +21,9 @@ import {
   verifyEmailOTP,
   sendPhoneOTP,
   verifyPhoneOTP,
+  saveStoredUser,
+  getStoredUser,
+  clearStoredUser,
 } from '../firebase/authService';
 
 describe('Auth Service - Google Auth, Strict OTP Verification & @mulyam.in Admin Elevation', () => {
@@ -87,6 +106,28 @@ describe('Auth Service - Google Auth, Strict OTP Verification & @mulyam.in Admin
       );
       expect(verifyRes.success).toBe(true);
       expect(verifyRes.user?.role).toBe('customer');
+    });
+  });
+
+  describe('Session Persistence (App Close / Page Reload Survival)', () => {
+    it('should save, retrieve, and clear user session in persistent storage', async () => {
+      const testProfile = {
+        uid: 'user_persistent_123',
+        email: 'persistent@mulyam.in',
+        role: 'admin' as const,
+        displayName: 'Persistent Admin',
+        createdAt: new Date().toISOString(),
+      };
+
+      await saveStoredUser(testProfile);
+      const retrieved = await getStoredUser();
+      expect(retrieved).not.toBeNull();
+      expect(retrieved?.uid).toBe('user_persistent_123');
+      expect(retrieved?.email).toBe('persistent@mulyam.in');
+
+      await clearStoredUser();
+      const afterClear = await getStoredUser();
+      expect(afterClear).toBeNull();
     });
   });
 });
