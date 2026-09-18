@@ -21,12 +21,12 @@ export const AddressBookView: React.FC<{ onBack?: () => void }> = ({ onBack }) =
   const { colors, radii, shadows } = useTheme();
 
   const [modalVisible, setModalVisible] = useState(false);
-  const [name, setName] = useState(user?.displayName || 'Priya Sharma');
-  const [phone, setPhone] = useState(user?.phoneNumber || '+91 98765 43210');
+  const [name, setName] = useState(user?.displayName || '');
+  const [phone, setPhone] = useState(user?.phoneNumber || '');
   const [flatAndStreet, setFlatAndStreet] = useState('');
   const [areaAndLandmark, setAreaAndLandmark] = useState('');
   const [city, setCity] = useState('Bengaluru');
-  const [pincode, setPincode] = useState('560103');
+  const [pincode, setPincode] = useState('');
   const [tag, setTag] = useState<'Home' | 'Work' | 'Other'>('Home');
 
   const handleSave = () => {

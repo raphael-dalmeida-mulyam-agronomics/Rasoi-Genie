@@ -57,20 +57,20 @@ function RootLayoutNav() {
 
   return (
     <RasoiThemeProvider>
-      <PreferencesProvider>
-        <WishlistProvider>
-          <CartProvider>
-            <AuthProvider>
+      <AuthProvider>
+        <PreferencesProvider>
+          <WishlistProvider>
+            <CartProvider>
               <NavigationThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
                 <Stack>
                   <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
                   <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
                 </Stack>
               </NavigationThemeProvider>
-            </AuthProvider>
-          </CartProvider>
-        </WishlistProvider>
-      </PreferencesProvider>
+            </CartProvider>
+          </WishlistProvider>
+        </PreferencesProvider>
+      </AuthProvider>
     </RasoiThemeProvider>
   );
 }

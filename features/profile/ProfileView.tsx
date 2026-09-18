@@ -1,9 +1,19 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Alert } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  Image,
+  Alert,
+  Modal,
+} from 'react-native';
 import { router } from 'expo-router';
 import { useAuth } from '../../framework/context/AuthContext';
 import { useTheme } from '../../framework/theme/ThemeContext';
 import { usePreferences } from '../../framework/context/PreferencesContext';
+import { PaymentMethod } from '../../framework/context/CartContext';
 import { Badge } from '../../framework/ui/Badge';
 import { Button } from '../../framework/ui/Button';
 import { AddressBookView } from './AddressBookView';
@@ -16,8 +26,10 @@ import { subscribeToPendingApprovalCount } from '../../framework/services/notifi
 export const ProfileView: React.FC = () => {
   const { user, isAdmin, logout } = useAuth();
   const { colors, radii, shadows, isDark, toggleColorMode } = useTheme();
-  const { preferences, defaultAddress } = usePreferences();
+  const { preferences, defaultAddress, preferredPaymentMethod, setPreferredPaymentMethod } =
+    usePreferences();
   const [pendingApprovalCount, setPendingApprovalCount] = useState<number>(0);
+  const [paymentModalVisible, setPaymentModalVisible] = useState<boolean>(false);
 
   React.useEffect(() => {
     const unsub = subscribeToPendingApprovalCount((count) => setPendingApprovalCount(count));
@@ -28,7 +40,6 @@ export const ProfileView: React.FC = () => {
   const [subView, setSubView] = useState<
     'main' | 'addresses' | 'notifications' | 'support' | 'subscription'
   >('main');
-
   const [dietModalVisible, setDietModalVisible] = useState(false);
 
   const handleReferFriend = () => {
@@ -169,6 +180,10 @@ export const ProfileView: React.FC = () => {
             <Badge label={`Diet: ${preferences.dietType.toUpperCase()}`} variant="primary" />
             <Badge label={`Spice: ${preferences.spiceTolerance}`} variant="warning" />
             <Badge label={`Hub: ${preferences.regionHub}`} variant="accent" />
+            <Badge label={`Pay: ${preferredPaymentMethod}`} variant="info" />
+            {preferences.preferredCuisines?.slice(0, 3).map((c) => (
+              <Badge key={c} label={c} variant="neutral" />
+            ))}
             {preferences.allergies.map((a) => (
               <Badge key={a} label={`No ${a}`} variant="danger" />
             ))}
@@ -190,8 +205,15 @@ export const ProfileView: React.FC = () => {
           <MenuRow
             icon="📍"
             title="Saved Delivery Addresses"
-            subtitle={`${defaultAddress?.flatAndStreet || 'Manage your addresses'}`}
+            subtitle={`${defaultAddress?.flatAndStreet || 'Manage your delivery locations'}`}
             onPress={() => setSubView('addresses')}
+          />
+
+          <MenuRow
+            icon="💳"
+            title="Preferred Payment Method"
+            subtitle={`Default: ${preferredPaymentMethod} — Tap to switch`}
+            onPress={() => setPaymentModalVisible(true)}
           />
 
           <MenuRow
@@ -275,6 +297,88 @@ export const ProfileView: React.FC = () => {
         visible={dietModalVisible}
         onClose={() => setDietModalVisible(false)}
       />
+
+      {/* Preferred Payment Method Selection Modal */}
+      <Modal
+        visible={paymentModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setPaymentModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View
+            style={[
+              styles.modalCard,
+              { backgroundColor: colors.bgSurface, borderColor: colors.borderLight },
+            ]}
+          >
+            <Text style={[styles.modalTitle, { color: colors.textPrimary }]}>
+              Choose Preferred Payment Method
+            </Text>
+            <Text style={[styles.modalSubtitle, { color: colors.textSecondary }]}>
+              This will automatically be selected for all upcoming meal kit checkouts.
+            </Text>
+
+            {(['UPI', 'Card', 'Cash on Delivery', 'Wallet'] as PaymentMethod[]).map((method) => {
+              const isSelected = preferredPaymentMethod === method;
+              return (
+                <TouchableOpacity
+                  key={method}
+                  onPress={async () => {
+                    await setPreferredPaymentMethod(method);
+                    setPaymentModalVisible(false);
+                  }}
+                  style={[
+                    styles.paymentOptionRow,
+                    {
+                      borderColor: isSelected ? colors.primary : colors.borderLight,
+                      backgroundColor: isSelected ? colors.primary + '15' : 'transparent',
+                    },
+                  ]}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.paymentMethodIcon}>
+                    {method === 'UPI'
+                      ? '⚡'
+                      : method === 'Card'
+                        ? '💳'
+                        : method === 'Cash on Delivery'
+                          ? '💵'
+                          : '🏦'}
+                  </Text>
+                  <View style={{ flex: 1, marginLeft: 10 }}>
+                    <Text style={[styles.paymentOptionName, { color: colors.textPrimary }]}>
+                      {method === 'UPI'
+                        ? 'UPI (GPay / PhonePe / Paytm)'
+                        : method === 'Card'
+                          ? 'Credit / Debit Card'
+                          : method === 'Cash on Delivery'
+                            ? 'Cash on Delivery (Doorstep)'
+                            : 'Wallet / Net Banking'}
+                    </Text>
+                  </View>
+                  <View
+                    style={[
+                      styles.radioIndicator,
+                      {
+                        borderColor: isSelected ? colors.primary : colors.borderLight,
+                        backgroundColor: isSelected ? colors.primary : 'transparent',
+                      },
+                    ]}
+                  />
+                </TouchableOpacity>
+              );
+            })}
+
+            <TouchableOpacity
+              onPress={() => setPaymentModalVisible(false)}
+              style={[styles.closeModalBtn, { borderColor: colors.borderLight }]}
+            >
+              <Text style={[styles.closeModalText, { color: colors.textPrimary }]}>Done</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 };
@@ -422,6 +526,62 @@ const styles = StyleSheet.create({
   },
   deleteAccText: {
     fontSize: 13,
+    fontWeight: '700',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.65)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  modalCard: {
+    width: '100%',
+    maxWidth: 420,
+    borderRadius: 20,
+    borderWidth: 1,
+    padding: 24,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    marginBottom: 6,
+  },
+  modalSubtitle: {
+    fontSize: 13,
+    lineHeight: 18,
+    marginBottom: 20,
+  },
+  paymentOptionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 14,
+    borderRadius: 14,
+    borderWidth: 1,
+    marginBottom: 10,
+  },
+  paymentMethodIcon: {
+    fontSize: 22,
+  },
+  paymentOptionName: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  radioIndicator: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    borderWidth: 2,
+  },
+  closeModalBtn: {
+    marginTop: 10,
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    alignItems: 'center',
+  },
+  closeModalText: {
+    fontSize: 14,
     fontWeight: '700',
   },
 });
