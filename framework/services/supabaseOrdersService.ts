@@ -367,30 +367,78 @@ export async function refreshPendingApprovalCount(): Promise<number> {
   return localPending;
 }
 
+const realtimeOrderListeners = new Set<() => void>();
+let sharedRealtimeChannel: ReturnType<typeof supabase.channel> | null = null;
+
+function ensureSharedRealtimeChannel() {
+  if (sharedRealtimeChannel) {
+    return;
+  }
+
+  try {
+    // Unique channel topic to prevent collisions across reconnects or hot reloads
+    const channelTopic = `rasoi_orders_realtime_${Math.random().toString(36).substring(2, 9)}`;
+    const channel = supabase.channel(channelTopic);
+
+    channel.on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'orders' },
+      (payload: any) => {
+        try {
+          if (payload?.eventType === 'INSERT') {
+            const newRow = payload?.new;
+            if (newRow && newRow.status === 'Placed') {
+              playOrderAlertSound();
+            }
+          }
+          refreshPendingApprovalCount();
+          realtimeOrderListeners.forEach((listener) => {
+            try {
+              listener();
+            } catch (err) {
+              console.error('[Supabase Realtime] Error invoking order listener:', err);
+            }
+          });
+        } catch (err) {
+          console.warn('[Supabase Realtime] Error in change event handler:', err);
+        }
+      },
+    );
+
+    channel.subscribe((status: string, err?: any) => {
+      if (err) {
+        console.warn('[Supabase Realtime] Subscription status:', status, err);
+      }
+    });
+
+    sharedRealtimeChannel = channel;
+  } catch (err) {
+    console.warn('[Supabase Realtime] Could not initialize realtime subscription channel:', err);
+  }
+}
+
 /**
  * Sets up Supabase Realtime subscription for orders.
  * Listens for new orders (INSERT) and status changes (UPDATE).
+ * Safe to call from multiple components simultaneously (AdminDashboard, OrderHistory, TabLayout).
  * When a new order with status 'Placed' arrives, triggers audio alert and increments pending count.
  */
 export function subscribeToOrdersRealtime(onOrdersChanged: () => void): () => void {
   // Initial check
   refreshPendingApprovalCount();
 
-  const channel = supabase
-    .channel('rasoi_orders_realtime')
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, (payload: any) => {
-      if (payload.eventType === 'INSERT') {
-        const newRow = payload.new;
-        if (newRow && newRow.status === 'Placed') {
-          playOrderAlertSound();
-        }
-      }
-      refreshPendingApprovalCount();
-      onOrdersChanged();
-    })
-    .subscribe();
+  realtimeOrderListeners.add(onOrdersChanged);
+  ensureSharedRealtimeChannel();
 
   return () => {
-    supabase.removeChannel(channel);
+    realtimeOrderListeners.delete(onOrdersChanged);
+    if (realtimeOrderListeners.size === 0 && sharedRealtimeChannel) {
+      try {
+        supabase.removeChannel(sharedRealtimeChannel);
+      } catch (err) {
+        console.warn('[Supabase Realtime] Error removing channel:', err);
+      }
+      sharedRealtimeChannel = null;
+    }
   };
 }
