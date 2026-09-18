@@ -5,7 +5,7 @@ import { useWishlist } from '../../framework/context/WishlistContext';
 import { useCart } from '../../framework/context/CartContext';
 import { useTheme } from '../../framework/theme/ThemeContext';
 import { getMealKits, MealKit } from '../../framework/services/mealKitsService';
-import { Badge } from '../../framework/ui/Badge';
+import { Badge, getDietBadgeInfo } from '../../framework/ui/Badge';
 import { Button } from '../../framework/ui/Button';
 import { MealDetailModal } from '../meal-detail/MealDetailModal';
 
@@ -23,13 +23,12 @@ export const WishlistView: React.FC = () => {
   const handleMoveToCart = (kit: MealKit) => {
     addItem(kit, 1);
     removeFromWishlist(kit.id);
-    Alert.alert('Moved to Basket! 🛒', `${kit.name} was moved to your cart.`);
+    Alert.alert('Moved to Basket', `${kit.name} was moved to your cart.`);
   };
 
   if (savedKits.length === 0) {
     return (
       <View style={styles.emptyContainer}>
-        <Text style={styles.emptyIcon}>❤️</Text>
         <Text style={[styles.emptyTitle, { color: colors.textPrimary }]}>
           Your Wishlist is Empty
         </Text>
@@ -37,7 +36,7 @@ export const WishlistView: React.FC = () => {
           Tap the heart on any meal kit to save it here for upcoming dinners!
         </Text>
         <Button
-          title="Browse Indian Meal Kits 🥘"
+          title="Browse Indian Meal Kits"
           style={{ marginTop: 16 }}
           onPress={() => router.push('/' as any)}
         />
@@ -74,11 +73,10 @@ export const WishlistView: React.FC = () => {
             <Image source={{ uri: kit.heroImage }} style={styles.cardImg} />
             <View style={styles.cardInfo}>
               <View style={styles.topRow}>
-                <Badge
-                  label={kit.diet === 'veg' ? 'Veg' : 'Non-Veg'}
-                  variant={kit.diet === 'veg' ? 'veg' : 'nonveg'}
-                  size="sm"
-                />
+                {(() => {
+                  const badge = getDietBadgeInfo(kit.diet);
+                  return <Badge label={badge.label} variant={badge.variant} size="sm" />;
+                })()}
                 <TouchableOpacity onPress={() => removeFromWishlist(kit.id)}>
                   <Text style={[styles.removeBtn, { color: colors.textMuted }]}>✕ Remove</Text>
                 </TouchableOpacity>
@@ -94,7 +92,7 @@ export const WishlistView: React.FC = () => {
               <View style={styles.bottomRow}>
                 <Text style={[styles.kitPrice, { color: colors.primary }]}>₹{kit.price}</Text>
                 <Button
-                  title="Move to Cart 🛒"
+                  title="Move to Cart"
                   size="sm"
                   onPress={() => handleMoveToCart(kit)}
                   style={{ paddingHorizontal: 12 }}

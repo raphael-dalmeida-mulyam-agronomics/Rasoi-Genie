@@ -7,15 +7,17 @@ export interface CartItem {
   kit: MealKit;
   quantity: number;
   servings: number;
+  spiceLevel?: string;
+  unitPrice?: number;
 }
 
 export type PaymentMethod = 'UPI' | 'Card' | 'Wallet' | 'Cash on Delivery';
 
 export interface CartContextValue {
   items: CartItem[];
-  addItem: (kit: MealKit, quantity?: number, servings?: number) => void;
-  updateQuantity: (kitId: string, quantity: number) => void;
-  removeItem: (kitId: string) => void;
+  addItem: (kit: MealKit, quantity?: number, servings?: number, spiceLevel?: string) => void;
+  updateQuantity: (kitId: string, quantity: number, servings?: number, spiceLevel?: string) => void;
+  removeItem: (kitId: string, servings?: number, spiceLevel?: string) => void;
   clearCart: () => void;
   reorderItems: (orderItems: OrderItem[]) => void;
 
@@ -54,28 +56,61 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [selectedDeliveryDate, setSelectedDeliveryDate] = useState<string>('Today');
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<PaymentMethod>('UPI');
 
-  const addItem = (kit: MealKit, quantity = 1, servings = kit.servings) => {
+  const addItem = (
+    kit: MealKit,
+    quantity = 1,
+    servings = kit.servings || 2,
+    spiceLevel: string = kit.spiceLevel || 'Medium',
+  ) => {
+    const baseServings = kit.servings || 2;
+    const unitPrice = Math.round((kit.price / baseServings) * servings);
+
     setItems((prev) => {
-      const existing = prev.find((item) => item.kit.id === kit.id);
+      const existing = prev.find(
+        (item) =>
+          item.kit.id === kit.id &&
+          item.servings === servings &&
+          (item.spiceLevel || kit.spiceLevel) === spiceLevel,
+      );
       if (existing) {
         return prev.map((item) =>
-          item.kit.id === kit.id ? { ...item, quantity: item.quantity + quantity } : item,
+          item === existing ? { ...item, quantity: item.quantity + quantity } : item,
         );
       }
-      return [...prev, { kit, quantity, servings }];
+      return [...prev, { kit, quantity, servings, spiceLevel, unitPrice }];
     });
   };
 
-  const updateQuantity = (kitId: string, quantity: number) => {
+  const updateQuantity = (
+    kitId: string,
+    quantity: number,
+    servings?: number,
+    spiceLevel?: string,
+  ) => {
     if (quantity <= 0) {
-      removeItem(kitId);
+      removeItem(kitId, servings, spiceLevel);
       return;
     }
-    setItems((prev) => prev.map((item) => (item.kit.id === kitId ? { ...item, quantity } : item)));
+    setItems((prev) =>
+      prev.map((item) => {
+        const matches =
+          item.kit.id === kitId &&
+          (servings === undefined || item.servings === servings) &&
+          (spiceLevel === undefined || item.spiceLevel === spiceLevel);
+        return matches ? { ...item, quantity } : item;
+      }),
+    );
   };
 
-  const removeItem = (kitId: string) => {
-    setItems((prev) => prev.filter((item) => item.kit.id !== kitId));
+  const removeItem = (kitId: string, servings?: number, spiceLevel?: string) => {
+    setItems((prev) =>
+      prev.filter((item) => {
+        if (item.kit.id !== kitId) return true;
+        if (servings !== undefined && item.servings !== servings) return true;
+        if (spiceLevel !== undefined && item.spiceLevel !== spiceLevel) return true;
+        return false;
+      }),
+    );
   };
 
   const clearCart = () => {
@@ -95,10 +130,15 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
       orderItems.forEach((orderItem) => {
         const kit = getMealKitById(orderItem.id) || allKits.find((k) => k.name === orderItem.name);
         if (kit) {
+          const s = (orderItem as any).servings || kit.servings || 2;
+          const sp = (orderItem as any).spiceLevel || kit.spiceLevel || 'Medium';
+          const up = Math.round((kit.price / (kit.servings || 2)) * s);
           newCartItems.push({
             kit,
             quantity: orderItem.quantity,
-            servings: kit.servings,
+            servings: s,
+            spiceLevel: sp,
+            unitPrice: up,
           });
         }
       });
@@ -110,7 +150,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const subtotal = useMemo(() => {
-    return items.reduce((sum, item) => sum + item.kit.price * item.quantity, 0);
+    return items.reduce((sum, item) => sum + (item.unitPrice ?? item.kit.price) * item.quantity, 0);
   }, [items]);
 
   const deliveryFee = useMemo(() => {

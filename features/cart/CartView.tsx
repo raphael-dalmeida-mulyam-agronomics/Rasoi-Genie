@@ -124,7 +124,7 @@ export const CartView: React.FC = () => {
           id: i.kit.id,
           name: i.kit.name,
           quantity: i.quantity,
-          price: i.kit.price,
+          price: i.unitPrice ?? i.kit.price,
           masalaSachets: i.kit.masalaSachets,
           imageUrl: i.kit.heroImage,
         })),
@@ -186,16 +186,14 @@ export const CartView: React.FC = () => {
         {/* LINE ITEMS LIST */}
         <View style={styles.section}>
           <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>1. Recipe Items</Text>
-          {items.map(({ kit, quantity, servings }) => (
+          {items.map(({ kit, quantity, servings, spiceLevel, unitPrice }, index) => (
             <View
-              key={kit.id}
+              key={`${kit.id}-${servings}-${spiceLevel}-${index}`}
               style={[
                 styles.itemRow,
                 {
-                  backgroundColor: colors.bgSurface,
+                  backgroundColor: colors.bgSubtle,
                   borderRadius: radii.lg,
-                  borderColor: colors.borderLight,
-                  ...shadows.card,
                 },
               ]}
             >
@@ -205,22 +203,60 @@ export const CartView: React.FC = () => {
                   <Text style={[styles.itemName, { color: colors.textPrimary }]} numberOfLines={1}>
                     {kit.name}
                   </Text>
-                  <TouchableOpacity onPress={() => removeItem(kit.id)}>
+                  <TouchableOpacity onPress={() => removeItem(kit.id, servings, spiceLevel)}>
                     <Text style={[styles.deleteBtn, { color: colors.textMuted }]}>✕</Text>
                   </TouchableOpacity>
                 </View>
 
-                <Text style={[styles.itemSub, { color: colors.textSecondary }]}>
-                  {kit.cuisine} • {servings} Servings Box
-                </Text>
+                {/* Serving & Spice Badges */}
+                <View
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 6,
+                    marginVertical: 4,
+                    flexWrap: 'wrap',
+                  }}
+                >
+                  <View
+                    style={{
+                      backgroundColor: colors.bgSurface,
+                      paddingHorizontal: 7,
+                      paddingVertical: 2,
+                      borderRadius: 6,
+                      borderWidth: 1,
+                      borderColor: colors.borderLight,
+                    }}
+                  >
+                    <Text style={{ fontSize: 11, fontWeight: '700', color: colors.textPrimary }}>
+                      🍽️ {servings} Servings
+                    </Text>
+                  </View>
+                  {spiceLevel ? (
+                    <View
+                      style={{
+                        backgroundColor: colors.bgSurface,
+                        paddingHorizontal: 7,
+                        paddingVertical: 2,
+                        borderRadius: 6,
+                        borderWidth: 1,
+                        borderColor: colors.borderLight,
+                      }}
+                    >
+                      <Text style={{ fontSize: 11, fontWeight: '700', color: colors.primary }}>
+                        🌶️ {spiceLevel}
+                      </Text>
+                    </View>
+                  ) : null}
+                </View>
 
                 <View style={styles.itemBottomRow}>
                   <Text style={[styles.itemPrice, { color: colors.primary }]}>
-                    ₹{kit.price * quantity}
+                    ₹{(unitPrice ?? kit.price) * quantity}
                   </Text>
                   <QuantityStepper
                     value={quantity}
-                    onChange={(q) => updateQuantity(kit.id, q)}
+                    onChange={(q) => updateQuantity(kit.id, q, servings, spiceLevel)}
                     size="sm"
                   />
                 </View>

@@ -26,7 +26,7 @@ import {
 } from '../../framework/services/mealKitsService';
 import { Button } from '../../framework/ui/Button';
 import { Card } from '../../framework/ui/Card';
-import { Badge } from '../../framework/ui/Badge';
+import { Badge, getDietBadgeInfo } from '../../framework/ui/Badge';
 import { PillTag } from '../../framework/ui/PillTag';
 import { RatingStars } from '../../framework/ui/RatingStars';
 import { MealDetailModal } from '../meal-detail/MealDetailModal';
@@ -67,7 +67,7 @@ export const HomeScreenView: React.FC = () => {
   const { preferences } = usePreferences();
 
   // Selected filters
-  const [dietFilter, setDietFilter] = useState<'all' | 'veg' | 'nonveg'>('all');
+  const [dietFilter, setDietFilter] = useState<'all' | DietTag>('all');
   const [selectedCuisine, setSelectedCuisine] = useState<CuisineType | 'All'>('All');
   const [selectedDishCategory, setSelectedDishCategory] = useState<DishCategory | 'All'>('All');
   const [selectedSpice, setSelectedSpice] = useState<SpiceLevel | 'All'>('All');
@@ -121,6 +121,8 @@ export const HomeScreenView: React.FC = () => {
       if (preferences.dietType === 'vegan' && !k.dietaryTags.includes('vegan')) return false;
       if (preferences.dietType === 'jain' && !k.dietaryTags.includes('jain')) return false;
       if (preferences.dietType === 'keto' && !k.dietaryTags.includes('keto')) return false;
+      if (preferences.dietType === 'gluten-free' && !k.dietaryTags.includes('gluten-free'))
+        return false;
       return true;
     });
   }, [allKits, preferences.dietType]);
@@ -139,7 +141,7 @@ export const HomeScreenView: React.FC = () => {
 
   const handleQuickAdd = (kit: MealKit) => {
     addItem(kit, 1);
-    Alert.alert('Added to Cart! 🛒', `1x ${kit.name} added to your basket.`);
+    Alert.alert('Added to Cart', `1x ${kit.name} added to your basket.`);
   };
 
   return (
@@ -279,72 +281,49 @@ export const HomeScreenView: React.FC = () => {
 
         {/* Quick Filter Bar (Veg/Non-Veg, Cuisines, Spice) */}
         <View style={styles.filterSection}>
-          <View style={styles.vegToggleRow}>
-            <TouchableOpacity
-              style={[
-                styles.vegTab,
-                {
-                  backgroundColor: dietFilter === 'all' ? colors.primary : colors.bgSurface,
-                  borderColor: dietFilter === 'all' ? colors.primary : colors.border,
-                  borderRadius: radii.pill,
-                },
-              ]}
-              onPress={() => setDietFilter('all')}
-            >
-              <Text
-                style={[
-                  styles.vegTabText,
-                  { color: dietFilter === 'all' ? colors.textInverse : colors.textPrimary },
-                ]}
-              >
-                All Meals ({allKits.length})
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[
-                styles.vegTab,
-                {
-                  backgroundColor: dietFilter === 'veg' ? colors.veg : colors.bgSurface,
-                  borderColor: dietFilter === 'veg' ? colors.veg : colors.border,
-                  borderRadius: radii.pill,
-                },
-              ]}
-              onPress={() => setDietFilter('veg')}
-            >
-              <Text style={{ fontSize: 13, marginRight: 4 }}>🥬</Text>
-              <Text
-                style={[
-                  styles.vegTabText,
-                  { color: dietFilter === 'veg' ? '#FFFFFF' : colors.veg },
-                ]}
-              >
-                Pure Veg
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[
-                styles.vegTab,
-                {
-                  backgroundColor: dietFilter === 'nonveg' ? colors.nonVeg : colors.bgSurface,
-                  borderColor: dietFilter === 'nonveg' ? colors.nonVeg : colors.border,
-                  borderRadius: radii.pill,
-                },
-              ]}
-              onPress={() => setDietFilter('nonveg')}
-            >
-              <Text style={{ fontSize: 13, marginRight: 4 }}>🍗</Text>
-              <Text
-                style={[
-                  styles.vegTabText,
-                  { color: dietFilter === 'nonveg' ? '#FFFFFF' : colors.nonVeg },
-                ]}
-              >
-                Non-Veg
-              </Text>
-            </TouchableOpacity>
-          </View>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.pillsScroll}
+            contentContainerStyle={{ gap: 8, paddingBottom: 2 }}
+          >
+            {(
+              [
+                { id: 'all', label: `All Meals (${allKits.length})` },
+                { id: 'veg', label: 'Pure Veg' },
+                { id: 'nonveg', label: 'Non-Veg' },
+                { id: 'vegan', label: 'Vegan' },
+                { id: 'keto', label: 'Keto' },
+                { id: 'jain', label: 'Jain Friendly' },
+                { id: 'gluten-free', label: 'Gluten-Free' },
+              ] as { id: 'all' | DietTag; label: string }[]
+            ).map((d) => {
+              const isSelected = dietFilter === d.id;
+              return (
+                <TouchableOpacity
+                  key={d.id}
+                  style={[
+                    styles.vegTab,
+                    {
+                      backgroundColor: isSelected ? colors.primary : colors.bgSurface,
+                      borderColor: isSelected ? colors.primary : colors.border,
+                      borderRadius: radii.pill,
+                    },
+                  ]}
+                  onPress={() => setDietFilter(d.id)}
+                >
+                  <Text
+                    style={[
+                      styles.vegTabText,
+                      { color: isSelected ? colors.textInverse : colors.textPrimary },
+                    ]}
+                  >
+                    {d.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
 
           {/* Cuisine and Dietary Tag Pills */}
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.pillsScroll}>
@@ -355,13 +334,13 @@ export const HomeScreenView: React.FC = () => {
             />
             {(
               [
-                { id: 'Italian', label: 'Italian 🍕🍝' },
-                { id: 'Mexican', label: 'Mexican 🌮🌯' },
-                { id: 'American', label: 'American 🍔' },
-                { id: 'North Indian', label: 'North Indian 🍛' },
-                { id: 'Hyderabadi', label: 'Hyderabadi 🍲' },
-                { id: 'Punjabi', label: 'Punjabi 🫓' },
-                { id: 'Coastal', label: 'Coastal 🦐' },
+                { id: 'Italian', label: 'Italian' },
+                { id: 'Mexican', label: 'Mexican' },
+                { id: 'American', label: 'American' },
+                { id: 'North Indian', label: 'North Indian' },
+                { id: 'Hyderabadi', label: 'Hyderabadi' },
+                { id: 'Punjabi', label: 'Punjabi' },
+                { id: 'Coastal', label: 'Coastal' },
               ] as { id: CuisineType; label: string }[]
             ).map((c) => (
               <PillTag
@@ -407,13 +386,13 @@ export const HomeScreenView: React.FC = () => {
             />
             {(
               [
-                { id: 'Pizzas', label: '🍕 Pizzas' },
-                { id: 'Burgers & Sliders', label: '🍔 Burgers' },
-                { id: 'Tacos', label: '🌮 Tacos' },
-                { id: 'Burritos & Bowls', label: '🌯 Burritos' },
-                { id: 'Pastas', label: '🍝 Pastas' },
-                { id: 'Curries & Gravies', label: '🍛 Curries' },
-                { id: 'Biryani & Rice', label: '🍲 Biryani' },
+                { id: 'Pizzas', label: 'Pizzas' },
+                { id: 'Burgers & Sliders', label: 'Burgers' },
+                { id: 'Tacos', label: 'Tacos' },
+                { id: 'Burritos & Bowls', label: 'Burritos' },
+                { id: 'Pastas', label: 'Pastas' },
+                { id: 'Curries & Gravies', label: 'Curries' },
+                { id: 'Biryani & Rice', label: 'Biryani' },
               ] as { id: DishCategory; label: string }[]
             ).map((d) => (
               <PillTag
@@ -442,7 +421,7 @@ export const HomeScreenView: React.FC = () => {
                 ]}
               >
                 <Text style={[styles.sortBtnText, { color: colors.textSecondary }]}>
-                  Sort: {sortBy === 'popularity' ? 'Popularity 🔥' : 'Price: Low-High'}
+                  Sort: {sortBy === 'popularity' ? 'Popularity' : 'Price: Low-High'}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -455,7 +434,7 @@ export const HomeScreenView: React.FC = () => {
             <View style={styles.sectionHeaderRow}>
               <View>
                 <Text style={[styles.sectionHeading, { color: colors.textPrimary }]}>
-                  Trending in {preferences.currentCity} 🔥
+                  Trending in {preferences.currentCity}
                 </Text>
                 <Text style={[styles.sectionSubtitle, { color: colors.textSecondary }]}>
                   Most ordered pre-portioned kits in your area today
@@ -632,11 +611,10 @@ const MealKitCard: React.FC<{
       <View style={styles.cardImageContainer}>
         <Image source={{ uri: kit.heroImage }} style={styles.cardImg} resizeMode="cover" />
         <View style={styles.cardBadgeRow}>
-          <Badge
-            label={kit.diet === 'veg' ? 'Veg' : 'Non-Veg'}
-            variant={kit.diet === 'veg' ? 'veg' : 'nonveg'}
-            size="sm"
-          />
+          {(() => {
+            const badge = getDietBadgeInfo(kit.diet);
+            return <Badge label={badge.label} variant={badge.variant} size="sm" />;
+          })()}
           <TouchableOpacity
             style={styles.cardFavBtn}
             onPress={onToggleFavorite}
@@ -648,7 +626,7 @@ const MealKitCard: React.FC<{
 
         <View style={styles.cardBottomOverlay}>
           <Text style={styles.cardPrepTime}>
-            ⏱️ {kit.prepTimeMinutes + kit.cookTimeMinutes}m • {kit.servings} Servings
+            {kit.prepTimeMinutes + kit.cookTimeMinutes} mins • {kit.servings} Servings
           </Text>
         </View>
       </View>
@@ -671,7 +649,7 @@ const MealKitCard: React.FC<{
               { color: colors.primary, backgroundColor: colors.primaryLight },
             ]}
           >
-            ✨ {kit.masalaSachets.length} Fresh Spice Sachets Included
+            {kit.masalaSachets.length} Fresh Spice Sachets Included
           </Text>
         </View>
 
@@ -719,11 +697,10 @@ const MealKitHorizontalCard: React.FC<{
       <View style={styles.hCardImgContainer}>
         <Image source={{ uri: kit.heroImage }} style={styles.hCardImg} />
         <View style={styles.hCardBadge}>
-          <Badge
-            label={kit.diet === 'veg' ? 'Veg' : 'Non-Veg'}
-            variant={kit.diet === 'veg' ? 'veg' : 'nonveg'}
-            size="sm"
-          />
+          {(() => {
+            const badge = getDietBadgeInfo(kit.diet);
+            return <Badge label={badge.label} variant={badge.variant} size="sm" />;
+          })()}
         </View>
       </View>
 
