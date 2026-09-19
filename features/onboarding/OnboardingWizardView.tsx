@@ -139,7 +139,7 @@ export const OnboardingWizardView: React.FC = () => {
   const [phone, setPhone] = useState<string>(user?.phoneNumber || '');
   const [flatAndStreet, setFlatAndStreet] = useState<string>('');
   const [areaAndLandmark, setAreaAndLandmark] = useState<string>('');
-  const [city, setCity] = useState<string>('Bengaluru');
+  const [city, setCity] = useState<string>('');
   const [pincode, setPincode] = useState<string>('');
   const [regionHub, setRegionHub] = useState<RegionHub>('South');
   const [addressTag, setAddressTag] = useState<'Home' | 'Work' | 'Other'>('Home');
@@ -209,14 +209,14 @@ export const OnboardingWizardView: React.FC = () => {
           phone: phone.trim() || '+91 9876543210',
           flatAndStreet: flatAndStreet.trim() || 'Flat 101, Main Road',
           areaAndLandmark: areaAndLandmark.trim(),
-          city: city.trim() || 'Bengaluru',
+          city: city.trim(),
           pincode: pincode.trim() || '560001',
           tag: addressTag,
           isDefault: true,
         },
         paymentMethod,
         regionHub,
-        currentCity: city.trim() || 'Bengaluru',
+        currentCity: city.trim(),
       });
     } catch (err: any) {
       Alert.alert('Save Error', err?.message || 'Could not save profile setup.');
@@ -587,7 +587,7 @@ export const OnboardingWizardView: React.FC = () => {
                     ]}
                     value={city}
                     onChangeText={setCity}
-                    placeholder="Bengaluru"
+                    placeholder="Enter delivery city"
                     placeholderTextColor={colors.textMuted}
                   />
                 </View>

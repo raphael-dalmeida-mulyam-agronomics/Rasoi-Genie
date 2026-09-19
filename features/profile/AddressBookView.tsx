@@ -25,7 +25,7 @@ export const AddressBookView: React.FC<{ onBack?: () => void }> = ({ onBack }) =
   const [phone, setPhone] = useState(user?.phoneNumber || '');
   const [flatAndStreet, setFlatAndStreet] = useState('');
   const [areaAndLandmark, setAreaAndLandmark] = useState('');
-  const [city, setCity] = useState('Bengaluru');
+  const [city, setCity] = useState('');
   const [pincode, setPincode] = useState('');
   const [tag, setTag] = useState<'Home' | 'Work' | 'Other'>('Home');
 

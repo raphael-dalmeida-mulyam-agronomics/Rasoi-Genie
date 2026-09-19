@@ -48,7 +48,7 @@ export const ReviewModal: React.FC<ReviewModalProps> = ({
         kit.name,
         userId,
         userName,
-        preferences.currentCity || 'Bengaluru',
+        preferences.currentCity || '',
         rating,
         comment.trim(),
         photoUrl.trim() || undefined,

@@ -127,8 +127,13 @@ export const HomeScreenView: React.FC = () => {
   );
 
   // Minimalist Filter & Sort Dropdown states
-  const [activeFilterModal, setActiveFilterModal] = useState<'diet' | 'cuisine' | 'dish' | null>(null);
+  const [activeFilterModal, setActiveFilterModal] = useState<'diet' | 'cuisine' | 'dish' | null>(
+    null,
+  );
   const [isSortDropdownOpen, setIsSortDropdownOpen] = useState(false);
+
+  // Preference-based filtering toggle (defaults to true)
+  const [applyUserPreferences, setApplyUserPreferences] = useState(true);
 
   // Modals
   const [selectedKit, setSelectedKit] = useState<MealKit | null>(null);
@@ -139,10 +144,41 @@ export const HomeScreenView: React.FC = () => {
 
   const allKits = useMemo(() => getMealKits(), []);
 
-  // Filtered kits based on current options
+  // Helper to check if a kit contains allergens configured in user preferences
+  const matchesUserAllergens = (kit: MealKit): boolean => {
+    if (!preferences.allergies || preferences.allergies.length === 0) return true;
+    const kitAllergens = (kit.allergens || []).map((a) => a.toLowerCase().trim());
+    return !preferences.allergies.some((userAllergy) => {
+      const u = userAllergy.toLowerCase().trim();
+      return kitAllergens.some((a) => a.includes(u) || u.includes(a));
+    });
+  };
+
+  // Helper to check if a kit matches user's preferred diet type
+  const matchesUserDiet = (kit: MealKit): boolean => {
+    if (!preferences.dietType || preferences.dietType === 'all') return true;
+    if (preferences.dietType === 'veg') return kit.diet === 'veg';
+    if (preferences.dietType === 'nonveg') return kit.diet === 'nonveg';
+    if (preferences.dietType === 'vegan') return kit.dietaryTags.includes('vegan');
+    if (preferences.dietType === 'jain') return kit.dietaryTags.includes('jain');
+    if (preferences.dietType === 'keto') return kit.dietaryTags.includes('keto');
+    if (preferences.dietType === 'gluten-free') return kit.dietaryTags.includes('gluten-free');
+    return true;
+  };
+
+  // Effective diet: if user manually picked a diet filter, use it; otherwise use user profile diet if preference filtering is active
+  const effectiveDiet = useMemo<'all' | DietTag>(() => {
+    if (dietFilter !== 'all') return dietFilter;
+    if (applyUserPreferences && preferences.dietType && preferences.dietType !== 'all') {
+      return preferences.dietType;
+    }
+    return 'all';
+  }, [dietFilter, applyUserPreferences, preferences.dietType]);
+
+  // Filtered kits based on current options and user preferences
   const filteredKits = useMemo(() => {
-    return searchAndFilterMealKits({
-      diet: dietFilter,
+    let results = searchAndFilterMealKits({
+      diet: effectiveDiet,
       cuisine: selectedCuisine,
       dishCategory: selectedDishCategory !== 'All' ? selectedDishCategory : undefined,
       spiceLevel: selectedSpice,
@@ -150,42 +186,87 @@ export const HomeScreenView: React.FC = () => {
       maxPrepTime,
       sortBy,
     });
+
+    if (applyUserPreferences) {
+      // Exclude dishes with allergens
+      results = results.filter(matchesUserAllergens);
+
+      // Prioritize preferred cuisines if sorting by popularity and no specific cuisine is chosen
+      if (
+        selectedCuisine === 'All' &&
+        preferences.preferredCuisines &&
+        preferences.preferredCuisines.length > 0 &&
+        sortBy === 'popularity'
+      ) {
+        const preferredSet = new Set(preferences.preferredCuisines);
+        results = [...results].sort((a, b) => {
+          const aPref = preferredSet.has(a.cuisine) ? 1 : 0;
+          const bPref = preferredSet.has(b.cuisine) ? 1 : 0;
+          if (bPref !== aPref) return bPref - aPref;
+          return b.rating - a.rating;
+        });
+      }
+    }
+
+    return results;
   }, [
-    dietFilter,
+    effectiveDiet,
     selectedCuisine,
     selectedDishCategory,
     selectedSpice,
     selectedDietTag,
     maxPrepTime,
     sortBy,
+    applyUserPreferences,
+    preferences.allergies,
+    preferences.preferredCuisines,
   ]);
 
-  // "Trending in your region"
+  // "Trending in your region" filtered by user preferences
   const trendingKits = useMemo(() => {
-    return allKits.filter(
+    let kits = allKits.filter(
       (k) => k.isTrending || k.availableRegions.includes(preferences.regionHub),
     );
-  }, [allKits, preferences.regionHub]);
+    if (applyUserPreferences) {
+      kits = kits.filter((k) => matchesUserDiet(k) && matchesUserAllergens(k));
+    }
+    return kits;
+  }, [
+    allKits,
+    preferences.regionHub,
+    applyUserPreferences,
+    preferences.dietType,
+    preferences.allergies,
+  ]);
 
   // "Recommended for you" based on user preferences
   const recommendedKits = useMemo(() => {
-    return allKits.filter((k) => {
-      if (preferences.dietType === 'veg' && k.diet !== 'veg') return false;
-      if (preferences.dietType === 'vegan' && !k.dietaryTags.includes('vegan')) return false;
-      if (preferences.dietType === 'jain' && !k.dietaryTags.includes('jain')) return false;
-      if (preferences.dietType === 'keto' && !k.dietaryTags.includes('keto')) return false;
-      if (preferences.dietType === 'gluten-free' && !k.dietaryTags.includes('gluten-free'))
-        return false;
-      return true;
-    });
-  }, [allKits, preferences.dietType]);
+    return allKits
+      .filter((k) => {
+        if (!matchesUserDiet(k)) return false;
+        if (!matchesUserAllergens(k)) return false;
+        return true;
+      })
+      .sort((a, b) => {
+        if (preferences.preferredCuisines && preferences.preferredCuisines.length > 0) {
+          const aPref = preferences.preferredCuisines.includes(a.cuisine) ? 1 : 0;
+          const bPref = preferences.preferredCuisines.includes(b.cuisine) ? 1 : 0;
+          if (bPref !== aPref) return bPref - aPref;
+        }
+        return b.rating - a.rating;
+      });
+  }, [allKits, preferences.dietType, preferences.allergies, preferences.preferredCuisines]);
 
-  // "Global Favorites & Foreign Specials" (Italian Pizzas & Pastas, Mexican Tacos & Burritos, American Burgers)
+  // "Global Favorites & Foreign Specials" filtered by user preferences
   const foreignKits = useMemo(() => {
-    return allKits.filter((k) =>
+    let kits = allKits.filter((k) =>
       ['Italian', 'Mexican', 'American', 'Continental'].includes(k.cuisine),
     );
-  }, [allKits]);
+    if (applyUserPreferences) {
+      kits = kits.filter((k) => matchesUserDiet(k) && matchesUserAllergens(k));
+    }
+    return kits;
+  }, [allKits, applyUserPreferences, preferences.dietType, preferences.allergies]);
 
   const handleOpenDetail = (kit: MealKit) => {
     setSelectedKit(kit);
@@ -193,8 +274,8 @@ export const HomeScreenView: React.FC = () => {
   };
 
   const handleQuickAdd = (kit: MealKit) => {
-    addItem(kit, 1);
-    Alert.alert('Added to Cart', `1x ${kit.name} added to your basket.`);
+    // Open meal kit detail modal so user can customize servings, spice level, etc.
+    handleOpenDetail(kit);
   };
 
   return (
@@ -332,14 +413,93 @@ export const HomeScreenView: React.FC = () => {
           ))}
         </ScrollView>
 
+        {/* Preference Tailoring Indicator Banner */}
+        <View
+          style={[
+            styles.prefBanner,
+            {
+              backgroundColor: applyUserPreferences ? colors.primary + '14' : colors.bgSurface,
+              borderColor: applyUserPreferences ? colors.primary + '60' : colors.borderLight,
+            },
+          ]}
+        >
+          <View style={styles.prefBannerLeft}>
+            <Text style={styles.prefBannerIcon}>{applyUserPreferences ? '🎯' : '🌐'}</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.prefBannerTitle, { color: colors.textPrimary }]}>
+                {applyUserPreferences
+                  ? `Curated for: ${preferences.dietType === 'all' ? 'All Diets' : preferences.dietType.toUpperCase()}`
+                  : 'Showing All Available Dishes'}
+              </Text>
+              <Text
+                style={[styles.prefBannerSubtitle, { color: colors.textSecondary }]}
+                numberOfLines={1}
+              >
+                {applyUserPreferences
+                  ? [
+                      preferences.allergies.length > 0
+                        ? `No ${preferences.allergies.join(', ')}`
+                        : null,
+                      preferences.preferredCuisines.length > 0
+                        ? `${preferences.preferredCuisines.join(', ')}`
+                        : null,
+                    ]
+                      .filter(Boolean)
+                      .join(' • ') || 'Personalized to your taste profile'
+                  : 'User dietary filters currently paused'}
+              </Text>
+            </View>
+          </View>
+
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            <TouchableOpacity
+              style={[
+                styles.prefToggleBtn,
+                {
+                  backgroundColor: applyUserPreferences ? colors.primary : colors.bgSubtle,
+                  borderColor: applyUserPreferences ? colors.primary : colors.borderLight,
+                },
+              ]}
+              onPress={() => setApplyUserPreferences(!applyUserPreferences)}
+              activeOpacity={0.7}
+            >
+              <Text
+                style={[
+                  styles.prefToggleBtnText,
+                  { color: applyUserPreferences ? '#FFFFFF' : colors.textPrimary },
+                ]}
+              >
+                {applyUserPreferences ? 'Preferences On ✓' : 'Filter by Me'}
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.prefSettingsBtn,
+                { backgroundColor: colors.bgSubtle, borderColor: colors.borderLight },
+              ]}
+              onPress={() => setPreferencesModalVisible(true)}
+              activeOpacity={0.7}
+            >
+              <Text style={{ fontSize: 13 }}>⚙️</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
         {/* Minimalist 3-Filter Buttons Bar */}
         <View style={styles.minimalistFilterBar}>
           <TouchableOpacity
             style={[
               styles.minimalistFilterBtn,
               {
-                backgroundColor: dietFilter !== 'all' ? colors.primary + '18' : colors.bgSurface,
-                borderColor: dietFilter !== 'all' ? colors.primary : colors.borderLight,
+                backgroundColor:
+                  dietFilter !== 'all' || (applyUserPreferences && preferences.dietType !== 'all')
+                    ? colors.primary + '18'
+                    : colors.bgSurface,
+                borderColor:
+                  dietFilter !== 'all' || (applyUserPreferences && preferences.dietType !== 'all')
+                    ? colors.primary
+                    : colors.borderLight,
               },
             ]}
             onPress={() => setActiveFilterModal('diet')}
@@ -348,11 +508,21 @@ export const HomeScreenView: React.FC = () => {
             <Text
               style={[
                 styles.minimalistFilterBtnText,
-                { color: dietFilter !== 'all' ? colors.primary : colors.textPrimary },
+                {
+                  color:
+                    dietFilter !== 'all' || (applyUserPreferences && preferences.dietType !== 'all')
+                      ? colors.primary
+                      : colors.textPrimary,
+                },
               ]}
               numberOfLines={1}
             >
-              🥗 {dietFilter === 'all' ? 'Diets' : dietFilter.toUpperCase()}
+              🥗{' '}
+              {dietFilter === 'all'
+                ? applyUserPreferences && preferences.dietType !== 'all'
+                  ? preferences.dietType.toUpperCase()
+                  : 'Diets'
+                : dietFilter.toUpperCase()}
             </Text>
             <Text style={{ fontSize: 10, color: colors.textMuted, marginLeft: 4 }}>▼</Text>
           </TouchableOpacity>
@@ -361,7 +531,8 @@ export const HomeScreenView: React.FC = () => {
             style={[
               styles.minimalistFilterBtn,
               {
-                backgroundColor: selectedCuisine !== 'All' ? colors.primary + '18' : colors.bgSurface,
+                backgroundColor:
+                  selectedCuisine !== 'All' ? colors.primary + '18' : colors.bgSurface,
                 borderColor: selectedCuisine !== 'All' ? colors.primary : colors.borderLight,
               },
             ]}
@@ -473,7 +644,9 @@ export const HomeScreenView: React.FC = () => {
                         {opt.label}
                       </Text>
                       {isSelected && (
-                        <Text style={{ color: colors.primary, fontWeight: '800', marginLeft: 'auto' }}>
+                        <Text
+                          style={{ color: colors.primary, fontWeight: '800', marginLeft: 'auto' }}
+                        >
                           ✓
                         </Text>
                       )}
@@ -596,18 +769,48 @@ export const HomeScreenView: React.FC = () => {
             Includes fresh ingredients, whole spices & authentic masala sachets
           </Text>
 
-          <View style={styles.kitsGrid}>
-            {filteredKits.map((kit) => (
-              <MealKitCard
-                key={kit.id}
-                kit={kit}
-                onPress={() => handleOpenDetail(kit)}
-                onQuickAdd={() => handleQuickAdd(kit)}
-                isFavorite={isInWishlist(kit.id)}
-                onToggleFavorite={() => toggleWishlist(kit.id)}
-              />
-            ))}
-          </View>
+          {filteredKits.length === 0 ? (
+            <View
+              style={[
+                styles.emptyKitsContainer,
+                { backgroundColor: colors.bgSurface, borderColor: colors.borderLight },
+              ]}
+            >
+              <Text style={{ fontSize: 36, marginBottom: 8 }}>🍽️</Text>
+              <Text style={[styles.emptyKitsTitle, { color: colors.textPrimary }]}>
+                No dishes match your active filters
+              </Text>
+              <Text style={[styles.emptyKitsSubtitle, { color: colors.textSecondary }]}>
+                Try loosening your dietary filters or clearing allergen exclusions to see more
+                dishes.
+              </Text>
+              <TouchableOpacity
+                style={[styles.resetPrefBtn, { backgroundColor: colors.primary }]}
+                onPress={() => {
+                  setDietFilter('all');
+                  setSelectedCuisine('All');
+                  setSelectedDishCategory('All');
+                  setApplyUserPreferences(false);
+                }}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.resetPrefBtnText}>Show All Dishes</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <View style={styles.kitsGrid}>
+              {filteredKits.map((kit) => (
+                <MealKitCard
+                  key={kit.id}
+                  kit={kit}
+                  onPress={() => handleOpenDetail(kit)}
+                  onQuickAdd={() => handleQuickAdd(kit)}
+                  isFavorite={isInWishlist(kit.id)}
+                  onToggleFavorite={() => toggleWishlist(kit.id)}
+                />
+              ))}
+            </View>
+          )}
         </View>
       </ScrollView>
 
@@ -699,7 +902,9 @@ export const HomeScreenView: React.FC = () => {
                         {opt.label}
                       </Text>
                       {isSelected && (
-                        <Text style={{ color: colors.primary, fontWeight: '800', marginLeft: 'auto' }}>
+                        <Text
+                          style={{ color: colors.primary, fontWeight: '800', marginLeft: 'auto' }}
+                        >
                           ✓
                         </Text>
                       )}
@@ -739,7 +944,9 @@ export const HomeScreenView: React.FC = () => {
                         {opt.label}
                       </Text>
                       {isSelected && (
-                        <Text style={{ color: colors.primary, fontWeight: '800', marginLeft: 'auto' }}>
+                        <Text
+                          style={{ color: colors.primary, fontWeight: '800', marginLeft: 'auto' }}
+                        >
                           ✓
                         </Text>
                       )}
@@ -779,7 +986,9 @@ export const HomeScreenView: React.FC = () => {
                         {opt.label}
                       </Text>
                       {isSelected && (
-                        <Text style={{ color: colors.primary, fontWeight: '800', marginLeft: 'auto' }}>
+                        <Text
+                          style={{ color: colors.primary, fontWeight: '800', marginLeft: 'auto' }}
+                        >
                           ✓
                         </Text>
                       )}
@@ -792,7 +1001,9 @@ export const HomeScreenView: React.FC = () => {
               onPress={() => setActiveFilterModal(null)}
               style={[styles.filterModalCloseBtn, { borderColor: colors.borderLight }]}
             >
-              <Text style={[styles.filterModalCloseText, { color: colors.textPrimary }]}>Close</Text>
+              <Text style={[styles.filterModalCloseText, { color: colors.textPrimary }]}>
+                Close
+              </Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -1093,6 +1304,84 @@ const styles = StyleSheet.create({
   promoImg: {
     flex: 0.8,
     height: '100%',
+  },
+  prefBanner: {
+    marginHorizontal: 16,
+    marginTop: 8,
+    marginBottom: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 14,
+    borderWidth: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  prefBannerLeft: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginRight: 8,
+  },
+  prefBannerIcon: {
+    fontSize: 18,
+  },
+  prefBannerTitle: {
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  prefBannerSubtitle: {
+    fontSize: 11,
+    marginTop: 1,
+  },
+  prefToggleBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  prefToggleBtnText: {
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  prefSettingsBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 6,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyKitsContainer: {
+    padding: 24,
+    borderRadius: 16,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginVertical: 16,
+  },
+  emptyKitsTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    marginBottom: 6,
+    textAlign: 'center',
+  },
+  emptyKitsSubtitle: {
+    fontSize: 13,
+    textAlign: 'center',
+    marginBottom: 16,
+    lineHeight: 18,
+  },
+  resetPrefBtn: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 10,
+  },
+  resetPrefBtnText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '800',
   },
   minimalistFilterBar: {
     flexDirection: 'row',

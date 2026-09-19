@@ -60,7 +60,7 @@ export const CartView: React.FC = () => {
   const [addressModalVisible, setAddressModalVisible] = useState(false);
   const [newFlat, setNewFlat] = useState('');
   const [newArea, setNewArea] = useState('');
-  const [newCity, setNewCity] = useState('Bengaluru');
+  const [newCity, setNewCity] = useState('');
   const [newPincode, setNewPincode] = useState('560103');
   const [newTag, setNewTag] = useState<'Home' | 'Work' | 'Other'>('Home');
 
@@ -113,6 +113,7 @@ export const CartView: React.FC = () => {
 
     setIsCheckingOut(true);
     try {
+      const sharedTxnId = `TXN-${Math.random().toString(36).substring(2, 10).toUpperCase()}`;
       const orderData = {
         userId: user?.uid || 'guest_user_' + Date.now(),
         customerPhone: user?.phoneNumber || activeAddress.phone || '+91 9876543210',
@@ -136,20 +137,26 @@ export const CartView: React.FC = () => {
         deliveryFee,
         totalAmount: total,
         paymentMethod: selectedPaymentMethod,
+        transactionId: sharedTxnId,
       };
 
       // 1. Create order in Supabase backend (triggers real-time alert, sound chime, admin_notifications)
-      await createOrderInSupabase(orderData);
+      const sbResult = await createOrderInSupabase(orderData);
+      const sharedOrderId = sbResult?.orderId;
 
-      // 2. Also keep Firebase local store in sync
+      // 2. Also keep local store in sync with the exact same order ID
       const order = await createOrder({
         ...orderData,
+        id: sharedOrderId,
+        orderId: sharedOrderId,
         addressTag: activeAddress.tag,
         items: orderData.items.map((it) => ({
           id: it.kitId,
           name: it.name,
           quantity: it.quantity,
           price: it.price,
+          servings: it.servings,
+          spiceLevel: it.spiceLevel,
           masalaSachets: it.masalaSachets || [],
           imageUrl: it.imageUrl,
         })),

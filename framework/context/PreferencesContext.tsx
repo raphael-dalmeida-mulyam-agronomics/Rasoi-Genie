@@ -74,7 +74,7 @@ export const DEFAULT_PREFERENCES: UserDietaryPreferences = {
   spiceTolerance: 'Medium',
   preferredCuisines: ['North Indian', 'South Indian', 'Punjabi'],
   regionHub: 'South',
-  currentCity: 'Bengaluru',
+  currentCity: '',
   isOnboarded: false, // Default false until first-time onboarding is completed
 };
 
@@ -253,7 +253,7 @@ export const PreferencesProvider: React.FC<{ children: React.ReactNode }> = ({ c
       spiceTolerance: data.spiceTolerance,
       preferredCuisines: data.cuisines,
       regionHub: data.regionHub,
-      currentCity: data.currentCity || data.address.city || 'Bengaluru',
+      currentCity: data.currentCity || data.address.city || '',
       isOnboarded: true,
     };
 

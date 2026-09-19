@@ -149,4 +149,51 @@ describe('Supabase Backend & End-to-End Order Flow', () => {
     expect(typeof seedResult.success).toBe('boolean');
     expect(typeof seedResult.kitsCount).toBe('number');
   });
+
+  it('should ensure order approval is only required once and persists across fetches', async () => {
+    const createRes = await createOrderInSupabase({
+      userId: 'user_onetime_approval',
+      customerName: 'Kavita Iyer',
+      customerPhone: '+91 9771122334',
+      deliveryAddress: 'Jayanagar, Bengaluru',
+      items: [
+        {
+          kitId: 'kit-101',
+          name: 'Paneer Butter Masala Kit',
+          quantity: 1,
+          price: 299,
+        },
+      ],
+      subtotal: 299,
+      totalAmount: 299,
+      paymentMethod: 'UPI',
+    });
+
+    // Before approval: order is Placed
+    let orders = await fetchAllOrdersFromSupabase();
+    let target = orders.find((o) => o.id === createRes.orderId);
+    expect(target?.status).toBe('Placed');
+    expect(target?.isApproved).toBeFalsy();
+
+    // Admin approves order once
+    await approveOrderInSupabase(createRes.orderId, 'Chef Admin');
+
+    // After approval: order is Confirmed and isApproved is true
+    orders = await fetchAllOrdersFromSupabase();
+    target = orders.find((o) => o.id === createRes.orderId);
+    expect(target?.status).toBe('Confirmed');
+    expect(target?.isApproved).toBe(true);
+
+    // Simulate reloading multiple times: approval status is retained, never reverts to Placed
+    const reloadedOrders = await fetchAllOrdersFromSupabase();
+    const reloadedTarget = reloadedOrders.find((o) => o.id === createRes.orderId);
+    expect(reloadedTarget?.status).toBe('Confirmed');
+    expect(reloadedTarget?.isApproved).toBe(true);
+
+    // Pending approval count does NOT include this approved order
+    await refreshPendingApprovalCount();
+    expect(
+      reloadedOrders.filter((o) => o.id === createRes.orderId && o.status === 'Placed').length,
+    ).toBe(0);
+  });
 });
