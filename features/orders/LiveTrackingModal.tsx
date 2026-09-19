@@ -30,11 +30,11 @@ export const LiveTrackingModal: React.FC<LiveTrackingModalProps> = ({
   const getStatusBadgeVariant = (status: Order['status']) => {
     switch (status) {
       case 'Delivered':
+      case 'Confirmed':
         return 'success';
       case 'Out for Delivery':
-        return 'info';
       case 'Preparing':
-      case 'Confirmed':
+        return 'info';
       case 'Placed':
         return 'warning';
       case 'Cancelled':
@@ -88,19 +88,56 @@ export const LiveTrackingModal: React.FC<LiveTrackingModalProps> = ({
               <Badge label={order.status} variant={getStatusBadgeVariant(order.status)} />
             </View>
 
-            <Text style={[styles.statusMainHeading, { color: colors.textPrimary }]}>
-              {order.status === 'Delivered'
-                ? 'Kit Delivered to Your Doorstep! 🥘'
-                : order.status === 'Out for Delivery'
-                  ? 'Rider is on the way in cold-chain gear 🛵'
-                  : order.status === 'Preparing'
-                    ? 'Chefs are packing fresh masalas & ingredients 👨‍🍳'
-                    : 'Order Confirmed by Fulfillment Kitchen ✨'}
+            <Text
+              style={[
+                styles.statusMainHeading,
+                { color: order.status === 'Cancelled' ? '#DC2626' : colors.textPrimary },
+              ]}
+            >
+              {order.status === 'Cancelled'
+                ? 'Order Cancelled 🚫'
+                : order.status === 'Delivered'
+                  ? 'Kit Delivered to Your Doorstep! 🥘'
+                  : order.status === 'Out for Delivery'
+                    ? 'Rider is on the way in cold-chain gear 🛵'
+                    : order.status === 'Preparing'
+                      ? 'Chefs are packing fresh masalas & ingredients 👨‍🍳'
+                      : order.status === 'Confirmed'
+                        ? 'Order Confirmed by Fulfillment Kitchen ✨'
+                        : 'Order Placed • Awaiting Kitchen Confirmation ⏳'}
             </Text>
 
-            <Text style={[styles.statusSubtitle, { color: colors.textSecondary }]}>
-              Estimated Delivery: {order.deliverySlot} ({order.deliveryDate || 'Today'})
-            </Text>
+            {order.status === 'Cancelled' ? (
+              <View
+                style={{
+                  backgroundColor: '#FEF2F2',
+                  borderWidth: 1,
+                  borderColor: '#FCA5A5',
+                  borderRadius: radii.md,
+                  padding: 12,
+                  marginTop: 10,
+                }}
+              >
+                <Text
+                  style={{ color: '#991B1B', fontWeight: '800', fontSize: 13, marginBottom: 4 }}
+                >
+                  Why was this cancelled?
+                </Text>
+                <Text style={{ color: '#B91C1C', fontSize: 12, lineHeight: 18 }}>
+                  {order.cancellationReason ||
+                    order.adminNotes ||
+                    'Cancelled by Kitchen Management.'}
+                </Text>
+                <Text style={{ color: '#7F1D1D', fontSize: 11, marginTop: 6, fontStyle: 'italic' }}>
+                  If paid online, your refund of ₹{order.totalAmount} is processed back to your
+                  original payment method.
+                </Text>
+              </View>
+            ) : (
+              <Text style={[styles.statusSubtitle, { color: colors.textSecondary }]}>
+                Estimated Delivery: {order.deliverySlot} ({order.deliveryDate || 'Today'})
+              </Text>
+            )}
           </View>
 
           {/* Timeline Milestones */}

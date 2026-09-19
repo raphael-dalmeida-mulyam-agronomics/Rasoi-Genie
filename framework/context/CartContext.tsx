@@ -1,7 +1,8 @@
-import React, { createContext, useContext, useState, useMemo } from 'react';
+import React, { createContext, useContext, useState, useMemo, useEffect } from 'react';
 import { MealKit } from '../services/mealKitsService';
 import { validateCoupon, Coupon } from '../services/couponsService';
 import { OrderItem } from '../firebase/ordersService';
+import { usePreferences } from './PreferencesContext';
 
 export interface CartItem {
   kit: MealKit;
@@ -47,6 +48,16 @@ export interface CartContextValue {
 const CartContext = createContext<CartContextValue | undefined>(undefined);
 
 export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  let preferredPayment: PaymentMethod = 'UPI';
+  try {
+    const prefs = usePreferences();
+    if (prefs?.preferredPaymentMethod) {
+      preferredPayment = prefs.preferredPaymentMethod;
+    }
+  } catch {
+    // Graceful fallback for test environments without PreferencesProvider
+  }
+
   const [items, setItems] = useState<CartItem[]>([]);
   const [appliedCoupon, setAppliedCoupon] = useState<Coupon | null>(null);
   const [couponDiscount, setCouponDiscount] = useState<number>(0);
@@ -54,7 +65,14 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const [selectedSlot, setSelectedSlot] = useState<string>('6:00 PM - 8:00 PM (Dinner)');
   const [selectedDeliveryDate, setSelectedDeliveryDate] = useState<string>('Today');
-  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<PaymentMethod>('UPI');
+  const [selectedPaymentMethod, setSelectedPaymentMethod] =
+    useState<PaymentMethod>(preferredPayment);
+
+  useEffect(() => {
+    if (preferredPayment) {
+      setSelectedPaymentMethod(preferredPayment);
+    }
+  }, [preferredPayment]);
 
   const addItem = (
     kit: MealKit,

@@ -8,6 +8,7 @@ import {
   Image,
   Dimensions,
   Alert,
+  Modal,
 } from 'react-native';
 import { router } from 'expo-router';
 import { useAuth } from '../../framework/context/AuthContext';
@@ -59,6 +60,54 @@ const PROMO_BANNERS = [
   },
 ];
 
+const DIET_FILTER_OPTIONS: { id: 'all' | DietTag; label: string; emoji: string }[] = [
+  { id: 'all', label: 'All Diets', emoji: '🍽️' },
+  { id: 'veg', label: 'Pure Veg', emoji: '🥬' },
+  { id: 'nonveg', label: 'Non-Veg', emoji: '🍗' },
+  { id: 'vegan', label: 'Vegan', emoji: '🌱' },
+  { id: 'keto', label: 'Keto Low-Carb', emoji: '🥑' },
+  { id: 'jain', label: 'Jain Friendly', emoji: '🌱' },
+  { id: 'gluten-free', label: 'Gluten-Free', emoji: '🌾' },
+];
+
+const CUISINE_FILTER_OPTIONS: { id: 'All' | CuisineType; label: string; emoji: string }[] = [
+  { id: 'All', label: 'All Cuisines', emoji: '🌍' },
+  { id: 'North Indian', label: 'North Indian', emoji: '🥘' },
+  { id: 'South Indian', label: 'South Indian', emoji: '🥞' },
+  { id: 'Punjabi', label: 'Punjabi', emoji: '🫓' },
+  { id: 'Hyderabadi', label: 'Hyderabadi', emoji: '🍚' },
+  { id: 'Coastal', label: 'Coastal', emoji: '🐟' },
+  { id: 'Italian', label: 'Italian', emoji: '🍕' },
+  { id: 'Mexican', label: 'Mexican', emoji: '🌮' },
+  { id: 'American', label: 'American', emoji: '🍔' },
+  { id: 'Mughlai', label: 'Mughlai', emoji: '🍖' },
+  { id: 'Gujarati', label: 'Gujarati', emoji: '🍲' },
+  { id: 'Indo-Chinese', label: 'Indo-Chinese', emoji: '🥢' },
+  { id: 'Continental', label: 'Continental', emoji: '🥗' },
+];
+
+const DISH_FILTER_OPTIONS: { id: 'All' | DishCategory; label: string; emoji: string }[] = [
+  { id: 'All', label: 'All Dishes', emoji: '🍽️' },
+  { id: 'Biryani & Rice', label: 'Biryani & Rice', emoji: '🍚' },
+  { id: 'Curries & Gravies', label: 'Curries & Gravies', emoji: '🥘' },
+  { id: 'Pizzas', label: 'Pizzas', emoji: '🍕' },
+  { id: 'Burgers & Sliders', label: 'Burgers & Sliders', emoji: '🍔' },
+  { id: 'Tacos', label: 'Tacos', emoji: '🌮' },
+  { id: 'Burritos & Bowls', label: 'Burritos & Bowls', emoji: '🥗' },
+  { id: 'Pastas', label: 'Pastas', emoji: '🍝' },
+];
+
+const SORT_OPTIONS: {
+  id: 'popularity' | 'priceLowHigh' | 'priceHighLow' | 'prepTime';
+  label: string;
+  icon: string;
+}[] = [
+  { id: 'popularity', label: 'Most Popular', icon: '🔥' },
+  { id: 'priceLowHigh', label: 'Price: Low to High', icon: '💵' },
+  { id: 'priceHighLow', label: 'Price: High to Low', icon: '💎' },
+  { id: 'prepTime', label: 'Fastest Prep Time', icon: '⚡' },
+];
+
 export const HomeScreenView: React.FC = () => {
   const { user } = useAuth();
   const { colors, radii, shadows, isDark, toggleColorMode } = useTheme();
@@ -77,6 +126,15 @@ export const HomeScreenView: React.FC = () => {
     'popularity',
   );
 
+  // Minimalist Filter & Sort Dropdown states
+  const [activeFilterModal, setActiveFilterModal] = useState<'diet' | 'cuisine' | 'dish' | null>(
+    null,
+  );
+  const [isSortDropdownOpen, setIsSortDropdownOpen] = useState(false);
+
+  // Preference-based filtering toggle (defaults to true)
+  const [applyUserPreferences, setApplyUserPreferences] = useState(true);
+
   // Modals
   const [selectedKit, setSelectedKit] = useState<MealKit | null>(null);
   const [detailModalVisible, setDetailModalVisible] = useState(false);
@@ -86,10 +144,41 @@ export const HomeScreenView: React.FC = () => {
 
   const allKits = useMemo(() => getMealKits(), []);
 
-  // Filtered kits based on current options
+  // Helper to check if a kit contains allergens configured in user preferences
+  const matchesUserAllergens = (kit: MealKit): boolean => {
+    if (!preferences.allergies || preferences.allergies.length === 0) return true;
+    const kitAllergens = (kit.allergens || []).map((a) => a.toLowerCase().trim());
+    return !preferences.allergies.some((userAllergy) => {
+      const u = userAllergy.toLowerCase().trim();
+      return kitAllergens.some((a) => a.includes(u) || u.includes(a));
+    });
+  };
+
+  // Helper to check if a kit matches user's preferred diet type
+  const matchesUserDiet = (kit: MealKit): boolean => {
+    if (!preferences.dietType || preferences.dietType === 'all') return true;
+    if (preferences.dietType === 'veg') return kit.diet === 'veg';
+    if (preferences.dietType === 'nonveg') return kit.diet === 'nonveg';
+    if (preferences.dietType === 'vegan') return kit.dietaryTags.includes('vegan');
+    if (preferences.dietType === 'jain') return kit.dietaryTags.includes('jain');
+    if (preferences.dietType === 'keto') return kit.dietaryTags.includes('keto');
+    if (preferences.dietType === 'gluten-free') return kit.dietaryTags.includes('gluten-free');
+    return true;
+  };
+
+  // Effective diet: if user manually picked a diet filter, use it; otherwise use user profile diet if preference filtering is active
+  const effectiveDiet = useMemo<'all' | DietTag>(() => {
+    if (dietFilter !== 'all') return dietFilter;
+    if (applyUserPreferences && preferences.dietType && preferences.dietType !== 'all') {
+      return preferences.dietType;
+    }
+    return 'all';
+  }, [dietFilter, applyUserPreferences, preferences.dietType]);
+
+  // Filtered kits based on current options and user preferences
   const filteredKits = useMemo(() => {
-    return searchAndFilterMealKits({
-      diet: dietFilter,
+    let results = searchAndFilterMealKits({
+      diet: effectiveDiet,
       cuisine: selectedCuisine,
       dishCategory: selectedDishCategory !== 'All' ? selectedDishCategory : undefined,
       spiceLevel: selectedSpice,
@@ -97,42 +186,87 @@ export const HomeScreenView: React.FC = () => {
       maxPrepTime,
       sortBy,
     });
+
+    if (applyUserPreferences) {
+      // Exclude dishes with allergens
+      results = results.filter(matchesUserAllergens);
+
+      // Prioritize preferred cuisines if sorting by popularity and no specific cuisine is chosen
+      if (
+        selectedCuisine === 'All' &&
+        preferences.preferredCuisines &&
+        preferences.preferredCuisines.length > 0 &&
+        sortBy === 'popularity'
+      ) {
+        const preferredSet = new Set(preferences.preferredCuisines);
+        results = [...results].sort((a, b) => {
+          const aPref = preferredSet.has(a.cuisine) ? 1 : 0;
+          const bPref = preferredSet.has(b.cuisine) ? 1 : 0;
+          if (bPref !== aPref) return bPref - aPref;
+          return b.rating - a.rating;
+        });
+      }
+    }
+
+    return results;
   }, [
-    dietFilter,
+    effectiveDiet,
     selectedCuisine,
     selectedDishCategory,
     selectedSpice,
     selectedDietTag,
     maxPrepTime,
     sortBy,
+    applyUserPreferences,
+    preferences.allergies,
+    preferences.preferredCuisines,
   ]);
 
-  // "Trending in your region"
+  // "Trending in your region" filtered by user preferences
   const trendingKits = useMemo(() => {
-    return allKits.filter(
+    let kits = allKits.filter(
       (k) => k.isTrending || k.availableRegions.includes(preferences.regionHub),
     );
-  }, [allKits, preferences.regionHub]);
+    if (applyUserPreferences) {
+      kits = kits.filter((k) => matchesUserDiet(k) && matchesUserAllergens(k));
+    }
+    return kits;
+  }, [
+    allKits,
+    preferences.regionHub,
+    applyUserPreferences,
+    preferences.dietType,
+    preferences.allergies,
+  ]);
 
   // "Recommended for you" based on user preferences
   const recommendedKits = useMemo(() => {
-    return allKits.filter((k) => {
-      if (preferences.dietType === 'veg' && k.diet !== 'veg') return false;
-      if (preferences.dietType === 'vegan' && !k.dietaryTags.includes('vegan')) return false;
-      if (preferences.dietType === 'jain' && !k.dietaryTags.includes('jain')) return false;
-      if (preferences.dietType === 'keto' && !k.dietaryTags.includes('keto')) return false;
-      if (preferences.dietType === 'gluten-free' && !k.dietaryTags.includes('gluten-free'))
-        return false;
-      return true;
-    });
-  }, [allKits, preferences.dietType]);
+    return allKits
+      .filter((k) => {
+        if (!matchesUserDiet(k)) return false;
+        if (!matchesUserAllergens(k)) return false;
+        return true;
+      })
+      .sort((a, b) => {
+        if (preferences.preferredCuisines && preferences.preferredCuisines.length > 0) {
+          const aPref = preferences.preferredCuisines.includes(a.cuisine) ? 1 : 0;
+          const bPref = preferences.preferredCuisines.includes(b.cuisine) ? 1 : 0;
+          if (bPref !== aPref) return bPref - aPref;
+        }
+        return b.rating - a.rating;
+      });
+  }, [allKits, preferences.dietType, preferences.allergies, preferences.preferredCuisines]);
 
-  // "Global Favorites & Foreign Specials" (Italian Pizzas & Pastas, Mexican Tacos & Burritos, American Burgers)
+  // "Global Favorites & Foreign Specials" filtered by user preferences
   const foreignKits = useMemo(() => {
-    return allKits.filter((k) =>
+    let kits = allKits.filter((k) =>
       ['Italian', 'Mexican', 'American', 'Continental'].includes(k.cuisine),
     );
-  }, [allKits]);
+    if (applyUserPreferences) {
+      kits = kits.filter((k) => matchesUserDiet(k) && matchesUserAllergens(k));
+    }
+    return kits;
+  }, [allKits, applyUserPreferences, preferences.dietType, preferences.allergies]);
 
   const handleOpenDetail = (kit: MealKit) => {
     setSelectedKit(kit);
@@ -140,8 +274,8 @@ export const HomeScreenView: React.FC = () => {
   };
 
   const handleQuickAdd = (kit: MealKit) => {
-    addItem(kit, 1);
-    Alert.alert('Added to Cart', `1x ${kit.name} added to your basket.`);
+    // Open meal kit detail modal so user can customize servings, spice level, etc.
+    handleOpenDetail(kit);
   };
 
   return (
@@ -279,152 +413,248 @@ export const HomeScreenView: React.FC = () => {
           ))}
         </ScrollView>
 
-        {/* Quick Filter Bar (Veg/Non-Veg, Cuisines, Spice) */}
-        <View style={styles.filterSection}>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            style={styles.pillsScroll}
-            contentContainerStyle={{ gap: 8, paddingBottom: 2 }}
-          >
-            {(
-              [
-                { id: 'all', label: `All Meals (${allKits.length})` },
-                { id: 'veg', label: 'Pure Veg' },
-                { id: 'nonveg', label: 'Non-Veg' },
-                { id: 'vegan', label: 'Vegan' },
-                { id: 'keto', label: 'Keto' },
-                { id: 'jain', label: 'Jain Friendly' },
-                { id: 'gluten-free', label: 'Gluten-Free' },
-              ] as { id: 'all' | DietTag; label: string }[]
-            ).map((d) => {
-              const isSelected = dietFilter === d.id;
-              return (
-                <TouchableOpacity
-                  key={d.id}
-                  style={[
-                    styles.vegTab,
-                    {
-                      backgroundColor: isSelected ? colors.primary : colors.bgSurface,
-                      borderColor: isSelected ? colors.primary : colors.border,
-                      borderRadius: radii.pill,
-                    },
-                  ]}
-                  onPress={() => setDietFilter(d.id)}
-                >
-                  <Text
-                    style={[
-                      styles.vegTabText,
-                      { color: isSelected ? colors.textInverse : colors.textPrimary },
-                    ]}
-                  >
-                    {d.label}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </ScrollView>
+        {/* Preference Tailoring Indicator Banner */}
+        <View
+          style={[
+            styles.prefBanner,
+            {
+              backgroundColor: applyUserPreferences ? colors.primary + '14' : colors.bgSurface,
+              borderColor: applyUserPreferences ? colors.primary + '60' : colors.borderLight,
+            },
+          ]}
+        >
+          <View style={styles.prefBannerLeft}>
+            <Text style={styles.prefBannerIcon}>{applyUserPreferences ? '🎯' : '🌐'}</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.prefBannerTitle, { color: colors.textPrimary }]}>
+                {applyUserPreferences
+                  ? `Curated for: ${preferences.dietType === 'all' ? 'All Diets' : preferences.dietType.toUpperCase()}`
+                  : 'Showing All Available Dishes'}
+              </Text>
+              <Text
+                style={[styles.prefBannerSubtitle, { color: colors.textSecondary }]}
+                numberOfLines={1}
+              >
+                {applyUserPreferences
+                  ? [
+                      preferences.allergies.length > 0
+                        ? `No ${preferences.allergies.join(', ')}`
+                        : null,
+                      preferences.preferredCuisines.length > 0
+                        ? `${preferences.preferredCuisines.join(', ')}`
+                        : null,
+                    ]
+                      .filter(Boolean)
+                      .join(' • ') || 'Personalized to your taste profile'
+                  : 'User dietary filters currently paused'}
+              </Text>
+            </View>
+          </View>
 
-          {/* Cuisine and Dietary Tag Pills */}
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.pillsScroll}>
-            <PillTag
-              label="All Cuisines"
-              selected={selectedCuisine === 'All'}
-              onPress={() => setSelectedCuisine('All')}
-            />
-            {(
-              [
-                { id: 'Italian', label: 'Italian' },
-                { id: 'Mexican', label: 'Mexican' },
-                { id: 'American', label: 'American' },
-                { id: 'North Indian', label: 'North Indian' },
-                { id: 'Hyderabadi', label: 'Hyderabadi' },
-                { id: 'Punjabi', label: 'Punjabi' },
-                { id: 'Coastal', label: 'Coastal' },
-              ] as { id: CuisineType; label: string }[]
-            ).map((c) => (
-              <PillTag
-                key={c.id}
-                label={c.label}
-                selected={selectedCuisine === c.id}
-                onPress={() => setSelectedCuisine(selectedCuisine === c.id ? 'All' : c.id)}
-              />
-            ))}
-            <PillTag
-              label="Jain Friendly"
-              selected={selectedDietTag === 'jain'}
-              onPress={() => setSelectedDietTag(selectedDietTag === 'jain' ? 'all' : 'jain')}
-            />
-            <PillTag
-              label="Vegan"
-              selected={selectedDietTag === 'vegan'}
-              onPress={() => setSelectedDietTag(selectedDietTag === 'vegan' ? 'all' : 'vegan')}
-            />
-            <PillTag
-              label="Keto Low-Carb"
-              selected={selectedDietTag === 'keto'}
-              onPress={() => setSelectedDietTag(selectedDietTag === 'keto' ? 'all' : 'keto')}
-            />
-            <PillTag
-              label="Under 25 mins"
-              selected={maxPrepTime === 25}
-              onPress={() => setMaxPrepTime(maxPrepTime === 25 ? undefined : 25)}
-            />
-          </ScrollView>
-
-          {/* Dish Sub-Category Quick Filter Pills */}
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            style={[styles.pillsScroll, { marginTop: 4 }]}
-          >
-            <PillTag
-              label="All Dishes"
-              selected={selectedDishCategory === 'All'}
-              onPress={() => setSelectedDishCategory('All')}
-              size="sm"
-            />
-            {(
-              [
-                { id: 'Pizzas', label: 'Pizzas' },
-                { id: 'Burgers & Sliders', label: 'Burgers' },
-                { id: 'Tacos', label: 'Tacos' },
-                { id: 'Burritos & Bowls', label: 'Burritos' },
-                { id: 'Pastas', label: 'Pastas' },
-                { id: 'Curries & Gravies', label: 'Curries' },
-                { id: 'Biryani & Rice', label: 'Biryani' },
-              ] as { id: DishCategory; label: string }[]
-            ).map((d) => (
-              <PillTag
-                key={d.id}
-                label={d.label}
-                selected={selectedDishCategory === d.id}
-                onPress={() =>
-                  setSelectedDishCategory(selectedDishCategory === d.id ? 'All' : d.id)
-                }
-                size="sm"
-              />
-            ))}
-          </ScrollView>
-
-          {/* Sort Selector Bar */}
-          <View style={styles.sortRow}>
-            <Text style={[styles.resultCount, { color: colors.textMuted }]}>
-              Showing {filteredKits.length} Chef Meal Kits
-            </Text>
-            <View style={styles.sortPills}>
-              <TouchableOpacity
-                onPress={() => setSortBy(sortBy === 'popularity' ? 'priceLowHigh' : 'popularity')}
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            <TouchableOpacity
+              style={[
+                styles.prefToggleBtn,
+                {
+                  backgroundColor: applyUserPreferences ? colors.primary : colors.bgSubtle,
+                  borderColor: applyUserPreferences ? colors.primary : colors.borderLight,
+                },
+              ]}
+              onPress={() => setApplyUserPreferences(!applyUserPreferences)}
+              activeOpacity={0.7}
+            >
+              <Text
                 style={[
-                  styles.sortBtn,
-                  { borderColor: colors.borderLight, backgroundColor: colors.bgSurface },
+                  styles.prefToggleBtnText,
+                  { color: applyUserPreferences ? '#FFFFFF' : colors.textPrimary },
                 ]}
               >
-                <Text style={[styles.sortBtnText, { color: colors.textSecondary }]}>
-                  Sort: {sortBy === 'popularity' ? 'Popularity' : 'Price: Low-High'}
-                </Text>
-              </TouchableOpacity>
-            </View>
+                {applyUserPreferences ? 'Preferences On ✓' : 'Filter by Me'}
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.prefSettingsBtn,
+                { backgroundColor: colors.bgSubtle, borderColor: colors.borderLight },
+              ]}
+              onPress={() => setPreferencesModalVisible(true)}
+              activeOpacity={0.7}
+            >
+              <Text style={{ fontSize: 13 }}>⚙️</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* Minimalist 3-Filter Buttons Bar */}
+        <View style={styles.minimalistFilterBar}>
+          <TouchableOpacity
+            style={[
+              styles.minimalistFilterBtn,
+              {
+                backgroundColor:
+                  dietFilter !== 'all' || (applyUserPreferences && preferences.dietType !== 'all')
+                    ? colors.primary + '18'
+                    : colors.bgSurface,
+                borderColor:
+                  dietFilter !== 'all' || (applyUserPreferences && preferences.dietType !== 'all')
+                    ? colors.primary
+                    : colors.borderLight,
+              },
+            ]}
+            onPress={() => setActiveFilterModal('diet')}
+            activeOpacity={0.7}
+          >
+            <Text
+              style={[
+                styles.minimalistFilterBtnText,
+                {
+                  color:
+                    dietFilter !== 'all' || (applyUserPreferences && preferences.dietType !== 'all')
+                      ? colors.primary
+                      : colors.textPrimary,
+                },
+              ]}
+              numberOfLines={1}
+            >
+              🥗{' '}
+              {dietFilter === 'all'
+                ? applyUserPreferences && preferences.dietType !== 'all'
+                  ? preferences.dietType.toUpperCase()
+                  : 'Diets'
+                : dietFilter.toUpperCase()}
+            </Text>
+            <Text style={{ fontSize: 10, color: colors.textMuted, marginLeft: 4 }}>▼</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.minimalistFilterBtn,
+              {
+                backgroundColor:
+                  selectedCuisine !== 'All' ? colors.primary + '18' : colors.bgSurface,
+                borderColor: selectedCuisine !== 'All' ? colors.primary : colors.borderLight,
+              },
+            ]}
+            onPress={() => setActiveFilterModal('cuisine')}
+            activeOpacity={0.7}
+          >
+            <Text
+              style={[
+                styles.minimalistFilterBtnText,
+                { color: selectedCuisine !== 'All' ? colors.primary : colors.textPrimary },
+              ]}
+              numberOfLines={1}
+            >
+              🥘 {selectedCuisine === 'All' ? 'Cuisines' : selectedCuisine}
+            </Text>
+            <Text style={{ fontSize: 10, color: colors.textMuted, marginLeft: 4 }}>▼</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.minimalistFilterBtn,
+              {
+                backgroundColor:
+                  selectedDishCategory !== 'All' ? colors.primary + '18' : colors.bgSurface,
+                borderColor: selectedDishCategory !== 'All' ? colors.primary : colors.borderLight,
+              },
+            ]}
+            onPress={() => setActiveFilterModal('dish')}
+            activeOpacity={0.7}
+          >
+            <Text
+              style={[
+                styles.minimalistFilterBtnText,
+                { color: selectedDishCategory !== 'All' ? colors.primary : colors.textPrimary },
+              ]}
+              numberOfLines={1}
+            >
+              🍽️ {selectedDishCategory === 'All' ? 'Dishes' : selectedDishCategory}
+            </Text>
+            <Text style={{ fontSize: 10, color: colors.textMuted, marginLeft: 4 }}>▼</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Sort Bar with Dropdown List */}
+        <View style={styles.sortRow}>
+          <Text style={[styles.resultCount, { color: colors.textMuted }]}>
+            Showing {filteredKits.length} Chef Meal Kits
+          </Text>
+          <View style={{ position: 'relative', zIndex: 10 }}>
+            <TouchableOpacity
+              onPress={() => setIsSortDropdownOpen(!isSortDropdownOpen)}
+              style={[
+                styles.sortBtn,
+                {
+                  borderColor: isSortDropdownOpen ? colors.primary : colors.borderLight,
+                  backgroundColor: colors.bgSurface,
+                },
+              ]}
+              activeOpacity={0.8}
+            >
+              <Text style={[styles.sortBtnText, { color: colors.textPrimary }]}>
+                {SORT_OPTIONS.find((s) => s.id === sortBy)?.icon} Sort:{' '}
+                {SORT_OPTIONS.find((s) => s.id === sortBy)?.label}
+              </Text>
+              <Text style={{ fontSize: 10, color: colors.textMuted, marginLeft: 6 }}>
+                {isSortDropdownOpen ? '▲' : '▼'}
+              </Text>
+            </TouchableOpacity>
+
+            {/* Sort Dropdown List */}
+            {isSortDropdownOpen && (
+              <View
+                style={[
+                  styles.sortDropdownMenu,
+                  {
+                    backgroundColor: colors.bgSurface,
+                    borderColor: colors.borderLight,
+                    ...shadows.medium,
+                  },
+                ]}
+              >
+                {SORT_OPTIONS.map((opt) => {
+                  const isSelected = sortBy === opt.id;
+                  return (
+                    <TouchableOpacity
+                      key={opt.id}
+                      style={[
+                        styles.sortDropdownItem,
+                        {
+                          backgroundColor: isSelected ? colors.primary + '18' : 'transparent',
+                        },
+                      ]}
+                      onPress={() => {
+                        setSortBy(opt.id);
+                        setIsSortDropdownOpen(false);
+                      }}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={{ fontSize: 14, marginRight: 8 }}>{opt.icon}</Text>
+                      <Text
+                        style={[
+                          styles.sortDropdownItemText,
+                          {
+                            color: isSelected ? colors.primary : colors.textPrimary,
+                            fontWeight: isSelected ? '700' : '500',
+                          },
+                        ]}
+                      >
+                        {opt.label}
+                      </Text>
+                      {isSelected && (
+                        <Text
+                          style={{ color: colors.primary, fontWeight: '800', marginLeft: 'auto' }}
+                        >
+                          ✓
+                        </Text>
+                      )}
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            )}
           </View>
         </View>
 
@@ -539,18 +769,48 @@ export const HomeScreenView: React.FC = () => {
             Includes fresh ingredients, whole spices & authentic masala sachets
           </Text>
 
-          <View style={styles.kitsGrid}>
-            {filteredKits.map((kit) => (
-              <MealKitCard
-                key={kit.id}
-                kit={kit}
-                onPress={() => handleOpenDetail(kit)}
-                onQuickAdd={() => handleQuickAdd(kit)}
-                isFavorite={isInWishlist(kit.id)}
-                onToggleFavorite={() => toggleWishlist(kit.id)}
-              />
-            ))}
-          </View>
+          {filteredKits.length === 0 ? (
+            <View
+              style={[
+                styles.emptyKitsContainer,
+                { backgroundColor: colors.bgSurface, borderColor: colors.borderLight },
+              ]}
+            >
+              <Text style={{ fontSize: 36, marginBottom: 8 }}>🍽️</Text>
+              <Text style={[styles.emptyKitsTitle, { color: colors.textPrimary }]}>
+                No dishes match your active filters
+              </Text>
+              <Text style={[styles.emptyKitsSubtitle, { color: colors.textSecondary }]}>
+                Try loosening your dietary filters or clearing allergen exclusions to see more
+                dishes.
+              </Text>
+              <TouchableOpacity
+                style={[styles.resetPrefBtn, { backgroundColor: colors.primary }]}
+                onPress={() => {
+                  setDietFilter('all');
+                  setSelectedCuisine('All');
+                  setSelectedDishCategory('All');
+                  setApplyUserPreferences(false);
+                }}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.resetPrefBtnText}>Show All Dishes</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <View style={styles.kitsGrid}>
+              {filteredKits.map((kit) => (
+                <MealKitCard
+                  key={kit.id}
+                  kit={kit}
+                  onPress={() => handleOpenDetail(kit)}
+                  onQuickAdd={() => handleQuickAdd(kit)}
+                  isFavorite={isInWishlist(kit.id)}
+                  onToggleFavorite={() => toggleWishlist(kit.id)}
+                />
+              ))}
+            </View>
+          )}
         </View>
       </ScrollView>
 
@@ -574,12 +834,180 @@ export const HomeScreenView: React.FC = () => {
         onClose={() => setPreferencesModalVisible(false)}
       />
 
-      {/* Review Modal */}
-      <ReviewModal
-        kit={reviewKit}
-        visible={reviewModalVisible}
-        onClose={() => setReviewModalVisible(false)}
-      />
+      {/* Minimalist Filter Selection Modal (Diets / Cuisines / Dishes) */}
+      <Modal
+        visible={activeFilterModal !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setActiveFilterModal(null)}
+      >
+        <View style={styles.filterModalOverlay}>
+          <View
+            style={[
+              styles.filterModalCard,
+              { backgroundColor: colors.bgSurface, borderColor: colors.borderLight },
+              shadows.card,
+            ]}
+          >
+            <View style={styles.filterModalHeader}>
+              <Text style={[styles.filterModalTitle, { color: colors.textPrimary }]}>
+                {activeFilterModal === 'diet' && 'Select Dietary Preference 🥗'}
+                {activeFilterModal === 'cuisine' && 'Select Preferred Cuisine 🥘'}
+                {activeFilterModal === 'dish' && 'Select Dish Category 🍽️'}
+              </Text>
+              <TouchableOpacity
+                onPress={() => {
+                  if (activeFilterModal === 'diet') setDietFilter('all');
+                  if (activeFilterModal === 'cuisine') setSelectedCuisine('All');
+                  if (activeFilterModal === 'dish') setSelectedDishCategory('All');
+                  setActiveFilterModal(null);
+                }}
+              >
+                <Text style={{ fontSize: 13, color: colors.primary, fontWeight: '700' }}>
+                  Reset to All
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={{ maxHeight: 380 }} showsVerticalScrollIndicator={false}>
+              {activeFilterModal === 'diet' &&
+                DIET_FILTER_OPTIONS.map((opt) => {
+                  const isSelected = dietFilter === opt.id;
+                  return (
+                    <TouchableOpacity
+                      key={opt.id}
+                      style={[
+                        styles.filterModalRow,
+                        {
+                          backgroundColor: isSelected ? colors.primary + '18' : 'transparent',
+                          borderColor: isSelected ? colors.primary : colors.borderLight,
+                        },
+                      ]}
+                      onPress={() => {
+                        setDietFilter(opt.id);
+                        setActiveFilterModal(null);
+                      }}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={{ fontSize: 18, marginRight: 10 }}>{opt.emoji}</Text>
+                      <Text
+                        style={[
+                          styles.filterModalRowText,
+                          {
+                            color: isSelected ? colors.primary : colors.textPrimary,
+                            fontWeight: isSelected ? '800' : '600',
+                          },
+                        ]}
+                      >
+                        {opt.label}
+                      </Text>
+                      {isSelected && (
+                        <Text
+                          style={{ color: colors.primary, fontWeight: '800', marginLeft: 'auto' }}
+                        >
+                          ✓
+                        </Text>
+                      )}
+                    </TouchableOpacity>
+                  );
+                })}
+
+              {activeFilterModal === 'cuisine' &&
+                CUISINE_FILTER_OPTIONS.map((opt) => {
+                  const isSelected = selectedCuisine === opt.id;
+                  return (
+                    <TouchableOpacity
+                      key={opt.id}
+                      style={[
+                        styles.filterModalRow,
+                        {
+                          backgroundColor: isSelected ? colors.primary + '18' : 'transparent',
+                          borderColor: isSelected ? colors.primary : colors.borderLight,
+                        },
+                      ]}
+                      onPress={() => {
+                        setSelectedCuisine(opt.id);
+                        setActiveFilterModal(null);
+                      }}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={{ fontSize: 18, marginRight: 10 }}>{opt.emoji}</Text>
+                      <Text
+                        style={[
+                          styles.filterModalRowText,
+                          {
+                            color: isSelected ? colors.primary : colors.textPrimary,
+                            fontWeight: isSelected ? '800' : '600',
+                          },
+                        ]}
+                      >
+                        {opt.label}
+                      </Text>
+                      {isSelected && (
+                        <Text
+                          style={{ color: colors.primary, fontWeight: '800', marginLeft: 'auto' }}
+                        >
+                          ✓
+                        </Text>
+                      )}
+                    </TouchableOpacity>
+                  );
+                })}
+
+              {activeFilterModal === 'dish' &&
+                DISH_FILTER_OPTIONS.map((opt) => {
+                  const isSelected = selectedDishCategory === opt.id;
+                  return (
+                    <TouchableOpacity
+                      key={opt.id}
+                      style={[
+                        styles.filterModalRow,
+                        {
+                          backgroundColor: isSelected ? colors.primary + '18' : 'transparent',
+                          borderColor: isSelected ? colors.primary : colors.borderLight,
+                        },
+                      ]}
+                      onPress={() => {
+                        setSelectedDishCategory(opt.id);
+                        setActiveFilterModal(null);
+                      }}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={{ fontSize: 18, marginRight: 10 }}>{opt.emoji}</Text>
+                      <Text
+                        style={[
+                          styles.filterModalRowText,
+                          {
+                            color: isSelected ? colors.primary : colors.textPrimary,
+                            fontWeight: isSelected ? '800' : '600',
+                          },
+                        ]}
+                      >
+                        {opt.label}
+                      </Text>
+                      {isSelected && (
+                        <Text
+                          style={{ color: colors.primary, fontWeight: '800', marginLeft: 'auto' }}
+                        >
+                          ✓
+                        </Text>
+                      )}
+                    </TouchableOpacity>
+                  );
+                })}
+            </ScrollView>
+
+            <TouchableOpacity
+              onPress={() => setActiveFilterModal(null)}
+              style={[styles.filterModalCloseBtn, { borderColor: colors.borderLight }]}
+            >
+              <Text style={[styles.filterModalCloseText, { color: colors.textPrimary }]}>
+                Close
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 };
@@ -877,48 +1305,193 @@ const styles = StyleSheet.create({
     flex: 0.8,
     height: '100%',
   },
-  filterSection: {
-    paddingHorizontal: 16,
-    marginBottom: 10,
-  },
-  vegToggleRow: {
-    flexDirection: 'row',
-    gap: 8,
-    marginBottom: 10,
-  },
-  vegTab: {
+  prefBanner: {
+    marginHorizontal: 16,
+    marginTop: 8,
+    marginBottom: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 14,
+    borderWidth: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 7,
-    paddingHorizontal: 14,
-    borderWidth: 1.5,
+    justifyContent: 'space-between',
   },
-  vegTabText: {
+  prefBannerLeft: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginRight: 8,
+  },
+  prefBannerIcon: {
+    fontSize: 18,
+  },
+  prefBannerTitle: {
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  prefBannerSubtitle: {
+    fontSize: 11,
+    marginTop: 1,
+  },
+  prefToggleBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  prefToggleBtnText: {
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  prefSettingsBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 6,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyKitsContainer: {
+    padding: 24,
+    borderRadius: 16,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginVertical: 16,
+  },
+  emptyKitsTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    marginBottom: 6,
+    textAlign: 'center',
+  },
+  emptyKitsSubtitle: {
+    fontSize: 13,
+    textAlign: 'center',
+    marginBottom: 16,
+    lineHeight: 18,
+  },
+  resetPrefBtn: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 10,
+  },
+  resetPrefBtnText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  minimalistFilterBar: {
+    flexDirection: 'row',
+    paddingHorizontal: 16,
+    gap: 8,
+    marginTop: 10,
+    marginBottom: 8,
+  },
+  minimalistFilterBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 9,
+    paddingHorizontal: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+  },
+  minimalistFilterBtnText: {
     fontSize: 12,
     fontWeight: '700',
-  },
-  pillsScroll: {
-    marginBottom: 10,
   },
   sortRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    paddingHorizontal: 16,
     paddingTop: 4,
+    marginBottom: 4,
   },
   resultCount: {
     fontSize: 12,
     fontWeight: '600',
   },
-  sortPills: {},
   sortBtn: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
     borderRadius: 999,
     borderWidth: 1,
   },
   sortBtnText: {
     fontSize: 11,
+    fontWeight: '700',
+  },
+  sortDropdownMenu: {
+    position: 'absolute',
+    top: 34,
+    right: 0,
+    width: 200,
+    borderRadius: 14,
+    borderWidth: 1,
+    paddingVertical: 6,
+    zIndex: 9999,
+  },
+  sortDropdownItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  sortDropdownItemText: {
+    fontSize: 12,
+  },
+  filterModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.65)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  filterModalCard: {
+    width: '100%',
+    maxWidth: 420,
+    borderRadius: 20,
+    borderWidth: 1,
+    padding: 20,
+  },
+  filterModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  filterModalTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+  },
+  filterModalRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    marginBottom: 8,
+  },
+  filterModalRowText: {
+    fontSize: 14,
+  },
+  filterModalCloseBtn: {
+    marginTop: 12,
+    paddingVertical: 11,
+    borderRadius: 12,
+    borderWidth: 1,
+    alignItems: 'center',
+  },
+  filterModalCloseText: {
+    fontSize: 14,
     fontWeight: '700',
   },
   catalogSection: {

@@ -8,54 +8,7 @@ export interface ExtendedReview extends BuyerReview {
   reportReason?: string;
 }
 
-const INITIAL_EXTENDED_REVIEWS: ExtendedReview[] = [
-  {
-    id: 'rev-101',
-    mealKitId: 'kit-101',
-    mealKitName: 'Paneer Butter Masala Kit',
-    userId: 'user_phone_9876543210',
-    userName: 'Priya Sharma',
-    userCity: 'Bengaluru',
-    rating: 5,
-    comment: 'The whole spices made my kitchen smell like a 5-star kitchen. So easy to prepare!',
-    date: 'Yesterday',
-    verifiedBuyer: true,
-    helpfulCount: 14,
-    status: 'approved',
-    photoUrl:
-      'https://images.unsplash.com/photo-1631452180519-c014fe946bc7?auto=format&fit=crop&w=500&q=80',
-  },
-  {
-    id: 'rev-102',
-    mealKitId: 'kit-102',
-    mealKitName: 'Hyderabadi Dum Chicken Biryani Kit',
-    userId: 'user_phone_9123456789',
-    userName: 'Rahul Verma',
-    userCity: 'Noida',
-    rating: 4,
-    comment:
-      'Delicious authentic taste. Took 35 mins instead of 30, but chicken was tender and juicy.',
-    date: '3 days ago',
-    verifiedBuyer: true,
-    helpfulCount: 8,
-    status: 'approved',
-  },
-  {
-    id: 'rev-103',
-    mealKitId: 'kit-104',
-    mealKitName: 'Coastal Prawns Ghee Roast Kit',
-    userId: 'user_phone_9988776655',
-    userName: 'Karthik Rao',
-    userCity: 'Mumbai',
-    rating: 1,
-    comment: 'Too fiery spicy for my family! Masala was overwhelming.',
-    date: '4 days ago',
-    verifiedBuyer: true,
-    helpfulCount: 2,
-    status: 'flagged',
-    reportReason: 'Customer claims spice warning was not prominent enough.',
-  },
-];
+const INITIAL_EXTENDED_REVIEWS: ExtendedReview[] = [];
 
 let reviewsStore: ExtendedReview[] = [...INITIAL_EXTENDED_REVIEWS];
 

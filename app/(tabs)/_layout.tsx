@@ -5,12 +5,15 @@ import { View } from 'react-native';
 import { useAuth } from '../../framework/context/AuthContext';
 import { useTheme } from '../../framework/theme/ThemeContext';
 import { useCart } from '../../framework/context/CartContext';
+import { usePreferences } from '../../framework/context/PreferencesContext';
+import { OnboardingWizardView } from '../../features/onboarding/OnboardingWizardView';
 import { AuthGuard } from '../../features/auth/AuthGuard';
 import { subscribeToPendingApprovalCount } from '../../framework/services/notificationService';
 import { refreshPendingApprovalCount } from '../../framework/services/supabaseOrdersService';
 
 export default function TabLayout() {
   const { user, isAdmin } = useAuth();
+  const { preferences, isLoadingProfile } = usePreferences();
   const { colors } = useTheme();
   const { totalCount } = useCart();
   const [pendingApprovalCount, setPendingApprovalCount] = useState<number>(0);
@@ -29,6 +32,15 @@ export default function TabLayout() {
         <AuthGuard isRootGate>
           <></>
         </AuthGuard>
+      </View>
+    );
+  }
+
+  // First-time user onboarding gate
+  if (!isLoadingProfile && !preferences.isOnboarded) {
+    return (
+      <View style={{ flex: 1, backgroundColor: colors.bgPrimary }}>
+        <OnboardingWizardView />
       </View>
     );
   }

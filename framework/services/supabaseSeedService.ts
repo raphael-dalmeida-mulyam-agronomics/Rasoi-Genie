@@ -1,6 +1,5 @@
 import { supabase } from '../supabase/client';
 import { INITIAL_MEAL_KITS, MealKit } from './mealKitsService';
-import { INITIAL_MOCK_ORDERS, OrderItem } from '../firebase/ordersService';
 
 export interface SeedResult {
   success: boolean;
@@ -69,55 +68,14 @@ export async function seedSupabaseDatabase(forceReseed = false): Promise<SeedRes
       kitsCount = existingKits.length;
     }
 
-    // 2. Check existing orders in Supabase
-    const { data: existingOrders } = await supabase.from('orders').select('id');
-    const shouldSeedOrders = forceReseed || !existingOrders || existingOrders.length === 0;
-
-    if (shouldSeedOrders) {
-      for (const order of INITIAL_MOCK_ORDERS) {
-        await supabase.from('orders').upsert(
-          {
-            id: order.id,
-            user_id: order.userId,
-            customer_name: order.customerName || 'Customer',
-            customer_phone: order.customerPhone,
-            customer_email: order.customerEmail,
-            delivery_address: order.deliveryAddress,
-            delivery_slot: order.deliverySlot || '6:00 PM - 8:00 PM',
-            delivery_date: order.deliveryDate || 'Today',
-            subtotal: order.subtotal,
-            discount: order.discount || 0,
-            delivery_fee: order.deliveryFee || 0,
-            total_amount: order.totalAmount,
-            status: order.status,
-            payment_method: order.paymentMethod,
-            payment_status: order.paymentStatus,
-            transaction_id: order.transactionId,
-            created_at: order.createdAt,
-            updated_at: order.updatedAt,
-          },
-          { onConflict: 'id' },
-        );
-
-        if (order.items && order.items.length > 0) {
-          const itemRows = order.items.map((item: OrderItem, idx: number) => ({
-            order_id: order.id,
-            kit_id: item.id || `kit-${idx}`,
-            name: item.name,
-            quantity: item.quantity,
-            price: item.price,
-            servings: 2,
-            spice_level: 'Medium',
-            masala_sachets: item.masalaSachets || [],
-            image_url: item.imageUrl,
-          }));
-
-          await supabase.from('order_items').insert(itemRows);
-        }
-        ordersCount++;
-      }
-    } else {
-      ordersCount = existingOrders.length;
+    // 2. Count existing orders in Supabase (do not seed filler orders)
+    try {
+      const { data: existingOrders } = await supabase.from('orders').select('id');
+      ordersCount = (existingOrders || []).filter(
+        (o: any) => !['ORD-9821', 'ORD-9820', 'ORD-9819'].includes(o.id),
+      ).length;
+    } catch {
+      ordersCount = 0;
     }
 
     return {

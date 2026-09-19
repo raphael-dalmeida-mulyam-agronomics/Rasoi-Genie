@@ -8,6 +8,7 @@ import {
   TextInput,
   Modal,
   Alert,
+  Platform,
 } from 'react-native';
 import { useAuth } from '../../framework/context/AuthContext';
 import { useTheme } from '../../framework/theme/ThemeContext';
@@ -18,6 +19,8 @@ import {
   updateOrderStatus,
   issueRefund,
   generateInvoiceText,
+  MOCK_ORDER_IDS,
+  isOrderApproved,
 } from '../../framework/firebase/ordersService';
 import { validateAdminEmail } from '../../framework/firebase/authService';
 import {
@@ -63,6 +66,8 @@ import {
   approveOrderInSupabase,
   subscribeToOrdersRealtime,
   refreshPendingApprovalCount,
+  updateOrderStatusInSupabase,
+  clearAllOrdersFromSupabase,
 } from '../../framework/services/supabaseOrdersService';
 import { saveMealKitToSupabase } from '../../framework/services/supabaseMealKitsService';
 import { seedSupabaseDatabase } from '../../framework/services/supabaseSeedService';
@@ -70,9 +75,7 @@ import {
   subscribeToPendingApprovalCount,
   playOrderAlertSound,
 } from '../../framework/services/notificationService';
-
-type AdminTab =
-  'orders' | 'kits' | 'inventory' | 'analytics' | 'users' | 'coupons' | 'revenue' | 'reviews';
+import { AdminNavigationMenu, AdminTab } from './AdminNavigationMenu';
 
 const STATUS_FILTERS: (OrderStatus | 'All')[] = [
   'All',
@@ -92,7 +95,7 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
   const { user, isAdmin, logout } = useAuth();
   const { colors, radii, shadows } = useTheme();
 
-  const [activeTab, setActiveTab] = useState<AdminTab>('orders');
+  const [activeTab, setActiveTab] = useState<AdminTab>('overview');
   const [orders, setOrders] = useState<Order[]>([]);
   const [selectedStatusFilter, setSelectedStatusFilter] = useState<OrderStatus | 'All'>('All');
   const [updatingOrderId, setUpdatingOrderId] = useState<string | null>(null);
@@ -104,6 +107,15 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
   const [refundReason, setRefundReason] = useState(
     'Customer reported issue with fresh ingredients',
   );
+
+  // Cancel Order Modal State
+  const [cancelOrderModalVisible, setCancelOrderModalVisible] = useState(false);
+  const [orderToCancel, setOrderToCancel] = useState<string | null>(null);
+  const [cancelReason, setCancelReason] = useState('Cancelled by Admin');
+
+  // Order Details Inspection Modal State
+  const [inspectOrder, setInspectOrder] = useState<Order | null>(null);
+  const [inspectModalVisible, setInspectModalVisible] = useState(false);
 
   // Meal Kits Management State
   const [kits, setKits] = useState<MealKit[]>(getMealKits());
@@ -139,8 +151,8 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
   const reloadSupabaseOrders = async () => {
     try {
       const sbOrders = await fetchAllOrdersFromSupabase();
-      if (sbOrders && sbOrders.length > 0) {
-        setOrders(sbOrders);
+      if (sbOrders) {
+        setOrders(sbOrders.filter((o) => !MOCK_ORDER_IDS.has(o.id)));
       }
     } catch (err) {
       console.warn('[AdminDashboard] Error loading Supabase orders:', err);
@@ -155,6 +167,7 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
 
     const unsubscribeRealtime = subscribeToOrdersRealtime(() => {
       reloadSupabaseOrders();
+      refreshPendingApprovalCount();
     });
 
     const unsubscribeCount = subscribeToPendingApprovalCount((cnt) => {
@@ -162,10 +175,28 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
     });
 
     const unsubscribeFb = subscribeToOrders((updatedOrders) => {
-      setOrders(updatedOrders);
+      setOrders(updatedOrders.filter((o) => !MOCK_ORDER_IDS.has(o.id)));
     });
 
+    const handleStorageChange = () => {
+      reloadSupabaseOrders();
+      refreshPendingApprovalCount();
+    };
+
+    if (typeof window !== 'undefined' && window.addEventListener) {
+      window.addEventListener('storage', handleStorageChange);
+    }
+
+    const interval = setInterval(() => {
+      reloadSupabaseOrders();
+      refreshPendingApprovalCount();
+    }, 2500);
+
     return () => {
+      clearInterval(interval);
+      if (typeof window !== 'undefined' && window.removeEventListener) {
+        window.removeEventListener('storage', handleStorageChange);
+      }
       unsubscribeRealtime();
       unsubscribeCount();
       unsubscribeFb();
@@ -174,16 +205,68 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
 
   const handleApproveOrder = async (orderId: string) => {
     setUpdatingOrderId(orderId);
+    setOrders((prevOrders) =>
+      prevOrders.map((o) =>
+        o.id === orderId ? { ...o, status: 'Confirmed', isApproved: true } : o,
+      ),
+    );
     try {
       await approveOrderInSupabase(orderId, user?.displayName || user?.email || 'Admin');
       await updateOrderStatus(orderId, 'Confirmed');
       await reloadSupabaseOrders();
+      await refreshPendingApprovalCount();
       Alert.alert(
         'Order Approved! ✅',
         `Order ${orderId} has been confirmed. Chef packing team has been notified.`,
       );
     } catch (err: any) {
       Alert.alert('Approval Error', err?.message || 'Could not approve order.');
+    } finally {
+      setUpdatingOrderId(null);
+    }
+  };
+
+  const handleCancelOrder = (orderId: string) => {
+    setOrderToCancel(orderId);
+    setCancelReason('Cancelled by Admin');
+    setCancelOrderModalVisible(true);
+  };
+
+  const handleConfirmCancelOrder = async () => {
+    if (!orderToCancel) return;
+    const targetId = orderToCancel;
+    setUpdatingOrderId(targetId);
+    setOrders((prevOrders) =>
+      prevOrders.map((o) =>
+        o.id === targetId
+          ? {
+              ...o,
+              status: 'Cancelled',
+              isApproved: false,
+              cancellationReason: cancelReason,
+              adminNotes: cancelReason,
+            }
+          : o,
+      ),
+    );
+    try {
+      await updateOrderStatusInSupabase(targetId, 'Cancelled', cancelReason);
+      await updateOrderStatus(targetId, 'Cancelled', cancelReason);
+      await reloadSupabaseOrders();
+      await refreshPendingApprovalCount();
+      setCancelOrderModalVisible(false);
+      setOrderToCancel(null);
+      if (Platform.OS === 'web') {
+        window.alert(`Order ${targetId} has been successfully cancelled.`);
+      } else {
+        Alert.alert('Order Cancelled 🚫', `Order ${targetId} has been successfully cancelled.`);
+      }
+    } catch (err: any) {
+      if (Platform.OS === 'web') {
+        window.alert(err?.message || 'Could not cancel order.');
+      } else {
+        Alert.alert('Error', err?.message || 'Could not cancel order.');
+      }
     } finally {
       setUpdatingOrderId(null);
     }
@@ -204,9 +287,44 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
     }
   };
 
+  const [isClearingOrders, setIsClearingOrders] = useState(false);
+
+  const handleClearAllOrders = async () => {
+    const confirmMessage =
+      'Are you sure you want to delete ALL customer orders? This will permanently wipe orders from the system, admin dashboard, and user accounts.';
+    let confirmed = false;
+    if (Platform.OS === 'web') {
+      confirmed = window.confirm(confirmMessage);
+    } else {
+      confirmed = true;
+    }
+    if (!confirmed) return;
+
+    setIsClearingOrders(true);
+    try {
+      await clearAllOrdersFromSupabase();
+      setOrders([]);
+      setPendingApprovalCount(0);
+      if (Platform.OS === 'web') {
+        window.alert('All orders have been successfully deleted.');
+      } else {
+        Alert.alert('Orders Deleted', 'All customer orders have been deleted.');
+      }
+    } catch (err: any) {
+      Alert.alert('Error', err?.message || 'Could not delete orders.');
+    } finally {
+      setIsClearingOrders(false);
+    }
+  };
+
   const handleStatusChange = async (orderId: string, newStatus: OrderStatus) => {
+    if (newStatus === 'Cancelled') {
+      handleCancelOrder(orderId);
+      return;
+    }
     setUpdatingOrderId(orderId);
     try {
+      await updateOrderStatusInSupabase(orderId, newStatus);
       await updateOrderStatus(orderId, newStatus);
       await reloadSupabaseOrders();
     } finally {
@@ -289,8 +407,29 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
   }
 
   const filteredOrders = useMemo(() => {
-    if (selectedStatusFilter === 'All') return orders;
-    return orders.filter((o) => o.status === selectedStatusFilter);
+    const cleanOrders = orders
+      .filter((o) => !MOCK_ORDER_IDS.has(o.id) && o.id.startsWith('ORD-'))
+      .map((o) => {
+        if ((isOrderApproved(o.id) || o.isApproved) && o.status === 'Placed') {
+          return { ...o, isApproved: true, status: 'Confirmed' as OrderStatus };
+        }
+        return o;
+      });
+
+    // Deduplicate by ID and transactionId
+    const seenIds = new Set<string>();
+    const seenTxns = new Set<string>();
+    const deduped: Order[] = [];
+    for (const ord of cleanOrders) {
+      if (seenIds.has(ord.id)) continue;
+      if (ord.transactionId && seenTxns.has(ord.transactionId)) continue;
+      seenIds.add(ord.id);
+      if (ord.transactionId) seenTxns.add(ord.transactionId);
+      deduped.push(ord);
+    }
+
+    if (selectedStatusFilter === 'All') return deduped;
+    return deduped.filter((o) => o.status === selectedStatusFilter);
   }, [orders, selectedStatusFilter]);
 
   const crossTabResult = useMemo(() => {
@@ -324,67 +463,271 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
         <Button title="Logout" variant="outline" size="sm" onPress={logout} />
       </View>
 
-      {/* Admin Module Navigation Tabs */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={[
-          styles.tabsBar,
-          { backgroundColor: colors.bgSurface, borderBottomColor: colors.borderLight },
-        ]}
-        contentContainerStyle={styles.tabsContent}
-      >
-        {(
-          [
-            {
-              id: 'orders',
-              label:
-                pendingApprovalCount > 0
-                  ? `Orders (${orders.length}) 🚨 ${pendingApprovalCount} Awaiting Approval`
-                  : `Orders (${orders.length})`,
-            },
-            { id: 'kits', label: `Meal Kits (${kits.length})` },
-            { id: 'inventory', label: 'Inventory Hub' },
-            { id: 'analytics', label: 'Regional Analytics 🇮🇳' },
-            { id: 'users', label: `Users (${users.length})` },
-            { id: 'coupons', label: `Coupons (${coupons.length})` },
-            { id: 'revenue', label: 'Revenue Dash' },
-            { id: 'reviews', label: `Reviews (${moderationReviews.length})` },
-          ] as { id: AdminTab; label: string }[]
-        ).map((tab) => {
-          const isSelected = activeTab === tab.id;
-          return (
-            <TouchableOpacity
-              key={tab.id}
-              style={[
-                styles.tabPill,
-                {
-                  backgroundColor: isSelected ? colors.primary : colors.bgSubtle,
-                  borderRadius: radii.pill,
-                },
-              ]}
-              onPress={() => setActiveTab(tab.id)}
-            >
-              <Text
-                style={[
-                  styles.tabPillText,
-                  {
-                    color: isSelected ? '#FFFFFF' : colors.textPrimary,
-                    fontWeight: isSelected ? '800' : '600',
-                  },
-                ]}
-              >
-                {tab.label}
-              </Text>
-            </TouchableOpacity>
-          );
-        })}
-      </ScrollView>
+      {/* Admin Module Navigation Menu Component */}
+      <AdminNavigationMenu
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
+        ordersCount={orders.length}
+        pendingApprovalCount={pendingApprovalCount}
+        kitsCount={kits.length}
+        usersCount={users.length}
+        couponsCount={coupons.length}
+        reviewsCount={moderationReviews.length}
+      />
 
       <ScrollView contentContainerStyle={styles.scrollBody} showsVerticalScrollIndicator={false}>
+        {/* MODULE 0: CONTROL CENTER OVERVIEW / HOME */}
+        {activeTab === 'overview' && (
+          <View>
+            {/* Realtime Pending Approval Alert Banner */}
+            {pendingApprovalCount > 0 && (
+              <View
+                style={{
+                  backgroundColor: '#FEF2F2',
+                  borderColor: '#F87171',
+                  borderWidth: 1.5,
+                  borderRadius: radii.lg,
+                  padding: 16,
+                  marginBottom: 16,
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  ...shadows.card,
+                }}
+              >
+                <View style={{ flex: 1, marginRight: 10 }}>
+                  <Text
+                    style={{
+                      fontSize: 15,
+                      fontWeight: '800',
+                      color: '#991B1B',
+                      marginBottom: 2,
+                    }}
+                  >
+                    🚨 {pendingApprovalCount} New Order(s) Awaiting Approval!
+                  </Text>
+                  <Text style={{ fontSize: 12, color: '#B91C1C' }}>
+                    Customer orders are currently in 'Placed' status. Click to approve and confirm.
+                  </Text>
+                </View>
+                <Button
+                  title="Review Orders ➔"
+                  size="sm"
+                  onPress={() => setActiveTab('orders')}
+                  style={{ backgroundColor: '#DC2626' }}
+                />
+              </View>
+            )}
+
+            {/* Quick Metrics KPI Cards */}
+            <View style={styles.metricsGrid}>
+              <TouchableOpacity
+                style={[
+                  styles.metricCard,
+                  { backgroundColor: colors.bgSurface, borderRadius: radii.xl, ...shadows.card },
+                ]}
+                onPress={() => setActiveTab('orders')}
+                activeOpacity={0.8}
+              >
+                <Text
+                  style={[
+                    styles.metricVal,
+                    { color: pendingApprovalCount > 0 ? '#DC2626' : colors.primary },
+                  ]}
+                >
+                  {orders.length}
+                </Text>
+                <Text style={[styles.metricLabel, { color: colors.textMuted }]}>
+                  {pendingApprovalCount > 0
+                    ? `ORDERS (${pendingApprovalCount} PENDING)`
+                    : 'TOTAL ORDERS'}
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.metricCard,
+                  { backgroundColor: colors.bgSurface, borderRadius: radii.xl, ...shadows.card },
+                ]}
+                onPress={() => setActiveTab('kits')}
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.metricVal, { color: colors.textPrimary }]}>{kits.length}</Text>
+                <Text style={[styles.metricLabel, { color: colors.textMuted }]}>MEAL KITS</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.metricCard,
+                  { backgroundColor: colors.bgSurface, borderRadius: radii.xl, ...shadows.card },
+                ]}
+                onPress={() => setActiveTab('users')}
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.metricVal, { color: colors.textPrimary }]}>
+                  {users.length}
+                </Text>
+                <Text style={[styles.metricLabel, { color: colors.textMuted }]}>USERS</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* All Modules Hub Grid */}
+            <Text
+              style={[
+                styles.moduleSectionTitle,
+                { color: colors.textPrimary, marginTop: 14, marginBottom: 12 },
+              ]}
+            >
+              Control Center Modules
+            </Text>
+
+            <View style={styles.modulesGrid}>
+              {[
+                {
+                  id: 'orders' as AdminTab,
+                  title: 'Orders & Live Approvals',
+                  desc: 'Real-time order feed, approval workflow, status changes & customer refunds',
+                  icon: '📦',
+                  badge:
+                    pendingApprovalCount > 0
+                      ? `${pendingApprovalCount} Awaiting Approval`
+                      : `${orders.length} Orders`,
+                  badgeVariant:
+                    pendingApprovalCount > 0
+                      ? ('danger' as BadgeVariant)
+                      : ('primary' as BadgeVariant),
+                },
+                {
+                  id: 'kits' as AdminTab,
+                  title: 'Meal Kits & Recipes',
+                  desc: 'Publish chef-crafted recipes, modify spice levels, servings, ingredients & prices',
+                  icon: '🍲',
+                  badge: `${kits.length} Kits Active`,
+                  badgeVariant: 'success' as BadgeVariant,
+                },
+                {
+                  id: 'inventory' as AdminTab,
+                  title: 'Regional Inventory Hub',
+                  desc: 'Monitor cold-chain safety buffer stocks across South, West, North & East Hubs',
+                  icon: '🏭',
+                  badge: '4 Hubs',
+                  badgeVariant: 'neutral' as BadgeVariant,
+                },
+                {
+                  id: 'analytics' as AdminTab,
+                  title: 'Regional Analytics 🇮🇳',
+                  desc: 'State-by-state consumption trends, dietary split, and downloadable CSV exports',
+                  icon: '📊',
+                  badge: 'India Live',
+                  badgeVariant: 'accent' as BadgeVariant,
+                },
+                {
+                  id: 'users' as AdminTab,
+                  title: 'User Management',
+                  desc: 'View real customer accounts, manage staff permissions and platform roles',
+                  icon: '👥',
+                  badge: `${users.length} Users`,
+                  badgeVariant: 'info' as BadgeVariant,
+                },
+                {
+                  id: 'coupons' as AdminTab,
+                  title: 'Promotions & Coupons',
+                  desc: 'Create discount codes, flat reductions, and minimum cart value requirements',
+                  icon: '🏷️',
+                  badge: `${coupons.length} Coupons`,
+                  badgeVariant: 'warning' as BadgeVariant,
+                },
+                {
+                  id: 'revenue' as AdminTab,
+                  title: 'Revenue & Financials',
+                  desc: 'Monthly sales metrics, Average Order Value (AOV), and customer repeat rates',
+                  icon: '📈',
+                  badge: 'Financials',
+                  badgeVariant: 'success' as BadgeVariant,
+                },
+                {
+                  id: 'reviews' as AdminTab,
+                  title: 'Review Moderation',
+                  desc: 'Inspect customer meal kit reviews, verify feedback, and moderate flagged entries',
+                  icon: '⭐',
+                  badge: `${moderationReviews.length} Reviews`,
+                  badgeVariant: 'neutral' as BadgeVariant,
+                },
+              ].map((mod) => (
+                <TouchableOpacity
+                  key={mod.id}
+                  style={[
+                    styles.moduleCard,
+                    {
+                      backgroundColor: colors.bgSurface,
+                      borderColor: colors.borderLight,
+                      borderRadius: radii.xl,
+                      ...shadows.card,
+                    },
+                  ]}
+                  onPress={() => setActiveTab(mod.id)}
+                  activeOpacity={0.7}
+                >
+                  <View style={styles.moduleCardTop}>
+                    <Text style={{ fontSize: 26, marginRight: 12 }}>{mod.icon}</Text>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.moduleCardTitle, { color: colors.textPrimary }]}>
+                        {mod.title}
+                      </Text>
+                      <Text
+                        style={[styles.moduleCardDesc, { color: colors.textSecondary }]}
+                        numberOfLines={2}
+                      >
+                        {mod.desc}
+                      </Text>
+                    </View>
+                  </View>
+
+                  <View style={styles.moduleCardBottom}>
+                    <Badge label={mod.badge} variant={mod.badgeVariant} size="sm" />
+                    <Text style={[styles.moduleCardArrow, { color: colors.primary }]}>
+                      Open Module ➔
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        )}
+
         {/* MODULE 1: ORDERS MANAGEMENT */}
         {activeTab === 'orders' && (
           <View>
+            {/* Orders Header Row with Clear All Orders Button */}
+            <View
+              style={{
+                flexDirection: 'row',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                marginBottom: 12,
+              }}
+            >
+              <View>
+                <Text style={[styles.moduleTitle, { color: colors.textPrimary }]}>
+                  Customer Orders ({orders.length})
+                </Text>
+                <Text style={[styles.moduleSubtitle, { color: colors.textSecondary }]}>
+                  Live kitchen order flow & fulfillment
+                </Text>
+              </View>
+              {orders.length > 0 && (
+                <Button
+                  title={isClearingOrders ? 'Clearing...' : 'Clear All Orders 🗑️'}
+                  variant="outline"
+                  size="sm"
+                  loading={isClearingOrders}
+                  style={{ borderColor: '#DC2626' }}
+                  textStyle={{ color: '#DC2626', fontSize: 11 }}
+                  onPress={handleClearAllOrders}
+                />
+              )}
+            </View>
+
             {/* Realtime Pending Approval Alert Banner */}
             {pendingApprovalCount > 0 && (
               <View
@@ -457,144 +800,320 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
               ))}
             </ScrollView>
 
-            {filteredOrders.map((order) => (
+            {filteredOrders.length === 0 ? (
               <View
-                key={order.id}
                 style={[
-                  styles.adminOrderCard,
+                  styles.adminKitCard,
                   {
                     backgroundColor: colors.bgSurface,
+                    padding: 32,
+                    alignItems: 'center',
                     borderRadius: radii.xl,
-                    borderColor: colors.borderLight,
-                    ...shadows.card,
                   },
                 ]}
               >
-                <View style={styles.orderTopRow}>
-                  <View>
-                    <Text style={[styles.adminOrderId, { color: colors.textPrimary }]}>
-                      {order.id}
-                    </Text>
-                    <Text style={[styles.adminOrderCustomer, { color: colors.textSecondary }]}>
-                      {order.customerName} ({order.customerPhone})
-                    </Text>
-                  </View>
-                  <Badge label={order.status} variant={getBadgeVariant(order.status)} />
-                </View>
-
-                <Text style={[styles.adminOrderAddress, { color: colors.textSecondary }]}>
-                  📍 {order.deliveryAddress}
+                <Text style={{ fontSize: 36, marginBottom: 10 }}>📦</Text>
+                <Text style={{ fontSize: 16, fontWeight: '700', color: colors.textPrimary }}>
+                  No Orders Found
                 </Text>
-                <Text style={[styles.adminOrderSlot, { color: colors.textMuted }]}>
-                  Slot: {order.deliverySlot} • Paid: ₹{order.totalAmount} via {order.paymentMethod}
+                <Text
+                  style={{
+                    fontSize: 13,
+                    color: colors.textSecondary,
+                    marginTop: 4,
+                    textAlign: 'center',
+                  }}
+                >
+                  There are currently no orders under "{selectedStatusFilter}".
                 </Text>
-
-                {/* Direct Action Required Approval Section */}
-                {order.status === 'Placed' && (
-                  <View
-                    style={{
-                      marginVertical: 10,
-                      padding: 12,
-                      backgroundColor: '#FEF2F2',
-                      borderRadius: radii.md,
-                      borderWidth: 1.5,
-                      borderColor: '#F87171',
+              </View>
+            ) : (
+              filteredOrders.map((order) => (
+                <View
+                  key={order.id}
+                  style={[
+                    styles.adminOrderCard,
+                    {
+                      backgroundColor: colors.bgSurface,
+                      borderRadius: radii.xl,
+                      borderColor: colors.borderLight,
+                      ...shadows.card,
+                    },
+                  ]}
+                >
+                  <TouchableOpacity
+                    activeOpacity={0.7}
+                    onPress={() => {
+                      setInspectOrder(order);
+                      setInspectModalVisible(true);
                     }}
+                    style={{ marginBottom: 4 }}
                   >
-                    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
-                      <Text style={{ fontSize: 16, marginRight: 6 }}>⏳</Text>
+                    <View style={styles.orderTopRow}>
                       <View style={{ flex: 1 }}>
-                        <Text style={{ color: '#991B1B', fontWeight: '800', fontSize: 12 }}>
-                          Awaiting Admin Approval
-                        </Text>
-                        <Text style={{ color: '#B91C1C', fontSize: 11 }}>
-                          Customer placed this order. Approve to confirm and begin fresh ingredient
-                          packaging.
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                          <Text style={[styles.adminOrderId, { color: colors.textPrimary }]}>
+                            {order.id}
+                          </Text>
+                          <Text style={{ fontSize: 11, color: colors.primary, fontWeight: '700' }}>
+                            View Details ➔
+                          </Text>
+                        </View>
+                        <Text style={[styles.adminOrderCustomer, { color: colors.textSecondary }]}>
+                          {order.customerName} ({order.customerPhone})
                         </Text>
                       </View>
+                      <Badge label={order.status} variant={getBadgeVariant(order.status)} />
                     </View>
-                    <Button
-                      title={
-                        updatingOrderId === order.id
-                          ? 'Approving Order...'
-                          : 'Approve Order (Placed ➔ Confirmed) ✅'
-                      }
-                      variant="primary"
-                      size="sm"
-                      loading={updatingOrderId === order.id}
-                      style={{ backgroundColor: '#16A34A' }}
-                      onPress={() => handleApproveOrder(order.id)}
-                    />
-                  </View>
-                )}
 
-                {/* Status transition buttons */}
-                <View style={styles.orderActionsRow}>
-                  <Text style={[styles.actionLabel, { color: colors.textMuted }]}>
-                    Update Status:
-                  </Text>
-                  <ScrollView
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    style={{ marginVertical: 6 }}
-                  >
-                    {(
-                      [
-                        'Placed',
-                        'Confirmed',
-                        'Preparing',
-                        'Out for Delivery',
-                        'Delivered',
-                        'Cancelled',
-                      ] as OrderStatus[]
-                    ).map((st) => (
-                      <TouchableOpacity
-                        key={st}
-                        style={[
-                          styles.statusBtn,
-                          {
-                            backgroundColor: order.status === st ? colors.primary : colors.bgSubtle,
-                            borderColor: colors.borderLight,
-                            borderRadius: radii.sm,
-                          },
-                        ]}
-                        onPress={() => handleStatusChange(order.id, st)}
+                    <Text style={[styles.adminOrderAddress, { color: colors.textSecondary }]}>
+                      📍 {order.deliveryAddress}
+                    </Text>
+                    <Text style={[styles.adminOrderSlot, { color: colors.textMuted }]}>
+                      Slot: {order.deliverySlot} • Paid: ₹{order.totalAmount} via{' '}
+                      {order.paymentMethod}
+                    </Text>
+
+                    {/* Summary Preview of Ordered Dishes & Customizations */}
+                    {order.items && order.items.length > 0 && (
+                      <View
+                        style={{
+                          backgroundColor: colors.bgSubtle,
+                          borderRadius: radii.md,
+                          padding: 10,
+                          marginTop: 8,
+                          borderWidth: 1,
+                          borderColor: colors.borderLight,
+                        }}
                       >
-                        <Text
+                        <View
                           style={{
-                            color: order.status === st ? '#FFFFFF' : colors.textPrimary,
-                            fontSize: 11,
-                            fontWeight: '700',
+                            flexDirection: 'row',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            marginBottom: 4,
                           }}
                         >
-                          {st}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
-                  </ScrollView>
-                </View>
-
-                <View style={styles.orderBottomBar}>
-                  <TouchableOpacity
-                    onPress={() => Alert.alert('Invoice', generateInvoiceText(order))}
-                    style={styles.actionLink}
-                  >
-                    <Text style={[styles.actionLinkText, { color: colors.primary }]}>
-                      View Invoice
-                    </Text>
+                          <Text
+                            style={{ fontSize: 12, fontWeight: '800', color: colors.textPrimary }}
+                          >
+                            🍲 Ordered Dishes ({order.items.length}):
+                          </Text>
+                          <Text style={{ fontSize: 11, color: colors.primary, fontWeight: '700' }}>
+                            Inspect Details 🔍
+                          </Text>
+                        </View>
+                        {order.items.map((it, idx) => (
+                          <View
+                            key={idx}
+                            style={{
+                              flexDirection: 'row',
+                              justifyContent: 'space-between',
+                              alignItems: 'center',
+                              marginTop: 4,
+                            }}
+                          >
+                            <Text
+                              style={{ fontSize: 12, color: colors.textSecondary, flex: 1 }}
+                              numberOfLines={1}
+                            >
+                              • {it.quantity}x {it.name}
+                            </Text>
+                            <View style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+                              <Text style={{ fontSize: 11, color: colors.textMuted }}>
+                                👥 {it.servings || 2}p
+                              </Text>
+                              <Text
+                                style={{
+                                  fontSize: 11,
+                                  fontWeight: '700',
+                                  color: (it.spiceLevel || '').toLowerCase().includes('spicy')
+                                    ? '#DC2626'
+                                    : colors.primary,
+                                }}
+                              >
+                                🌶️ {it.spiceLevel || 'Medium'}
+                              </Text>
+                            </View>
+                          </View>
+                        ))}
+                      </View>
+                    )}
                   </TouchableOpacity>
 
-                  {order.status !== 'Refunded' && (
+                  {/* Cancelled Order Notice */}
+                  {order.status === 'Cancelled' && (
+                    <View
+                      style={{
+                        marginVertical: 10,
+                        padding: 12,
+                        backgroundColor: '#FEF2F2',
+                        borderRadius: radii.md,
+                        borderWidth: 1.5,
+                        borderColor: '#F87171',
+                      }}
+                    >
+                      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                        <Text style={{ fontSize: 16, marginRight: 8 }}>🚫</Text>
+                        <View style={{ flex: 1 }}>
+                          <Text style={{ color: '#991B1B', fontWeight: '800', fontSize: 12 }}>
+                            Order Cancelled
+                          </Text>
+                          <Text style={{ color: '#B91C1C', fontSize: 11 }}>
+                            Reason:{' '}
+                            {order.cancellationReason ||
+                              order.adminNotes ||
+                              'Cancelled by Kitchen Management.'}
+                          </Text>
+                        </View>
+                      </View>
+                    </View>
+                  )}
+
+                  {/* Direct Action Required Approval Section */}
+                  {order.status === 'Placed' && !order.isApproved && !isOrderApproved(order.id) && (
+                    <View
+                      style={{
+                        marginVertical: 10,
+                        padding: 12,
+                        backgroundColor: '#FEF2F2',
+                        borderRadius: radii.md,
+                        borderWidth: 1.5,
+                        borderColor: '#F87171',
+                      }}
+                    >
+                      <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
+                        <Text style={{ fontSize: 16, marginRight: 6 }}>⏳</Text>
+                        <View style={{ flex: 1 }}>
+                          <Text style={{ color: '#991B1B', fontWeight: '800', fontSize: 12 }}>
+                            Awaiting Admin Approval
+                          </Text>
+                          <Text style={{ color: '#B91C1C', fontSize: 11 }}>
+                            Customer placed this order. Approve to confirm and begin fresh
+                            ingredient packaging.
+                          </Text>
+                        </View>
+                      </View>
+                      <View style={{ flexDirection: 'row', gap: 8, marginTop: 4 }}>
+                        <Button
+                          title={updatingOrderId === order.id ? 'Approving...' : 'Approve Order ✅'}
+                          variant="primary"
+                          size="sm"
+                          loading={updatingOrderId === order.id}
+                          style={{ backgroundColor: '#16A34A', flex: 1 }}
+                          onPress={() => handleApproveOrder(order.id)}
+                        />
+                        <Button
+                          title="Reject / Cancel ✕"
+                          variant="outline"
+                          size="sm"
+                          style={{ borderColor: '#DC2626', flex: 1 }}
+                          textStyle={{ color: '#DC2626' }}
+                          onPress={() => handleCancelOrder(order.id)}
+                        />
+                      </View>
+                    </View>
+                  )}
+
+                  {/* Status transition buttons (only for active orders) */}
+                  {order.status !== 'Cancelled' &&
+                    order.status !== 'Delivered' &&
+                    order.status !== 'Refunded' && (
+                      <View style={styles.orderActionsRow}>
+                        <Text style={[styles.actionLabel, { color: colors.textMuted }]}>
+                          Update Status:
+                        </Text>
+                        <ScrollView
+                          horizontal
+                          showsHorizontalScrollIndicator={false}
+                          style={{ marginVertical: 6 }}
+                        >
+                          {(
+                            [
+                              'Placed',
+                              'Confirmed',
+                              'Preparing',
+                              'Out for Delivery',
+                              'Delivered',
+                              'Cancelled',
+                            ] as OrderStatus[]
+                          ).map((st) => (
+                            <TouchableOpacity
+                              key={st}
+                              style={[
+                                styles.statusBtn,
+                                {
+                                  backgroundColor:
+                                    order.status === st ? colors.primary : colors.bgSubtle,
+                                  borderColor: colors.borderLight,
+                                  borderRadius: radii.sm,
+                                },
+                              ]}
+                              onPress={() => handleStatusChange(order.id, st)}
+                            >
+                              <Text
+                                style={{
+                                  color: order.status === st ? '#FFFFFF' : colors.textPrimary,
+                                  fontSize: 11,
+                                  fontWeight: '700',
+                                }}
+                              >
+                                {st}
+                              </Text>
+                            </TouchableOpacity>
+                          ))}
+                        </ScrollView>
+                      </View>
+                    )}
+
+                  <View style={styles.orderBottomBar}>
                     <Button
-                      title="Issue Refund 💳"
+                      title={`Inspect Items (${order.items?.length || 0}) 🔍`}
                       variant="outline"
                       size="sm"
-                      onPress={() => handleOpenRefund(order)}
+                      style={{ borderColor: colors.primary, marginRight: 8 }}
+                      textStyle={{ color: colors.primary, fontWeight: '700', fontSize: 11 }}
+                      onPress={() => {
+                        setInspectOrder(order);
+                        setInspectModalVisible(true);
+                      }}
                     />
-                  )}
+
+                    <TouchableOpacity
+                      onPress={() => Alert.alert('Invoice', generateInvoiceText(order))}
+                      style={styles.actionLink}
+                    >
+                      <Text style={[styles.actionLinkText, { color: colors.primary }]}>
+                        View Invoice
+                      </Text>
+                    </TouchableOpacity>
+
+                    {order.status !== 'Cancelled' &&
+                      order.status !== 'Delivered' &&
+                      order.status !== 'Refunded' && (
+                        <Button
+                          title="Cancel Order 🚫"
+                          variant="outline"
+                          size="sm"
+                          style={{ borderColor: '#DC2626', marginRight: 8 }}
+                          textStyle={{ color: '#DC2626', fontSize: 11 }}
+                          onPress={() => handleCancelOrder(order.id)}
+                        />
+                      )}
+
+                    {order.status !== 'Refunded' && (
+                      <Button
+                        title="Issue Refund 💳"
+                        variant="outline"
+                        size="sm"
+                        textStyle={{ fontSize: 11 }}
+                        onPress={() => handleOpenRefund(order)}
+                      />
+                    )}
+                  </View>
                 </View>
-              </View>
-            ))}
+              ))
+            )}
           </View>
         )}
 
@@ -995,64 +1514,86 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
               </View>
             </View>
 
-            {users.map((u) => (
+            {users.length === 0 ? (
               <View
-                key={u.id}
                 style={[
-                  styles.userCard,
+                  styles.emptyStateCard,
                   {
                     backgroundColor: colors.bgSurface,
-                    borderRadius: radii.xl,
                     borderColor: colors.borderLight,
-                    ...shadows.card,
+                    borderRadius: radii.xl,
                   },
                 ]}
               >
-                <View style={styles.userTopRow}>
-                  <View>
-                    <Text style={[styles.userNameText, { color: colors.textPrimary }]}>
-                      {u.name}
-                    </Text>
-                    <Text style={[styles.userEmailText, { color: colors.textSecondary }]}>
-                      {u.email}
-                    </Text>
-                  </View>
-                  <Badge
-                    label={u.role.toUpperCase()}
-                    variant={u.role === 'admin' ? 'info' : 'neutral'}
-                  />
-                </View>
-
-                <Text style={[styles.userStats, { color: colors.textMuted }]}>
-                  City: {u.city} • Orders: {u.ordersCount} • Total Spend: ₹{u.totalSpend} • Joined:{' '}
-                  {u.joinedDate}
+                <Text style={styles.emptyStateIcon}>👥</Text>
+                <Text style={[styles.emptyStateTitle, { color: colors.textPrimary }]}>
+                  No Users Registered
                 </Text>
-
-                <View style={styles.userActionRow}>
-                  <Button
-                    title={
-                      u.role === 'admin' ? 'Demote to Customer' : 'Promote to Admin (@mulyam.in)'
-                    }
-                    variant="outline"
-                    size="sm"
-                    onPress={() => {
-                      toggleUserAdminRole(u.id);
-                      setUsers(getManagedUsers());
-                    }}
-                    style={{ marginRight: 8 }}
-                  />
-                  <Button
-                    title={u.status === 'active' ? 'Suspend' : 'Activate'}
-                    variant={u.status === 'active' ? 'danger' : 'secondary'}
-                    size="sm"
-                    onPress={() => {
-                      toggleUserStatus(u.id);
-                      setUsers(getManagedUsers());
-                    }}
-                  />
-                </View>
+                <Text style={[styles.emptyStateSubtitle, { color: colors.textSecondary }]}>
+                  Mock users have been removed. Real registered customer accounts will appear here
+                  once authenticated.
+                </Text>
               </View>
-            ))}
+            ) : (
+              users.map((u) => (
+                <View
+                  key={u.id}
+                  style={[
+                    styles.userCard,
+                    {
+                      backgroundColor: colors.bgSurface,
+                      borderRadius: radii.xl,
+                      borderColor: colors.borderLight,
+                      ...shadows.card,
+                    },
+                  ]}
+                >
+                  <View style={styles.userTopRow}>
+                    <View>
+                      <Text style={[styles.userNameText, { color: colors.textPrimary }]}>
+                        {u.name}
+                      </Text>
+                      <Text style={[styles.userEmailText, { color: colors.textSecondary }]}>
+                        {u.email}
+                      </Text>
+                    </View>
+                    <Badge
+                      label={u.role.toUpperCase()}
+                      variant={u.role === 'admin' ? 'info' : 'neutral'}
+                    />
+                  </View>
+
+                  <Text style={[styles.userStats, { color: colors.textMuted }]}>
+                    City: {u.city} • Orders: {u.ordersCount} • Total Spend: ₹{u.totalSpend} •
+                    Joined: {u.joinedDate}
+                  </Text>
+
+                  <View style={styles.userActionRow}>
+                    <Button
+                      title={
+                        u.role === 'admin' ? 'Demote to Customer' : 'Promote to Admin (@mulyam.in)'
+                      }
+                      variant="outline"
+                      size="sm"
+                      onPress={() => {
+                        toggleUserAdminRole(u.id);
+                        setUsers(getManagedUsers());
+                      }}
+                      style={{ marginRight: 8 }}
+                    />
+                    <Button
+                      title={u.status === 'suspended' ? 'Activate' : 'Suspend'}
+                      variant={u.status === 'suspended' ? 'primary' : 'danger'}
+                      size="sm"
+                      onPress={() => {
+                        toggleUserStatus(u.id);
+                        setUsers(getManagedUsers());
+                      }}
+                    />
+                  </View>
+                </View>
+              ))
+            )}
           </View>
         )}
 
@@ -1223,74 +1764,96 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
               </View>
             </View>
 
-            {moderationReviews.map((rev) => (
+            {moderationReviews.length === 0 ? (
               <View
-                key={rev.id}
                 style={[
-                  styles.reviewModCard,
+                  styles.emptyStateCard,
                   {
                     backgroundColor: colors.bgSurface,
+                    borderColor: colors.borderLight,
                     borderRadius: radii.xl,
-                    borderColor: rev.status === 'flagged' ? colors.warning : colors.borderLight,
-                    borderWidth: rev.status === 'flagged' ? 2 : 1,
-                    ...shadows.card,
                   },
                 ]}
               >
-                <View style={styles.reviewModTop}>
-                  <View>
-                    <Text style={[styles.reviewKitName, { color: colors.textPrimary }]}>
-                      {rev.mealKitName}
-                    </Text>
-                    <Text style={[styles.reviewAuthor, { color: colors.textSecondary }]}>
-                      {rev.userName} ({rev.userCity}) • Rating: {rev.rating}★
-                    </Text>
-                  </View>
-                  <Badge
-                    label={rev.status.toUpperCase()}
-                    variant={
-                      rev.status === 'approved'
-                        ? 'success'
-                        : rev.status === 'flagged'
-                          ? 'warning'
-                          : 'danger'
-                    }
-                  />
-                </View>
-
-                <Text style={[styles.reviewCommentText, { color: colors.textPrimary }]}>
-                  "{rev.comment}"
+                <Text style={styles.emptyStateIcon}>⭐</Text>
+                <Text style={[styles.emptyStateTitle, { color: colors.textPrimary }]}>
+                  No Reviews to Moderate
                 </Text>
-
-                {rev.reportReason && (
-                  <Text style={[styles.flaggedReason, { color: colors.danger }]}>
-                    Flag reason: {rev.reportReason}
-                  </Text>
-                )}
-
-                <View style={styles.reviewActionRow}>
-                  <Button
-                    title="Approve Review"
-                    variant="outline"
-                    size="sm"
-                    style={{ marginRight: 8 }}
-                    onPress={() => {
-                      moderateReview(rev.id, 'approved');
-                      setModerationReviews(getAllReviewsForModeration());
-                    }}
-                  />
-                  <Button
-                    title="Hide Review"
-                    variant="danger"
-                    size="sm"
-                    onPress={() => {
-                      moderateReview(rev.id, 'hidden');
-                      setModerationReviews(getAllReviewsForModeration());
-                    }}
-                  />
-                </View>
+                <Text style={[styles.emptyStateSubtitle, { color: colors.textSecondary }]}>
+                  Mock reviews have been removed. Verified customer feedback will appear here as
+                  orders are delivered and reviewed.
+                </Text>
               </View>
-            ))}
+            ) : (
+              moderationReviews.map((rev) => (
+                <View
+                  key={rev.id}
+                  style={[
+                    styles.reviewModCard,
+                    {
+                      backgroundColor: colors.bgSurface,
+                      borderRadius: radii.xl,
+                      borderColor: rev.status === 'flagged' ? colors.warning : colors.borderLight,
+                      borderWidth: rev.status === 'flagged' ? 2 : 1,
+                      ...shadows.card,
+                    },
+                  ]}
+                >
+                  <View style={styles.reviewModTop}>
+                    <View>
+                      <Text style={[styles.reviewKitName, { color: colors.textPrimary }]}>
+                        {rev.mealKitName}
+                      </Text>
+                      <Text style={[styles.reviewAuthor, { color: colors.textSecondary }]}>
+                        {rev.userName} ({rev.userCity}) • Rating: {rev.rating}★
+                      </Text>
+                    </View>
+                    <Badge
+                      label={rev.status.toUpperCase()}
+                      variant={
+                        rev.status === 'approved'
+                          ? 'success'
+                          : rev.status === 'flagged'
+                            ? 'warning'
+                            : 'danger'
+                      }
+                    />
+                  </View>
+
+                  <Text style={[styles.reviewCommentText, { color: colors.textPrimary }]}>
+                    "{rev.comment}"
+                  </Text>
+
+                  {rev.reportReason && (
+                    <Text style={[styles.flaggedReason, { color: colors.danger }]}>
+                      Flag reason: {rev.reportReason}
+                    </Text>
+                  )}
+
+                  <View style={styles.reviewActionRow}>
+                    <Button
+                      title="Approve Review"
+                      variant="outline"
+                      size="sm"
+                      style={{ marginRight: 8 }}
+                      onPress={() => {
+                        moderateReview(rev.id, 'approved');
+                        setModerationReviews(getAllReviewsForModeration());
+                      }}
+                    />
+                    <Button
+                      title="Hide Review"
+                      variant="danger"
+                      size="sm"
+                      onPress={() => {
+                        moderateReview(rev.id, 'hidden');
+                        setModerationReviews(getAllReviewsForModeration());
+                      }}
+                    />
+                  </View>
+                </View>
+              ))
+            )}
           </View>
         )}
       </ScrollView>
@@ -1362,6 +1925,585 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
                 onPress={handleExecuteRefund}
               />
             </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* CANCEL ORDER CONFIRMATION MODAL */}
+      <Modal
+        visible={cancelOrderModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {
+          setCancelOrderModalVisible(false);
+          setOrderToCancel(null);
+        }}
+      >
+        <View style={styles.modalOverlay}>
+          <View
+            style={[
+              styles.modalBox,
+              {
+                backgroundColor: colors.bgSurface,
+                borderRadius: radii.xl,
+                ...shadows.card,
+              },
+            ]}
+          >
+            <Text style={[styles.modalHeading, { color: '#DC2626' }]}>Cancel Order 🚫</Text>
+            <Text style={[styles.modalSub, { color: colors.textSecondary }]}>
+              {orderToCancel ? `Order ID: ${orderToCancel}` : ''}
+            </Text>
+
+            <Text
+              style={{
+                fontSize: 13,
+                color: colors.textSecondary,
+                lineHeight: 18,
+                marginTop: 8,
+                marginBottom: 14,
+              }}
+            >
+              Are you sure you want to cancel this order? This will mark the order as Cancelled and
+              remove it from active kitchen prep.
+            </Text>
+
+            <Text style={[styles.inputLabel, { color: colors.textPrimary }]}>
+              Cancellation Reason
+            </Text>
+            <TextInput
+              style={[
+                styles.modalInput,
+                {
+                  backgroundColor: colors.bgSubtle,
+                  borderColor: colors.border,
+                  borderRadius: radii.md,
+                },
+              ]}
+              value={cancelReason}
+              onChangeText={setCancelReason}
+              placeholder="Reason (e.g. Cancelled by Admin, Out of Stock)"
+              placeholderTextColor={colors.textMuted}
+            />
+
+            <View style={{ flexDirection: 'row', marginTop: 16, gap: 10 }}>
+              <Button
+                title="Keep Order"
+                variant="secondary"
+                style={{ flex: 1 }}
+                onPress={() => {
+                  setCancelOrderModalVisible(false);
+                  setOrderToCancel(null);
+                }}
+              />
+              <Button
+                title={updatingOrderId ? 'Cancelling...' : 'Yes, Cancel Order'}
+                variant="danger"
+                style={{ flex: 1, backgroundColor: '#DC2626' }}
+                loading={updatingOrderId !== null}
+                onPress={handleConfirmCancelOrder}
+              />
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ORDER ITEMS & CUSTOMIZATION DETAILS INSPECTOR MODAL */}
+      <Modal
+        visible={inspectModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {
+          setInspectModalVisible(false);
+          setInspectOrder(null);
+        }}
+      >
+        <View style={styles.modalOverlay}>
+          <View
+            style={[
+              styles.orderDetailModalBox,
+              {
+                backgroundColor: colors.bgSurface,
+                borderRadius: radii.xl,
+                ...shadows.card,
+              },
+            ]}
+          >
+            {/* Modal Header */}
+            <View
+              style={{
+                flexDirection: 'row',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                paddingBottom: 12,
+                borderBottomWidth: 1,
+                borderBottomColor: colors.borderLight,
+                marginBottom: 12,
+              }}
+            >
+              <View style={{ flex: 1 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <Text
+                    style={[styles.modalHeading, { color: colors.textPrimary, marginBottom: 0 }]}
+                  >
+                    Order {inspectOrder?.id}
+                  </Text>
+                  {inspectOrder && (
+                    <Badge
+                      label={inspectOrder.status}
+                      variant={getBadgeVariant(inspectOrder.status)}
+                      size="sm"
+                    />
+                  )}
+                </View>
+                <Text style={{ fontSize: 11, color: colors.textMuted, marginTop: 2 }}>
+                  Placed:{' '}
+                  {inspectOrder?.createdAt
+                    ? new Date(inspectOrder.createdAt).toLocaleString()
+                    : 'Recent'}
+                </Text>
+              </View>
+
+              <TouchableOpacity
+                onPress={() => {
+                  setInspectModalVisible(false);
+                  setInspectOrder(null);
+                }}
+                style={{
+                  width: 32,
+                  height: 32,
+                  borderRadius: 16,
+                  backgroundColor: colors.bgSubtle,
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                }}
+              >
+                <Text style={{ fontSize: 16, color: colors.textSecondary, fontWeight: '700' }}>
+                  ✕
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={{ maxHeight: 460 }} showsVerticalScrollIndicator={true}>
+              {inspectOrder && (
+                <View>
+                  {/* Customer & Delivery Section */}
+                  <View
+                    style={{
+                      backgroundColor: colors.bgSubtle,
+                      borderRadius: radii.lg,
+                      padding: 12,
+                      marginBottom: 14,
+                      borderWidth: 1,
+                      borderColor: colors.borderLight,
+                    }}
+                  >
+                    <Text
+                      style={{
+                        fontSize: 13,
+                        fontWeight: '800',
+                        color: colors.textPrimary,
+                        marginBottom: 8,
+                      }}
+                    >
+                      👤 Customer & Delivery Details
+                    </Text>
+                    <View style={{ gap: 4 }}>
+                      <Text style={{ fontSize: 12, color: colors.textPrimary, fontWeight: '700' }}>
+                        Customer:{' '}
+                        <Text style={{ fontWeight: '400', color: colors.textSecondary }}>
+                          {inspectOrder.customerName}
+                        </Text>
+                      </Text>
+                      <Text style={{ fontSize: 12, color: colors.textPrimary, fontWeight: '700' }}>
+                        Phone:{' '}
+                        <Text style={{ fontWeight: '400', color: colors.textSecondary }}>
+                          {inspectOrder.customerPhone}
+                        </Text>
+                        {inspectOrder.customerEmail ? (
+                          <Text style={{ fontWeight: '400', color: colors.textMuted }}>
+                            {' '}
+                            • {inspectOrder.customerEmail}
+                          </Text>
+                        ) : null}
+                      </Text>
+                      <Text style={{ fontSize: 12, color: colors.textPrimary, fontWeight: '700' }}>
+                        Delivery Address:{' '}
+                        <Text style={{ fontWeight: '400', color: colors.textSecondary }}>
+                          📍 {inspectOrder.deliveryAddress}{' '}
+                          {inspectOrder.addressTag ? `[${inspectOrder.addressTag}]` : ''}
+                        </Text>
+                      </Text>
+                      <Text style={{ fontSize: 12, color: colors.textPrimary, fontWeight: '700' }}>
+                        Slot:{' '}
+                        <Text style={{ fontWeight: '400', color: colors.textSecondary }}>
+                          🕒 {inspectOrder.deliveryDate || 'Today'} • {inspectOrder.deliverySlot}
+                        </Text>
+                      </Text>
+                      <Text style={{ fontSize: 12, color: colors.textPrimary, fontWeight: '700' }}>
+                        Payment:{' '}
+                        <Text style={{ fontWeight: '400', color: colors.textSecondary }}>
+                          💳 {inspectOrder.paymentMethod} • Status:{' '}
+                          {inspectOrder.paymentStatus || 'Paid'} (Txn:{' '}
+                          {inspectOrder.transactionId || inspectOrder.id})
+                        </Text>
+                      </Text>
+                    </View>
+                  </View>
+
+                  {/* Dishes & Meal Kits Section */}
+                  <Text
+                    style={{
+                      fontSize: 14,
+                      fontWeight: '800',
+                      color: colors.textPrimary,
+                      marginBottom: 8,
+                    }}
+                  >
+                    🍲 Dishes & Customizations ({inspectOrder.items?.length || 0})
+                  </Text>
+
+                  {!inspectOrder.items || inspectOrder.items.length === 0 ? (
+                    <Text
+                      style={{
+                        fontSize: 12,
+                        color: colors.textMuted,
+                        fontStyle: 'italic',
+                        marginBottom: 12,
+                      }}
+                    >
+                      No items recorded for this order.
+                    </Text>
+                  ) : (
+                    inspectOrder.items.map((item, index) => (
+                      <View
+                        key={item.id || index}
+                        style={{
+                          backgroundColor: colors.bgSurface,
+                          borderRadius: radii.lg,
+                          padding: 14,
+                          marginBottom: 10,
+                          borderWidth: 1.5,
+                          borderColor: colors.borderLight,
+                          ...shadows.card,
+                        }}
+                      >
+                        {/* Item Name & Quantity & Price */}
+                        <View
+                          style={{
+                            flexDirection: 'row',
+                            justifyContent: 'space-between',
+                            alignItems: 'flex-start',
+                          }}
+                        >
+                          <View style={{ flex: 1, marginRight: 8 }}>
+                            <Text
+                              style={{ fontSize: 15, fontWeight: '800', color: colors.textPrimary }}
+                            >
+                              {item.name}
+                            </Text>
+                            <Text style={{ fontSize: 12, color: colors.textMuted, marginTop: 2 }}>
+                              ₹{item.price} each × {item.quantity} kit{item.quantity > 1 ? 's' : ''}
+                            </Text>
+                          </View>
+                          <Text style={{ fontSize: 16, fontWeight: '900', color: colors.primary }}>
+                            ₹{item.price * item.quantity}
+                          </Text>
+                        </View>
+
+                        {/* Customization Details Grid */}
+                        <View
+                          style={{
+                            marginTop: 10,
+                            paddingTop: 10,
+                            borderTopWidth: 1,
+                            borderTopColor: colors.borderLight,
+                            flexDirection: 'row',
+                            flexWrap: 'wrap',
+                            gap: 8,
+                          }}
+                        >
+                          {/* Serving Size Badge */}
+                          <View
+                            style={{
+                              flexDirection: 'row',
+                              alignItems: 'center',
+                              backgroundColor: colors.bgSubtle,
+                              paddingHorizontal: 10,
+                              paddingVertical: 5,
+                              borderRadius: radii.md,
+                              borderWidth: 1,
+                              borderColor: colors.borderLight,
+                            }}
+                          >
+                            <Text
+                              style={{ fontSize: 12, fontWeight: '800', color: colors.textPrimary }}
+                            >
+                              👥 Serving Size:
+                            </Text>
+                            <Text
+                              style={{
+                                fontSize: 12,
+                                fontWeight: '700',
+                                color: colors.primary,
+                                marginLeft: 4,
+                              }}
+                            >
+                              {item.servings || 2} Persons
+                            </Text>
+                          </View>
+
+                          {/* Spice Level Badge */}
+                          <View
+                            style={{
+                              flexDirection: 'row',
+                              alignItems: 'center',
+                              backgroundColor: (item.spiceLevel || '')
+                                .toLowerCase()
+                                .includes('mild')
+                                ? '#ECFDF5'
+                                : (item.spiceLevel || '').toLowerCase().includes('spicy')
+                                  ? '#FEF2F2'
+                                  : '#FFFBEB',
+                              paddingHorizontal: 10,
+                              paddingVertical: 5,
+                              borderRadius: radii.md,
+                              borderWidth: 1,
+                              borderColor: (item.spiceLevel || '').toLowerCase().includes('mild')
+                                ? '#A7F3D0'
+                                : (item.spiceLevel || '').toLowerCase().includes('spicy')
+                                  ? '#FCA5A5'
+                                  : '#FDE68A',
+                            }}
+                          >
+                            <Text
+                              style={{
+                                fontSize: 12,
+                                fontWeight: '800',
+                                color: (item.spiceLevel || '').toLowerCase().includes('mild')
+                                  ? '#065F46'
+                                  : (item.spiceLevel || '').toLowerCase().includes('spicy')
+                                    ? '#991B1B'
+                                    : '#92400E',
+                              }}
+                            >
+                              🌶️ Spice Level: {item.spiceLevel || 'Medium'}
+                            </Text>
+                          </View>
+                        </View>
+
+                        {/* Masala Sachets Included */}
+                        <View style={{ marginTop: 10 }}>
+                          <Text
+                            style={{
+                              fontSize: 11,
+                              fontWeight: '800',
+                              color: colors.textMuted,
+                              textTransform: 'uppercase',
+                              marginBottom: 4,
+                            }}
+                          >
+                            🧂 Masala Sachets & Prep Packs:
+                          </Text>
+                          {item.masalaSachets && item.masalaSachets.length > 0 ? (
+                            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+                              {item.masalaSachets.map((sachet, sIdx) => (
+                                <View
+                                  key={sIdx}
+                                  style={{
+                                    backgroundColor: colors.bgSubtle,
+                                    paddingHorizontal: 8,
+                                    paddingVertical: 3,
+                                    borderRadius: radii.sm,
+                                    borderWidth: 1,
+                                    borderColor: colors.borderLight,
+                                  }}
+                                >
+                                  <Text style={{ fontSize: 11, color: colors.textSecondary }}>
+                                    ✨ {sachet}
+                                  </Text>
+                                </View>
+                              ))}
+                            </View>
+                          ) : (
+                            <Text
+                              style={{
+                                fontSize: 11,
+                                color: colors.textSecondary,
+                                fontStyle: 'italic',
+                              }}
+                            >
+                              Standard Chef Spice Pack
+                            </Text>
+                          )}
+                        </View>
+                      </View>
+                    ))
+                  )}
+
+                  {/* Financial Bill Breakdown */}
+                  <View
+                    style={{
+                      backgroundColor: colors.bgSubtle,
+                      borderRadius: radii.lg,
+                      padding: 12,
+                      marginTop: 6,
+                      marginBottom: 12,
+                      borderWidth: 1,
+                      borderColor: colors.borderLight,
+                    }}
+                  >
+                    <Text
+                      style={{
+                        fontSize: 12,
+                        fontWeight: '800',
+                        color: colors.textPrimary,
+                        marginBottom: 6,
+                      }}
+                    >
+                      💰 Bill Summary
+                    </Text>
+                    <View
+                      style={{
+                        flexDirection: 'row',
+                        justifyContent: 'space-between',
+                        marginBottom: 3,
+                      }}
+                    >
+                      <Text style={{ fontSize: 12, color: colors.textSecondary }}>Subtotal</Text>
+                      <Text style={{ fontSize: 12, color: colors.textPrimary, fontWeight: '600' }}>
+                        ₹{inspectOrder.subtotal}
+                      </Text>
+                    </View>
+                    {inspectOrder.discount ? (
+                      <View
+                        style={{
+                          flexDirection: 'row',
+                          justifyContent: 'space-between',
+                          marginBottom: 3,
+                        }}
+                      >
+                        <Text style={{ fontSize: 12, color: '#16A34A' }}>
+                          Discount {inspectOrder.couponCode ? `(${inspectOrder.couponCode})` : ''}
+                        </Text>
+                        <Text style={{ fontSize: 12, color: '#16A34A', fontWeight: '700' }}>
+                          -₹{inspectOrder.discount}
+                        </Text>
+                      </View>
+                    ) : null}
+                    <View
+                      style={{
+                        flexDirection: 'row',
+                        justifyContent: 'space-between',
+                        marginBottom: 3,
+                      }}
+                    >
+                      <Text style={{ fontSize: 12, color: colors.textSecondary }}>
+                        Delivery Fee
+                      </Text>
+                      <Text style={{ fontSize: 12, color: colors.textPrimary, fontWeight: '600' }}>
+                        {inspectOrder.deliveryFee === 0 ? 'FREE' : `₹${inspectOrder.deliveryFee}`}
+                      </Text>
+                    </View>
+                    <View
+                      style={{
+                        flexDirection: 'row',
+                        justifyContent: 'space-between',
+                        marginTop: 6,
+                        paddingTop: 6,
+                        borderTopWidth: 1,
+                        borderTopColor: colors.borderLight,
+                      }}
+                    >
+                      <Text style={{ fontSize: 14, fontWeight: '800', color: colors.textPrimary }}>
+                        Total Amount
+                      </Text>
+                      <Text style={{ fontSize: 15, fontWeight: '900', color: colors.primary }}>
+                        ₹{inspectOrder.totalAmount}
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+              )}
+            </ScrollView>
+
+            {/* Modal Actions Footer */}
+            {inspectOrder && (
+              <View
+                style={{
+                  paddingTop: 12,
+                  borderTopWidth: 1,
+                  borderTopColor: colors.borderLight,
+                  flexDirection: 'row',
+                  gap: 8,
+                }}
+              >
+                {inspectOrder.status === 'Placed' &&
+                !inspectOrder.isApproved &&
+                !isOrderApproved(inspectOrder.id) ? (
+                  <>
+                    <Button
+                      title="Approve Order ✅"
+                      variant="primary"
+                      size="sm"
+                      style={{ flex: 1, backgroundColor: '#16A34A' }}
+                      onPress={async () => {
+                        await handleApproveOrder(inspectOrder.id);
+                        setInspectOrder((prev) =>
+                          prev ? { ...prev, status: 'Confirmed', isApproved: true } : null,
+                        );
+                      }}
+                    />
+                    <Button
+                      title="Reject / Cancel ✕"
+                      variant="outline"
+                      size="sm"
+                      style={{ borderColor: '#DC2626', flex: 1 }}
+                      textStyle={{ color: '#DC2626' }}
+                      onPress={() => {
+                        setInspectModalVisible(false);
+                        handleCancelOrder(inspectOrder.id);
+                      }}
+                    />
+                  </>
+                ) : (
+                  <>
+                    <Button
+                      title="View Invoice 📄"
+                      variant="outline"
+                      size="sm"
+                      style={{ flex: 1 }}
+                      onPress={() => Alert.alert('Invoice', generateInvoiceText(inspectOrder))}
+                    />
+                    {inspectOrder.status !== 'Cancelled' &&
+                      inspectOrder.status !== 'Delivered' &&
+                      inspectOrder.status !== 'Refunded' && (
+                        <Button
+                          title="Cancel Order 🚫"
+                          variant="outline"
+                          size="sm"
+                          style={{ borderColor: '#DC2626', flex: 1 }}
+                          textStyle={{ color: '#DC2626' }}
+                          onPress={() => {
+                            setInspectModalVisible(false);
+                            handleCancelOrder(inspectOrder.id);
+                          }}
+                        />
+                      )}
+                    <Button
+                      title="Close"
+                      variant="secondary"
+                      size="sm"
+                      style={{ minWidth: 70 }}
+                      onPress={() => {
+                        setInspectModalVisible(false);
+                        setInspectOrder(null);
+                      }}
+                    />
+                  </>
+                )}
+              </View>
+            )}
           </View>
         </View>
       </Modal>
@@ -1504,22 +2646,6 @@ const styles = StyleSheet.create({
   adminUserEmail: {
     fontSize: 12,
     marginTop: 2,
-  },
-  tabsBar: {
-    maxHeight: 52,
-    borderBottomWidth: 1,
-  },
-  tabsContent: {
-    paddingHorizontal: 16,
-    alignItems: 'center',
-    gap: 8,
-  },
-  tabPill: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-  },
-  tabPillText: {
-    fontSize: 12,
   },
   scrollBody: {
     padding: 16,
@@ -1925,6 +3051,12 @@ const styles = StyleSheet.create({
     maxWidth: 440,
     padding: 20,
   },
+  orderDetailModalBox: {
+    width: '100%',
+    maxWidth: 580,
+    maxHeight: '90%',
+    padding: 20,
+  },
   modalHeading: {
     fontSize: 18,
     fontWeight: '800',
@@ -1950,5 +3082,65 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderWidth: 1,
+  },
+  moduleSectionTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+  },
+  modulesGrid: {
+    gap: 12,
+  },
+  moduleCard: {
+    padding: 16,
+    borderWidth: 1,
+    marginBottom: 10,
+  },
+  moduleCardTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  moduleCardTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    marginBottom: 2,
+  },
+  moduleCardDesc: {
+    fontSize: 12,
+    lineHeight: 16,
+  },
+  moduleCardBottom: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 6,
+  },
+  moduleCardArrow: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  emptyStateCard: {
+    padding: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    marginVertical: 16,
+  },
+  emptyStateIcon: {
+    fontSize: 40,
+    marginBottom: 10,
+  },
+  emptyStateTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    marginBottom: 4,
+    textAlign: 'center',
+  },
+  emptyStateSubtitle: {
+    fontSize: 13,
+    textAlign: 'center',
+    lineHeight: 18,
+    maxWidth: 320,
   },
 });

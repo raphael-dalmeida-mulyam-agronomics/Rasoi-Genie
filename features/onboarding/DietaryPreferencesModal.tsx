@@ -110,7 +110,7 @@ export const DietaryPreferencesModal: React.FC<DietaryPreferencesModalProps> = (
       spiceTolerance,
       preferredCuisines,
       regionHub,
-      currentCity: hubMatch?.city.split(' / ')[0] || 'Bengaluru',
+      currentCity: hubMatch?.city.split(' / ')[0] || preferences.currentCity || '',
     });
     onClose();
   };

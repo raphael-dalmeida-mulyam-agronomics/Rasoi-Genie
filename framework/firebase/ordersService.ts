@@ -3,12 +3,15 @@ import {
   addDoc,
   getDocs,
   doc,
+  deleteDoc,
   updateDoc,
+  setDoc,
   query,
   orderBy,
   onSnapshot,
 } from 'firebase/firestore';
 import { db } from './config';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export type OrderStatus =
   | 'Placed'
@@ -25,6 +28,8 @@ export interface OrderItem {
   name: string;
   quantity: number;
   price: number;
+  servings?: number;
+  spiceLevel?: string;
   masalaSachets: string[];
   imageUrl?: string;
 }
@@ -60,247 +65,244 @@ export interface Order {
   trackingEvents: TrackingEvent[];
   refundReason?: string;
   refundAmount?: number;
+  cancellationReason?: string;
+  adminNotes?: string;
+  isDismissed?: boolean;
+  isApproved?: boolean;
+  approvedBy?: string;
+  approvedAt?: string;
   createdAt: string;
   updatedAt: string;
 }
 
-// Initial mock orders to populate if Firestore is empty in dev mode
-export const INITIAL_MOCK_ORDERS: Order[] = [
-  {
-    id: 'ORD-9821',
-    userId: 'user_phone_9876543210',
-    customerPhone: '+91 9876543210',
-    customerName: 'Priya Sharma',
-    customerEmail: 'priya.sharma@example.com',
-    deliveryAddress: 'Flat 402, Green Glen Layout, Bellandur, Bengaluru',
-    addressTag: 'Home',
-    deliverySlot: '6:00 PM - 8:00 PM',
-    deliveryDate: 'Today',
-    items: [
-      {
-        id: 'kit-101',
-        name: 'Paneer Butter Masala Meal Kit',
-        quantity: 2,
-        price: 299,
-        masalaSachets: ['Whole Khada Masala', 'Shahi Gravy Premix', 'Kasuri Methi'],
-        imageUrl:
-          'https://images.unsplash.com/photo-1631452180519-c014fe946bc7?auto=format&fit=crop&w=500&q=80',
-      },
-      {
-        id: 'kit-103',
-        name: 'Slow-Brew Dal Makhani Kit',
-        quantity: 1,
-        price: 249,
-        masalaSachets: ['Smoked Kashmiri Mirch', 'Clove & Nutmeg Spice Dust'],
-        imageUrl:
-          'https://images.unsplash.com/photo-1546833999-b9f581a1996d?auto=format&fit=crop&w=500&q=80',
-      },
-    ],
-    subtotal: 847,
-    discount: 100,
-    couponCode: 'RASOI100',
-    deliveryFee: 0,
-    totalAmount: 747,
-    status: 'Preparing',
-    paymentMethod: 'UPI',
-    paymentStatus: 'Paid',
-    transactionId: 'UPI-TXN-8841920',
-    trackingEvents: [
-      {
-        status: 'Placed',
-        title: 'Order Placed',
-        description: 'Order placed successfully via UPI (GPay)',
-        timestamp: new Date(Date.now() - 1000 * 60 * 45).toLocaleTimeString([], {
-          hour: '2-digit',
-          minute: '2-digit',
-        }),
-        completed: true,
-      },
-      {
-        status: 'Confirmed',
-        title: 'Order Confirmed',
-        description: 'Fulfillment hub accepted your order',
-        timestamp: new Date(Date.now() - 1000 * 60 * 35).toLocaleTimeString([], {
-          hour: '2-digit',
-          minute: '2-digit',
-        }),
-        completed: true,
-      },
-      {
-        status: 'Preparing',
-        title: 'Portioning Fresh Ingredients & Masalas',
-        description: 'Chefs are packing vacuum-sealed sachets and fresh produce',
-        timestamp: new Date(Date.now() - 1000 * 60 * 15).toLocaleTimeString([], {
-          hour: '2-digit',
-          minute: '2-digit',
-        }),
-        completed: true,
-      },
-      {
-        status: 'Out for Delivery',
-        title: 'Dispatched with Cold-Chain Courier',
-        description: 'Delivery rider is on the way in temperature-controlled bag',
-        timestamp: 'Estimated 6:30 PM',
-        completed: false,
-      },
-      {
-        status: 'Delivered',
-        title: 'Delivered to Doorstep',
-        description: 'Handover complete. Ready to cook!',
-        timestamp: 'Pending',
-        completed: false,
-      },
-    ],
-    createdAt: new Date(Date.now() - 1000 * 60 * 45).toISOString(),
-    updatedAt: new Date(Date.now() - 1000 * 60 * 15).toISOString(),
-  },
-  {
-    id: 'ORD-9820',
-    userId: 'user_phone_9123456789',
-    customerPhone: '+91 9123456789',
-    customerName: 'Rahul Verma',
-    deliveryAddress: 'B-12, Sector 62, Noida, Uttar Pradesh',
-    addressTag: 'Work',
-    deliverySlot: '12:00 PM - 2:00 PM',
-    deliveryDate: 'Today',
-    items: [
-      {
-        id: 'kit-102',
-        name: 'Hyderabadi Chicken Biryani Meal Kit',
-        quantity: 1,
-        price: 399,
-        masalaSachets: ['Biryani Marinade Booster', 'Rice Whole Spice Pot', 'Rose & Kewra Mist'],
-        imageUrl:
-          'https://images.unsplash.com/photo-1563379091339-03b21ab4a4f8?auto=format&fit=crop&w=500&q=80',
-      },
-    ],
-    subtotal: 399,
-    discount: 0,
-    deliveryFee: 49,
-    totalAmount: 448,
-    status: 'Out for Delivery',
-    paymentMethod: 'Card',
-    paymentStatus: 'Paid',
-    transactionId: 'CRD-TXN-4910283',
-    trackingEvents: [
-      {
-        status: 'Placed',
-        title: 'Order Placed',
-        description: 'Payment authorized successfully',
-        timestamp: '11:05 AM',
-        completed: true,
-      },
-      {
-        status: 'Confirmed',
-        title: 'Confirmed by Hub',
-        description: 'Assigned to Delhi NCR Kitchen Hub',
-        timestamp: '11:15 AM',
-        completed: true,
-      },
-      {
-        status: 'Preparing',
-        title: 'Packed & Inspected',
-        description: 'Quality check passed with nitrogen freshness seal',
-        timestamp: '11:45 AM',
-        completed: true,
-      },
-      {
-        status: 'Out for Delivery',
-        title: 'Out for Delivery',
-        description: 'Rider Ramesh (+91 9811002233) is arriving in 15 mins',
-        timestamp: '12:15 PM',
-        completed: true,
-      },
-      {
-        status: 'Delivered',
-        title: 'Delivered',
-        description: 'Package received',
-        timestamp: 'Pending',
-        completed: false,
-      },
-    ],
-    createdAt: new Date(Date.now() - 1000 * 60 * 120).toISOString(),
-    updatedAt: new Date(Date.now() - 1000 * 60 * 20).toISOString(),
-  },
-  {
-    id: 'ORD-9819',
-    userId: 'user_phone_9988776655',
-    customerPhone: '+91 9988776655',
-    customerName: 'Ananya Patel',
-    deliveryAddress: '15/A Park Street, Indiranagar, Bengaluru',
-    addressTag: 'Home',
-    deliverySlot: '7:00 PM - 9:00 PM',
-    items: [
-      {
-        id: 'kit-104',
-        name: 'Coastal Prawns Ghee Roast Kit',
-        quantity: 2,
-        price: 499,
-        masalaSachets: ['Ghee Roast Cumin-Fennel Spice Blend', 'Peppercorn Kalpasi Masala'],
-        imageUrl:
-          'https://images.unsplash.com/photo-1559847844-5315695dadae?auto=format&fit=crop&w=500&q=80',
-      },
-    ],
-    subtotal: 998,
-    discount: 150,
-    couponCode: 'FEAST150',
-    deliveryFee: 0,
-    totalAmount: 848,
-    status: 'Delivered',
-    paymentMethod: 'UPI',
-    paymentStatus: 'Paid',
-    transactionId: 'UPI-TXN-1123984',
-    trackingEvents: [
-      {
-        status: 'Placed',
-        title: 'Order Placed',
-        description: 'Placed via PhonePe UPI',
-        timestamp: 'Yesterday',
-        completed: true,
-      },
-      {
-        status: 'Confirmed',
-        title: 'Confirmed',
-        description: 'Bengaluru East Hub',
-        timestamp: 'Yesterday',
-        completed: true,
-      },
-      {
-        status: 'Preparing',
-        title: 'Packed',
-        description: 'Ice chilled seafood thermal pack prepared',
-        timestamp: 'Yesterday',
-        completed: true,
-      },
-      {
-        status: 'Out for Delivery',
-        title: 'Out for Delivery',
-        description: 'Rider arrived',
-        timestamp: 'Yesterday',
-        completed: true,
-      },
-      {
-        status: 'Delivered',
-        title: 'Delivered',
-        description: 'Handed to customer at gate',
-        timestamp: 'Yesterday',
-        completed: true,
-      },
-    ],
-    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24).toISOString(),
-    updatedAt: new Date(Date.now() - 1000 * 60 * 60 * 22).toISOString(),
-  },
-];
+export const ORDERS_STORAGE_KEY = '@rasoi_persisted_orders';
+export const APPROVED_ORDERS_STORAGE_KEY = '@rasoi_approved_order_ids';
+export const DISMISSED_ORDERS_STORAGE_KEY = '@rasoi_dismissed_order_ids';
+export const MOCK_ORDER_IDS = new Set(['ORD-9821', 'ORD-9820', 'ORD-9819']);
+
+// Initial mock orders kept empty to avoid filler data
+export const INITIAL_MOCK_ORDERS: Order[] = [];
 
 // In-memory fallback order storage for local execution & testing
-let memoryOrdersStore: Order[] = [...INITIAL_MOCK_ORDERS];
+let memoryOrdersStore: Order[] = [];
+const approvedOrderIdsSet = new Set<string>();
+const dismissedOrderIdsSet = new Set<string>();
+
+// Read synchronously from web localStorage if available
+if (typeof window !== 'undefined' && window.localStorage) {
+  try {
+    const rawApproved = window.localStorage.getItem(APPROVED_ORDERS_STORAGE_KEY);
+    if (rawApproved) {
+      const ids: string[] = JSON.parse(rawApproved);
+      ids.forEach((id) => approvedOrderIdsSet.add(id));
+    }
+    const rawDismissed = window.localStorage.getItem(DISMISSED_ORDERS_STORAGE_KEY);
+    if (rawDismissed) {
+      const ids: string[] = JSON.parse(rawDismissed);
+      ids.forEach((id) => dismissedOrderIdsSet.add(id));
+    }
+    const rawOrders = window.localStorage.getItem(ORDERS_STORAGE_KEY);
+    if (rawOrders) {
+      const ords: Order[] = JSON.parse(rawOrders);
+      memoryOrdersStore = ords
+        .filter((o) => !MOCK_ORDER_IDS.has(o.id))
+        .map((o) => {
+          const isDismissed = dismissedOrderIdsSet.has(o.id) || !!o.isDismissed;
+          if (approvedOrderIdsSet.has(o.id) || o.isApproved) {
+            return {
+              ...o,
+              isApproved: true,
+              isDismissed,
+              status: o.status === 'Placed' ? 'Confirmed' : o.status,
+            };
+          }
+          return { ...o, isDismissed };
+        });
+    }
+  } catch {}
+}
+
 const listeners: ((orders: Order[]) => void)[] = [];
 
-function notifyListeners() {
+export function notifyListeners() {
   listeners.forEach((fn) => fn([...memoryOrdersStore]));
 }
 
+export function isOrderApproved(orderId: string): boolean {
+  return approvedOrderIdsSet.has(orderId);
+}
+
+async function safeStorageGet(key: string): Promise<string | null> {
+  if (typeof window !== 'undefined' && window.localStorage) {
+    try {
+      const val = window.localStorage.getItem(key);
+      if (val !== null) return val;
+    } catch {}
+  }
+  try {
+    if (typeof AsyncStorage !== 'undefined' && AsyncStorage?.getItem) {
+      return await AsyncStorage.getItem(key);
+    }
+  } catch {}
+  return null;
+}
+
+async function safeStorageSet(key: string, value: string): Promise<void> {
+  if (typeof window !== 'undefined' && window.localStorage) {
+    try {
+      window.localStorage.setItem(key, value);
+    } catch {}
+  }
+  try {
+    if (typeof AsyncStorage !== 'undefined' && AsyncStorage?.setItem) {
+      await AsyncStorage.setItem(key, value);
+    }
+  } catch {}
+}
+
+export async function savePersistedOrders(orders: Order[]): Promise<void> {
+  const clean = orders.filter((o) => !MOCK_ORDER_IDS.has(o.id));
+  const serialized = JSON.stringify(clean);
+  await safeStorageSet(ORDERS_STORAGE_KEY, serialized);
+}
+
+export async function markOrderAsApproved(orderId: string, approvedBy = 'Admin'): Promise<void> {
+  approvedOrderIdsSet.add(orderId);
+  const serialized = JSON.stringify(Array.from(approvedOrderIdsSet));
+  await safeStorageSet(APPROVED_ORDERS_STORAGE_KEY, serialized);
+
+  if (memoryOrdersStore.length === 0) {
+    await loadPersistedOrders();
+  }
+
+  const idx = memoryOrdersStore.findIndex((o) => o.id === orderId);
+  if (idx !== -1 && memoryOrdersStore[idx]) {
+    const existing = memoryOrdersStore[idx]!;
+    memoryOrdersStore[idx] = {
+      ...existing,
+      isApproved: true,
+      approvedBy,
+      approvedAt: new Date().toISOString(),
+      status: existing.status === 'Placed' ? 'Confirmed' : existing.status,
+    };
+    await savePersistedOrders(memoryOrdersStore);
+    notifyListeners();
+  }
+}
+
+export async function unmarkOrderAsApproved(orderId: string): Promise<void> {
+  approvedOrderIdsSet.delete(orderId);
+  const serialized = JSON.stringify(Array.from(approvedOrderIdsSet));
+  await safeStorageSet(APPROVED_ORDERS_STORAGE_KEY, serialized);
+}
+
+export async function loadPersistedOrders(): Promise<Order[]> {
+  try {
+    let parsedOrders: Order[] = [];
+    let parsedApproved: string[] = [];
+    let parsedDismissed: string[] = [];
+
+    const rawOrders = await safeStorageGet(ORDERS_STORAGE_KEY);
+    if (rawOrders) {
+      try {
+        parsedOrders = JSON.parse(rawOrders);
+      } catch {}
+    }
+
+    const rawApproved = await safeStorageGet(APPROVED_ORDERS_STORAGE_KEY);
+    if (rawApproved) {
+      try {
+        parsedApproved = JSON.parse(rawApproved);
+      } catch {}
+    }
+
+    const rawDismissed = await safeStorageGet(DISMISSED_ORDERS_STORAGE_KEY);
+    if (rawDismissed) {
+      try {
+        parsedDismissed = JSON.parse(rawDismissed);
+      } catch {}
+    }
+
+    parsedApproved.forEach((id) => approvedOrderIdsSet.add(id));
+    parsedDismissed.forEach((id) => dismissedOrderIdsSet.add(id));
+
+    const cleaned = parsedOrders
+      .filter((o) => !MOCK_ORDER_IDS.has(o.id) && o.id.startsWith('ORD-'))
+      .map((o) => {
+        const isDismissed = dismissedOrderIdsSet.has(o.id) || !!o.isDismissed;
+        const isCancelled = o.status === 'Cancelled' || o.status === 'Refunded';
+        if (!isCancelled && (approvedOrderIdsSet.has(o.id) || o.isApproved)) {
+          return {
+            ...o,
+            isApproved: true,
+            isDismissed,
+            status: o.status === 'Placed' ? 'Confirmed' : o.status,
+          };
+        }
+        return { ...o, isApproved: !isCancelled && !!o.isApproved, isDismissed };
+      });
+
+    if (cleaned.length > 0) {
+      memoryOrdersStore = cleaned;
+    }
+    return [...memoryOrdersStore];
+  } catch (err) {
+    return [...memoryOrdersStore];
+  }
+}
+
+export async function dismissCancelledOrder(orderId: string): Promise<void> {
+  dismissedOrderIdsSet.add(orderId);
+  const serialized = JSON.stringify(Array.from(dismissedOrderIdsSet));
+  await safeStorageSet(DISMISSED_ORDERS_STORAGE_KEY, serialized);
+
+  const idx = memoryOrdersStore.findIndex((o) => o.id === orderId);
+  if (idx !== -1 && memoryOrdersStore[idx]) {
+    memoryOrdersStore[idx]!.isDismissed = true;
+    await savePersistedOrders(memoryOrdersStore);
+  }
+  notifyListeners();
+}
+
+export function isOrderDismissed(orderId: string): boolean {
+  return dismissedOrderIdsSet.has(orderId);
+}
+
+export async function clearAllOrders(): Promise<void> {
+  memoryOrdersStore = [];
+  approvedOrderIdsSet.clear();
+  dismissedOrderIdsSet.clear();
+  await safeStorageSet(ORDERS_STORAGE_KEY, JSON.stringify([]));
+  await safeStorageSet(APPROVED_ORDERS_STORAGE_KEY, JSON.stringify([]));
+  await safeStorageSet(DISMISSED_ORDERS_STORAGE_KEY, JSON.stringify([]));
+  notifyListeners();
+
+  // Permanently delete all documents from Firestore orders collection
+  try {
+    const ordersCol = collection(db, 'orders');
+    const snapshot = await getDocs(ordersCol);
+    if (!snapshot.empty) {
+      await Promise.all(snapshot.docs.map((d) => deleteDoc(doc(db, 'orders', d.id))));
+    }
+  } catch (err) {
+    console.warn('[ordersService] Failed to clear Firestore orders collection:', err);
+  }
+
+  if (typeof window !== 'undefined' && window.dispatchEvent) {
+    try {
+      window.dispatchEvent(new Event('storage'));
+    } catch {}
+  }
+}
+
+// Initial load on start
+loadPersistedOrders()
+  .then(() => notifyListeners())
+  .catch(() => {});
+
 export interface CreateOrderParams {
+  id?: string;
+  orderId?: string;
   userId: string;
   customerPhone: string;
   customerName?: string;
@@ -346,7 +348,7 @@ export async function createOrder(
     };
   }
 
-  const orderId = 'ORD-' + Math.floor(1000 + Math.random() * 9000);
+  const orderId = params.id || params.orderId || 'ORD-' + Math.floor(1000 + Math.random() * 9000);
   const now = new Date();
 
   const newOrder: Order = {
@@ -362,7 +364,7 @@ export async function createOrder(
     items: params.items,
     subtotal: params.subtotal,
     discount: params.discount || 0,
-    couponCode: params.couponCode,
+    couponCode: params.couponCode || '',
     deliveryFee: params.deliveryFee || 0,
     totalAmount: params.totalAmount,
     status: 'Placed',
@@ -380,13 +382,13 @@ export async function createOrder(
       {
         status: 'Confirmed',
         title: 'Order Confirmed',
-        description: 'Nearest regional fulfillment kitchen accepted your order.',
-        timestamp: 'Within 10 mins',
+        description: 'RasoiGenie kitchen confirmed order. Fresh preparation underway.',
+        timestamp: 'Pending',
         completed: false,
       },
       {
         status: 'Preparing',
-        title: 'Preparing Masalas & Meal Kit',
+        title: 'Fresh Prep & Vacuum Pack',
         description: 'Pre-portioned fresh ingredients and spice sachets packed.',
         timestamp: 'Pending',
         completed: false,
@@ -394,14 +396,14 @@ export async function createOrder(
       {
         status: 'Out for Delivery',
         title: 'Out for Delivery',
-        description: 'Assigned to delivery executive.',
+        description: 'Handed over to cold-chain delivery agent with temperature monitor.',
         timestamp: 'Pending',
         completed: false,
       },
       {
         status: 'Delivered',
-        title: 'Delivered to Doorstep',
-        description: 'Delivered in thermal-sealed freshness pouch.',
+        title: 'Delivered Fresh to Doorstep',
+        description: 'Customer accepted order. Ready to cook in 25 mins!',
         timestamp: 'Pending',
         completed: false,
       },
@@ -410,15 +412,24 @@ export async function createOrder(
     updatedAt: now.toISOString(),
   };
 
-  try {
-    const ordersCol = collection(db, 'orders');
-    const docRef = await addDoc(ordersCol, newOrder);
-    newOrder.id = docRef.id;
-  } catch (err) {
-    console.warn('[ordersService] Firestore addDoc failed, using local store:', err);
+  if (process.env.NODE_ENV !== 'test') {
+    try {
+      const cleanDoc = JSON.parse(JSON.stringify(newOrder));
+      await setDoc(doc(db, 'orders', orderId), cleanDoc);
+    } catch (err) {
+      console.warn('[ordersService] Firestore setDoc failed, using local store:', err);
+    }
   }
 
-  memoryOrdersStore.unshift(newOrder);
+  // Deduplicate in memory
+  const existingIdx = memoryOrdersStore.findIndex((o) => o.id === newOrder.id);
+  if (existingIdx !== -1) {
+    memoryOrdersStore[existingIdx] = newOrder;
+  } else {
+    memoryOrdersStore.unshift(newOrder);
+  }
+
+  await savePersistedOrders(memoryOrdersStore);
   notifyListeners();
   return newOrder;
 }
@@ -451,29 +462,53 @@ export function subscribeToOrders(callback: (orders: Order[]) => void): () => vo
   callback([...memoryOrdersStore]);
   listeners.push(callback);
 
+  loadPersistedOrders()
+    .then((ords) => {
+      callback(ords);
+    })
+    .catch(() => {});
+
   let unsubscribeFirestore = () => {};
 
-  try {
-    const ordersCol = collection(db, 'orders');
-    const q = query(ordersCol, orderBy('createdAt', 'desc'));
-    unsubscribeFirestore = onSnapshot(
-      q,
-      (snapshot) => {
-        if (!snapshot.empty) {
-          const remoteOrders: Order[] = snapshot.docs.map((docSnap) => ({
-            id: docSnap.id,
-            ...(docSnap.data() as Omit<Order, 'id'>),
-          }));
-          memoryOrdersStore = remoteOrders;
-          notifyListeners();
-        }
-      },
-      (error) => {
-        console.warn('[ordersService] Firestore onSnapshot fallback:', error);
-      },
-    );
-  } catch (e) {
-    console.warn('[ordersService] Firestore subscription failed, using local store:', e);
+  if (process.env.NODE_ENV !== 'test') {
+    try {
+      const ordersCol = collection(db, 'orders');
+      const q = query(ordersCol, orderBy('createdAt', 'desc'));
+      unsubscribeFirestore = onSnapshot(
+        q,
+        (snapshot) => {
+          if (!snapshot.empty) {
+            const uniqueMap = new Map<string, Order>();
+            snapshot.docs
+              .filter((docSnap) => docSnap.id.startsWith('ORD-'))
+              .forEach((docSnap) => {
+                const data = docSnap.data() as Omit<Order, 'id'> & { id?: string };
+                const effectiveId = docSnap.id;
+                if (!MOCK_ORDER_IDS.has(effectiveId)) {
+                  uniqueMap.set(effectiveId, {
+                    ...data,
+                    id: effectiveId,
+                  } as Order);
+                }
+              });
+            const cleaned = Array.from(uniqueMap.values());
+            memoryOrdersStore = cleaned;
+            savePersistedOrders(cleaned);
+            notifyListeners();
+          } else {
+            // When Firestore collection is empty, ensure memory and local storage are also cleared
+            memoryOrdersStore = [];
+            savePersistedOrders([]);
+            notifyListeners();
+          }
+        },
+        (error) => {
+          console.warn('[ordersService] Firestore onSnapshot fallback:', error);
+        },
+      );
+    } catch (e) {
+      console.warn('[ordersService] Firestore subscription failed, using local store:', e);
+    }
   }
 
   return () => {
@@ -486,10 +521,63 @@ export function subscribeToOrders(callback: (orders: Order[]) => void): () => vo
 /**
  * Update an order's status (Admin operation)
  */
-export async function updateOrderStatus(orderId: string, status: OrderStatus): Promise<void> {
-  const order = memoryOrdersStore.find((o) => o.id === orderId);
+export async function updateOrderStatus(
+  orderId: string,
+  status: OrderStatus,
+  cancellationReason?: string,
+): Promise<void> {
+  if (status === 'Cancelled' || status === 'Refunded') {
+    await unmarkOrderAsApproved(orderId);
+  } else if (status !== 'Placed') {
+    await markOrderAsApproved(orderId);
+  }
+
+  if (memoryOrdersStore.length === 0 || !memoryOrdersStore.some((o) => o.id === orderId)) {
+    await loadPersistedOrders();
+  }
+
+  let order = memoryOrdersStore.find((o) => o.id === orderId);
+  if (!order) {
+    const raw = await safeStorageGet(ORDERS_STORAGE_KEY);
+    if (raw) {
+      try {
+        const parsed: Order[] = JSON.parse(raw);
+        const found = parsed.find((o) => o.id === orderId);
+        if (found) {
+          memoryOrdersStore = parsed;
+          order = found;
+        }
+      } catch {}
+    }
+  }
+
   if (order) {
     order.status = status;
+    if (status === 'Cancelled' || status === 'Refunded') {
+      order.isApproved = false;
+    } else if (status !== 'Placed') {
+      order.isApproved = true;
+    }
+
+    if (status === 'Cancelled') {
+      order.cancellationReason =
+        cancellationReason || order.cancellationReason || 'Cancelled by Admin';
+      order.adminNotes = cancellationReason || order.adminNotes || 'Cancelled by Admin';
+
+      const alreadyHasCancelEvent = order.trackingEvents.some((e) => e.status === 'Cancelled');
+      if (!alreadyHasCancelEvent) {
+        order.trackingEvents.push({
+          status: 'Cancelled',
+          title: 'Order Cancelled',
+          description: cancellationReason || 'Your order was cancelled by the fulfillment kitchen.',
+          timestamp: new Date().toLocaleTimeString([], {
+            hour: '2-digit',
+            minute: '2-digit',
+          }),
+          completed: true,
+        });
+      }
+    }
     order.updatedAt = new Date().toISOString();
 
     // Update tracking events
@@ -516,17 +604,31 @@ export async function updateOrderStatus(orderId: string, status: OrderStatus): P
       });
     }
 
+    await savePersistedOrders(memoryOrdersStore);
     notifyListeners();
+
+    if (typeof window !== 'undefined' && window.dispatchEvent) {
+      try {
+        window.dispatchEvent(new Event('storage'));
+      } catch {}
+    }
   }
 
-  try {
-    const orderDocRef = doc(db, 'orders', orderId);
-    await updateDoc(orderDocRef, {
-      status,
-      updatedAt: new Date().toISOString(),
-    });
-  } catch (err) {
-    console.warn('[ordersService] Firestore updateDoc fallback:', err);
+  if (process.env.NODE_ENV !== 'test') {
+    try {
+      const orderDocRef = doc(db, 'orders', orderId);
+      await setDoc(
+        orderDocRef,
+        {
+          status,
+          ...(cancellationReason ? { cancellationReason, adminNotes: cancellationReason } : {}),
+          updatedAt: new Date().toISOString(),
+        },
+        { merge: true },
+      );
+    } catch (err) {
+      console.warn('[ordersService] Firestore setDoc fallback:', err);
+    }
   }
 }
 
@@ -541,20 +643,27 @@ export async function issueRefund(orderId: string, amount: number, reason: strin
     order.refundAmount = amount;
     order.refundReason = reason;
     order.updatedAt = new Date().toISOString();
+    await savePersistedOrders(memoryOrdersStore);
     notifyListeners();
   }
 
-  try {
-    const orderDocRef = doc(db, 'orders', orderId);
-    await updateDoc(orderDocRef, {
-      status: 'Refunded',
-      paymentStatus: 'Refunded',
-      refundAmount: amount,
-      refundReason: reason,
-      updatedAt: new Date().toISOString(),
-    });
-  } catch (err) {
-    console.warn('[ordersService] Firestore refund fallback:', err);
+  if (process.env.NODE_ENV !== 'test') {
+    try {
+      const orderDocRef = doc(db, 'orders', orderId);
+      await setDoc(
+        orderDocRef,
+        {
+          status: 'Refunded',
+          paymentStatus: 'Refunded',
+          refundAmount: amount,
+          refundReason: reason,
+          updatedAt: new Date().toISOString(),
+        },
+        { merge: true },
+      );
+    } catch (err) {
+      console.warn('[ordersService] Firestore issueRefund setDoc fallback:', err);
+    }
   }
 }
 
