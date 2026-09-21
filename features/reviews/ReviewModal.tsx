@@ -7,6 +7,7 @@ import { usePreferences } from '../../framework/context/PreferencesContext';
 import { useTheme } from '../../framework/theme/ThemeContext';
 import { RatingStars } from '../../framework/ui/RatingStars';
 import { Button } from '../../framework/ui/Button';
+import { Icon } from '../../framework/ui/Icon';
 
 export interface ReviewModalProps {
   kit: MealKit | null;
@@ -55,7 +56,7 @@ export const ReviewModal: React.FC<ReviewModalProps> = ({
       );
 
       Alert.alert(
-        'Review Shared! ⭐',
+        'Review Shared',
         'Thank you for rating this meal kit. Your feedback helps our chefs improve!',
       );
       setComment('');
@@ -83,12 +84,14 @@ export const ReviewModal: React.FC<ReviewModalProps> = ({
           <View style={[styles.header, { borderBottomColor: colors.borderLight }]}>
             <View style={{ flex: 1 }}>
               <Text style={[styles.title, { color: colors.textPrimary }]}>Rate & Review</Text>
-              <Text style={[styles.subtitle, { color: colors.textSecondary }]} numberOfLines={1}>
-                {kit.name}
-              </Text>
+              <Text style={[styles.subtitle, { color: colors.textSecondary }]}>{kit.name}</Text>
             </View>
-            <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
-              <Text style={[styles.closeBtnText, { color: colors.textMuted }]}>✕</Text>
+            <TouchableOpacity
+              onPress={onClose}
+              style={styles.closeBtn}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <Icon name="close" size={20} color={colors.textMuted} />
             </TouchableOpacity>
           </View>
 

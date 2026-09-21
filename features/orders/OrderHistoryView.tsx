@@ -19,6 +19,7 @@ import {
 } from '../../framework/services/supabaseOrdersService';
 import { Badge, BadgeVariant } from '../../framework/ui/Badge';
 import { Button } from '../../framework/ui/Button';
+import { Icon } from '../../framework/ui/Icon';
 import { LiveTrackingModal } from './LiveTrackingModal';
 import { WishlistView } from '../wishlist/WishlistView';
 
@@ -162,7 +163,7 @@ export const OrderHistoryView: React.FC = () => {
   const handleReorder = (order: Order) => {
     reorderItems(order.items);
     Alert.alert(
-      'Items Added to Cart! 🛒',
+      'Items Added to Cart',
       `Re-added ${order.items.length} items from Order ${order.id} to your basket.`,
     );
     router.push('/(tabs)/cart' as any);
@@ -234,7 +235,7 @@ export const OrderHistoryView: React.FC = () => {
             ]}
           >
             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-              <Text style={{ fontSize: 16, marginRight: 6 }}>🚫</Text>
+              <Icon name="close-circle" size={18} color="#DC2626" style={{ marginRight: 6 }} />
               <View style={{ flex: 1 }}>
                 <Text style={{ color: '#991B1B', fontWeight: '800', fontSize: 12 }}>
                   Order Cancelled
@@ -289,12 +290,12 @@ export const OrderHistoryView: React.FC = () => {
               ]}
             >
               {order.status === 'Confirmed'
-                ? '✅ Order Confirmed by Kitchen • Chefs are packing fresh ingredients'
+                ? 'Order Confirmed by Kitchen • Chefs are packing fresh ingredients'
                 : order.status === 'Preparing'
-                  ? '👨‍🍳 Kitchen is Preparing Your Meal Kit'
+                  ? 'Kitchen is Preparing Your Meal Kit'
                   : order.status === 'Out for Delivery'
-                    ? '🛵 Out for Cold-Chain Delivery'
-                    : `⏳ Order Placed • Awaiting Kitchen Confirmation (${order.deliverySlot})`}
+                    ? 'Out for Cold-Chain Delivery'
+                    : `Order Placed • Awaiting Kitchen Confirmation (${order.deliverySlot})`}
             </Text>
           </View>
         ) : null}
@@ -327,7 +328,8 @@ export const OrderHistoryView: React.FC = () => {
             {isCancelled ? (
               <>
                 <Button
-                  title="Why was this cancelled? ℹ️"
+                  title="Why was this cancelled?"
+                  icon={<Icon name="info" size={14} color="#DC2626" />}
                   variant="outline"
                   size="sm"
                   style={{ borderColor: '#DC2626' }}
@@ -339,14 +341,16 @@ export const OrderHistoryView: React.FC = () => {
                 />
                 {isActive && (
                   <Button
-                    title="Dismiss ✕"
+                    title="Dismiss"
+                    icon={<Icon name="close" size={14} color={colors.textPrimary} />}
                     variant="secondary"
                     size="sm"
                     onPress={() => handleDismissOrder(order.id)}
                   />
                 )}
                 <Button
-                  title="Reorder 🔁"
+                  title="Reorder"
+                  icon={<Icon name="refresh" size={14} color={colors.textPrimary} />}
                   variant="secondary"
                   size="sm"
                   onPress={() => handleReorder(order)}
@@ -355,14 +359,18 @@ export const OrderHistoryView: React.FC = () => {
             ) : (
               <>
                 <Button
-                  title="Reorder 🔁"
+                  title="Reorder"
+                  icon={<Icon name="refresh" size={14} color={colors.textPrimary} />}
                   variant="secondary"
                   size="sm"
                   style={{ marginRight: 8 }}
                   onPress={() => handleReorder(order)}
                 />
                 <Button
-                  title={isActive ? 'Track Live 🛵' : 'View Details 📄'}
+                  title={isActive ? 'Track Live' : 'View Details'}
+                  icon={
+                    <Icon name={isActive ? 'delivery' : 'document'} size={15} color="#FFFFFF" />
+                  }
                   size="sm"
                   onPress={() => {
                     setSelectedOrder(order);
@@ -445,14 +453,21 @@ export const OrderHistoryView: React.FC = () => {
             ]}
             onPress={() => setActiveTab('wishlist')}
           >
-            <Text
-              style={[
-                styles.tabBtnText,
-                { color: activeTab === 'wishlist' ? colors.primary : colors.textSecondary },
-              ]}
-            >
-              Saved Kits ❤️
-            </Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <Icon
+                name={activeTab === 'wishlist' ? 'heart' : 'heart-outline'}
+                size={14}
+                color={activeTab === 'wishlist' ? colors.primary : colors.textSecondary}
+              />
+              <Text
+                style={[
+                  styles.tabBtnText,
+                  { color: activeTab === 'wishlist' ? colors.primary : colors.textSecondary },
+                ]}
+              >
+                Saved Kits
+              </Text>
+            </View>
           </TouchableOpacity>
         </View>
       </View>
@@ -477,7 +492,7 @@ export const OrderHistoryView: React.FC = () => {
               onPress={() => setActiveTab('previous')}
             >
               <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, marginRight: 8 }}>
-                <Text style={{ fontSize: 18, marginRight: 8 }}>🚫</Text>
+                <Icon name="close-circle" size={20} color="#DC2626" style={{ marginRight: 8 }} />
                 <View style={{ flex: 1 }}>
                   <Text style={{ color: '#991B1B', fontWeight: '800', fontSize: 13 }}>
                     {undismissedCancelledOrders.length} Order(s) Cancelled
@@ -487,9 +502,12 @@ export const OrderHistoryView: React.FC = () => {
                   </Text>
                 </View>
               </View>
-              <Text style={{ color: '#DC2626', fontWeight: '800', fontSize: 12 }}>
-                View in History ➔
-              </Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                <Text style={{ color: '#DC2626', fontWeight: '800', fontSize: 12 }}>
+                  View in History
+                </Text>
+                <Icon name="chevron-right" size={14} color="#DC2626" />
+              </View>
             </TouchableOpacity>
           )}
 
@@ -500,7 +518,9 @@ export const OrderHistoryView: React.FC = () => {
                 { backgroundColor: colors.bgSurface, borderRadius: radii.xl },
               ]}
             >
-              <Text style={styles.emptyIcon}>🍳</Text>
+              <View style={{ marginBottom: 12 }}>
+                <Icon name="restaurant" size={56} color={colors.textMuted} />
+              </View>
               <Text style={[styles.emptyTitle, { color: colors.textPrimary }]}>
                 No Active Orders
               </Text>
@@ -508,10 +528,15 @@ export const OrderHistoryView: React.FC = () => {
                 You don't have any ongoing meal kit deliveries in preparation right now.
               </Text>
               <View style={{ flexDirection: 'row', gap: 10, marginTop: 14 }}>
-                <Button title="Browse Meal Kits 🥘" onPress={() => router.push('/' as any)} />
+                <Button
+                  title="Browse Meal Kits"
+                  icon={<Icon name="restaurant" size={16} color="#FFFFFF" />}
+                  onPress={() => router.push('/' as any)}
+                />
                 {previousOrders.length > 0 && (
                   <Button
-                    title="View Previous Orders ➔"
+                    title="View Previous Orders"
+                    icon={<Icon name="arrow-forward" size={15} color={colors.primary} />}
                     variant="outline"
                     onPress={() => setActiveTab('previous')}
                   />
@@ -531,7 +556,9 @@ export const OrderHistoryView: React.FC = () => {
                 { backgroundColor: colors.bgSurface, borderRadius: radii.xl },
               ]}
             >
-              <Text style={styles.emptyIcon}>📦</Text>
+              <View style={{ marginBottom: 12 }}>
+                <Icon name="package" size={56} color={colors.textMuted} />
+              </View>
               <Text style={[styles.emptyTitle, { color: colors.textPrimary }]}>
                 No Previous Orders
               </Text>
@@ -540,7 +567,8 @@ export const OrderHistoryView: React.FC = () => {
                 reordering.
               </Text>
               <Button
-                title="Explore Gourmet Meal Kits 🥘"
+                title="Explore Gourmet Meal Kits"
+                icon={<Icon name="restaurant" size={16} color="#FFFFFF" />}
                 style={{ marginTop: 14 }}
                 onPress={() => router.push('/' as any)}
               />
@@ -574,7 +602,7 @@ export const OrderHistoryView: React.FC = () => {
             ]}
           >
             <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
-              <Text style={{ fontSize: 24, marginRight: 10 }}>🚫</Text>
+              <Icon name="close-circle" size={26} color="#DC2626" style={{ marginRight: 10 }} />
               <View style={{ flex: 1 }}>
                 <Text style={[styles.modalTitle, { color: colors.textPrimary }]}>
                   Order Cancellation Details
@@ -586,8 +614,9 @@ export const OrderHistoryView: React.FC = () => {
               <TouchableOpacity
                 onPress={() => setCancellationModalVisible(false)}
                 style={styles.modalCloseBtn}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
               >
-                <Text style={{ fontSize: 16, color: colors.textPrimary }}>✕</Text>
+                <Icon name="close" size={20} color={colors.textPrimary} />
               </TouchableOpacity>
             </View>
 
@@ -624,7 +653,8 @@ export const OrderHistoryView: React.FC = () => {
             <View style={{ flexDirection: 'row', gap: 10, marginTop: 8 }}>
               {cancelledModalOrder && !dismissedOrderIds.has(cancelledModalOrder.id) && (
                 <Button
-                  title="Dismiss from Active ✕"
+                  title="Dismiss from Active"
+                  icon={<Icon name="close" size={14} color={colors.primary} />}
                   variant="outline"
                   style={{ flex: 1 }}
                   onPress={() => {

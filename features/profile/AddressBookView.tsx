@@ -14,6 +14,7 @@ import { useAuth } from '../../framework/context/AuthContext';
 import { useTheme } from '../../framework/theme/ThemeContext';
 import { Badge } from '../../framework/ui/Badge';
 import { Button } from '../../framework/ui/Button';
+import { Icon } from '../../framework/ui/Icon';
 
 export const AddressBookView: React.FC<{ onBack?: () => void }> = ({ onBack }) => {
   const { user } = useAuth();
@@ -142,8 +143,11 @@ export const AddressBookView: React.FC<{ onBack?: () => void }> = ({ onBack }) =
               <Text style={[styles.modalTitle, { color: colors.textPrimary }]}>
                 Add New Delivery Address
               </Text>
-              <TouchableOpacity onPress={() => setModalVisible(false)}>
-                <Text style={{ fontSize: 18, color: colors.textMuted }}>✕</Text>
+              <TouchableOpacity
+                onPress={() => setModalVisible(false)}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <Icon name="close" size={20} color={colors.textMuted} />
               </TouchableOpacity>
             </View>
 

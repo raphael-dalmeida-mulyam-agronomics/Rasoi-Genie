@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Modal, ScrollView } from 'react-native';
 import { useTheme } from './ThemeContext';
+import { Icon } from '../ui/Icon';
 
 export const ThemeSwitcher: React.FC = () => {
   const {
@@ -33,7 +34,9 @@ export const ThemeSwitcher: React.FC = () => {
         activeOpacity={0.85}
         testID="theme-switcher-trigger"
       >
-        <Text style={styles.floatingButtonIcon}>{isDark ? '🌙' : '☀️'}</Text>
+        <View style={{ marginRight: 6 }}>
+          <Icon name={isDark ? 'moon' : 'sun'} size={16} color={colors.textInverse} />
+        </View>
         <Text style={[styles.floatingButtonText, { color: colors.textInverse }]}>
           {isDark ? 'Dark' : 'Light'}
         </Text>
@@ -68,7 +71,7 @@ export const ThemeSwitcher: React.FC = () => {
                 </Text>
               </View>
               <TouchableOpacity onPress={() => setModalVisible(false)} style={styles.closeBtn}>
-                <Text style={[styles.closeBtnText, { color: colors.textSecondary }]}>✕</Text>
+                <Icon name="close" size={20} color={colors.textSecondary} />
               </TouchableOpacity>
             </View>
 
@@ -90,7 +93,13 @@ export const ThemeSwitcher: React.FC = () => {
                 onPress={() => setColorMode('light')}
                 activeOpacity={0.8}
               >
-                <Text style={{ fontSize: 16, marginRight: 6 }}>☀️</Text>
+                <View style={{ marginRight: 6 }}>
+                  <Icon
+                    name="sun"
+                    size={16}
+                    color={!isDark ? colors.textInverse : colors.textPrimary}
+                  />
+                </View>
                 <Text
                   style={[
                     styles.modeTabText,
@@ -112,7 +121,13 @@ export const ThemeSwitcher: React.FC = () => {
                 onPress={() => setColorMode('dark')}
                 activeOpacity={0.8}
               >
-                <Text style={{ fontSize: 16, marginRight: 6 }}>🌙</Text>
+                <View style={{ marginRight: 6 }}>
+                  <Icon
+                    name="moon"
+                    size={16}
+                    color={isDark ? colors.textInverse : colors.textPrimary}
+                  />
+                </View>
                 <Text
                   style={[
                     styles.modeTabText,

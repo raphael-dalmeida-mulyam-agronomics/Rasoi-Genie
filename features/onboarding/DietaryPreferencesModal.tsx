@@ -4,6 +4,7 @@ import { usePreferences, UserDietaryPreferences } from '../../framework/context/
 import { useTheme } from '../../framework/theme/ThemeContext';
 import { Button } from '../../framework/ui/Button';
 import { PillTag } from '../../framework/ui/PillTag';
+import { Icon } from '../../framework/ui/Icon';
 import {
   CuisineType,
   DietTag,
@@ -125,8 +126,12 @@ export const DietaryPreferencesModal: React.FC<DietaryPreferencesModalProps> = (
             { backgroundColor: colors.bgSurface, borderBottomColor: colors.borderLight },
           ]}
         >
-          <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
-            <Text style={[styles.closeText, { color: colors.textPrimary }]}>✕</Text>
+          <TouchableOpacity
+            onPress={onClose}
+            style={styles.closeBtn}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Icon name="close" size={20} color={colors.textPrimary} />
           </TouchableOpacity>
           <View style={{ flex: 1, alignItems: 'center' }}>
             <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>
@@ -349,7 +354,8 @@ export const DietaryPreferencesModal: React.FC<DietaryPreferencesModalProps> = (
           ]}
         >
           <Button
-            title="Save Preferences & Update Feed ✨"
+            title="Save Preferences & Update Feed"
+            icon={<Icon name="check-circle" size={18} color="#FFFFFF" />}
             size="lg"
             style={{ width: '100%' }}
             onPress={handleSave}

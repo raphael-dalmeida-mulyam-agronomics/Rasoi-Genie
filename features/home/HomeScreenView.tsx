@@ -30,6 +30,7 @@ import { Card } from '../../framework/ui/Card';
 import { Badge, getDietBadgeInfo } from '../../framework/ui/Badge';
 import { PillTag } from '../../framework/ui/PillTag';
 import { RatingStars } from '../../framework/ui/RatingStars';
+import { Icon, AppIconName } from '../../framework/ui/Icon';
 import { MealDetailModal } from '../meal-detail/MealDetailModal';
 import { DietaryPreferencesModal } from '../onboarding/DietaryPreferencesModal';
 import { ReviewModal } from '../reviews/ReviewModal';
@@ -60,52 +61,52 @@ const PROMO_BANNERS = [
   },
 ];
 
-const DIET_FILTER_OPTIONS: { id: 'all' | DietTag; label: string; emoji: string }[] = [
-  { id: 'all', label: 'All Diets', emoji: '🍽️' },
-  { id: 'veg', label: 'Pure Veg', emoji: '🥬' },
-  { id: 'nonveg', label: 'Non-Veg', emoji: '🍗' },
-  { id: 'vegan', label: 'Vegan', emoji: '🌱' },
-  { id: 'keto', label: 'Keto Low-Carb', emoji: '🥑' },
-  { id: 'jain', label: 'Jain Friendly', emoji: '🌱' },
-  { id: 'gluten-free', label: 'Gluten-Free', emoji: '🌾' },
+const DIET_FILTER_OPTIONS: { id: 'all' | DietTag; label: string; icon: AppIconName }[] = [
+  { id: 'all', label: 'All Diets', icon: 'restaurant' },
+  { id: 'veg', label: 'Pure Veg', icon: 'leaf' },
+  { id: 'nonveg', label: 'Non-Veg', icon: 'nutrition' },
+  { id: 'vegan', label: 'Vegan', icon: 'leaf' },
+  { id: 'keto', label: 'Keto Low-Carb', icon: 'flame' },
+  { id: 'jain', label: 'Jain Friendly', icon: 'leaf' },
+  { id: 'gluten-free', label: 'Gluten-Free', icon: 'checkmark-circle' },
 ];
 
-const CUISINE_FILTER_OPTIONS: { id: 'All' | CuisineType; label: string; emoji: string }[] = [
-  { id: 'All', label: 'All Cuisines', emoji: '🌍' },
-  { id: 'North Indian', label: 'North Indian', emoji: '🥘' },
-  { id: 'South Indian', label: 'South Indian', emoji: '🥞' },
-  { id: 'Punjabi', label: 'Punjabi', emoji: '🫓' },
-  { id: 'Hyderabadi', label: 'Hyderabadi', emoji: '🍚' },
-  { id: 'Coastal', label: 'Coastal', emoji: '🐟' },
-  { id: 'Italian', label: 'Italian', emoji: '🍕' },
-  { id: 'Mexican', label: 'Mexican', emoji: '🌮' },
-  { id: 'American', label: 'American', emoji: '🍔' },
-  { id: 'Mughlai', label: 'Mughlai', emoji: '🍖' },
-  { id: 'Gujarati', label: 'Gujarati', emoji: '🍲' },
-  { id: 'Indo-Chinese', label: 'Indo-Chinese', emoji: '🥢' },
-  { id: 'Continental', label: 'Continental', emoji: '🥗' },
+const CUISINE_FILTER_OPTIONS: { id: 'All' | CuisineType; label: string; icon: AppIconName }[] = [
+  { id: 'All', label: 'All Cuisines', icon: 'globe' },
+  { id: 'North Indian', label: 'North Indian', icon: 'restaurant' },
+  { id: 'South Indian', label: 'South Indian', icon: 'cafe' },
+  { id: 'Punjabi', label: 'Punjabi', icon: 'flame' },
+  { id: 'Hyderabadi', label: 'Hyderabadi', icon: 'sparkles' },
+  { id: 'Coastal', label: 'Coastal', icon: 'water' },
+  { id: 'Italian', label: 'Italian', icon: 'pizza' },
+  { id: 'Mexican', label: 'Mexican', icon: 'flame' },
+  { id: 'American', label: 'American', icon: 'fast-food' },
+  { id: 'Mughlai', label: 'Mughlai', icon: 'star' },
+  { id: 'Gujarati', label: 'Gujarati', icon: 'leaf' },
+  { id: 'Indo-Chinese', label: 'Indo-Chinese', icon: 'flash' },
+  { id: 'Continental', label: 'Continental', icon: 'restaurant' },
 ];
 
-const DISH_FILTER_OPTIONS: { id: 'All' | DishCategory; label: string; emoji: string }[] = [
-  { id: 'All', label: 'All Dishes', emoji: '🍽️' },
-  { id: 'Biryani & Rice', label: 'Biryani & Rice', emoji: '🍚' },
-  { id: 'Curries & Gravies', label: 'Curries & Gravies', emoji: '🥘' },
-  { id: 'Pizzas', label: 'Pizzas', emoji: '🍕' },
-  { id: 'Burgers & Sliders', label: 'Burgers & Sliders', emoji: '🍔' },
-  { id: 'Tacos', label: 'Tacos', emoji: '🌮' },
-  { id: 'Burritos & Bowls', label: 'Burritos & Bowls', emoji: '🥗' },
-  { id: 'Pastas', label: 'Pastas', emoji: '🍝' },
+const DISH_FILTER_OPTIONS: { id: 'All' | DishCategory; label: string; icon: AppIconName }[] = [
+  { id: 'All', label: 'All Dishes', icon: 'restaurant' },
+  { id: 'Biryani & Rice', label: 'Biryani & Rice', icon: 'sparkles' },
+  { id: 'Curries & Gravies', label: 'Curries & Gravies', icon: 'restaurant' },
+  { id: 'Pizzas', label: 'Pizzas', icon: 'pizza' },
+  { id: 'Burgers & Sliders', label: 'Burgers & Sliders', icon: 'fast-food' },
+  { id: 'Tacos', label: 'Tacos', icon: 'flame' },
+  { id: 'Burritos & Bowls', label: 'Burritos & Bowls', icon: 'leaf' },
+  { id: 'Pastas', label: 'Pastas', icon: 'restaurant' },
 ];
 
 const SORT_OPTIONS: {
   id: 'popularity' | 'priceLowHigh' | 'priceHighLow' | 'prepTime';
   label: string;
-  icon: string;
+  icon: AppIconName;
 }[] = [
-  { id: 'popularity', label: 'Most Popular', icon: '🔥' },
-  { id: 'priceLowHigh', label: 'Price: Low to High', icon: '💵' },
-  { id: 'priceHighLow', label: 'Price: High to Low', icon: '💎' },
-  { id: 'prepTime', label: 'Fastest Prep Time', icon: '⚡' },
+  { id: 'popularity', label: 'Most Popular', icon: 'flame' },
+  { id: 'priceLowHigh', label: 'Price: Low to High', icon: 'arrow-down' },
+  { id: 'priceHighLow', label: 'Price: High to Low', icon: 'arrow-up' },
+  { id: 'prepTime', label: 'Fastest Prep Time', icon: 'flash' },
 ];
 
 export const HomeScreenView: React.FC = () => {
@@ -293,13 +294,15 @@ export const HomeScreenView: React.FC = () => {
             onPress={() => setPreferencesModalVisible(true)}
             activeOpacity={0.8}
           >
-            <Text style={styles.locationIcon}>📍</Text>
+            <View style={{ marginRight: 6 }}>
+              <Icon name="location" size={18} color={colors.primary} />
+            </View>
             <View>
-              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 2 }}>
                 <Text style={[styles.deliveringToText, { color: colors.textMuted }]}>
                   DELIVERING TO
                 </Text>
-                <Text style={[styles.dropdownArrow, { color: colors.primary }]}> ▼</Text>
+                <Icon name="chevron-down" size={12} color={colors.primary} />
               </View>
               <Text style={[styles.locationCity, { color: colors.textPrimary }]}>
                 {preferences.currentCity} ({preferences.regionHub} Hub)
@@ -329,14 +332,14 @@ export const HomeScreenView: React.FC = () => {
             accessibilityLabel={`Switch to ${isDark ? 'Light' : 'Dark'} Mode`}
             activeOpacity={0.7}
           >
-            <Text style={{ fontSize: 16 }}>{isDark ? '☀️' : '🌙'}</Text>
+            <Icon name={isDark ? 'sun' : 'moon'} size={18} color={colors.textPrimary} />
           </TouchableOpacity>
 
           <TouchableOpacity
             style={[styles.iconButton, { backgroundColor: colors.bgSubtle }]}
             onPress={() => router.push('/(tabs)/orders' as any)}
           >
-            <Text style={{ fontSize: 17 }}>❤️</Text>
+            <Icon name="heart" size={18} color={colors.textPrimary} />
             {wishlistCount > 0 && (
               <View style={[styles.counterBadge, { backgroundColor: colors.primary }]}>
                 <Text style={styles.counterBadgeText}>{wishlistCount}</Text>
@@ -348,7 +351,7 @@ export const HomeScreenView: React.FC = () => {
             style={[styles.iconButton, { backgroundColor: colors.bgSubtle }]}
             onPress={() => router.push('/(tabs)/cart' as any)}
           >
-            <Text style={{ fontSize: 17 }}>🛒</Text>
+            <Icon name="cart" size={18} color={colors.textPrimary} />
             {totalCount > 0 && (
               <View style={[styles.counterBadge, { backgroundColor: colors.primary }]}>
                 <Text style={styles.counterBadgeText}>{totalCount}</Text>
@@ -374,7 +377,9 @@ export const HomeScreenView: React.FC = () => {
             onPress={() => router.push('/(tabs)/search' as any)}
             activeOpacity={0.85}
           >
-            <Text style={styles.searchIcon}>🔍</Text>
+            <View style={{ marginRight: 8 }}>
+              <Icon name="search" size={18} color={colors.textMuted} />
+            </View>
             <Text style={[styles.searchPlaceholder, { color: colors.textMuted }]}>
               Search by recipe or ingredient (e.g. Paneer, Biryani, Ghee)...
             </Text>
@@ -424,7 +429,11 @@ export const HomeScreenView: React.FC = () => {
           ]}
         >
           <View style={styles.prefBannerLeft}>
-            <Text style={styles.prefBannerIcon}>{applyUserPreferences ? '🎯' : '🌐'}</Text>
+            <Icon
+              name={applyUserPreferences ? 'sparkles' : 'globe'}
+              size={18}
+              color={colors.primary}
+            />
             <View style={{ flex: 1 }}>
               <Text style={[styles.prefBannerTitle, { color: colors.textPrimary }]}>
                 {applyUserPreferences
@@ -458,18 +467,22 @@ export const HomeScreenView: React.FC = () => {
                 {
                   backgroundColor: applyUserPreferences ? colors.primary : colors.bgSubtle,
                   borderColor: applyUserPreferences ? colors.primary : colors.borderLight,
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: 4,
                 },
               ]}
               onPress={() => setApplyUserPreferences(!applyUserPreferences)}
               activeOpacity={0.7}
             >
+              {applyUserPreferences && <Icon name="check-circle" size={12} color="#FFFFFF" />}
               <Text
                 style={[
                   styles.prefToggleBtnText,
                   { color: applyUserPreferences ? '#FFFFFF' : colors.textPrimary },
                 ]}
               >
-                {applyUserPreferences ? 'Preferences On ✓' : 'Filter by Me'}
+                {applyUserPreferences ? 'Preferences On' : 'Filter by Me'}
               </Text>
             </TouchableOpacity>
 
@@ -481,7 +494,7 @@ export const HomeScreenView: React.FC = () => {
               onPress={() => setPreferencesModalVisible(true)}
               activeOpacity={0.7}
             >
-              <Text style={{ fontSize: 13 }}>⚙️</Text>
+              <Icon name="settings" size={14} color={colors.textPrimary} />
             </TouchableOpacity>
           </View>
         </View>
@@ -505,26 +518,37 @@ export const HomeScreenView: React.FC = () => {
             onPress={() => setActiveFilterModal('diet')}
             activeOpacity={0.7}
           >
-            <Text
-              style={[
-                styles.minimalistFilterBtnText,
-                {
-                  color:
-                    dietFilter !== 'all' || (applyUserPreferences && preferences.dietType !== 'all')
-                      ? colors.primary
-                      : colors.textPrimary,
-                },
-              ]}
-              numberOfLines={1}
-            >
-              🥗{' '}
-              {dietFilter === 'all'
-                ? applyUserPreferences && preferences.dietType !== 'all'
-                  ? preferences.dietType.toUpperCase()
-                  : 'Diets'
-                : dietFilter.toUpperCase()}
-            </Text>
-            <Text style={{ fontSize: 10, color: colors.textMuted, marginLeft: 4 }}>▼</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+              <Icon
+                name="restaurant"
+                size={14}
+                color={
+                  dietFilter !== 'all' || (applyUserPreferences && preferences.dietType !== 'all')
+                    ? colors.primary
+                    : colors.textSecondary
+                }
+              />
+              <Text
+                style={[
+                  styles.minimalistFilterBtnText,
+                  {
+                    color:
+                      dietFilter !== 'all' ||
+                      (applyUserPreferences && preferences.dietType !== 'all')
+                        ? colors.primary
+                        : colors.textPrimary,
+                  },
+                ]}
+                numberOfLines={1}
+              >
+                {dietFilter === 'all'
+                  ? applyUserPreferences && preferences.dietType !== 'all'
+                    ? preferences.dietType.toUpperCase()
+                    : 'Diets'
+                  : dietFilter.toUpperCase()}
+              </Text>
+              <Icon name="chevron-down" size={12} color={colors.textMuted} />
+            </View>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -539,16 +563,23 @@ export const HomeScreenView: React.FC = () => {
             onPress={() => setActiveFilterModal('cuisine')}
             activeOpacity={0.7}
           >
-            <Text
-              style={[
-                styles.minimalistFilterBtnText,
-                { color: selectedCuisine !== 'All' ? colors.primary : colors.textPrimary },
-              ]}
-              numberOfLines={1}
-            >
-              🥘 {selectedCuisine === 'All' ? 'Cuisines' : selectedCuisine}
-            </Text>
-            <Text style={{ fontSize: 10, color: colors.textMuted, marginLeft: 4 }}>▼</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+              <Icon
+                name="globe"
+                size={14}
+                color={selectedCuisine !== 'All' ? colors.primary : colors.textSecondary}
+              />
+              <Text
+                style={[
+                  styles.minimalistFilterBtnText,
+                  { color: selectedCuisine !== 'All' ? colors.primary : colors.textPrimary },
+                ]}
+                numberOfLines={1}
+              >
+                {selectedCuisine === 'All' ? 'Cuisines' : selectedCuisine}
+              </Text>
+              <Icon name="chevron-down" size={12} color={colors.textMuted} />
+            </View>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -563,16 +594,23 @@ export const HomeScreenView: React.FC = () => {
             onPress={() => setActiveFilterModal('dish')}
             activeOpacity={0.7}
           >
-            <Text
-              style={[
-                styles.minimalistFilterBtnText,
-                { color: selectedDishCategory !== 'All' ? colors.primary : colors.textPrimary },
-              ]}
-              numberOfLines={1}
-            >
-              🍽️ {selectedDishCategory === 'All' ? 'Dishes' : selectedDishCategory}
-            </Text>
-            <Text style={{ fontSize: 10, color: colors.textMuted, marginLeft: 4 }}>▼</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+              <Icon
+                name="fast-food"
+                size={14}
+                color={selectedDishCategory !== 'All' ? colors.primary : colors.textSecondary}
+              />
+              <Text
+                style={[
+                  styles.minimalistFilterBtnText,
+                  { color: selectedDishCategory !== 'All' ? colors.primary : colors.textPrimary },
+                ]}
+                numberOfLines={1}
+              >
+                {selectedDishCategory === 'All' ? 'Dishes' : selectedDishCategory}
+              </Text>
+              <Icon name="chevron-down" size={12} color={colors.textMuted} />
+            </View>
           </TouchableOpacity>
         </View>
 
@@ -589,17 +627,26 @@ export const HomeScreenView: React.FC = () => {
                 {
                   borderColor: isSortDropdownOpen ? colors.primary : colors.borderLight,
                   backgroundColor: colors.bgSurface,
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: 6,
                 },
               ]}
               activeOpacity={0.8}
             >
+              <Icon
+                name={SORT_OPTIONS.find((s) => s.id === sortBy)?.icon || 'flame'}
+                size={14}
+                color={colors.primary}
+              />
               <Text style={[styles.sortBtnText, { color: colors.textPrimary }]}>
-                {SORT_OPTIONS.find((s) => s.id === sortBy)?.icon} Sort:{' '}
-                {SORT_OPTIONS.find((s) => s.id === sortBy)?.label}
+                Sort: {SORT_OPTIONS.find((s) => s.id === sortBy)?.label}
               </Text>
-              <Text style={{ fontSize: 10, color: colors.textMuted, marginLeft: 6 }}>
-                {isSortDropdownOpen ? '▲' : '▼'}
-              </Text>
+              <Icon
+                name={isSortDropdownOpen ? 'chevron-up' : 'chevron-down'}
+                size={12}
+                color={colors.textMuted}
+              />
             </TouchableOpacity>
 
             {/* Sort Dropdown List */}
@@ -631,7 +678,13 @@ export const HomeScreenView: React.FC = () => {
                       }}
                       activeOpacity={0.7}
                     >
-                      <Text style={{ fontSize: 14, marginRight: 8 }}>{opt.icon}</Text>
+                      <View style={{ marginRight: 8 }}>
+                        <Icon
+                          name={opt.icon}
+                          size={15}
+                          color={isSelected ? colors.primary : colors.textSecondary}
+                        />
+                      </View>
                       <Text
                         style={[
                           styles.sortDropdownItemText,
@@ -644,11 +697,9 @@ export const HomeScreenView: React.FC = () => {
                         {opt.label}
                       </Text>
                       {isSelected && (
-                        <Text
-                          style={{ color: colors.primary, fontWeight: '800', marginLeft: 'auto' }}
-                        >
-                          ✓
-                        </Text>
+                        <View style={{ marginLeft: 'auto' }}>
+                          <Icon name="check" size={14} color={colors.primary} />
+                        </View>
                       )}
                     </TouchableOpacity>
                   );
@@ -697,7 +748,7 @@ export const HomeScreenView: React.FC = () => {
             <View style={styles.sectionHeaderRow}>
               <View>
                 <Text style={[styles.sectionHeading, { color: colors.textPrimary }]}>
-                  Global Street Eats & Foreign Specials 🍔🍕🌮
+                  Global Street Eats & Foreign Specials
                 </Text>
                 <Text style={[styles.sectionSubtitle, { color: colors.textSecondary }]}>
                   Smash burgers, fermented sourdough pizzas, Birria tacos, burrito bowls & pastas
@@ -730,7 +781,7 @@ export const HomeScreenView: React.FC = () => {
             <View style={styles.sectionHeaderRow}>
               <View>
                 <Text style={[styles.sectionHeading, { color: colors.textPrimary }]}>
-                  Recommended for You ✨
+                  Recommended for You
                 </Text>
                 <Text style={[styles.sectionSubtitle, { color: colors.textSecondary }]}>
                   Curated according to your {preferences.dietType.toUpperCase()} profile
@@ -776,7 +827,9 @@ export const HomeScreenView: React.FC = () => {
                 { backgroundColor: colors.bgSurface, borderColor: colors.borderLight },
               ]}
             >
-              <Text style={{ fontSize: 36, marginBottom: 8 }}>🍽️</Text>
+              <View style={{ marginBottom: 12 }}>
+                <Icon name="restaurant" size={40} color={colors.textMuted} />
+              </View>
               <Text style={[styles.emptyKitsTitle, { color: colors.textPrimary }]}>
                 No dishes match your active filters
               </Text>
@@ -851,9 +904,9 @@ export const HomeScreenView: React.FC = () => {
           >
             <View style={styles.filterModalHeader}>
               <Text style={[styles.filterModalTitle, { color: colors.textPrimary }]}>
-                {activeFilterModal === 'diet' && 'Select Dietary Preference 🥗'}
-                {activeFilterModal === 'cuisine' && 'Select Preferred Cuisine 🥘'}
-                {activeFilterModal === 'dish' && 'Select Dish Category 🍽️'}
+                {activeFilterModal === 'diet' && 'Select Dietary Preference'}
+                {activeFilterModal === 'cuisine' && 'Select Preferred Cuisine'}
+                {activeFilterModal === 'dish' && 'Select Dish Category'}
               </Text>
               <TouchableOpacity
                 onPress={() => {
@@ -889,7 +942,13 @@ export const HomeScreenView: React.FC = () => {
                       }}
                       activeOpacity={0.7}
                     >
-                      <Text style={{ fontSize: 18, marginRight: 10 }}>{opt.emoji}</Text>
+                      <View style={{ marginRight: 10 }}>
+                        <Icon
+                          name={opt.icon}
+                          size={20}
+                          color={isSelected ? colors.primary : colors.textSecondary}
+                        />
+                      </View>
                       <Text
                         style={[
                           styles.filterModalRowText,
@@ -902,11 +961,9 @@ export const HomeScreenView: React.FC = () => {
                         {opt.label}
                       </Text>
                       {isSelected && (
-                        <Text
-                          style={{ color: colors.primary, fontWeight: '800', marginLeft: 'auto' }}
-                        >
-                          ✓
-                        </Text>
+                        <View style={{ marginLeft: 'auto' }}>
+                          <Icon name="check" size={16} color={colors.primary} />
+                        </View>
                       )}
                     </TouchableOpacity>
                   );
@@ -931,7 +988,13 @@ export const HomeScreenView: React.FC = () => {
                       }}
                       activeOpacity={0.7}
                     >
-                      <Text style={{ fontSize: 18, marginRight: 10 }}>{opt.emoji}</Text>
+                      <View style={{ marginRight: 10 }}>
+                        <Icon
+                          name={opt.icon}
+                          size={20}
+                          color={isSelected ? colors.primary : colors.textSecondary}
+                        />
+                      </View>
                       <Text
                         style={[
                           styles.filterModalRowText,
@@ -944,11 +1007,9 @@ export const HomeScreenView: React.FC = () => {
                         {opt.label}
                       </Text>
                       {isSelected && (
-                        <Text
-                          style={{ color: colors.primary, fontWeight: '800', marginLeft: 'auto' }}
-                        >
-                          ✓
-                        </Text>
+                        <View style={{ marginLeft: 'auto' }}>
+                          <Icon name="check" size={16} color={colors.primary} />
+                        </View>
                       )}
                     </TouchableOpacity>
                   );
@@ -973,7 +1034,13 @@ export const HomeScreenView: React.FC = () => {
                       }}
                       activeOpacity={0.7}
                     >
-                      <Text style={{ fontSize: 18, marginRight: 10 }}>{opt.emoji}</Text>
+                      <View style={{ marginRight: 10 }}>
+                        <Icon
+                          name={opt.icon}
+                          size={20}
+                          color={isSelected ? colors.primary : colors.textSecondary}
+                        />
+                      </View>
                       <Text
                         style={[
                           styles.filterModalRowText,
@@ -986,11 +1053,9 @@ export const HomeScreenView: React.FC = () => {
                         {opt.label}
                       </Text>
                       {isSelected && (
-                        <Text
-                          style={{ color: colors.primary, fontWeight: '800', marginLeft: 'auto' }}
-                        >
-                          ✓
-                        </Text>
+                        <View style={{ marginLeft: 'auto' }}>
+                          <Icon name="check" size={16} color={colors.primary} />
+                        </View>
                       )}
                     </TouchableOpacity>
                   );
@@ -1048,7 +1113,11 @@ const MealKitCard: React.FC<{
             onPress={onToggleFavorite}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
-            <Text style={{ fontSize: 16 }}>{isFavorite ? '❤️' : '🤍'}</Text>
+            <Icon
+              name={isFavorite ? 'heart' : 'heart-outline'}
+              size={18}
+              color={isFavorite ? '#EF4444' : '#64748B'}
+            />
           </TouchableOpacity>
         </View>
 

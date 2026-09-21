@@ -4,6 +4,7 @@ import { useAuth } from '../../framework/context/AuthContext';
 import { Button } from '../../framework/ui/Button';
 import { Input } from '../../framework/ui/Input';
 import { Card } from '../../framework/ui/Card';
+import { Icon } from '../../framework/ui/Icon';
 
 export interface PhoneLoginFormProps {
   onSuccess?: () => void;
@@ -83,7 +84,8 @@ export const PhoneLoginForm: React.FC<PhoneLoginFormProps> = ({ onSuccess }) => 
 
       {errorMsg ? (
         <View style={styles.errorBox}>
-          <Text style={styles.errorText}>⚠️ {errorMsg}</Text>
+          <Icon name="alert" size={16} color="#DC2626" />
+          <Text style={styles.errorText}>{errorMsg}</Text>
         </View>
       ) : null}
 
@@ -169,6 +171,9 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   errorBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
     backgroundColor: '#FEF2F2',
     borderColor: '#FCA5A5',
     borderWidth: 1,

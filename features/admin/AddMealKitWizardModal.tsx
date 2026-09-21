@@ -22,8 +22,19 @@ import {
 } from '../../framework/services/mealKitsService';
 import { Button } from '../../framework/ui/Button';
 import { Badge, getDietBadgeInfo } from '../../framework/ui/Badge';
+import { Icon, AppIconName } from '../../framework/ui/Icon';
 import { estimateNutritionWithAI, NutritionEstimationResult } from './nutritionEstimatorService';
-import { generateDishPhotoWithAI } from './aiPhotoGeneratorService';
+import {
+  generateDishPhotoWithAI,
+  generateStepPhotoWithAI,
+  AI_STEP_PREPARATION_PRESETS,
+} from './aiPhotoGeneratorService';
+import {
+  RecipeCardFrontView,
+  RecipeCardBackView,
+  RecipeCardPrintModal,
+  triggerRecipeCardPrint,
+} from './RecipeCardPrintModal';
 
 export interface AddMealKitWizardModalProps {
   visible: boolean;
@@ -121,7 +132,7 @@ export const AddMealKitWizardModal: React.FC<AddMealKitWizardModalProps> = ({
             if (evt.target?.result) {
               setHeroImage(evt.target.result as string);
               setPhotoBadge('Uploaded Photo');
-              Alert.alert('Photo Uploaded! 📸', 'Your custom dish presentation photo is ready.');
+              Alert.alert('Photo Uploaded', 'Your custom dish presentation photo is ready.');
             }
           };
           reader.readAsDataURL(file);
@@ -148,7 +159,7 @@ export const AddMealKitWizardModal: React.FC<AddMealKitWizardModalProps> = ({
       setHeroImage(result.imageUrl);
       setPhotoBadge(`AI Generated (${result.presentationStyle})`);
       Alert.alert(
-        'AI Photo Generated! ✨',
+        'AI Photo Generated',
         `Gourmet presentation photo generated for "${name || 'your recipe'}".`,
       );
     } catch {
@@ -192,6 +203,7 @@ export const AddMealKitWizardModal: React.FC<AddMealKitWizardModalProps> = ({
       instruction: string;
       timerSeconds?: number;
       tip?: string;
+      imageUrl?: string;
     }[]
   >(
     initialKit?.recipeSteps || [
@@ -202,6 +214,8 @@ export const AddMealKitWizardModal: React.FC<AddMealKitWizardModalProps> = ({
           'Heat 2 tbsp ghee or oil in a pan. Empty Sachet 1 (Khada Spices) and sizzle for 45 seconds until fragrant.',
         timerSeconds: 45,
         tip: 'Keep flame low so whole spices release aromatics without browning.',
+        imageUrl:
+          'https://images.unsplash.com/photo-1596797038530-2c107229654b?auto=format&fit=crop&w=800&q=80',
       },
       {
         stepNumber: 2,
@@ -210,6 +224,8 @@ export const AddMealKitWizardModal: React.FC<AddMealKitWizardModalProps> = ({
           'Pour in Sachet 2 (Chef Gravy Base) with 100ml warm water. Bring to a gentle boil for 4-5 minutes.',
         timerSeconds: 300,
         tip: 'Stir occasionally to create a silky, velvety restaurant texture.',
+        imageUrl:
+          'https://images.unsplash.com/photo-1631452180519-c014fe946bc7?auto=format&fit=crop&w=800&q=80',
       },
       {
         stepNumber: 3,
@@ -218,6 +234,8 @@ export const AddMealKitWizardModal: React.FC<AddMealKitWizardModalProps> = ({
           'Fold in the diced paneer cubes or vegetables. Simmer gently for 3 minutes. Garnish with fresh cream.',
         timerSeconds: 180,
         tip: 'Do not overcook paneer so it remains melt-in-the-mouth tender.',
+        imageUrl:
+          'https://images.unsplash.com/photo-1626777552726-4a6b54c97e46?auto=format&fit=crop&w=800&q=80',
       },
     ],
   );
@@ -225,6 +243,18 @@ export const AddMealKitWizardModal: React.FC<AddMealKitWizardModalProps> = ({
   const [newStepInstruction, setNewStepInstruction] = useState('');
   const [newStepMinutes, setNewStepMinutes] = useState('3');
   const [newStepTip, setNewStepTip] = useState('');
+
+  // Step 3 Photo Management State (Upload, Presets & AI Contextual Generation)
+  type StepPhotoMode = 'ai' | 'upload' | 'presets';
+  const [newStepPhotoMode, setNewStepPhotoMode] = useState<StepPhotoMode>('ai');
+  const [newStepPhotoUrl, setNewStepPhotoUrl] = useState('');
+  const [customStepPhotoUrl, setCustomStepPhotoUrl] = useState('');
+  const [isGeneratingStepPhoto, setIsGeneratingStepPhoto] = useState(false);
+  const [stepAiBadge, setStepAiBadge] = useState('');
+
+  // Live Card Preview in Step 3
+  const [cardPreviewSide, setCardPreviewSide] = useState<'front' | 'back'>('front');
+  const [printModalVisible, setPrintModalVisible] = useState(false);
 
   // Step 4: AI Nutrition Estimator
   const [nutrition, setNutrition] = useState<NutritionFacts>(
@@ -264,7 +294,106 @@ export const AddMealKitWizardModal: React.FC<AddMealKitWizardModalProps> = ({
     setIngredients((prev) => prev.filter((_, i) => i !== index));
   };
 
-  // Add recipe step
+  // Upload step preparation photo from device
+  const handleUploadStepPhoto = () => {
+    if (Platform.OS === 'web' && typeof document !== 'undefined') {
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = 'image/*';
+      input.onchange = (e: any) => {
+        const file = e.target?.files?.[0];
+        if (file) {
+          const reader = new FileReader();
+          reader.onload = (evt) => {
+            if (evt.target?.result) {
+              setNewStepPhotoUrl(evt.target.result as string);
+              setStepAiBadge('Custom Uploaded Photo');
+              Alert.alert('Step Photo Attached', 'Preparation step photo ready.');
+            }
+          };
+          reader.readAsDataURL(file);
+        }
+      };
+      input.click();
+    } else {
+      Alert.alert('Upload Photo', 'Please paste the image URL below or select AI Generation.');
+    }
+  };
+
+  // AI Step Photo Generation: synthesizes dish name, all ingredients from step 2,
+  // and all previous cooking instructions to create the most accurate culinary stage photo
+  const handleGenerateStepAiPhoto = async () => {
+    if (!newStepTitle.trim() && !newStepInstruction.trim()) {
+      Alert.alert(
+        'Step Details Needed',
+        'Please enter at least a step title or cooking instruction so the AI can read what stage is being prepared!',
+      );
+      return;
+    }
+
+    setIsGeneratingStepPhoto(true);
+    try {
+      const result = await generateStepPhotoWithAI({
+        dishName: name || 'Artisanal Indian Recipe',
+        cuisine,
+        diet,
+        stepNumber: recipeSteps.length + 1,
+        stepTitle: newStepTitle.trim() || `Step ${recipeSteps.length + 1}`,
+        stepInstruction: newStepInstruction.trim() || newStepTitle.trim(),
+        allIngredients: ingredients,
+        previousSteps: recipeSteps,
+      });
+      setNewStepPhotoUrl(result.imageUrl);
+      setStepAiBadge(result.presentationStyle);
+      Alert.alert(
+        'AI Step Photo Generated',
+        `Generated reference photo based on ${ingredients.length} ingredients and ${recipeSteps.length} previous instructions (${result.presentationStyle}).`,
+      );
+    } catch {
+      Alert.alert('Notice', 'Using chef preparation library.');
+    } finally {
+      setIsGeneratingStepPhoto(false);
+    }
+  };
+
+  // Regenerate an existing step's photo using AI
+  const handleRegenerateExistingStepPhoto = async (stepNumber: number) => {
+    const targetStep = recipeSteps.find((s) => s.stepNumber === stepNumber);
+    if (!targetStep) return;
+    const priorSteps = recipeSteps.filter((s) => s.stepNumber < stepNumber);
+
+    try {
+      const result = await generateStepPhotoWithAI({
+        dishName: name || 'Artisanal Indian Recipe',
+        cuisine,
+        diet,
+        stepNumber: targetStep.stepNumber,
+        stepTitle: targetStep.title,
+        stepInstruction: targetStep.instruction,
+        allIngredients: ingredients,
+        previousSteps: priorSteps,
+      });
+      setRecipeSteps((prev) =>
+        prev.map((s) => (s.stepNumber === stepNumber ? { ...s, imageUrl: result.imageUrl } : s)),
+      );
+      Alert.alert(
+        'Step Photo Refreshed',
+        `AI updated photo for Step ${stepNumber} (${result.presentationStyle}).`,
+      );
+    } catch {
+      Alert.alert('Notice', 'Existing photo kept.');
+    }
+  };
+
+  const handleApplyCustomStepUrl = () => {
+    if (!customStepPhotoUrl.trim()) return;
+    setNewStepPhotoUrl(customStepPhotoUrl.trim());
+    setStepAiBadge('Custom Web URL');
+    setCustomStepPhotoUrl('');
+    Alert.alert('Photo Updated', 'Custom step image URL applied.');
+  };
+
+  // Add recipe step (with photo)
   const handleAddStep = () => {
     if (!newStepTitle.trim() || !newStepInstruction.trim()) {
       Alert.alert('Incomplete Step', 'Please enter a step title and cooking instruction.');
@@ -277,12 +406,16 @@ export const AddMealKitWizardModal: React.FC<AddMealKitWizardModalProps> = ({
       instruction: newStepInstruction.trim(),
       timerSeconds: mins > 0 ? Math.round(mins * 60) : undefined,
       tip: newStepTip.trim() || undefined,
+      imageUrl: newStepPhotoUrl || undefined,
     };
     setRecipeSteps((prev) => [...prev, nextStep]);
     setNewStepTitle('');
     setNewStepInstruction('');
     setNewStepMinutes('3');
     setNewStepTip('');
+    setNewStepPhotoUrl('');
+    setCustomStepPhotoUrl('');
+    setStepAiBadge('');
   };
 
   const handleRemoveStep = (stepNumber: number) => {
@@ -366,10 +499,50 @@ export const AddMealKitWizardModal: React.FC<AddMealKitWizardModalProps> = ({
 
     onSaveKit(savedKit);
     Alert.alert(
-      'Meal Kit Published! 🎉',
+      'Meal Kit Published',
       `"${savedKit.name}" is now live in your RasoiGenie catalog with AI-calculated nutrition facts.`,
     );
     onClose();
+  };
+
+  const currentKitForPreview: MealKit = {
+    id: initialKit?.id || 'kit-preview',
+    name: name.trim() || 'Artisanal Indian Recipe',
+    hindiName: hindiName.trim() || undefined,
+    slug: (name || 'recipe').toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+    tagline: tagline.trim() || 'Chef handcrafted gourmet meal kit with exact portioned masalas',
+    description: `${name || 'Dish'} kit carefully prepared by master chefs with fresh ingredients and authentic masala sachets.`,
+    heroImage:
+      heroImage ||
+      'https://images.unsplash.com/photo-1631452180519-c014fe946bc7?auto=format&fit=crop&w=800&q=80',
+    galleryImages: [heroImage],
+    price: parseInt(price) || 299,
+    servings: parseInt(servings) || 2,
+    prepTimeMinutes: parseInt(prepTime) || 10,
+    cookTimeMinutes: parseInt(cookTime) || 20,
+    diet,
+    cuisine,
+    spiceLevel,
+    difficulty: 'Easy',
+    dietaryTags: [diet],
+    availableRegions: ['North', 'South', 'West', 'East'],
+    stockByRegion: { North: 50, South: 50, West: 50, East: 50 },
+    rating: 5.0,
+    reviewCount: 1,
+    nutrition,
+    allergens: diet === 'nonveg' ? [] : ['Dairy'],
+    ingredients: ingredients.map((i) => ({
+      name: i.name,
+      quantity: i.quantity,
+      isMasalaSachet: i.isMasalaSachet,
+    })),
+    masalaSachets: ingredients.filter((i) => i.isMasalaSachet).map((i) => i.name),
+    recipeSteps: recipeSteps.map((s) => ({
+      ...s,
+      imageUrl: s.imageUrl || heroImage,
+    })),
+    reviews: [],
+    salesByRegion: { Maharashtra: 120 },
   };
 
   return (
@@ -383,11 +556,11 @@ export const AddMealKitWizardModal: React.FC<AddMealKitWizardModalProps> = ({
           ]}
         >
           <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
-            <Text style={[styles.closeBtnText, { color: colors.textPrimary }]}>✕ Cancel</Text>
+            <Text style={[styles.closeBtnText, { color: colors.textPrimary }]}>Cancel</Text>
           </TouchableOpacity>
           <View style={{ alignItems: 'center' }}>
             <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>
-              👨‍🍳 Chef Recipe Builder
+              Chef Recipe Builder
             </Text>
             <Text style={[styles.headerSubtitle, { color: colors.primary }]}>
               {initialKit ? 'Edit Meal Kit' : 'Create Custom Meal Kit'}
@@ -404,11 +577,11 @@ export const AddMealKitWizardModal: React.FC<AddMealKitWizardModalProps> = ({
         {/* Wizard Step Progress Bar */}
         <View style={[styles.stepNavBar, { backgroundColor: colors.bgSurface }]}>
           {[
-            { step: 1, label: '1. Dish Info', icon: '🍲' },
-            { step: 2, label: '2. Ingredients', icon: '🧂' },
-            { step: 3, label: '3. Recipe Steps', icon: '📋' },
-            { step: 4, label: '4. AI Nutrition', icon: '🤖' },
-            { step: 5, label: '5. Preview', icon: '✨' },
+            { step: 1, label: '1. Dish Info', icon: 'restaurant' as AppIconName },
+            { step: 2, label: '2. Ingredients', icon: 'nutrition' as AppIconName },
+            { step: 3, label: '3. Recipe Steps', icon: 'document-text' as AppIconName },
+            { step: 4, label: '4. AI Nutrition', icon: 'sparkles' as AppIconName },
+            { step: 5, label: '5. Preview', icon: 'eye' as AppIconName },
           ].map((s) => {
             const isActive = currentStep === s.step;
             const isCompleted = currentStep > s.step;
@@ -421,7 +594,13 @@ export const AddMealKitWizardModal: React.FC<AddMealKitWizardModalProps> = ({
                   isActive && { borderBottomColor: colors.primary, borderBottomWidth: 3 },
                 ]}
               >
-                <Text style={styles.stepTabIcon}>{s.icon}</Text>
+                <View style={{ marginBottom: 2 }}>
+                  <Icon
+                    name={s.icon}
+                    size={16}
+                    color={isActive ? colors.primary : colors.textMuted}
+                  />
+                </View>
                 <Text
                   style={[
                     styles.stepTabLabel,
@@ -454,7 +633,7 @@ export const AddMealKitWizardModal: React.FC<AddMealKitWizardModalProps> = ({
                 style={[styles.card, { backgroundColor: colors.bgSurface, borderRadius: radii.xl }]}
               >
                 <Text style={[styles.sectionHeading, { color: colors.textPrimary }]}>
-                  🍲 What dish are you crafting?
+                  What dish are you crafting?
                 </Text>
                 <Text style={[styles.sectionHint, { color: colors.textSecondary }]}>
                   Give your meal kit a mouth-watering title and culinary details.
@@ -653,7 +832,7 @@ export const AddMealKitWizardModal: React.FC<AddMealKitWizardModalProps> = ({
                         { color: colors.textPrimary, marginTop: 0, marginBottom: 0 },
                       ]}
                     >
-                      📸 Dish Presentation Photo
+                      Dish Presentation Photo
                     </Text>
                     <Badge label={photoBadge} variant="accent" />
                   </View>
@@ -676,7 +855,7 @@ export const AddMealKitWizardModal: React.FC<AddMealKitWizardModalProps> = ({
                           { color: photoMode === 'ai' ? '#fff' : colors.textPrimary },
                         ]}
                       >
-                        ✨ Generate with AI
+                        Generate with AI
                       </Text>
                     </TouchableOpacity>
 
@@ -696,7 +875,7 @@ export const AddMealKitWizardModal: React.FC<AddMealKitWizardModalProps> = ({
                           { color: photoMode === 'upload' ? '#fff' : colors.textPrimary },
                         ]}
                       >
-                        📤 Upload / URL
+                        Upload / URL
                       </Text>
                     </TouchableOpacity>
 
@@ -716,7 +895,7 @@ export const AddMealKitWizardModal: React.FC<AddMealKitWizardModalProps> = ({
                           { color: photoMode === 'presets' ? '#fff' : colors.textPrimary },
                         ]}
                       >
-                        🖼️ Presets
+                        Presets
                       </Text>
                     </TouchableOpacity>
                   </View>
@@ -736,9 +915,9 @@ export const AddMealKitWizardModal: React.FC<AddMealKitWizardModalProps> = ({
                       </Text>
                       <View style={{ flexDirection: 'row', gap: 6, marginBottom: 10 }}>
                         {[
-                          { key: 'handi', label: '🍲 Brass Handi' },
-                          { key: 'finedining', label: '🍽️ Fine Dining' },
-                          { key: 'flatlay', label: '🍱 Kit Box Flatlay' },
+                          { key: 'handi', label: 'Brass Handi' },
+                          { key: 'finedining', label: 'Fine Dining' },
+                          { key: 'flatlay', label: 'Kit Box Flatlay' },
                         ].map((s) => (
                           <TouchableOpacity
                             key={s.key}
@@ -774,9 +953,7 @@ export const AddMealKitWizardModal: React.FC<AddMealKitWizardModalProps> = ({
                         {isGeneratingPhoto ? (
                           <ActivityIndicator color="#fff" />
                         ) : (
-                          <Text style={styles.aiGenerateBtnText}>
-                            ✨ Generate Dish Photo with AI
-                          </Text>
+                          <Text style={styles.aiGenerateBtnText}>Generate Dish Photo with AI</Text>
                         )}
                       </TouchableOpacity>
                     </View>
@@ -793,7 +970,9 @@ export const AddMealKitWizardModal: React.FC<AddMealKitWizardModalProps> = ({
                           { borderColor: colors.primary, backgroundColor: colors.bgSurface },
                         ]}
                       >
-                        <Text style={{ fontSize: 22, marginBottom: 4 }}>📁</Text>
+                        <View style={{ marginBottom: 4 }}>
+                          <Icon name="folder" size={22} color={colors.primary} />
+                        </View>
                         <Text style={[styles.deviceUploadText, { color: colors.primary }]}>
                           Click to Upload from Device / Files
                         </Text>
@@ -896,7 +1075,7 @@ export const AddMealKitWizardModal: React.FC<AddMealKitWizardModalProps> = ({
               </View>
 
               <Button
-                title="Next: Add Ingredients 🧂 →"
+                title="Next: Add Ingredients"
                 size="lg"
                 onPress={() => setCurrentStep(2)}
                 style={{ marginTop: 16 }}
@@ -911,7 +1090,7 @@ export const AddMealKitWizardModal: React.FC<AddMealKitWizardModalProps> = ({
                 style={[styles.card, { backgroundColor: colors.bgSurface, borderRadius: radii.xl }]}
               >
                 <Text style={[styles.sectionHeading, { color: colors.textPrimary }]}>
-                  🧂 Ingredients & Masala Sachets
+                  Ingredients & Masala Sachets
                 </Text>
                 <Text style={[styles.sectionHint, { color: colors.textSecondary }]}>
                   List all pre-portioned items packed into this meal kit box.
@@ -919,7 +1098,7 @@ export const AddMealKitWizardModal: React.FC<AddMealKitWizardModalProps> = ({
 
                 {/* Quick-Add Staples */}
                 <Text style={[styles.inputLabel, { color: colors.primary, marginTop: 4 }]}>
-                  ⚡ 1-Tap Quick Add Pantry Staples:
+                  1-Tap Quick Add Pantry Staples:
                 </Text>
                 <View style={styles.staplesRow}>
                   {COMMON_CHEF_STAPLES.map((staple, idx) => (
@@ -984,7 +1163,11 @@ export const AddMealKitWizardModal: React.FC<AddMealKitWizardModalProps> = ({
                       style={{ flexDirection: 'row', alignItems: 'center' }}
                     >
                       <Text style={{ fontSize: 16, marginRight: 6 }}>
-                        {newIngIsSachet ? '☑️' : '⬜'}
+                        <Icon
+                          name={newIngIsSachet ? 'checkbox' : 'square-outline'}
+                          size={16}
+                          color={newIngIsSachet ? colors.primary : colors.textMuted}
+                        />
                       </Text>
                       <Text style={{ fontSize: 12, fontWeight: '700', color: colors.textPrimary }}>
                         Packaged as Masala Sachet
@@ -1018,9 +1201,7 @@ export const AddMealKitWizardModal: React.FC<AddMealKitWizardModalProps> = ({
                           fontWeight: '700',
                         }}
                       >
-                        {ing.isMasalaSachet
-                          ? '✨ Chef Secret Masala Sachet'
-                          : '🥬 Fresh Produce / Base'}
+                        {ing.isMasalaSachet ? 'Chef Secret Masala Sachet' : 'Fresh Produce / Base'}
                       </Text>
                     </View>
                     <Badge
@@ -1031,9 +1212,7 @@ export const AddMealKitWizardModal: React.FC<AddMealKitWizardModalProps> = ({
                       onPress={() => handleRemoveIngredient(idx)}
                       style={styles.deleteIngBtn}
                     >
-                      <Text style={{ color: colors.danger, fontWeight: '900', fontSize: 14 }}>
-                        ✕
-                      </Text>
+                      <Icon name="close" size={14} color={colors.danger} />
                     </TouchableOpacity>
                   </View>
                 ))}
@@ -1047,7 +1226,7 @@ export const AddMealKitWizardModal: React.FC<AddMealKitWizardModalProps> = ({
                   onPress={() => setCurrentStep(1)}
                 />
                 <Button
-                  title="Next: Recipe Steps 📋 →"
+                  title="Next: Recipe Steps"
                   style={{ flex: 2 }}
                   onPress={() => setCurrentStep(3)}
                 />
@@ -1062,13 +1241,18 @@ export const AddMealKitWizardModal: React.FC<AddMealKitWizardModalProps> = ({
                 style={[styles.card, { backgroundColor: colors.bgSurface, borderRadius: radii.xl }]}
               >
                 <Text style={[styles.sectionHeading, { color: colors.textPrimary }]}>
-                  📋 Recipe Instructions For Home Cooks
+                  Recipe Instructions For Home Cooks
                 </Text>
                 <Text style={[styles.sectionHint, { color: colors.textSecondary }]}>
-                  Guide your customers step-by-step to cook like a master chef.
+                  Guide your customers step-by-step to cook like a master chef. Add reference photos
+                  to each step or generate them using AI.
                 </Text>
 
-                {/* Existing Steps */}
+                {/* Existing Steps with Photos */}
+                <Text style={[styles.inputLabel, { color: colors.textPrimary, marginTop: 10 }]}>
+                  Steps In This Recipe ({recipeSteps.length} steps):
+                </Text>
+
                 {recipeSteps.map((step) => (
                   <View
                     key={step.stepNumber}
@@ -1088,36 +1272,82 @@ export const AddMealKitWizardModal: React.FC<AddMealKitWizardModalProps> = ({
                         {step.title}
                       </Text>
                       <TouchableOpacity onPress={() => handleRemoveStep(step.stepNumber)}>
-                        <Text style={{ color: colors.danger, fontWeight: '800' }}>✕</Text>
+                        <Icon name="close" size={16} color={colors.danger} />
                       </TouchableOpacity>
                     </View>
 
-                    <Text style={[styles.recipeStepText, { color: colors.textSecondary }]}>
-                      {step.instruction}
-                    </Text>
+                    {/* Step Photo & Details Split */}
+                    <View style={{ flexDirection: 'row', gap: 10, marginVertical: 6 }}>
+                      {step.imageUrl ? (
+                        <View style={styles.stepPhotoThumbWrapper}>
+                          <Image
+                            source={{ uri: step.imageUrl }}
+                            style={styles.stepPhotoThumb}
+                            resizeMode="cover"
+                          />
+                          <View style={styles.stepPhotoBadge}>
+                            <Text style={styles.stepPhotoBadgeText}>Step Photo</Text>
+                          </View>
+                        </View>
+                      ) : null}
 
-                    {step.tip && (
-                      <View style={styles.tipBox}>
-                        <Text
-                          style={{ fontSize: 11, color: colors.primaryDark, fontWeight: '600' }}
-                        >
-                          💡 Chef Tip: {step.tip}
+                      <View style={{ flex: 1 }}>
+                        <Text style={[styles.recipeStepText, { color: colors.textSecondary }]}>
+                          {step.instruction}
                         </Text>
-                      </View>
-                    )}
 
-                    {step.timerSeconds && (
-                      <Text
-                        style={{
-                          fontSize: 11,
-                          fontWeight: '700',
-                          color: colors.primary,
-                          marginTop: 4,
-                        }}
-                      >
-                        ⏱️ Timer: {Math.round(step.timerSeconds / 60)} minutes
-                      </Text>
-                    )}
+                        {step.tip ? (
+                          <View style={styles.tipBox}>
+                            <Text
+                              style={{ fontSize: 11, color: colors.primaryDark, fontWeight: '600' }}
+                            >
+                              Chef Tip: {step.tip}
+                            </Text>
+                          </View>
+                        ) : null}
+
+                        <View
+                          style={{
+                            flexDirection: 'row',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            marginTop: 6,
+                          }}
+                        >
+                          {step.timerSeconds ? (
+                            <Text
+                              style={{
+                                fontSize: 11,
+                                fontWeight: '700',
+                                color: colors.primary,
+                              }}
+                            >
+                              ⏱️ Timer: {Math.round(step.timerSeconds / 60)} mins
+                            </Text>
+                          ) : (
+                            <View />
+                          )}
+
+                          <TouchableOpacity
+                            onPress={() => handleRegenerateExistingStepPhoto(step.stepNumber)}
+                            style={{
+                              paddingHorizontal: 8,
+                              paddingVertical: 3,
+                              borderRadius: 6,
+                              backgroundColor: colors.bgSurface,
+                              borderWidth: 1,
+                              borderColor: colors.borderLight,
+                            }}
+                          >
+                            <Text
+                              style={{ fontSize: 10, fontWeight: '700', color: colors.primary }}
+                            >
+                              Regenerate AI Photo
+                            </Text>
+                          </TouchableOpacity>
+                        </View>
+                      </View>
+                    </View>
                   </View>
                 ))}
 
@@ -1125,7 +1355,7 @@ export const AddMealKitWizardModal: React.FC<AddMealKitWizardModalProps> = ({
                 <View
                   style={[
                     styles.addStepBox,
-                    { backgroundColor: colors.bgSubtle, borderRadius: radii.lg },
+                    { backgroundColor: colors.bgSubtle, borderRadius: radii.lg, marginTop: 14 },
                   ]}
                 >
                   <Text style={[styles.inputLabel, { color: colors.textPrimary, marginBottom: 8 }]}>
@@ -1136,7 +1366,7 @@ export const AddMealKitWizardModal: React.FC<AddMealKitWizardModalProps> = ({
                       styles.textInput,
                       { backgroundColor: colors.bgSurface, borderColor: colors.border },
                     ]}
-                    placeholder="Step Title (e.g. Sauté Onion Base)"
+                    placeholder="Step Title (e.g. Sauté Onion & Tomato Base)"
                     placeholderTextColor={colors.textMuted}
                     value={newStepTitle}
                     onChangeText={setNewStepTitle}
@@ -1153,7 +1383,7 @@ export const AddMealKitWizardModal: React.FC<AddMealKitWizardModalProps> = ({
                       },
                     ]}
                     multiline
-                    placeholder="What should the home cook do? (e.g. Heat oil, add aromatics, stir continuously for 3 mins)"
+                    placeholder="What should the home cook do? (e.g. Heat oil, empty Sachet 1, simmer for 3 mins until fragrant)"
                     placeholderTextColor={colors.textMuted}
                     value={newStepInstruction}
                     onChangeText={setNewStepInstruction}
@@ -1183,6 +1413,259 @@ export const AddMealKitWizardModal: React.FC<AddMealKitWizardModalProps> = ({
                     />
                   </View>
 
+                  {/* Step Photo Selection (AI, Upload, Presets) */}
+                  <View
+                    style={{
+                      marginTop: 12,
+                      padding: 10,
+                      backgroundColor: colors.bgSurface,
+                      borderRadius: radii.md,
+                      borderWidth: 1,
+                      borderColor: colors.borderLight,
+                    }}
+                  >
+                    <View
+                      style={{
+                        flexDirection: 'row',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        marginBottom: 6,
+                      }}
+                    >
+                      <Text style={{ fontSize: 12, fontWeight: '800', color: colors.textPrimary }}>
+                        Step Preparation Reference Photo:
+                      </Text>
+                      {stepAiBadge ? (
+                        <Badge label={stepAiBadge} variant="accent" size="sm" />
+                      ) : null}
+                    </View>
+
+                    {/* Mode Tabs */}
+                    <View style={styles.photoModeTabs}>
+                      <TouchableOpacity
+                        onPress={() => setNewStepPhotoMode('ai')}
+                        style={[
+                          styles.photoModeTab,
+                          newStepPhotoMode === 'ai' && {
+                            backgroundColor: colors.primary,
+                            borderColor: colors.primary,
+                          },
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.photoModeTabText,
+                            { color: newStepPhotoMode === 'ai' ? '#fff' : colors.textPrimary },
+                          ]}
+                        >
+                          Generate with AI
+                        </Text>
+                      </TouchableOpacity>
+
+                      <TouchableOpacity
+                        onPress={() => setNewStepPhotoMode('upload')}
+                        style={[
+                          styles.photoModeTab,
+                          newStepPhotoMode === 'upload' && {
+                            backgroundColor: colors.primary,
+                            borderColor: colors.primary,
+                          },
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.photoModeTabText,
+                            { color: newStepPhotoMode === 'upload' ? '#fff' : colors.textPrimary },
+                          ]}
+                        >
+                          Upload / URL
+                        </Text>
+                      </TouchableOpacity>
+
+                      <TouchableOpacity
+                        onPress={() => setNewStepPhotoMode('presets')}
+                        style={[
+                          styles.photoModeTab,
+                          newStepPhotoMode === 'presets' && {
+                            backgroundColor: colors.primary,
+                            borderColor: colors.primary,
+                          },
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.photoModeTabText,
+                            { color: newStepPhotoMode === 'presets' ? '#fff' : colors.textPrimary },
+                          ]}
+                        >
+                          Presets
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+
+                    {/* TAB 1: AI GENERATION */}
+                    {newStepPhotoMode === 'ai' && (
+                      <View style={{ paddingVertical: 4 }}>
+                        <Text
+                          style={{ fontSize: 11, color: colors.textSecondary, marginBottom: 8 }}
+                        >
+                          AI analyzes all ingredients ({ingredients.length} items), previous steps (
+                          {recipeSteps.length} steps), and this instruction to generate the most
+                          realistic preparation photo.
+                        </Text>
+
+                        <TouchableOpacity
+                          activeOpacity={0.85}
+                          onPress={handleGenerateStepAiPhoto}
+                          style={[styles.aiGenerateBtn, { backgroundColor: colors.primary }]}
+                        >
+                          {isGeneratingStepPhoto ? (
+                            <ActivityIndicator color="#fff" />
+                          ) : (
+                            <Text style={styles.aiGenerateBtnText}>
+                              Generate Step Photo with AI
+                            </Text>
+                          )}
+                        </TouchableOpacity>
+                      </View>
+                    )}
+
+                    {/* TAB 2: UPLOAD / URL */}
+                    {newStepPhotoMode === 'upload' && (
+                      <View style={{ paddingVertical: 4 }}>
+                        <TouchableOpacity
+                          activeOpacity={0.8}
+                          onPress={handleUploadStepPhoto}
+                          style={[
+                            styles.deviceUploadButton,
+                            {
+                              borderColor: colors.primary,
+                              backgroundColor: colors.bgSubtle,
+                              paddingVertical: 10,
+                            },
+                          ]}
+                        >
+                          <View style={{ marginBottom: 2 }}>
+                            <Icon name="folder" size={18} color={colors.primary} />
+                          </View>
+                          <Text
+                            style={[
+                              styles.deviceUploadText,
+                              { color: colors.primary, fontSize: 12 },
+                            ]}
+                          >
+                            Upload from Device / Files
+                          </Text>
+                        </TouchableOpacity>
+
+                        <View style={{ flexDirection: 'row', gap: 6, marginTop: 8 }}>
+                          <TextInput
+                            style={[
+                              styles.textInput,
+                              {
+                                flex: 1,
+                                backgroundColor: colors.bgSubtle,
+                                borderColor: colors.border,
+                              },
+                            ]}
+                            placeholder="Or paste photo URL (https://...)"
+                            placeholderTextColor={colors.textMuted}
+                            value={customStepPhotoUrl}
+                            onChangeText={setCustomStepPhotoUrl}
+                          />
+                          <Button title="Apply" size="sm" onPress={handleApplyCustomStepUrl} />
+                        </View>
+                      </View>
+                    )}
+
+                    {/* TAB 3: PRESETS */}
+                    {newStepPhotoMode === 'presets' && (
+                      <ScrollView
+                        horizontal
+                        showsHorizontalScrollIndicator={false}
+                        style={{ marginVertical: 6 }}
+                      >
+                        {AI_STEP_PREPARATION_PRESETS.map((p, idx) => (
+                          <TouchableOpacity
+                            key={idx}
+                            onPress={() => {
+                              setNewStepPhotoUrl(p.url);
+                              setStepAiBadge(p.phase);
+                            }}
+                            style={{
+                              marginRight: 8,
+                              width: 100,
+                              borderRadius: 6,
+                              overflow: 'hidden',
+                              borderWidth: newStepPhotoUrl === p.url ? 2 : 1,
+                              borderColor:
+                                newStepPhotoUrl === p.url ? colors.primary : colors.borderLight,
+                            }}
+                          >
+                            <Image
+                              source={{ uri: p.url }}
+                              style={{ width: 100, height: 60 }}
+                              resizeMode="cover"
+                            />
+                            <Text
+                              style={{
+                                fontSize: 9,
+                                fontWeight: '700',
+                                padding: 3,
+                                color: colors.textPrimary,
+                              }}
+                              numberOfLines={1}
+                            >
+                              {p.phase}
+                            </Text>
+                          </TouchableOpacity>
+                        ))}
+                      </ScrollView>
+                    )}
+
+                    {/* Attached Photo Preview */}
+                    {newStepPhotoUrl ? (
+                      <View
+                        style={{
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          backgroundColor: colors.bgSubtle,
+                          padding: 8,
+                          borderRadius: radii.md,
+                          marginTop: 8,
+                          borderWidth: 1,
+                          borderColor: colors.borderLight,
+                        }}
+                      >
+                        <Image
+                          source={{ uri: newStepPhotoUrl }}
+                          style={{ width: 60, height: 45, borderRadius: 6, marginRight: 10 }}
+                        />
+                        <View style={{ flex: 1 }}>
+                          <Text
+                            style={{ fontSize: 12, fontWeight: '800', color: colors.textPrimary }}
+                          >
+                            Photo Attached
+                          </Text>
+                          <Text style={{ fontSize: 10, color: colors.textMuted }} numberOfLines={1}>
+                            {stepAiBadge || 'Reference cooking stage photo'}
+                          </Text>
+                        </View>
+                        <TouchableOpacity
+                          onPress={() => {
+                            setNewStepPhotoUrl('');
+                            setStepAiBadge('');
+                          }}
+                          style={{ padding: 6 }}
+                        >
+                          <Text style={{ color: colors.danger, fontWeight: '800', fontSize: 12 }}>
+                            Clear
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
+                    ) : null}
+                  </View>
+
                   <Button
                     title="+ Append Cooking Step"
                     variant="outline"
@@ -1190,6 +1673,106 @@ export const AddMealKitWizardModal: React.FC<AddMealKitWizardModalProps> = ({
                     onPress={handleAddStep}
                     style={{ marginTop: 10 }}
                   />
+                </View>
+
+                {/* LIVE RECIPE CARD PREVIEW (ON INSTRUCTIONS PAGE) */}
+                <View
+                  style={{
+                    marginTop: 24,
+                    padding: 14,
+                    backgroundColor: colors.bgSubtle,
+                    borderRadius: radii.xl,
+                    borderWidth: 1.5,
+                    borderColor: colors.borderLight,
+                  }}
+                >
+                  <View
+                    style={{
+                      flexDirection: 'row',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      marginBottom: 10,
+                      flexWrap: 'wrap',
+                      gap: 8,
+                    }}
+                  >
+                    <View>
+                      <Text style={{ fontSize: 15, fontWeight: '900', color: colors.textPrimary }}>
+                        Customer Recipe Card Preview
+                      </Text>
+                      <Text style={{ fontSize: 11, color: colors.textSecondary }}>
+                        Real-time preview of the printed card that will come with the meal kit
+                        package.
+                      </Text>
+                    </View>
+
+                    <Button
+                      title="Print Test Card"
+                      variant="primary"
+                      size="sm"
+                      onPress={() => setPrintModalVisible(true)}
+                    />
+                  </View>
+
+                  {/* Front / Back Toggle Buttons */}
+                  <View style={{ flexDirection: 'row', gap: 8, marginBottom: 12 }}>
+                    <TouchableOpacity
+                      onPress={() => setCardPreviewSide('front')}
+                      style={{
+                        flex: 1,
+                        paddingVertical: 8,
+                        borderRadius: 8,
+                        backgroundColor:
+                          cardPreviewSide === 'front' ? colors.primary : colors.bgSurface,
+                        borderWidth: 1,
+                        borderColor:
+                          cardPreviewSide === 'front' ? colors.primary : colors.borderLight,
+                        alignItems: 'center',
+                      }}
+                    >
+                      <Text
+                        style={{
+                          fontSize: 12,
+                          fontWeight: '800',
+                          color: cardPreviewSide === 'front' ? '#fff' : colors.textPrimary,
+                        }}
+                      >
+                        Front Side (Ingredients & Nutrition)
+                      </Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      onPress={() => setCardPreviewSide('back')}
+                      style={{
+                        flex: 1,
+                        paddingVertical: 8,
+                        borderRadius: 8,
+                        backgroundColor:
+                          cardPreviewSide === 'back' ? colors.primary : colors.bgSurface,
+                        borderWidth: 1,
+                        borderColor:
+                          cardPreviewSide === 'back' ? colors.primary : colors.borderLight,
+                        alignItems: 'center',
+                      }}
+                    >
+                      <Text
+                        style={{
+                          fontSize: 12,
+                          fontWeight: '800',
+                          color: cardPreviewSide === 'back' ? '#fff' : colors.textPrimary,
+                        }}
+                      >
+                        Back Side (Steps & Photos)
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+
+                  {/* Visual Card View */}
+                  {cardPreviewSide === 'front' ? (
+                    <RecipeCardFrontView kit={currentKitForPreview} />
+                  ) : (
+                    <RecipeCardBackView kit={currentKitForPreview} />
+                  )}
                 </View>
               </View>
 
@@ -1201,7 +1784,7 @@ export const AddMealKitWizardModal: React.FC<AddMealKitWizardModalProps> = ({
                   onPress={() => setCurrentStep(2)}
                 />
                 <Button
-                  title="Next: AI Nutrition 🤖 →"
+                  title="Next: AI Nutrition"
                   style={{ flex: 2 }}
                   onPress={() => setCurrentStep(4)}
                 />
@@ -1216,7 +1799,7 @@ export const AddMealKitWizardModal: React.FC<AddMealKitWizardModalProps> = ({
                 style={[styles.card, { backgroundColor: colors.bgSurface, borderRadius: radii.xl }]}
               >
                 <Text style={[styles.sectionHeading, { color: colors.textPrimary }]}>
-                  🤖 AI Nutrition Value Estimator
+                  AI Nutrition Value Estimator
                 </Text>
                 <Text style={[styles.sectionHint, { color: colors.textSecondary }]}>
                   Our AI evaluates your listed ingredients and portions to calculate approximate
@@ -1233,7 +1816,7 @@ export const AddMealKitWizardModal: React.FC<AddMealKitWizardModalProps> = ({
                     <ActivityIndicator color="#fff" />
                   ) : (
                     <>
-                      <Text style={styles.aiActionIcon}>✨</Text>
+                      <Icon name="sparkles" size={16} color="#FFFFFF" />
                       <Text style={styles.aiActionText}>
                         Calculate Approximate Nutrition with AI
                       </Text>
@@ -1330,7 +1913,7 @@ export const AddMealKitWizardModal: React.FC<AddMealKitWizardModalProps> = ({
                     <Text
                       style={{ fontSize: 13, fontWeight: '800', color: '#166534', marginBottom: 6 }}
                     >
-                      🧠 AI Culinary Nutritional Analysis:
+                      AI Culinary Nutritional Analysis:
                     </Text>
                     <Text
                       style={{ fontSize: 12, fontWeight: '700', color: '#15803D', marginBottom: 6 }}
@@ -1421,7 +2004,7 @@ export const AddMealKitWizardModal: React.FC<AddMealKitWizardModalProps> = ({
                   onPress={() => setCurrentStep(3)}
                 />
                 <Button
-                  title="Next: Preview & Save ✨ →"
+                  title="Next: Preview & Save"
                   style={{ flex: 2 }}
                   onPress={() => setCurrentStep(5)}
                 />
@@ -1436,7 +2019,7 @@ export const AddMealKitWizardModal: React.FC<AddMealKitWizardModalProps> = ({
                 style={[styles.card, { backgroundColor: colors.bgSurface, borderRadius: radii.xl }]}
               >
                 <Text style={[styles.sectionHeading, { color: colors.textPrimary }]}>
-                  ✨ Customer Preview
+                  Customer Preview
                 </Text>
                 <Text style={[styles.sectionHint, { color: colors.textSecondary }]}>
                   Here is how your meal kit will look to home cooks in the app catalog.
@@ -1514,7 +2097,14 @@ export const AddMealKitWizardModal: React.FC<AddMealKitWizardModalProps> = ({
                   onPress={() => setCurrentStep(4)}
                 />
                 <Button
-                  title="Publish Meal Kit to Catalog"
+                  title="Print Card"
+                  variant="outline"
+                  size="lg"
+                  style={{ flex: 1 }}
+                  onPress={() => setPrintModalVisible(true)}
+                />
+                <Button
+                  title="Publish Kit"
                   size="lg"
                   style={{ flex: 2 }}
                   onPress={handleFinalPublish}
@@ -1523,6 +2113,13 @@ export const AddMealKitWizardModal: React.FC<AddMealKitWizardModalProps> = ({
             </View>
           )}
         </ScrollView>
+
+        {/* 2-Sided Recipe Card Print Modal */}
+        <RecipeCardPrintModal
+          visible={printModalVisible}
+          onClose={() => setPrintModalVisible(false)}
+          kit={currentKitForPreview}
+        />
       </View>
     </Modal>
   );
@@ -1753,14 +2350,17 @@ const styles = StyleSheet.create({
   },
   macroCardsGrid: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 6,
     marginBottom: 14,
   },
   macroCard: {
     flex: 1,
+    minWidth: 56,
     paddingVertical: 10,
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'hidden',
   },
   macroNumber: {
     fontSize: 16,
@@ -1909,5 +2509,33 @@ const styles = StyleSheet.create({
   activePhotoTitle: {
     fontSize: 12,
     fontWeight: '800',
+  },
+  stepPhotoThumbWrapper: {
+    position: 'relative',
+    width: 85,
+    height: 65,
+    borderRadius: 8,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  stepPhotoThumb: {
+    width: '100%',
+    height: '100%',
+  },
+  stepPhotoBadge: {
+    position: 'absolute',
+    bottom: 2,
+    left: 2,
+    right: 2,
+    backgroundColor: 'rgba(0,0,0,0.65)',
+    borderRadius: 3,
+    paddingVertical: 1,
+    alignItems: 'center',
+  },
+  stepPhotoBadgeText: {
+    color: '#fff',
+    fontSize: 8,
+    fontWeight: '700',
   },
 });

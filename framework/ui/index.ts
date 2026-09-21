@@ -7,3 +7,4 @@ export * from './PillTag';
 export * from './RatingStars';
 export * from './QuantityStepper';
 export * from './SegmentedControl';
+export * from './Icon';

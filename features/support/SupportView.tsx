@@ -11,6 +11,7 @@ import {
 import { useTheme } from '../../framework/theme/ThemeContext';
 import { Badge } from '../../framework/ui/Badge';
 import { Button } from '../../framework/ui/Button';
+import { Icon } from '../../framework/ui/Icon';
 
 interface SupportTicket {
   id: string;
@@ -75,7 +76,7 @@ export const SupportView: React.FC<{ onBack?: () => void }> = ({ onBack }) => {
     setTickets([newTicket, ...tickets]);
     setDescription('');
     setOrderId('');
-    Alert.alert('Ticket Raised! 🎫', 'Our kitchen support team will resolve this within 1 hour.');
+    Alert.alert('Ticket Raised', 'Our kitchen support team will resolve this within 1 hour.');
   };
 
   return (
@@ -196,7 +197,11 @@ export const SupportView: React.FC<{ onBack?: () => void }> = ({ onBack }) => {
             onChangeText={setDescription}
           />
 
-          <Button title="Submit Support Ticket 🎫" onPress={handleSubmitTicket} />
+          <Button
+            title="Submit Support Ticket"
+            icon={<Icon name="chat" size={16} color="#FFFFFF" />}
+            onPress={handleSubmitTicket}
+          />
         </View>
 
         {/* SECTION 2: Existing Support Tickets */}
@@ -220,29 +225,34 @@ export const SupportView: React.FC<{ onBack?: () => void }> = ({ onBack }) => {
                 ]}
               >
                 <View style={styles.ticketTop}>
-                  <Text style={[styles.ticketId, { color: colors.textPrimary }]}>{t.id}</Text>
+                  <Text style={[styles.ticketSubject, { color: colors.textPrimary }]}>
+                    {t.subject}
+                  </Text>
                   <Badge
                     label={t.status}
-                    variant={t.status === 'Resolved' ? 'success' : 'warning'}
+                    variant={
+                      t.status === 'Resolved'
+                        ? 'success'
+                        : t.status === 'In Review'
+                          ? 'warning'
+                          : 'neutral'
+                    }
                     size="sm"
                   />
                 </View>
-                <Text style={[styles.ticketSubject, { color: colors.textPrimary }]}>
-                  {t.subject}
-                </Text>
                 <Text style={[styles.ticketDate, { color: colors.textMuted }]}>
-                  Raised on {t.date}
+                  {t.date} • Ticket ID: {t.id}
                 </Text>
 
                 {t.response && (
                   <View
                     style={[
                       styles.ticketResponse,
-                      { backgroundColor: colors.bgSubtle, borderRadius: radii.sm },
+                      { backgroundColor: colors.bgSubtle, borderRadius: radii.md },
                     ]}
                   >
                     <Text style={[styles.responseHead, { color: colors.primary }]}>
-                      Support Response:
+                      Support Resolution:
                     </Text>
                     <Text style={[styles.responseText, { color: colors.textSecondary }]}>
                       {t.response}
@@ -279,9 +289,11 @@ export const SupportView: React.FC<{ onBack?: () => void }> = ({ onBack }) => {
                   onPress={() => setExpandedFaq(isExpanded ? null : idx)}
                 >
                   <Text style={[styles.faqQuestion, { color: colors.textPrimary }]}>{faq.q}</Text>
-                  <Text style={[styles.faqArrow, { color: colors.primary }]}>
-                    {isExpanded ? '▲' : '▼'}
-                  </Text>
+                  <Icon
+                    name={isExpanded ? 'chevron-up' : 'chevron-down'}
+                    size={16}
+                    color={colors.primary}
+                  />
                 </TouchableOpacity>
 
                 {isExpanded && (
