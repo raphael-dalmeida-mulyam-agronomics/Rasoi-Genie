@@ -4,6 +4,7 @@ import { Order, generateInvoiceText } from '../../framework/firebase/ordersServi
 import { useTheme } from '../../framework/theme/ThemeContext';
 import { Badge } from '../../framework/ui/Badge';
 import { Button } from '../../framework/ui/Button';
+import { Icon } from '../../framework/ui/Icon';
 
 export interface LiveTrackingModalProps {
   order: Order | null;
@@ -24,7 +25,7 @@ export const LiveTrackingModal: React.FC<LiveTrackingModalProps> = ({
 
   const handleDownloadInvoice = () => {
     const text = generateInvoiceText(order);
-    Alert.alert('Invoice Generated 📄', text);
+    Alert.alert('Invoice Generated', text);
   };
 
   const getStatusBadgeVariant = (status: Order['status']) => {
@@ -33,12 +34,10 @@ export const LiveTrackingModal: React.FC<LiveTrackingModalProps> = ({
       case 'Confirmed':
         return 'success';
       case 'Out for Delivery':
-      case 'Preparing':
         return 'info';
-      case 'Placed':
+      case 'Preparing':
         return 'warning';
       case 'Cancelled':
-      case 'Refunded':
         return 'danger';
       default:
         return 'neutral';
@@ -46,7 +45,12 @@ export const LiveTrackingModal: React.FC<LiveTrackingModalProps> = ({
   };
 
   return (
-    <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
+    <Modal
+      visible={visible}
+      animationType="slide"
+      presentationStyle="pageSheet"
+      onRequestClose={onClose}
+    >
       <View style={[styles.container, { backgroundColor: colors.bgPrimary }]}>
         {/* App Bar */}
         <View
@@ -55,15 +59,23 @@ export const LiveTrackingModal: React.FC<LiveTrackingModalProps> = ({
             { backgroundColor: colors.bgSurface, borderBottomColor: colors.borderLight },
           ]}
         >
-          <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
-            <Text style={[styles.closeBtnText, { color: colors.textPrimary }]}>✕</Text>
+          <TouchableOpacity
+            onPress={onClose}
+            style={styles.closeBtn}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Icon name="close" size={20} color={colors.textPrimary} />
           </TouchableOpacity>
           <View style={{ alignItems: 'center' }}>
             <Text style={[styles.appBarTitle, { color: colors.textPrimary }]}>Order Tracking</Text>
             <Text style={[styles.appBarSub, { color: colors.textSecondary }]}>{order.id}</Text>
           </View>
-          <TouchableOpacity onPress={handleDownloadInvoice}>
-            <Text style={[styles.invoiceLink, { color: colors.primary }]}>Invoice 📄</Text>
+          <TouchableOpacity
+            onPress={handleDownloadInvoice}
+            style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}
+          >
+            <Icon name="document" size={15} color={colors.primary} />
+            <Text style={[styles.invoiceLink, { color: colors.primary }]}>Invoice</Text>
           </TouchableOpacity>
         </View>
 
@@ -95,16 +107,16 @@ export const LiveTrackingModal: React.FC<LiveTrackingModalProps> = ({
               ]}
             >
               {order.status === 'Cancelled'
-                ? 'Order Cancelled 🚫'
+                ? 'Order Cancelled'
                 : order.status === 'Delivered'
-                  ? 'Kit Delivered to Your Doorstep! 🥘'
+                  ? 'Kit Delivered to Your Doorstep!'
                   : order.status === 'Out for Delivery'
-                    ? 'Rider is on the way in cold-chain gear 🛵'
+                    ? 'Rider is on the way in cold-chain gear'
                     : order.status === 'Preparing'
-                      ? 'Chefs are packing fresh masalas & ingredients 👨‍🍳'
+                      ? 'Chefs are packing fresh masalas & ingredients'
                       : order.status === 'Confirmed'
-                        ? 'Order Confirmed by Fulfillment Kitchen ✨'
-                        : 'Order Placed • Awaiting Kitchen Confirmation ⏳'}
+                        ? 'Order Confirmed by Fulfillment Kitchen'
+                        : 'Order Placed • Awaiting Kitchen Confirmation'}
             </Text>
 
             {order.status === 'Cancelled' ? (
@@ -171,7 +183,7 @@ export const LiveTrackingModal: React.FC<LiveTrackingModalProps> = ({
                           },
                         ]}
                       >
-                        {evt.completed && <Text style={styles.checkmark}>✓</Text>}
+                        {evt.completed && <Icon name="check" size={12} color="#FFFFFF" />}
                       </View>
                       {!isLast && (
                         <View
@@ -299,9 +311,12 @@ export const LiveTrackingModal: React.FC<LiveTrackingModalProps> = ({
             <Text style={[styles.blockHeading, { color: colors.textPrimary }]}>
               Delivery Details
             </Text>
-            <Text style={[styles.addressText, { color: colors.textPrimary }]}>
-              📍 {order.deliveryAddress}
-            </Text>
+            <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 6, marginTop: 4 }}>
+              <Icon name="location" size={16} color={colors.primary} style={{ marginTop: 2 }} />
+              <Text style={[styles.addressText, { color: colors.textPrimary, flex: 1 }]}>
+                {order.deliveryAddress}
+              </Text>
+            </View>
             <Text style={[styles.metaText, { color: colors.textSecondary, marginTop: 4 }]}>
               Recipient: {order.customerName} ({order.customerPhone})
             </Text>
@@ -323,13 +338,15 @@ export const LiveTrackingModal: React.FC<LiveTrackingModalProps> = ({
           ]}
         >
           <Button
-            title="Download Tax Invoice 📄"
+            title="Download Tax Invoice"
+            icon={<Icon name="document" size={16} color={colors.primary} />}
             variant="outline"
             style={{ flex: 1, marginRight: 10 }}
             onPress={handleDownloadInvoice}
           />
           <Button
-            title="Reorder Box 🔁"
+            title="Reorder Box"
+            icon={<Icon name="refresh" size={16} color="#FFFFFF" />}
             style={{ flex: 1.2 }}
             onPress={() => {
               onReorder?.(order);

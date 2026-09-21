@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet, ScrollView } from 'react-native';
 import { useAuth } from '../../framework/context/AuthContext';
 import { useTheme } from '../../framework/theme/ThemeContext';
+import { Icon } from '../../framework/ui/Icon';
 import { UnifiedLoginForm } from './UnifiedLoginForm';
 import { ThemeSwitcher } from '../../framework/theme/ThemeSwitcher';
 
@@ -61,7 +62,7 @@ export const AuthGuard: React.FC<AuthGuardProps> = ({
               { backgroundColor: colors.primaryLight, borderRadius: radii.pill },
             ]}
           >
-            <Text style={styles.logoEmoji}>🥘</Text>
+            <Icon name="restaurant" size={40} color={colors.primary} />
           </View>
 
           <Text style={[styles.brandTitle, { color: colors.textPrimary }]}>RasoiGenie</Text>
@@ -81,9 +82,20 @@ export const AuthGuard: React.FC<AuthGuardProps> = ({
                 },
               ]}
             >
-              <Text style={[styles.noticeTitle, { color: colors.textPrimary }]}>
-                🔒 Sign In Required
-              </Text>
+              <View
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  marginBottom: 6,
+                  gap: 6,
+                }}
+              >
+                <Icon name="lock" size={16} color={colors.primary} />
+                <Text style={[styles.noticeTitle, { color: colors.textPrimary, marginBottom: 0 }]}>
+                  Sign In Required
+                </Text>
+              </View>
               <Text style={[styles.noticeDesc, { color: colors.textSecondary }]}>
                 {pageSubtitle ||
                   `Please sign in to your RasoiGenie account to access ${pageTitle}.`}

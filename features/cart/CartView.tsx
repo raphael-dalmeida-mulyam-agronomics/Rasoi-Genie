@@ -21,6 +21,7 @@ import { Button } from '../../framework/ui/Button';
 import { Card } from '../../framework/ui/Card';
 import { Badge } from '../../framework/ui/Badge';
 import { QuantityStepper } from '../../framework/ui/QuantityStepper';
+import { Icon } from '../../framework/ui/Icon';
 
 const DELIVERY_SLOTS = [
   { id: 'slot-1', title: '6:00 PM - 8:00 PM (Dinner)', tag: 'Fastest' },
@@ -175,7 +176,9 @@ export const CartView: React.FC = () => {
   if (items.length === 0 && !confirmedOrder) {
     return (
       <View style={[styles.emptyContainer, { backgroundColor: colors.bgPrimary }]}>
-        <Text style={styles.emptyBasketEmoji}>🧺</Text>
+        <View style={{ marginBottom: 16 }}>
+          <Icon name="basket" size={64} color={colors.primary} />
+        </View>
         <Text style={[styles.emptyBasketTitle, { color: colors.textPrimary }]}>
           Your Cooking Basket is Empty
         </Text>
@@ -183,7 +186,8 @@ export const CartView: React.FC = () => {
           Discover restaurant-grade meal kits with authentic pre-portioned masalas!
         </Text>
         <Button
-          title="Explore Gourmet Meal Kits 🍳"
+          title="Explore Gourmet Meal Kits"
+          icon={<Icon name="restaurant" size={18} color="#FFFFFF" />}
           style={{ marginTop: 20 }}
           onPress={() => router.push('/' as any)}
         />
@@ -229,8 +233,11 @@ export const CartView: React.FC = () => {
                   <Text style={[styles.itemName, { color: colors.textPrimary }]} numberOfLines={1}>
                     {kit.name}
                   </Text>
-                  <TouchableOpacity onPress={() => removeItem(kit.id, servings, spiceLevel)}>
-                    <Text style={[styles.deleteBtn, { color: colors.textMuted }]}>✕</Text>
+                  <TouchableOpacity
+                    onPress={() => removeItem(kit.id, servings, spiceLevel)}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  >
+                    <Icon name="close" size={16} color={colors.textMuted} />
                   </TouchableOpacity>
                 </View>
 
@@ -246,6 +253,9 @@ export const CartView: React.FC = () => {
                 >
                   <View
                     style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      gap: 4,
                       backgroundColor: colors.bgSurface,
                       paddingHorizontal: 7,
                       paddingVertical: 2,
@@ -254,13 +264,17 @@ export const CartView: React.FC = () => {
                       borderColor: colors.borderLight,
                     }}
                   >
+                    <Icon name="people" size={12} color={colors.textSecondary} />
                     <Text style={{ fontSize: 11, fontWeight: '700', color: colors.textPrimary }}>
-                      🍽️ {servings} Servings
+                      {servings} Servings
                     </Text>
                   </View>
                   {spiceLevel ? (
                     <View
                       style={{
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        gap: 4,
                         backgroundColor: colors.bgSurface,
                         paddingHorizontal: 7,
                         paddingVertical: 2,
@@ -269,8 +283,9 @@ export const CartView: React.FC = () => {
                         borderColor: colors.borderLight,
                       }}
                     >
+                      <Icon name="flame" size={12} color={colors.primary} />
                       <Text style={{ fontSize: 11, fontWeight: '700', color: colors.primary }}>
-                        🌶️ {spiceLevel}
+                        {spiceLevel}
                       </Text>
                     </View>
                   ) : null}
@@ -305,9 +320,14 @@ export const CartView: React.FC = () => {
           {appliedCoupon ? (
             <View style={[styles.appliedCouponBanner, { backgroundColor: colors.primaryLight }]}>
               <View style={{ flex: 1 }}>
-                <Text style={[styles.couponCodeText, { color: colors.primary }]}>
-                  🎉 {appliedCoupon.code} Applied
-                </Text>
+                <View
+                  style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 2 }}
+                >
+                  <Icon name="tag" size={16} color={colors.primary} />
+                  <Text style={[styles.couponCodeText, { color: colors.primary, marginBottom: 0 }]}>
+                    {appliedCoupon.code} Applied
+                  </Text>
+                </View>
                 <Text style={[styles.couponSavingsText, { color: colors.primaryDark }]}>
                   {couponMessage || `You saved ₹${discount} on this box!`}
                 </Text>
@@ -482,9 +502,13 @@ export const CartView: React.FC = () => {
                 ]}
                 onPress={() => setSelectedPaymentMethod(method)}
               >
-                <Text style={{ fontSize: 20, marginRight: 10 }}>
-                  {method === 'UPI' ? '⚡' : method === 'Card' ? '💳' : '💵'}
-                </Text>
+                <View style={{ marginRight: 12 }}>
+                  <Icon
+                    name={method === 'UPI' ? 'flash' : method === 'Card' ? 'card' : 'cash'}
+                    size={22}
+                    color={isSelected ? colors.primary : colors.textSecondary}
+                  />
+                </View>
                 <View style={{ flex: 1 }}>
                   <Text
                     style={[
@@ -599,7 +623,8 @@ export const CartView: React.FC = () => {
         </View>
 
         <Button
-          title={isCheckingOut ? 'Authorizing Payment...' : `Place Order (₹${total}) 🚀`}
+          title={isCheckingOut ? 'Authorizing Payment...' : `Place Order (₹${total})`}
+          icon={<Icon name="arrow-forward" size={18} color="#FFFFFF" />}
           size="lg"
           style={{ flex: 1, marginLeft: 16 }}
           loading={isCheckingOut}
@@ -624,8 +649,11 @@ export const CartView: React.FC = () => {
               <Text style={[styles.modalTitle, { color: colors.textPrimary }]}>
                 Add New Address
               </Text>
-              <TouchableOpacity onPress={() => setAddressModalVisible(false)}>
-                <Text style={{ fontSize: 18, color: colors.textMuted }}>✕</Text>
+              <TouchableOpacity
+                onPress={() => setAddressModalVisible(false)}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <Icon name="close" size={20} color={colors.textMuted} />
               </TouchableOpacity>
             </View>
 
@@ -725,7 +753,9 @@ export const CartView: React.FC = () => {
         <Modal visible={!!confirmedOrder} animationType="slide">
           <View style={[styles.successContainer, { backgroundColor: colors.bgPrimary }]}>
             <View style={styles.successContent}>
-              <Text style={styles.successCelebration}>🎉</Text>
+              <View style={{ marginBottom: 16 }}>
+                <Icon name="check-circle" size={64} color="#16A34A" />
+              </View>
               <Text style={[styles.successTitle, { color: colors.textPrimary }]}>
                 Order Successfully Placed!
               </Text>
@@ -779,7 +809,8 @@ export const CartView: React.FC = () => {
 
               <View style={styles.successBtnCol}>
                 <Button
-                  title="Track Live Delivery 🚚"
+                  title="Track Live Delivery"
+                  icon={<Icon name="delivery" size={20} color="#FFFFFF" />}
                   size="lg"
                   onPress={() => {
                     setConfirmedOrder(null);

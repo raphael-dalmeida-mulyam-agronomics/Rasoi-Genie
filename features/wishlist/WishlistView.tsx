@@ -7,6 +7,7 @@ import { useTheme } from '../../framework/theme/ThemeContext';
 import { getMealKits, MealKit } from '../../framework/services/mealKitsService';
 import { Badge, getDietBadgeInfo } from '../../framework/ui/Badge';
 import { Button } from '../../framework/ui/Button';
+import { Icon } from '../../framework/ui/Icon';
 import { MealDetailModal } from '../meal-detail/MealDetailModal';
 
 export const WishlistView: React.FC = () => {
@@ -77,8 +78,12 @@ export const WishlistView: React.FC = () => {
                   const badge = getDietBadgeInfo(kit.diet);
                   return <Badge label={badge.label} variant={badge.variant} size="sm" />;
                 })()}
-                <TouchableOpacity onPress={() => removeFromWishlist(kit.id)}>
-                  <Text style={[styles.removeBtn, { color: colors.textMuted }]}>✕ Remove</Text>
+                <TouchableOpacity
+                  onPress={() => removeFromWishlist(kit.id)}
+                  style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}
+                >
+                  <Icon name="trash" size={13} color={colors.textMuted} />
+                  <Text style={[styles.removeBtn, { color: colors.textMuted }]}>Remove</Text>
                 </TouchableOpacity>
               </View>
 

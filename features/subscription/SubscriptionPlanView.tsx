@@ -4,6 +4,7 @@ import { useTheme } from '../../framework/theme/ThemeContext';
 import { getMealKits, MealKit } from '../../framework/services/mealKitsService';
 import { Badge } from '../../framework/ui/Badge';
 import { Button } from '../../framework/ui/Button';
+import { Icon } from '../../framework/ui/Icon';
 
 interface PlanOption {
   id: string;
@@ -74,7 +75,7 @@ export const SubscriptionPlanView: React.FC<{ onBack?: () => void }> = ({ onBack
   const handleSubscribe = () => {
     setIsSubscribed(true);
     Alert.alert(
-      'Subscribed to RasoiGenie Plan! 🎉',
+      'Subscribed to RasoiGenie Plan!',
       `Your recurring ${activePlan.name} is active. Recurring delivery every Monday morning!`,
     );
   };
@@ -98,8 +99,12 @@ export const SubscriptionPlanView: React.FC<{ onBack?: () => void }> = ({ onBack
         ]}
       >
         {onBack && (
-          <TouchableOpacity onPress={onBack} style={styles.backBtn}>
-            <Text style={{ fontSize: 18 }}>←</Text>
+          <TouchableOpacity
+            onPress={onBack}
+            style={styles.backBtn}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Icon name="arrow-back" size={20} color={colors.textPrimary} />
           </TouchableOpacity>
         )}
         <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>
@@ -154,7 +159,8 @@ export const SubscriptionPlanView: React.FC<{ onBack?: () => void }> = ({ onBack
 
             <View style={styles.subActionsRow}>
               <Button
-                title={isPaused ? 'Resume Plan ▶️' : 'Pause Next Week ⏸️'}
+                title={isPaused ? 'Resume Plan' : 'Pause Next Week'}
+                icon={<Icon name={isPaused ? 'play' : 'pause'} size={15} color={colors.primary} />}
                 variant="outline"
                 size="sm"
                 onPress={handleTogglePause}
@@ -258,8 +264,11 @@ export const SubscriptionPlanView: React.FC<{ onBack?: () => void }> = ({ onBack
                   </Text>
                 </View>
                 <Badge
-                  label={isChosen ? 'SELECTED ✓' : '+ ADD TO PLAN'}
+                  label={isChosen ? 'SELECTED' : '+ ADD TO PLAN'}
                   variant={isChosen ? 'primary' : 'neutral'}
+                  icon={
+                    isChosen ? <Icon name="check" size={12} color={colors.primary} /> : undefined
+                  }
                   size="sm"
                 />
               </TouchableOpacity>
@@ -269,7 +278,8 @@ export const SubscriptionPlanView: React.FC<{ onBack?: () => void }> = ({ onBack
 
         {!isSubscribed && (
           <Button
-            title={`Start ${activePlan.name} (₹${activePlan.weeklyPrice}/wk) 🚀`}
+            title={`Start ${activePlan.name} (₹${activePlan.weeklyPrice}/wk)`}
+            icon={<Icon name="arrow-forward" size={18} color="#FFFFFF" />}
             size="lg"
             style={{ marginTop: 20 }}
             onPress={handleSubscribe}

@@ -9,6 +9,7 @@ import {
   ViewStyle,
 } from 'react-native';
 import { useTheme } from '../theme/ThemeContext';
+import { Icon } from './Icon';
 
 export interface ModalProps extends RNModalProps {
   visible: boolean;
@@ -57,7 +58,7 @@ export const Modal: React.FC<ModalProps> = ({
               onPress={onClose}
               hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
             >
-              <Text style={[styles.closeBtnText, { color: colors.textMuted }]}>✕</Text>
+              <Icon name="close" size={20} color={colors.textMuted} />
             </TouchableOpacity>
           </View>
           <View style={styles.body}>{children}</View>

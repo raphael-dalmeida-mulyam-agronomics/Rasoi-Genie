@@ -60,7 +60,9 @@ import {
 import { Card } from '../../framework/ui/Card';
 import { Badge, BadgeVariant, getDietBadgeInfo } from '../../framework/ui/Badge';
 import { Button } from '../../framework/ui/Button';
+import { Icon, AppIconName } from '../../framework/ui/Icon';
 import { AddMealKitWizardModal } from './AddMealKitWizardModal';
+import { RecipeCardPrintModal, triggerRecipeCardPrint } from './RecipeCardPrintModal';
 import {
   fetchAllOrdersFromSupabase,
   approveOrderInSupabase,
@@ -70,7 +72,6 @@ import {
   clearAllOrdersFromSupabase,
 } from '../../framework/services/supabaseOrdersService';
 import { saveMealKitToSupabase } from '../../framework/services/supabaseMealKitsService';
-import { seedSupabaseDatabase } from '../../framework/services/supabaseSeedService';
 import {
   subscribeToPendingApprovalCount,
   playOrderAlertSound,
@@ -121,6 +122,8 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
   const [kits, setKits] = useState<MealKit[]>(getMealKits());
   const [kitModalVisible, setKitModalVisible] = useState(false);
   const [editingKit, setEditingKit] = useState<MealKit | null>(null);
+  const [printCardKit, setPrintCardKit] = useState<MealKit | null>(null);
+  const [printCardModalVisible, setPrintCardModalVisible] = useState(false);
 
   // Regional Analytics State
   const [selectedState, setSelectedState] = useState('Maharashtra');
@@ -146,7 +149,6 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
     user && user.role === 'admin' && user.email && validateAdminEmail(user.email);
 
   const [pendingApprovalCount, setPendingApprovalCount] = useState<number>(0);
-  const [isSeedingSupabase, setIsSeedingSupabase] = useState<boolean>(false);
 
   const reloadSupabaseOrders = async () => {
     try {
@@ -216,7 +218,7 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
       await reloadSupabaseOrders();
       await refreshPendingApprovalCount();
       Alert.alert(
-        'Order Approved! ✅',
+        'Order Approved',
         `Order ${orderId} has been confirmed. Chef packing team has been notified.`,
       );
     } catch (err: any) {
@@ -259,7 +261,7 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
       if (Platform.OS === 'web') {
         window.alert(`Order ${targetId} has been successfully cancelled.`);
       } else {
-        Alert.alert('Order Cancelled 🚫', `Order ${targetId} has been successfully cancelled.`);
+        Alert.alert('Order Cancelled', `Order ${targetId} has been successfully cancelled.`);
       }
     } catch (err: any) {
       if (Platform.OS === 'web') {
@@ -269,21 +271,6 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
       }
     } finally {
       setUpdatingOrderId(null);
-    }
-  };
-
-  const handleSeedSupabase = async () => {
-    setIsSeedingSupabase(true);
-    try {
-      const result = await seedSupabaseDatabase(true);
-      if (result.success) {
-        Alert.alert('Supabase Synced! ☁️', result.message);
-        await reloadSupabaseOrders();
-      } else {
-        Alert.alert('Sync Incomplete', result.error || result.message);
-      }
-    } finally {
-      setIsSeedingSupabase(false);
     }
   };
 
@@ -343,7 +330,7 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
     const amt = parseFloat(refundAmount) || refundOrder.totalAmount;
     await issueRefund(refundOrder.id, amt, refundReason);
     setRefundModalVisible(false);
-    Alert.alert('Refund Issued 💳', `₹${amt} refunded for Order ${refundOrder.id}.`);
+    Alert.alert('Refund Issued', `₹${amt} refunded for Order ${refundOrder.id}.`);
   };
 
   const handleStockAdjust = (kitId: string, region: RegionHub, delta: number) => {
@@ -358,7 +345,7 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
   const handleExportCSV = () => {
     const csv = generateRegionalCSV(selectedState);
     Alert.alert(
-      'Regional Analytics Exported 📊',
+      'Regional Analytics Exported',
       `CSV Report Generated:\n\n${csv.substring(0, 300)}...`,
     );
   };
@@ -381,30 +368,6 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
         return 'neutral';
     }
   };
-
-  // If user is not logged in as @mulyam.in admin
-  if (!isMulyamAdmin) {
-    return (
-      <View style={[styles.accessDeniedContainer, { backgroundColor: colors.bgPrimary }]}>
-        <Card style={styles.accessDeniedCard}>
-          <Text style={styles.accessDeniedIcon}>🔒</Text>
-          <Text style={[styles.accessDeniedTitle, { color: colors.textPrimary }]}>
-            Admin Access Restricted
-          </Text>
-          <Text style={[styles.accessDeniedText, { color: colors.textSecondary }]}>
-            This control center is strictly reserved for authorized company personnel with a valid{' '}
-            <Text style={{ fontWeight: '800', color: colors.primary }}>@mulyam.in</Text> email
-            address.
-          </Text>
-          <Button
-            title="Sign in with @mulyam.in Email"
-            onPress={onNavigateToLogin}
-            style={{ width: '100%', marginTop: 14 }}
-          />
-        </Card>
-      </View>
-    );
-  }
 
   const filteredOrders = useMemo(() => {
     const cleanOrders = orders
@@ -440,30 +403,75 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
     });
   }, [selectedState, crossTabDiet]);
 
+  // If user is not logged in as @mulyam.in admin
+  if (!isMulyamAdmin) {
+    return (
+      <View style={[styles.accessDeniedContainer, { backgroundColor: colors.bgPrimary }]}>
+        <Card style={styles.accessDeniedCard}>
+          <View style={{ marginBottom: 12, alignItems: 'center' }}>
+            <Icon name="lock" size={44} color={colors.primary} />
+          </View>
+          <Text style={[styles.accessDeniedTitle, { color: colors.textPrimary }]}>
+            Admin Access Restricted
+          </Text>
+          <Text style={[styles.accessDeniedText, { color: colors.textSecondary }]}>
+            This control center is strictly reserved for authorized company personnel with a valid{' '}
+            <Text style={{ fontWeight: '800', color: colors.primary }}>@mulyam.in</Text> email
+            address.
+          </Text>
+          <Button
+            title="Log In with Admin Account"
+            variant="primary"
+            size="md"
+            onPress={onNavigateToLogin || logout}
+            style={{ marginTop: 20 }}
+          />
+        </Card>
+      </View>
+    );
+  }
+
   return (
     <View style={[styles.container, { backgroundColor: colors.bgPrimary }]}>
-      {/* Top Admin Header */}
+      {/* Top Header Bar */}
       <View
         style={[
           styles.header,
           { backgroundColor: colors.bgSurface, borderBottomColor: colors.borderLight },
         ]}
       >
-        <View style={styles.headerLeft}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-            <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>
-              RasoiGenie Admin
-            </Text>
-            <Badge label="SECURE • @mulyam.in" variant="primary" size="sm" />
-          </View>
-          <Text style={[styles.adminUserEmail, { color: colors.textSecondary }]}>
-            Logged in as {user?.email}
+        <View style={styles.headerTitleCol}>
+          <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>
+            RasoiGenie Admin Control
+          </Text>
+          <Text style={[styles.headerSubtitle, { color: colors.textSecondary }]}>
+            Master operations, catalog, kitchen orders & regional logistics
           </Text>
         </View>
-        <Button title="Logout" variant="outline" size="sm" onPress={logout} />
+
+        <View style={styles.headerRightActions}>
+          <View
+            style={[
+              styles.adminPill,
+              { backgroundColor: colors.primaryLight, borderColor: colors.primary + '40' },
+            ]}
+          >
+            <View style={styles.adminDot} />
+            <Text style={[styles.adminPillText, { color: colors.primary }]}>
+              {user?.email?.split('@')[0] || 'Admin'}
+            </Text>
+          </View>
+
+          <TouchableOpacity
+            style={[styles.logoutBtn, { borderColor: colors.borderLight }]}
+            onPress={logout}
+          >
+            <Text style={[styles.logoutText, { color: colors.danger }]}>Logout</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
-      {/* Admin Module Navigation Menu Component */}
+      {/* Main Unified Navigation Menu Bar */}
       <AdminNavigationMenu
         activeTab={activeTab}
         onTabChange={setActiveTab}
@@ -475,8 +483,8 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
         reviewsCount={moderationReviews.length}
       />
 
-      <ScrollView contentContainerStyle={styles.scrollBody} showsVerticalScrollIndicator={false}>
-        {/* MODULE 0: CONTROL CENTER OVERVIEW / HOME */}
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        {/* MODULE 0: OVERVIEW HOME */}
         {activeTab === 'overview' && (
           <View>
             {/* Realtime Pending Approval Alert Banner */}
@@ -496,22 +504,26 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
                 }}
               >
                 <View style={{ flex: 1, marginRight: 10 }}>
-                  <Text
-                    style={{
-                      fontSize: 15,
-                      fontWeight: '800',
-                      color: '#991B1B',
-                      marginBottom: 2,
-                    }}
+                  <View
+                    style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 2 }}
                   >
-                    🚨 {pendingApprovalCount} New Order(s) Awaiting Approval!
-                  </Text>
+                    <Icon name="alert" size={18} color="#DC2626" />
+                    <Text
+                      style={{
+                        fontSize: 15,
+                        fontWeight: '800',
+                        color: '#991B1B',
+                      }}
+                    >
+                      {pendingApprovalCount} New Order(s) Awaiting Approval!
+                    </Text>
+                  </View>
                   <Text style={{ fontSize: 12, color: '#B91C1C' }}>
                     Customer orders are currently in 'Placed' status. Click to approve and confirm.
                   </Text>
                 </View>
                 <Button
-                  title="Review Orders ➔"
+                  title="Review Orders"
                   size="sm"
                   onPress={() => setActiveTab('orders')}
                   style={{ backgroundColor: '#DC2626' }}
@@ -537,10 +549,10 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
                 >
                   {orders.length}
                 </Text>
-                <Text style={[styles.metricLabel, { color: colors.textMuted }]}>
+                <Text style={[styles.metricLabel, { color: colors.textSecondary }]}>
                   {pendingApprovalCount > 0
-                    ? `ORDERS (${pendingApprovalCount} PENDING)`
-                    : 'TOTAL ORDERS'}
+                    ? `${pendingApprovalCount} Awaiting Approval`
+                    : 'Customer Orders'}
                 </Text>
               </TouchableOpacity>
 
@@ -552,8 +564,10 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
                 onPress={() => setActiveTab('kits')}
                 activeOpacity={0.8}
               >
-                <Text style={[styles.metricVal, { color: colors.textPrimary }]}>{kits.length}</Text>
-                <Text style={[styles.metricLabel, { color: colors.textMuted }]}>MEAL KITS</Text>
+                <Text style={[styles.metricVal, { color: colors.primary }]}>{kits.length}</Text>
+                <Text style={[styles.metricLabel, { color: colors.textSecondary }]}>
+                  Active Meal Kits
+                </Text>
               </TouchableOpacity>
 
               <TouchableOpacity
@@ -561,20 +575,36 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
                   styles.metricCard,
                   { backgroundColor: colors.bgSurface, borderRadius: radii.xl, ...shadows.card },
                 ]}
-                onPress={() => setActiveTab('users')}
+                onPress={() => setActiveTab('inventory')}
                 activeOpacity={0.8}
               >
-                <Text style={[styles.metricVal, { color: colors.textPrimary }]}>
-                  {users.length}
+                <Text style={[styles.metricVal, { color: colors.primary }]}>4</Text>
+                <Text style={[styles.metricLabel, { color: colors.textSecondary }]}>
+                  Regional Hubs
                 </Text>
-                <Text style={[styles.metricLabel, { color: colors.textMuted }]}>USERS</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.metricCard,
+                  { backgroundColor: colors.bgSurface, borderRadius: radii.xl, ...shadows.card },
+                ]}
+                onPress={() => setActiveTab('analytics')}
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.metricVal, { color: colors.primary }]}>
+                  ₹{(orders.reduce((acc, o) => acc + o.totalAmount, 0) / 1000).toFixed(1)}k
+                </Text>
+                <Text style={[styles.metricLabel, { color: colors.textSecondary }]}>
+                  Gross Revenue
+                </Text>
               </TouchableOpacity>
             </View>
 
-            {/* All Modules Hub Grid */}
+            {/* Quick-Access Operational Modules Grid */}
             <Text
               style={[
-                styles.moduleSectionTitle,
+                styles.sectionHeading,
                 { color: colors.textPrimary, marginTop: 14, marginBottom: 12 },
               ]}
             >
@@ -587,7 +617,7 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
                   id: 'orders' as AdminTab,
                   title: 'Orders & Live Approvals',
                   desc: 'Real-time order feed, approval workflow, status changes & customer refunds',
-                  icon: '📦',
+                  icon: 'cube' as AppIconName,
                   badge:
                     pendingApprovalCount > 0
                       ? `${pendingApprovalCount} Awaiting Approval`
@@ -601,7 +631,7 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
                   id: 'kits' as AdminTab,
                   title: 'Meal Kits & Recipes',
                   desc: 'Publish chef-crafted recipes, modify spice levels, servings, ingredients & prices',
-                  icon: '🍲',
+                  icon: 'restaurant' as AppIconName,
                   badge: `${kits.length} Kits Active`,
                   badgeVariant: 'success' as BadgeVariant,
                 },
@@ -609,15 +639,15 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
                   id: 'inventory' as AdminTab,
                   title: 'Regional Inventory Hub',
                   desc: 'Monitor cold-chain safety buffer stocks across South, West, North & East Hubs',
-                  icon: '🏭',
+                  icon: 'business' as AppIconName,
                   badge: '4 Hubs',
                   badgeVariant: 'neutral' as BadgeVariant,
                 },
                 {
                   id: 'analytics' as AdminTab,
-                  title: 'Regional Analytics 🇮🇳',
+                  title: 'Regional Analytics',
                   desc: 'State-by-state consumption trends, dietary split, and downloadable CSV exports',
-                  icon: '📊',
+                  icon: 'bar-chart' as AppIconName,
                   badge: 'India Live',
                   badgeVariant: 'accent' as BadgeVariant,
                 },
@@ -625,7 +655,7 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
                   id: 'users' as AdminTab,
                   title: 'User Management',
                   desc: 'View real customer accounts, manage staff permissions and platform roles',
-                  icon: '👥',
+                  icon: 'people' as AppIconName,
                   badge: `${users.length} Users`,
                   badgeVariant: 'info' as BadgeVariant,
                 },
@@ -633,7 +663,7 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
                   id: 'coupons' as AdminTab,
                   title: 'Promotions & Coupons',
                   desc: 'Create discount codes, flat reductions, and minimum cart value requirements',
-                  icon: '🏷️',
+                  icon: 'tag' as AppIconName,
                   badge: `${coupons.length} Coupons`,
                   badgeVariant: 'warning' as BadgeVariant,
                 },
@@ -641,7 +671,7 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
                   id: 'revenue' as AdminTab,
                   title: 'Revenue & Financials',
                   desc: 'Monthly sales metrics, Average Order Value (AOV), and customer repeat rates',
-                  icon: '📈',
+                  icon: 'trending-up' as AppIconName,
                   badge: 'Financials',
                   badgeVariant: 'success' as BadgeVariant,
                 },
@@ -649,7 +679,7 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
                   id: 'reviews' as AdminTab,
                   title: 'Review Moderation',
                   desc: 'Inspect customer meal kit reviews, verify feedback, and moderate flagged entries',
-                  icon: '⭐',
+                  icon: 'star' as AppIconName,
                   badge: `${moderationReviews.length} Reviews`,
                   badgeVariant: 'neutral' as BadgeVariant,
                 },
@@ -669,7 +699,9 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
                   activeOpacity={0.7}
                 >
                   <View style={styles.moduleCardTop}>
-                    <Text style={{ fontSize: 26, marginRight: 12 }}>{mod.icon}</Text>
+                    <View style={{ marginRight: 12 }}>
+                      <Icon name={mod.icon} size={26} color={colors.primary} />
+                    </View>
                     <View style={{ flex: 1 }}>
                       <Text style={[styles.moduleCardTitle, { color: colors.textPrimary }]}>
                         {mod.title}
@@ -686,7 +718,7 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
                   <View style={styles.moduleCardBottom}>
                     <Badge label={mod.badge} variant={mod.badgeVariant} size="sm" />
                     <Text style={[styles.moduleCardArrow, { color: colors.primary }]}>
-                      Open Module ➔
+                      Open Module
                     </Text>
                   </View>
                 </TouchableOpacity>
@@ -717,7 +749,7 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
               </View>
               {orders.length > 0 && (
                 <Button
-                  title={isClearingOrders ? 'Clearing...' : 'Clear All Orders 🗑️'}
+                  title={isClearingOrders ? 'Clearing...' : 'Clear All Orders'}
                   variant="outline"
                   size="sm"
                   loading={isClearingOrders}
@@ -744,9 +776,14 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
                 }}
               >
                 <View style={{ flex: 1, marginRight: 10 }}>
-                  <Text style={{ color: '#991B1B', fontWeight: '800', fontSize: 13 }}>
-                    🚨 {pendingApprovalCount} New Order(s) Awaiting Approval!
-                  </Text>
+                  <View
+                    style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 2 }}
+                  >
+                    <Icon name="alert" size={16} color="#DC2626" />
+                    <Text style={{ color: '#991B1B', fontWeight: '800', fontSize: 13 }}>
+                      {pendingApprovalCount} New Order(s) Awaiting Approval!
+                    </Text>
+                  </View>
                   <Text style={{ color: '#B91C1C', fontSize: 11, marginTop: 2 }}>
                     Review customer recipe orders and approve them to start kitchen prep.
                   </Text>
@@ -812,7 +849,9 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
                   },
                 ]}
               >
-                <Text style={{ fontSize: 36, marginBottom: 10 }}>📦</Text>
+                <View style={{ marginBottom: 12 }}>
+                  <Icon name="cube" size={38} color={colors.textMuted} />
+                </View>
                 <Text style={{ fontSize: 16, fontWeight: '700', color: colors.textPrimary }}>
                   No Orders Found
                 </Text>
@@ -856,7 +895,7 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
                             {order.id}
                           </Text>
                           <Text style={{ fontSize: 11, color: colors.primary, fontWeight: '700' }}>
-                            View Details ➔
+                            View Details
                           </Text>
                         </View>
                         <Text style={[styles.adminOrderCustomer, { color: colors.textSecondary }]}>
@@ -866,9 +905,24 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
                       <Badge label={order.status} variant={getBadgeVariant(order.status)} />
                     </View>
 
-                    <Text style={[styles.adminOrderAddress, { color: colors.textSecondary }]}>
-                      📍 {order.deliveryAddress}
-                    </Text>
+                    <View
+                      style={{
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        gap: 4,
+                        marginVertical: 2,
+                      }}
+                    >
+                      <Icon name="location" size={13} color={colors.textSecondary} />
+                      <Text
+                        style={[
+                          styles.adminOrderAddress,
+                          { color: colors.textSecondary, marginBottom: 0 },
+                        ]}
+                      >
+                        {order.deliveryAddress}
+                      </Text>
+                    </View>
                     <Text style={[styles.adminOrderSlot, { color: colors.textMuted }]}>
                       Slot: {order.deliverySlot} • Paid: ₹{order.totalAmount} via{' '}
                       {order.paymentMethod}
@@ -894,13 +948,16 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
                             marginBottom: 4,
                           }}
                         >
-                          <Text
-                            style={{ fontSize: 12, fontWeight: '800', color: colors.textPrimary }}
-                          >
-                            🍲 Ordered Dishes ({order.items.length}):
-                          </Text>
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                            <Icon name="restaurant" size={14} color={colors.textPrimary} />
+                            <Text
+                              style={{ fontSize: 12, fontWeight: '800', color: colors.textPrimary }}
+                            >
+                              Ordered Dishes ({order.items.length}):
+                            </Text>
+                          </View>
                           <Text style={{ fontSize: 11, color: colors.primary, fontWeight: '700' }}>
-                            Inspect Details 🔍
+                            Inspect Details
                           </Text>
                         </View>
                         {order.items.map((it, idx) => (
@@ -921,19 +978,30 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
                             </Text>
                             <View style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
                               <Text style={{ fontSize: 11, color: colors.textMuted }}>
-                                👥 {it.servings || 2}p
+                                {it.servings || 2}p
                               </Text>
-                              <Text
-                                style={{
-                                  fontSize: 11,
-                                  fontWeight: '700',
-                                  color: (it.spiceLevel || '').toLowerCase().includes('spicy')
-                                    ? '#DC2626'
-                                    : colors.primary,
-                                }}
-                              >
-                                🌶️ {it.spiceLevel || 'Medium'}
-                              </Text>
+                              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 2 }}>
+                                <Icon
+                                  name="flame"
+                                  size={11}
+                                  color={
+                                    (it.spiceLevel || '').toLowerCase().includes('spicy')
+                                      ? '#DC2626'
+                                      : colors.primary
+                                  }
+                                />
+                                <Text
+                                  style={{
+                                    fontSize: 11,
+                                    fontWeight: '700',
+                                    color: (it.spiceLevel || '').toLowerCase().includes('spicy')
+                                      ? '#DC2626'
+                                      : colors.primary,
+                                  }}
+                                >
+                                  {it.spiceLevel || 'Medium'}
+                                </Text>
+                              </View>
                             </View>
                           </View>
                         ))}
@@ -954,7 +1022,9 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
                       }}
                     >
                       <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                        <Text style={{ fontSize: 16, marginRight: 8 }}>🚫</Text>
+                        <View style={{ marginRight: 8 }}>
+                          <Icon name="close" size={16} color="#DC2626" />
+                        </View>
                         <View style={{ flex: 1 }}>
                           <Text style={{ color: '#991B1B', fontWeight: '800', fontSize: 12 }}>
                             Order Cancelled
@@ -983,7 +1053,9 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
                       }}
                     >
                       <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
-                        <Text style={{ fontSize: 16, marginRight: 6 }}>⏳</Text>
+                        <View style={{ marginRight: 6 }}>
+                          <Icon name="time" size={16} color="#DC2626" />
+                        </View>
                         <View style={{ flex: 1 }}>
                           <Text style={{ color: '#991B1B', fontWeight: '800', fontSize: 12 }}>
                             Awaiting Admin Approval
@@ -996,7 +1068,7 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
                       </View>
                       <View style={{ flexDirection: 'row', gap: 8, marginTop: 4 }}>
                         <Button
-                          title={updatingOrderId === order.id ? 'Approving...' : 'Approve Order ✅'}
+                          title={updatingOrderId === order.id ? 'Approving...' : 'Approve Order'}
                           variant="primary"
                           size="sm"
                           loading={updatingOrderId === order.id}
@@ -1004,7 +1076,7 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
                           onPress={() => handleApproveOrder(order.id)}
                         />
                         <Button
-                          title="Reject / Cancel ✕"
+                          title="Reject / Cancel"
                           variant="outline"
                           size="sm"
                           style={{ borderColor: '#DC2626', flex: 1 }}
@@ -1053,9 +1125,9 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
                             >
                               <Text
                                 style={{
-                                  color: order.status === st ? '#FFFFFF' : colors.textPrimary,
                                   fontSize: 11,
-                                  fontWeight: '700',
+                                  color: order.status === st ? '#FFFFFF' : colors.textPrimary,
+                                  fontWeight: order.status === st ? '800' : '500',
                                 }}
                               >
                                 {st}
@@ -1068,7 +1140,7 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
 
                   <View style={styles.orderBottomBar}>
                     <Button
-                      title={`Inspect Items (${order.items?.length || 0}) 🔍`}
+                      title={`Inspect Items (${order.items?.length || 0})`}
                       variant="outline"
                       size="sm"
                       style={{ borderColor: colors.primary, marginRight: 8 }}
@@ -1092,7 +1164,7 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
                       order.status !== 'Delivered' &&
                       order.status !== 'Refunded' && (
                         <Button
-                          title="Cancel Order 🚫"
+                          title="Cancel Order"
                           variant="outline"
                           size="sm"
                           style={{ borderColor: '#DC2626', marginRight: 8 }}
@@ -1103,7 +1175,7 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
 
                     {order.status !== 'Refunded' && (
                       <Button
-                        title="Issue Refund 💳"
+                        title="Issue Refund"
                         variant="outline"
                         size="sm"
                         textStyle={{ fontSize: 11 }}
@@ -1129,23 +1201,14 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
                   Manage recipes, ingredients, sachets & prices
                 </Text>
               </View>
-              <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
-                <Button
-                  title={isSeedingSupabase ? 'Syncing...' : 'Seed to Supabase ☁️'}
-                  variant="outline"
-                  size="sm"
-                  loading={isSeedingSupabase}
-                  onPress={handleSeedSupabase}
-                />
-                <Button
-                  title="+ Add Meal Kit"
-                  size="sm"
-                  onPress={() => {
-                    setEditingKit(null);
-                    setKitModalVisible(true);
-                  }}
-                />
-              </View>
+              <Button
+                title="+ Add Meal Kit"
+                size="sm"
+                onPress={() => {
+                  setEditingKit(null);
+                  setKitModalVisible(true);
+                }}
+              />
             </View>
 
             {kits.map((kit) => (
@@ -1180,6 +1243,16 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
                 </View>
 
                 <View style={styles.kitActionsRow}>
+                  <Button
+                    title="Print Recipe Card"
+                    variant="primary"
+                    size="sm"
+                    style={{ marginRight: 8 }}
+                    onPress={() => {
+                      setPrintCardKit(kit);
+                      setPrintCardModalVisible(true);
+                    }}
+                  />
                   <Button
                     title="Edit Recipe & Price"
                     variant="outline"
@@ -1290,13 +1363,13 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
             <View style={styles.moduleHeaderRow}>
               <View>
                 <Text style={[styles.moduleTitle, { color: colors.textPrimary }]}>
-                  India Regional Analytics 🇮🇳
+                  India Regional Analytics
                 </Text>
                 <Text style={[styles.moduleSubtitle, { color: colors.textSecondary }]}>
                   State & city performance, dietary cross-tabs & export
                 </Text>
               </View>
-              <Button title="Export CSV 📄" size="sm" onPress={handleExportCSV} />
+              <Button title="Export CSV" size="sm" onPress={handleExportCSV} />
             </View>
 
             {/* Indian State Selector */}
@@ -1403,14 +1476,22 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
                     </View>
                   </View>
 
-                  <Text
+                  <View
                     style={[
                       styles.topSellingCallout,
-                      { color: colors.primaryDark, backgroundColor: colors.primaryLight },
+                      {
+                        backgroundColor: colors.primaryLight,
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        gap: 6,
+                      },
                     ]}
                   >
-                    🏆 Top Selling: {stateData.topMealKitName}
-                  </Text>
+                    <Icon name="star" size={14} color={colors.primaryDark} />
+                    <Text style={{ color: colors.primaryDark, fontWeight: '700', fontSize: 13 }}>
+                      Top Selling: {stateData.topMealKitName}
+                    </Text>
+                  </View>
                 </View>
               );
             })()}
@@ -1444,26 +1525,25 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
                     { id: 'vegan', label: 'VEGAN' },
                     { id: 'keto', label: 'KETO' },
                     { id: 'jain', label: 'JAIN' },
-                    { id: 'gluten-free', label: 'GLUTEN-FREE' },
                   ] as { id: 'all' | DietTag; label: string }[]
                 ).map((d) => (
                   <TouchableOpacity
                     key={d.id}
                     style={[
-                      styles.crossTabBtn,
+                      styles.crossTabFilterPill,
                       {
                         backgroundColor: crossTabDiet === d.id ? colors.primary : colors.bgSubtle,
+                        borderColor: crossTabDiet === d.id ? colors.primary : colors.borderLight,
                         borderRadius: radii.pill,
-                        paddingHorizontal: 12,
                       },
                     ]}
                     onPress={() => setCrossTabDiet(d.id)}
                   >
                     <Text
                       style={{
-                        color: crossTabDiet === d.id ? '#fff' : colors.textPrimary,
                         fontSize: 11,
                         fontWeight: '700',
+                        color: crossTabDiet === d.id ? '#FFFFFF' : colors.textPrimary,
                       }}
                     >
                       {d.label}
@@ -1472,30 +1552,34 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
                 ))}
               </ScrollView>
 
-              {crossTabResult.topItems.slice(0, 4).map((item, idx) => (
-                <View
-                  key={item.mealKitId}
-                  style={[styles.crossTabItem, { borderBottomColor: colors.borderLight }]}
-                >
-                  <Text style={[styles.crossTabRank, { color: colors.primary }]}>#{idx + 1}</Text>
-                  <View style={{ flex: 1, marginHorizontal: 8 }}>
-                    <Text style={[styles.crossTabName, { color: colors.textPrimary }]}>
-                      {item.name}
-                    </Text>
-                    <Text style={[styles.crossTabCuisine, { color: colors.textMuted }]}>
-                      {item.cuisine} • ₹{item.price}
+              <View style={{ gap: 8 }}>
+                {crossTabResult.topItems.map((dish, idx) => (
+                  <View
+                    key={dish.mealKitId || idx}
+                    style={[
+                      styles.crossTabItem,
+                      {
+                        backgroundColor: colors.bgSubtle,
+                        borderRadius: radii.md,
+                        paddingHorizontal: 12,
+                      },
+                    ]}
+                  >
+                    <Text style={[styles.crossTabRank, { color: colors.primary }]}>#{idx + 1}</Text>
+                    <View style={{ flex: 1, marginLeft: 8 }}>
+                      <Text style={[styles.crossTabName, { color: colors.textPrimary }]}>
+                        {dish.name}
+                      </Text>
+                      <Text style={[styles.crossTabCuisine, { color: colors.textSecondary }]}>
+                        {dish.unitsSold} kits sold • {dish.shareInRegion}% region share
+                      </Text>
+                    </View>
+                    <Text style={[styles.crossTabUnits, { color: colors.primary }]}>
+                      ₹{dish.revenueGenerated.toLocaleString('en-IN')}
                     </Text>
                   </View>
-                  <View style={{ alignItems: 'flex-end' }}>
-                    <Text style={[styles.crossTabUnits, { color: colors.textPrimary }]}>
-                      {item.unitsSold} boxes
-                    </Text>
-                    <Text style={[styles.crossTabShare, { color: colors.primary }]}>
-                      {item.shareInRegion}% share
-                    </Text>
-                  </View>
-                </View>
-              ))}
+                ))}
+              </View>
             </View>
           </View>
         )}
@@ -1506,10 +1590,10 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
             <View style={styles.moduleHeaderRow}>
               <View>
                 <Text style={[styles.moduleTitle, { color: colors.textPrimary }]}>
-                  User Directory ({users.length})
+                  Customer Accounts ({users.length})
                 </Text>
                 <Text style={[styles.moduleSubtitle, { color: colors.textSecondary }]}>
-                  Manage roles, activity, and ban/suspend permissions
+                  Manage staff admin roles and customer statuses
                 </Text>
               </View>
             </View>
@@ -1525,7 +1609,9 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
                   },
                 ]}
               >
-                <Text style={styles.emptyStateIcon}>👥</Text>
+                <View style={{ marginBottom: 12 }}>
+                  <Icon name="people" size={38} color={colors.textMuted} />
+                </View>
                 <Text style={[styles.emptyStateTitle, { color: colors.textPrimary }]}>
                   No Users Registered
                 </Text>
@@ -1564,29 +1650,26 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
                   </View>
 
                   <Text style={[styles.userStats, { color: colors.textMuted }]}>
-                    City: {u.city} • Orders: {u.ordersCount} • Total Spend: ₹{u.totalSpend} •
-                    Joined: {u.joinedDate}
+                    Orders: {u.ordersCount} • Spent: ₹{u.totalSpend} • City: {u.city}
                   </Text>
 
                   <View style={styles.userActionRow}>
                     <Button
-                      title={
-                        u.role === 'admin' ? 'Demote to Customer' : 'Promote to Admin (@mulyam.in)'
-                      }
+                      title={u.status === 'active' ? 'Suspend Account' : 'Activate Account'}
+                      variant={u.status === 'active' ? 'outline' : 'primary'}
+                      size="sm"
+                      style={{ marginRight: 8 }}
+                      onPress={() => {
+                        toggleUserStatus(u.id);
+                        setUsers(getManagedUsers());
+                      }}
+                    />
+                    <Button
+                      title={u.role === 'admin' ? 'Revoke Admin' : 'Grant Admin'}
                       variant="outline"
                       size="sm"
                       onPress={() => {
                         toggleUserAdminRole(u.id);
-                        setUsers(getManagedUsers());
-                      }}
-                      style={{ marginRight: 8 }}
-                    />
-                    <Button
-                      title={u.status === 'suspended' ? 'Activate' : 'Suspend'}
-                      variant={u.status === 'suspended' ? 'primary' : 'danger'}
-                      size="sm"
-                      onPress={() => {
-                        toggleUserStatus(u.id);
                         setUsers(getManagedUsers());
                       }}
                     />
@@ -1597,19 +1680,19 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
           </View>
         )}
 
-        {/* MODULE 6: COUPONS & DISCOUNTS */}
+        {/* MODULE 6: COUPONS & PROMOTIONS */}
         {activeTab === 'coupons' && (
           <View>
             <View style={styles.moduleHeaderRow}>
               <View>
                 <Text style={[styles.moduleTitle, { color: colors.textPrimary }]}>
-                  Promotions & Coupons
+                  Discounts & Coupons ({coupons.length})
                 </Text>
                 <Text style={[styles.moduleSubtitle, { color: colors.textSecondary }]}>
-                  Create, toggle, and manage campaign discount codes
+                  Manage promo codes and checkout discounts
                 </Text>
               </View>
-              <Button title="+ Add Coupon" size="sm" onPress={() => setCouponModalVisible(true)} />
+              <Button title="+ New Coupon" size="sm" onPress={() => setCouponModalVisible(true)} />
             </View>
 
             {coupons.map((c) => (
@@ -1635,11 +1718,14 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
                   />
                 </View>
 
-                <Text style={[styles.couponDesc, { color: colors.textSecondary }]}>
-                  {c.description}
+                <Text style={[styles.couponDesc, { color: colors.textPrimary }]}>
+                  {c.type === 'percentage'
+                    ? `${c.discountValue}% OFF`
+                    : `Flat ₹${c.discountValue} OFF`}
+                  {c.minOrderValue ? ` • Min Order: ₹${c.minOrderValue}` : ''}
                 </Text>
                 <Text style={[styles.couponTerms, { color: colors.textMuted }]}>
-                  Min Order: ₹{c.minOrderValue} • Expiry: {c.expiryDate}
+                  Max Discount: ₹{c.maxDiscount || 'Unlimited'} • Valid until {c.expiryDate}
                 </Text>
 
                 <View style={styles.couponActionRow}>
@@ -1647,11 +1733,11 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
                     title={c.isActive ? 'Deactivate' : 'Activate'}
                     variant="outline"
                     size="sm"
+                    style={{ marginRight: 8 }}
                     onPress={() => {
                       toggleCouponActive(c.code);
                       setCoupons(getCoupons());
                     }}
-                    style={{ marginRight: 8 }}
                   />
                   <Button
                     title="Delete"
@@ -1668,16 +1754,16 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
           </View>
         )}
 
-        {/* MODULE 7: REVENUE DASHBOARD */}
+        {/* MODULE 7: REVENUE & FINANCIAL REPORT */}
         {activeTab === 'revenue' && (
           <View>
             <View style={styles.moduleHeaderRow}>
               <View>
                 <Text style={[styles.moduleTitle, { color: colors.textPrimary }]}>
-                  Revenue & Sales Dashboard
+                  Financial Dashboard
                 </Text>
                 <Text style={[styles.moduleSubtitle, { color: colors.textSecondary }]}>
-                  Financial metrics, Average Order Value (AOV) & trends
+                  Monthly sales, AOV & growth indicators
                 </Text>
               </View>
             </View>
@@ -1686,29 +1772,27 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
               <View
                 style={[
                   styles.metricCard,
-                  { backgroundColor: colors.bgSurface, borderRadius: radii.xl, ...shadows.card },
+                  { backgroundColor: colors.bgSubtle, borderRadius: radii.md },
                 ]}
               >
-                <Text style={[styles.metricVal, { color: colors.primary }]}>₹17.9L</Text>
+                <Text style={[styles.metricVal, { color: colors.primary }]}>₹4.8L</Text>
                 <Text style={[styles.metricLabel, { color: colors.textMuted }]}>
-                  THIS MONTH SALES
+                  OCTOBER REVENUE
                 </Text>
               </View>
               <View
                 style={[
                   styles.metricCard,
-                  { backgroundColor: colors.bgSurface, borderRadius: radii.xl, ...shadows.card },
+                  { backgroundColor: colors.bgSubtle, borderRadius: radii.md },
                 ]}
               >
-                <Text style={[styles.metricVal, { color: colors.textPrimary }]}>₹614</Text>
-                <Text style={[styles.metricLabel, { color: colors.textMuted }]}>
-                  AVERAGE ORDER (AOV)
-                </Text>
+                <Text style={[styles.metricVal, { color: colors.textPrimary }]}>₹612</Text>
+                <Text style={[styles.metricLabel, { color: colors.textMuted }]}>AVERAGE ORDER</Text>
               </View>
               <View
                 style={[
                   styles.metricCard,
-                  { backgroundColor: colors.bgSurface, borderRadius: radii.xl, ...shadows.card },
+                  { backgroundColor: colors.bgSubtle, borderRadius: radii.md },
                 ]}
               >
                 <Text style={[styles.metricVal, { color: colors.success }]}>68%</Text>
@@ -1716,50 +1800,55 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
               </View>
             </View>
 
-            {/* Monthly Trend Bars */}
-            <View
+            <Text
               style={[
-                styles.trendCard,
-                { backgroundColor: colors.bgSurface, borderRadius: radii.xl, ...shadows.card },
+                styles.trendCardTitle,
+                { color: colors.textPrimary, marginTop: 14, marginBottom: 10 },
               ]}
             >
-              <Text style={[styles.trendCardTitle, { color: colors.textPrimary }]}>
-                Sales Growth Over Past 6 Months
-              </Text>
-              {MONTHLY_TRENDS.map((t) => (
-                <View key={t.month} style={styles.trendRow}>
-                  <Text style={[styles.trendMonth, { color: colors.textPrimary }]}>{t.month}</Text>
-                  <View style={styles.trendBarTrack}>
-                    <View
-                      style={[
-                        styles.trendBarFill,
-                        {
-                          backgroundColor: colors.primary,
-                          width: `${(t.revenue / 2000000) * 100}%`,
-                          borderRadius: radii.pill,
-                        },
-                      ]}
-                    />
-                  </View>
-                  <Text style={[styles.trendRevenue, { color: colors.primary }]}>
-                    ₹{(t.revenue / 100000).toFixed(1)}L
+              Quarterly Trajectory (2024)
+            </Text>
+
+            {MONTHLY_TRENDS.map((t) => (
+              <View
+                key={t.month}
+                style={[
+                  styles.trendRow,
+                  {
+                    backgroundColor: colors.bgSurface,
+                    borderRadius: radii.lg,
+                    borderColor: colors.borderLight,
+                    borderWidth: 1,
+                    padding: 12,
+                  },
+                ]}
+              >
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.trendMonth, { color: colors.textPrimary, width: 'auto' }]}>
+                    {t.month} 2024
+                  </Text>
+                  <Text style={{ fontSize: 12, color: colors.textMuted, marginTop: 2 }}>
+                    {t.orders} kits shipped
                   </Text>
                 </View>
-              ))}
-            </View>
+                <Text style={[styles.trendRevenue, { color: colors.primary }]}>
+                  ₹{(t.revenue / 1000).toFixed(0)}k
+                </Text>
+              </View>
+            ))}
           </View>
         )}
 
-        {/* MODULE 8: REVIEW MODERATION */}
+        {/* MODULE 8: REVIEWS MODERATION */}
         {activeTab === 'reviews' && (
           <View>
             <View style={styles.moduleHeaderRow}>
               <View>
                 <Text style={[styles.moduleTitle, { color: colors.textPrimary }]}>
-                  Customer Review Moderation
+                  Customer Reviews ({moderationReviews.length})
                 </Text>
                 <Text style={[styles.moduleSubtitle, { color: colors.textSecondary }]}>
-                  Inspect flagged/reported reviews, approve, or hide
+                  Moderation queue for meal kit ratings and feedback
                 </Text>
               </View>
             </View>
@@ -1775,13 +1864,11 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
                   },
                 ]}
               >
-                <Text style={styles.emptyStateIcon}>⭐</Text>
                 <Text style={[styles.emptyStateTitle, { color: colors.textPrimary }]}>
-                  No Reviews to Moderate
+                  No Pending Reviews
                 </Text>
                 <Text style={[styles.emptyStateSubtitle, { color: colors.textSecondary }]}>
-                  Mock reviews have been removed. Verified customer feedback will appear here as
-                  orders are delivered and reviewed.
+                  All customer reviews have been reviewed.
                 </Text>
               </View>
             ) : (
@@ -1792,8 +1879,8 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
                     styles.reviewModCard,
                     {
                       backgroundColor: colors.bgSurface,
+                      borderColor: rev.status === 'flagged' ? colors.danger : colors.borderLight,
                       borderRadius: radii.xl,
-                      borderColor: rev.status === 'flagged' ? colors.warning : colors.borderLight,
                       borderWidth: rev.status === 'flagged' ? 2 : 1,
                       ...shadows.card,
                     },
@@ -1804,9 +1891,17 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
                       <Text style={[styles.reviewKitName, { color: colors.textPrimary }]}>
                         {rev.mealKitName}
                       </Text>
-                      <Text style={[styles.reviewAuthor, { color: colors.textSecondary }]}>
-                        {rev.userName} ({rev.userCity}) • Rating: {rev.rating}★
-                      </Text>
+                      <View
+                        style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 }}
+                      >
+                        <Text style={[styles.reviewAuthor, { color: colors.textSecondary }]}>
+                          {rev.userName} ({rev.userCity}) •
+                        </Text>
+                        <Icon name="star" size={12} color="#EAB308" />
+                        <Text style={[styles.reviewAuthor, { color: colors.textSecondary }]}>
+                          {rev.rating}
+                        </Text>
+                      </View>
                     </View>
                     <Badge
                       label={rev.status.toUpperCase()}
@@ -1950,7 +2045,7 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
               },
             ]}
           >
-            <Text style={[styles.modalHeading, { color: '#DC2626' }]}>Cancel Order 🚫</Text>
+            <Text style={[styles.modalHeading, { color: '#DC2626' }]}>Cancel Order</Text>
             <Text style={[styles.modalSub, { color: colors.textSecondary }]}>
               {orderToCancel ? `Order ID: ${orderToCancel}` : ''}
             </Text>
@@ -1997,10 +2092,9 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
                 }}
               />
               <Button
-                title={updatingOrderId ? 'Cancelling...' : 'Yes, Cancel Order'}
+                title="Confirm Cancel"
                 variant="danger"
-                style={{ flex: 1, backgroundColor: '#DC2626' }}
-                loading={updatingOrderId !== null}
+                style={{ flex: 1 }}
                 onPress={handleConfirmCancelOrder}
               />
             </View>
@@ -2008,7 +2102,7 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
         </View>
       </Modal>
 
-      {/* ORDER ITEMS & CUSTOMIZATION DETAILS INSPECTOR MODAL */}
+      {/* INSPECT ORDER DETAILS MODAL */}
       <Modal
         visible={inspectModalVisible}
         transparent
@@ -2029,41 +2123,28 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
               },
             ]}
           >
-            {/* Modal Header */}
             <View
               style={{
                 flexDirection: 'row',
                 justifyContent: 'space-between',
-                alignItems: 'center',
-                paddingBottom: 12,
-                borderBottomWidth: 1,
-                borderBottomColor: colors.borderLight,
-                marginBottom: 12,
+                alignItems: 'flex-start',
+                marginBottom: 16,
               }}
             >
-              <View style={{ flex: 1 }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                  <Text
-                    style={[styles.modalHeading, { color: colors.textPrimary, marginBottom: 0 }]}
-                  >
-                    Order {inspectOrder?.id}
-                  </Text>
-                  {inspectOrder && (
-                    <Badge
-                      label={inspectOrder.status}
-                      variant={getBadgeVariant(inspectOrder.status)}
-                      size="sm"
-                    />
-                  )}
-                </View>
-                <Text style={{ fontSize: 11, color: colors.textMuted, marginTop: 2 }}>
-                  Placed:{' '}
+              <View>
+                <Text style={[styles.modalHeading, { color: colors.textPrimary }]}>
+                  Order Inspection
+                </Text>
+                <Text style={[styles.modalSub, { color: colors.textSecondary }]}>
+                  {inspectOrder?.id} • Placed{' '}
                   {inspectOrder?.createdAt
-                    ? new Date(inspectOrder.createdAt).toLocaleString()
-                    : 'Recent'}
+                    ? new Date(inspectOrder.createdAt).toLocaleTimeString([], {
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      })
+                    : 'recently'}
                 </Text>
               </View>
-
               <TouchableOpacity
                 onPress={() => {
                   setInspectModalVisible(false);
@@ -2078,9 +2159,7 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
                   alignItems: 'center',
                 }}
               >
-                <Text style={{ fontSize: 16, color: colors.textSecondary, fontWeight: '700' }}>
-                  ✕
-                </Text>
+                <Icon name="close" size={18} color={colors.textSecondary} />
               </TouchableOpacity>
             </View>
 
@@ -2098,16 +2177,25 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
                       borderColor: colors.borderLight,
                     }}
                   >
-                    <Text
+                    <View
                       style={{
-                        fontSize: 13,
-                        fontWeight: '800',
-                        color: colors.textPrimary,
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        gap: 6,
                         marginBottom: 8,
                       }}
                     >
-                      👤 Customer & Delivery Details
-                    </Text>
+                      <Icon name="people" size={14} color={colors.textPrimary} />
+                      <Text
+                        style={{
+                          fontSize: 13,
+                          fontWeight: '800',
+                          color: colors.textPrimary,
+                        }}
+                      >
+                        Customer & Delivery Details
+                      </Text>
+                    </View>
                     <View style={{ gap: 4 }}>
                       <Text style={{ fontSize: 12, color: colors.textPrimary, fontWeight: '700' }}>
                         Customer:{' '}
@@ -2130,20 +2218,20 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
                       <Text style={{ fontSize: 12, color: colors.textPrimary, fontWeight: '700' }}>
                         Delivery Address:{' '}
                         <Text style={{ fontWeight: '400', color: colors.textSecondary }}>
-                          📍 {inspectOrder.deliveryAddress}{' '}
+                          {inspectOrder.deliveryAddress}{' '}
                           {inspectOrder.addressTag ? `[${inspectOrder.addressTag}]` : ''}
                         </Text>
                       </Text>
                       <Text style={{ fontSize: 12, color: colors.textPrimary, fontWeight: '700' }}>
                         Slot:{' '}
                         <Text style={{ fontWeight: '400', color: colors.textSecondary }}>
-                          🕒 {inspectOrder.deliveryDate || 'Today'} • {inspectOrder.deliverySlot}
+                          {inspectOrder.deliveryDate || 'Today'} • {inspectOrder.deliverySlot}
                         </Text>
                       </Text>
                       <Text style={{ fontSize: 12, color: colors.textPrimary, fontWeight: '700' }}>
                         Payment:{' '}
                         <Text style={{ fontWeight: '400', color: colors.textSecondary }}>
-                          💳 {inspectOrder.paymentMethod} • Status:{' '}
+                          {inspectOrder.paymentMethod} • Status:{' '}
                           {inspectOrder.paymentStatus || 'Paid'} (Txn:{' '}
                           {inspectOrder.transactionId || inspectOrder.id})
                         </Text>
@@ -2152,16 +2240,48 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
                   </View>
 
                   {/* Dishes & Meal Kits Section */}
-                  <Text
+                  <View
                     style={{
-                      fontSize: 14,
-                      fontWeight: '800',
-                      color: colors.textPrimary,
+                      flexDirection: 'row',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
                       marginBottom: 8,
                     }}
                   >
-                    🍲 Dishes & Customizations ({inspectOrder.items?.length || 0})
-                  </Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                      <Icon name="restaurant" size={16} color={colors.textPrimary} />
+                      <Text
+                        style={{
+                          fontSize: 14,
+                          fontWeight: '800',
+                          color: colors.textPrimary,
+                        }}
+                      >
+                        Dishes & Customizations ({inspectOrder.items?.length || 0})
+                      </Text>
+                    </View>
+                    {inspectOrder.items && inspectOrder.items.length > 0 && (
+                      <Button
+                        title="Print Recipe Cards"
+                        variant="outline"
+                        size="sm"
+                        onPress={() => {
+                          const item = inspectOrder.items?.[0];
+                          if (!item) return;
+                          const matchedKit =
+                            kits.find(
+                              (k) =>
+                                k.name.toLowerCase() === item.name.toLowerCase() ||
+                                k.id === item.id,
+                            ) ||
+                            kits[0] ||
+                            null;
+                          setPrintCardKit(matchedKit);
+                          setPrintCardModalVisible(true);
+                        }}
+                      />
+                    )}
+                  </View>
 
                   {!inspectOrder.items || inspectOrder.items.length === 0 ? (
                     <Text
@@ -2205,6 +2325,40 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
                             <Text style={{ fontSize: 12, color: colors.textMuted, marginTop: 2 }}>
                               ₹{item.price} each × {item.quantity} kit{item.quantity > 1 ? 's' : ''}
                             </Text>
+                            <TouchableOpacity
+                              onPress={() => {
+                                const matchedKit =
+                                  kits.find(
+                                    (k) =>
+                                      k.name.toLowerCase() === item.name.toLowerCase() ||
+                                      k.id === item.id,
+                                  ) ||
+                                  kits[0] ||
+                                  null;
+                                setPrintCardKit(matchedKit);
+                                setPrintCardModalVisible(true);
+                              }}
+                              style={{
+                                marginTop: 6,
+                                alignSelf: 'flex-start',
+                                backgroundColor: '#FFF7ED',
+                                paddingHorizontal: 8,
+                                paddingVertical: 4,
+                                borderRadius: 6,
+                                borderWidth: 1,
+                                borderColor: '#FED7AA',
+                                flexDirection: 'row',
+                                alignItems: 'center',
+                                gap: 4,
+                              }}
+                            >
+                              <Icon name="document-text" size={12} color={colors.primary} />
+                              <Text
+                                style={{ fontSize: 11, fontWeight: '700', color: colors.primary }}
+                              >
+                                Print Recipe Card for Box Package
+                              </Text>
+                            </TouchableOpacity>
                           </View>
                           <Text style={{ fontSize: 16, fontWeight: '900', color: colors.primary }}>
                             ₹{item.price * item.quantity}
@@ -2239,7 +2393,7 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
                             <Text
                               style={{ fontSize: 12, fontWeight: '800', color: colors.textPrimary }}
                             >
-                              👥 Serving Size:
+                              Serving Size:
                             </Text>
                             <Text
                               style={{
@@ -2274,8 +2428,20 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
                                 : (item.spiceLevel || '').toLowerCase().includes('spicy')
                                   ? '#FCA5A5'
                                   : '#FDE68A',
+                              gap: 4,
                             }}
                           >
+                            <Icon
+                              name="flame"
+                              size={12}
+                              color={
+                                (item.spiceLevel || '').toLowerCase().includes('mild')
+                                  ? '#065F46'
+                                  : (item.spiceLevel || '').toLowerCase().includes('spicy')
+                                    ? '#991B1B'
+                                    : '#92400E'
+                              }
+                            />
                             <Text
                               style={{
                                 fontSize: 12,
@@ -2287,7 +2453,7 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
                                     : '#92400E',
                               }}
                             >
-                              🌶️ Spice Level: {item.spiceLevel || 'Medium'}
+                              Spice Level: {item.spiceLevel || 'Medium'}
                             </Text>
                           </View>
                         </View>
@@ -2303,7 +2469,7 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
                               marginBottom: 4,
                             }}
                           >
-                            🧂 Masala Sachets & Prep Packs:
+                            Masala Sachets & Prep Packs:
                           </Text>
                           {item.masalaSachets && item.masalaSachets.length > 0 ? (
                             <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
@@ -2317,10 +2483,14 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
                                     borderRadius: radii.sm,
                                     borderWidth: 1,
                                     borderColor: colors.borderLight,
+                                    flexDirection: 'row',
+                                    alignItems: 'center',
+                                    gap: 4,
                                   }}
                                 >
+                                  <Icon name="sparkles" size={10} color={colors.primary} />
                                   <Text style={{ fontSize: 11, color: colors.textSecondary }}>
-                                    ✨ {sachet}
+                                    {sachet}
                                   </Text>
                                 </View>
                               ))}
@@ -2361,7 +2531,7 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
                         marginBottom: 6,
                       }}
                     >
-                      💰 Bill Summary
+                      Bill Summary
                     </Text>
                     <View
                       style={{
@@ -2443,7 +2613,7 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
                 !isOrderApproved(inspectOrder.id) ? (
                   <>
                     <Button
-                      title="Approve Order ✅"
+                      title="Approve Order"
                       variant="primary"
                       size="sm"
                       style={{ flex: 1, backgroundColor: '#16A34A' }}
@@ -2455,7 +2625,7 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
                       }}
                     />
                     <Button
-                      title="Reject / Cancel ✕"
+                      title="Reject / Cancel"
                       variant="outline"
                       size="sm"
                       style={{ borderColor: '#DC2626', flex: 1 }}
@@ -2469,7 +2639,25 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
                 ) : (
                   <>
                     <Button
-                      title="View Invoice 📄"
+                      title="Print Recipe Card"
+                      variant="primary"
+                      size="sm"
+                      style={{ flex: 1, marginRight: 6 }}
+                      onPress={() => {
+                        const firstItem = inspectOrder.items?.[0];
+                        const matched =
+                          (firstItem &&
+                            kits.find(
+                              (k) => k.name.toLowerCase() === firstItem.name.toLowerCase(),
+                            )) ||
+                          kits[0] ||
+                          null;
+                        setPrintCardKit(matched);
+                        setPrintCardModalVisible(true);
+                      }}
+                    />
+                    <Button
+                      title="View Invoice"
                       variant="outline"
                       size="sm"
                       style={{ flex: 1 }}
@@ -2479,7 +2667,7 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
                       inspectOrder.status !== 'Delivered' &&
                       inspectOrder.status !== 'Refunded' && (
                         <Button
-                          title="Cancel Order 🚫"
+                          title="Cancel Order"
                           variant="outline"
                           size="sm"
                           style={{ borderColor: '#DC2626', flex: 1 }}
@@ -2619,6 +2807,20 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
           </View>
         </View>
       </Modal>
+
+      {/* 2-SIDED MEAL KIT RECIPE CARD PRINT MODAL */}
+      {printCardKit && (
+        <RecipeCardPrintModal
+          visible={printCardModalVisible}
+          onClose={() => {
+            setPrintCardModalVisible(false);
+            setPrintCardKit(null);
+          }}
+          kit={printCardKit}
+          orderId={inspectOrder?.id}
+          customerName={inspectOrder?.customerName}
+        />
+      )}
     </View>
   );
 };
@@ -2639,9 +2841,50 @@ const styles = StyleSheet.create({
   headerLeft: {
     flex: 1,
   },
+  headerTitleCol: {
+    flex: 1,
+  },
   headerTitle: {
     fontSize: 18,
     fontWeight: '800',
+  },
+  headerSubtitle: {
+    fontSize: 12,
+    marginTop: 2,
+  },
+  headerRightActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  adminPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 16,
+    borderWidth: 1,
+    gap: 6,
+  },
+  adminDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#10B981',
+  },
+  adminPillText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  logoutBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  logoutText: {
+    fontSize: 12,
+    fontWeight: '700',
   },
   adminUserEmail: {
     fontSize: 12,
@@ -2650,6 +2893,21 @@ const styles = StyleSheet.create({
   scrollBody: {
     padding: 16,
     paddingBottom: 90,
+  },
+  scrollContent: {
+    padding: 16,
+    paddingBottom: 90,
+  },
+  sectionHeading: {
+    fontSize: 16,
+    fontWeight: '800',
+    marginBottom: 8,
+  },
+  crossTabFilterPill: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderWidth: 1,
+    marginRight: 8,
   },
   statusFilterRow: {
     marginBottom: 12,

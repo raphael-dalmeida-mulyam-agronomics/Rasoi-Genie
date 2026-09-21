@@ -122,7 +122,7 @@ export function notifyAdminNewOrder(payload: OrderNotificationPayload): void {
   if (Platform.OS === 'web' && typeof window !== 'undefined' && 'Notification' in window) {
     if (Notification.permission === 'granted') {
       try {
-        const title = `🚨 New Order ${payload.orderId} Awaiting Approval!`;
+        const title = `New Order ${payload.orderId} Awaiting Approval!`;
         const body = `${payload.customerName || 'Customer'} placed an order (₹${payload.totalAmount}) with ${payload.itemsCount} item(s).`;
         new Notification(title, {
           body,

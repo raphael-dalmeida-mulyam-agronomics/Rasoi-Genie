@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ViewStyle } from 'react-native';
 import { useTheme } from '../../framework/theme/ThemeContext';
+import { Icon, AppIconName } from '../../framework/ui/Icon';
 
 export type AdminTab =
   | 'overview'
@@ -16,7 +17,7 @@ export type AdminTab =
 export interface AdminNavTabItem {
   id: AdminTab;
   label: string;
-  icon: string;
+  icon: AppIconName;
   count?: number;
   alertBadge?: string;
   highlightAlert?: boolean;
@@ -56,56 +57,54 @@ export const AdminNavigationMenu: React.FC<AdminNavigationMenuProps> = ({
     {
       id: 'overview',
       label: 'Overview',
-      icon: '🏠',
+      icon: 'home',
     },
     {
       id: 'orders',
       label: 'Orders',
-      icon: '📦',
+      icon: 'cube',
       count: ordersCount,
       alertBadge:
-        pendingApprovalCount > 0
-          ? `🚨 ${pendingApprovalCount} Awaiting Approval`
-          : undefined,
+        pendingApprovalCount > 0 ? `${pendingApprovalCount} Awaiting Approval` : undefined,
       highlightAlert: pendingApprovalCount > 0,
     },
     {
       id: 'kits',
       label: 'Meal Kits',
-      icon: '🍲',
+      icon: 'restaurant',
       count: kitsCount,
     },
     {
       id: 'inventory',
       label: 'Inventory Hub',
-      icon: '🏭',
+      icon: 'business',
     },
     {
       id: 'analytics',
-      label: 'Regional Analytics 🇮🇳',
-      icon: '📊',
+      label: 'Regional Analytics',
+      icon: 'bar-chart',
     },
     {
       id: 'users',
       label: 'Users',
-      icon: '👥',
+      icon: 'people',
       count: usersCount,
     },
     {
       id: 'coupons',
       label: 'Coupons',
-      icon: '🏷️',
+      icon: 'tag',
       count: couponsCount,
     },
     {
       id: 'revenue',
       label: 'Revenue Dash',
-      icon: '📈',
+      icon: 'trending-up',
     },
     {
       id: 'reviews',
       label: 'Reviews',
-      icon: '⭐',
+      icon: 'star',
       count: reviewsCount,
     },
   ];
@@ -157,16 +156,18 @@ export const AdminNavigationMenu: React.FC<AdminNavigationMenuProps> = ({
               activeOpacity={0.7}
             >
               {/* Icon & Label */}
-              <Text style={{ fontSize: 13, marginRight: 6 }}>{tab.icon}</Text>
+              <View style={{ marginRight: 6 }}>
+                <Icon
+                  name={tab.icon}
+                  size={14}
+                  color={isSelected ? '#FFFFFF' : hasAlert ? '#991B1B' : colors.textPrimary}
+                />
+              </View>
               <Text
                 style={[
                   styles.tabLabel,
                   {
-                    color: isSelected
-                      ? '#FFFFFF'
-                      : hasAlert
-                        ? '#991B1B'
-                        : colors.textPrimary,
+                    color: isSelected ? '#FFFFFF' : hasAlert ? '#991B1B' : colors.textPrimary,
                     fontWeight: isSelected ? '800' : '600',
                   },
                 ]}
@@ -184,12 +185,7 @@ export const AdminNavigationMenu: React.FC<AdminNavigationMenuProps> = ({
                     },
                   ]}
                 >
-                  <Text
-                    style={[
-                      styles.alertBadgeText,
-                      { color: '#FFFFFF' },
-                    ]}
-                  >
+                  <Text style={[styles.alertBadgeText, { color: '#FFFFFF' }]}>
                     {tab.alertBadge}
                   </Text>
                 </View>

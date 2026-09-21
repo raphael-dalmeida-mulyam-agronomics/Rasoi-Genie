@@ -22,6 +22,7 @@ import {
 import { Badge, getDietBadgeInfo } from '../../framework/ui/Badge';
 import { Button } from '../../framework/ui/Button';
 import { PillTag } from '../../framework/ui/PillTag';
+import { Icon } from '../../framework/ui/Icon';
 import { MealDetailModal } from '../meal-detail/MealDetailModal';
 
 const TRENDING_SEARCHES = [
@@ -86,7 +87,7 @@ export const SearchView: React.FC = () => {
 
   const handleQuickAdd = (kit: MealKit) => {
     addItem(kit, 1);
-    Alert.alert('Added to Cart! 🛒', `1x ${kit.name} added to your basket.`);
+    Alert.alert('Added to Cart', `1x ${kit.name} added to your basket.`);
   };
 
   return (
@@ -108,7 +109,9 @@ export const SearchView: React.FC = () => {
             },
           ]}
         >
-          <Text style={styles.searchIcon}>🔍</Text>
+          <View style={{ marginRight: 8 }}>
+            <Icon name="search" size={18} color={colors.textMuted} />
+          </View>
           <TextInput
             style={[styles.searchInput, { color: colors.textPrimary }]}
             placeholder="Search by meal name or ingredient..."
@@ -119,8 +122,12 @@ export const SearchView: React.FC = () => {
             autoCapitalize="none"
           />
           {searchQuery.length > 0 && (
-            <TouchableOpacity onPress={() => setSearchQuery('')} style={styles.clearBtn}>
-              <Text style={[styles.clearText, { color: colors.textMuted }]}>✕</Text>
+            <TouchableOpacity
+              onPress={() => setSearchQuery('')}
+              style={styles.clearBtn}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Icon name="close" size={16} color={colors.textMuted} />
             </TouchableOpacity>
           )}
         </View>
@@ -219,9 +226,14 @@ export const SearchView: React.FC = () => {
             {recentSearches.length > 0 && (
               <View style={styles.block}>
                 <View style={styles.blockHeader}>
-                  <Text style={[styles.blockTitle, { color: colors.textPrimary }]}>
-                    🕒 Recent Searches
-                  </Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    <Icon name="time" size={16} color={colors.primary} />
+                    <Text
+                      style={[styles.blockTitle, { color: colors.textPrimary, marginBottom: 0 }]}
+                    >
+                      Recent Searches
+                    </Text>
+                  </View>
                   <TouchableOpacity onPress={handleClearRecent}>
                     <Text style={[styles.clearLink, { color: colors.textMuted }]}>Clear All</Text>
                   </TouchableOpacity>
@@ -245,9 +257,14 @@ export const SearchView: React.FC = () => {
             )}
 
             <View style={styles.block}>
-              <Text style={[styles.blockTitle, { color: colors.textPrimary }]}>
-                🔥 Trending Searches
-              </Text>
+              <View
+                style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 12 }}
+              >
+                <Icon name="flame" size={16} color={colors.primary} />
+                <Text style={[styles.blockTitle, { color: colors.textPrimary, marginBottom: 0 }]}>
+                  Trending Searches
+                </Text>
+              </View>
               <View style={styles.tagWrap}>
                 {TRENDING_SEARCHES.map((item, idx) => (
                   <TouchableOpacity
@@ -281,7 +298,9 @@ export const SearchView: React.FC = () => {
                 { backgroundColor: colors.bgSurface, borderRadius: radii.xl },
               ]}
             >
-              <Text style={styles.emptyIcon}>🍳</Text>
+              <View style={{ marginBottom: 12 }}>
+                <Icon name="search" size={48} color={colors.textMuted} />
+              </View>
               <Text style={[styles.emptyTitle, { color: colors.textPrimary }]}>
                 No Meal Kits Found
               </Text>
@@ -330,7 +349,11 @@ export const SearchView: React.FC = () => {
                       onPress={() => toggleWishlist(kit.id)}
                       hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                     >
-                      <Text style={{ fontSize: 16 }}>{isInWishlist(kit.id) ? '❤️' : '🤍'}</Text>
+                      <Icon
+                        name={isInWishlist(kit.id) ? 'heart' : 'heart-outline'}
+                        size={18}
+                        color={isInWishlist(kit.id) ? colors.primary : colors.textMuted}
+                      />
                     </TouchableOpacity>
                   </View>
 
@@ -348,9 +371,12 @@ export const SearchView: React.FC = () => {
                   </Text>
 
                   <View style={styles.resultMetaRow}>
-                    <Text style={[styles.resultMeta, { color: colors.textMuted }]}>
-                      ⏱️ {kit.prepTimeMinutes + kit.cookTimeMinutes}m • {kit.servings} Servings
-                    </Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                      <Icon name="time" size={13} color={colors.textMuted} />
+                      <Text style={[styles.resultMeta, { color: colors.textMuted }]}>
+                        {kit.prepTimeMinutes + kit.cookTimeMinutes}m • {kit.servings} Servings
+                      </Text>
+                    </View>
                   </View>
 
                   <View style={styles.resultFooter}>

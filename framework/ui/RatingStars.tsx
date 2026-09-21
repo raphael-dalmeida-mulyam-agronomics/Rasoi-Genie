@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ViewStyle } from 'react-native';
 import { useTheme } from '../theme/ThemeContext';
+import { Icon } from './Icon';
 
 export interface RatingStarsProps {
   rating: number; // 0 to 5
@@ -29,16 +30,13 @@ export const RatingStars: React.FC<RatingStarsProps> = ({
           const isHalf = !isFilled && rating >= star - 0.5;
 
           const starContent = (
-            <Text
-              key={star}
-              style={{
-                fontSize: size,
-                color: isFilled || isHalf ? colors.star : colors.border,
-                marginRight: 2,
-              }}
-            >
-              {isFilled ? '★' : isHalf ? '★' : '☆'}
-            </Text>
+            <View key={star} style={{ marginRight: 2 }}>
+              <Icon
+                name={isFilled ? 'star' : isHalf ? 'star-half' : 'star-outline'}
+                size={size}
+                color={isFilled || isHalf ? colors.star : colors.border}
+              />
+            </View>
           );
 
           if (interactive) {

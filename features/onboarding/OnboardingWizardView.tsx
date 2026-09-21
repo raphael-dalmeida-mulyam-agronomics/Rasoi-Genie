@@ -14,6 +14,7 @@ import { usePreferences } from '../../framework/context/PreferencesContext';
 import { useTheme } from '../../framework/theme/ThemeContext';
 import { Button } from '../../framework/ui/Button';
 import { PillTag } from '../../framework/ui/PillTag';
+import { Icon, AppIconName } from '../../framework/ui/Icon';
 import {
   CuisineType,
   DietTag,
@@ -24,53 +25,68 @@ import { PaymentMethod } from '../../framework/context/CartContext';
 
 const { width } = Dimensions.get('window');
 
-const ALL_CUISINES: { id: CuisineType; name: string; emoji: string }[] = [
-  { id: 'North Indian', name: 'North Indian', emoji: '🥘' },
-  { id: 'South Indian', name: 'South Indian', emoji: '🥞' },
-  { id: 'Punjabi', name: 'Punjabi', emoji: '🫓' },
-  { id: 'Hyderabadi', name: 'Hyderabadi', emoji: '🍚' },
-  { id: 'Mughlai', name: 'Mughlai', emoji: '🍖' },
-  { id: 'Coastal', name: 'Coastal & Malabar', emoji: '🐟' },
-  { id: 'Gujarati', name: 'Gujarati', emoji: '🍲' },
-  { id: 'Indo-Chinese', name: 'Indo-Chinese', emoji: '🥢' },
-  { id: 'Italian', name: 'Italian', emoji: '🍕' },
-  { id: 'Mexican', name: 'Mexican', emoji: '🌮' },
-  { id: 'Continental', name: 'Continental', emoji: '🥗' },
-  { id: 'American', name: 'American', emoji: '🍔' },
+const ALL_CUISINES: { id: CuisineType; name: string }[] = [
+  { id: 'North Indian', name: 'North Indian' },
+  { id: 'South Indian', name: 'South Indian' },
+  { id: 'Punjabi', name: 'Punjabi' },
+  { id: 'Hyderabadi', name: 'Hyderabadi' },
+  { id: 'Mughlai', name: 'Mughlai' },
+  { id: 'Coastal', name: 'Coastal & Malabar' },
+  { id: 'Gujarati', name: 'Gujarati' },
+  { id: 'Indo-Chinese', name: 'Indo-Chinese' },
+  { id: 'Italian', name: 'Italian' },
+  { id: 'Mexican', name: 'Mexican' },
+  { id: 'Continental', name: 'Continental' },
+  { id: 'American', name: 'American' },
 ];
 
-const DIET_OPTIONS: { id: DietTag | 'all'; label: string; emoji: string; desc: string }[] = [
-  { id: 'veg', label: 'Vegetarian', emoji: '🥬', desc: '100% vegetarian dishes, paneer & lentils' },
+const DIET_OPTIONS: { id: DietTag | 'all'; label: string; icon: AppIconName; desc: string }[] = [
+  {
+    id: 'veg',
+    label: 'Vegetarian',
+    icon: 'leaf',
+    desc: '100% vegetarian dishes, paneer & lentils',
+  },
   {
     id: 'nonveg',
     label: 'Non-Vegetarian',
-    emoji: '🍗',
+    icon: 'restaurant',
     desc: 'Chicken, meats, seafood & egg options',
   },
-  { id: 'jain', label: 'Jain Friendly', emoji: '🌱', desc: 'No root vegetables, onions or garlic' },
-  { id: 'vegan', label: 'Vegan', emoji: '🥑', desc: 'Strictly plant-based, 100% dairy-free' },
+  {
+    id: 'jain',
+    label: 'Jain Friendly',
+    icon: 'leaf',
+    desc: 'No root vegetables, onions or garlic',
+  },
+  { id: 'vegan', label: 'Vegan', icon: 'nutrition', desc: 'Strictly plant-based, 100% dairy-free' },
   {
     id: 'keto',
     label: 'Keto Low-Carb',
-    emoji: '🥩',
+    icon: 'flame',
     desc: 'High protein, healthy fats, under 15g carbs',
   },
-  { id: 'gluten-free', label: 'Gluten-Free', emoji: '🌾', desc: 'Zero wheat, gluten-free grains' },
+  {
+    id: 'gluten-free',
+    label: 'Gluten-Free',
+    icon: 'nutrition',
+    desc: 'Zero wheat, gluten-free grains',
+  },
 ];
 
-const SPICE_OPTIONS: { id: SpiceLevel; label: string; heat: string; desc: string }[] = [
-  { id: 'Mild', label: 'Mild', heat: '🌶️', desc: 'Gentle, aromatic, child-friendly heat' },
+const SPICE_OPTIONS: { id: SpiceLevel; label: string; flameCount: number; desc: string }[] = [
+  { id: 'Mild', label: 'Mild', flameCount: 1, desc: 'Gentle, aromatic, child-friendly heat' },
   {
     id: 'Medium',
     label: 'Medium',
-    heat: '🌶️🌶️',
+    flameCount: 2,
     desc: 'Balanced authentic Indian restaurant heat',
   },
-  { id: 'Spicy', label: 'Spicy', heat: '🌶️🌶️🌶️', desc: 'Rich, bold & traditional Dhaba warmth' },
+  { id: 'Spicy', label: 'Spicy', flameCount: 3, desc: 'Rich, bold & traditional Dhaba warmth' },
   {
     id: 'Fiery',
     label: 'Fiery',
-    heat: '🌶️🌶️🌶️🌶️',
+    flameCount: 4,
     desc: 'Intense heat for Andhra & Kolhapuri lovers',
   },
 ];
@@ -93,27 +109,33 @@ const REGIONAL_HUBS: { id: RegionHub; name: string; cityInfo: string }[] = [
   { id: 'East', name: 'East Hub', cityInfo: 'Kolkata, Bhubaneswar' },
 ];
 
-const PAYMENT_OPTIONS: { id: PaymentMethod; title: string; subtitle: string; icon: string }[] = [
-  { id: 'UPI', title: 'UPI Instant Pay', subtitle: 'Google Pay, PhonePe, Paytm, BHIM', icon: '⚡' },
-  {
-    id: 'Card',
-    title: 'Credit / Debit Card',
-    subtitle: 'Visa, Mastercard, RuPay & Amex',
-    icon: '💳',
-  },
-  {
-    id: 'Cash on Delivery',
-    title: 'Cash on Delivery',
-    subtitle: 'Pay at your doorstep on arrival',
-    icon: '💵',
-  },
-  {
-    id: 'Wallet',
-    title: 'Wallets & Net Banking',
-    subtitle: 'Paytm Wallet, Amazon Pay, NetBanking',
-    icon: '🏦',
-  },
-];
+const PAYMENT_OPTIONS: { id: PaymentMethod; title: string; subtitle: string; icon: AppIconName }[] =
+  [
+    {
+      id: 'UPI',
+      title: 'UPI Instant Pay',
+      subtitle: 'Google Pay, PhonePe, Paytm, BHIM',
+      icon: 'flash',
+    },
+    {
+      id: 'Card',
+      title: 'Credit / Debit Card',
+      subtitle: 'Visa, Mastercard, RuPay & Amex',
+      icon: 'card',
+    },
+    {
+      id: 'Cash on Delivery',
+      title: 'Cash on Delivery',
+      subtitle: 'Pay at your doorstep on arrival',
+      icon: 'cash',
+    },
+    {
+      id: 'Wallet',
+      title: 'Wallets & Net Banking',
+      subtitle: 'Paytm Wallet, Amazon Pay, NetBanking',
+      icon: 'bank',
+    },
+  ];
 
 export const OnboardingWizardView: React.FC = () => {
   const { user } = useAuth();
@@ -235,7 +257,7 @@ export const OnboardingWizardView: React.FC = () => {
         ]}
       >
         <View style={styles.badgeRow}>
-          <Text style={styles.brandTitle}>RasoiGenie 🪔</Text>
+          <Text style={styles.brandTitle}>RasoiGenie</Text>
           <View style={[styles.stepBadge, { backgroundColor: colors.primary + '20' }]}>
             <Text style={[styles.stepBadgeText, { color: colors.primary }]}>
               Step {currentStep} of {totalSteps}
@@ -244,10 +266,10 @@ export const OnboardingWizardView: React.FC = () => {
         </View>
 
         <Text style={[styles.welcomeHeadline, { color: colors.textPrimary }]}>
-          {currentStep === 1 && 'What flavors excite your palate? 🍲'}
-          {currentStep === 2 && 'Your dietary lifestyle & allergies 🥗'}
-          {currentStep === 3 && 'Where should we deliver your fresh kits? 📍'}
-          {currentStep === 4 && 'How would you prefer to pay? 💳'}
+          {currentStep === 1 && 'What flavors excite your palate?'}
+          {currentStep === 2 && 'Your dietary lifestyle & allergies'}
+          {currentStep === 3 && 'Where should we deliver your fresh kits?'}
+          {currentStep === 4 && 'How would you prefer to pay?'}
         </Text>
         <Text style={[styles.welcomeSubtext, { color: colors.textSecondary }]}>
           {currentStep === 1 && 'Tailor your daily meal kit recommendations and recipe discovery.'}
@@ -292,12 +314,16 @@ export const OnboardingWizardView: React.FC = () => {
                       {
                         backgroundColor: isSelected ? colors.primary : colors.bgSurface,
                         borderColor: isSelected ? colors.primary : colors.borderLight,
+                        flexDirection: 'row',
+                        alignItems: 'center',
                       },
                       shadows.soft,
                     ]}
                     activeOpacity={0.7}
                   >
-                    <Text style={styles.cuisineEmoji}>{item.emoji}</Text>
+                    {isSelected && (
+                      <Icon name="check" size={14} color="#FFFFFF" style={{ marginRight: 6 }} />
+                    )}
                     <Text
                       style={[
                         styles.cuisineChipText,
@@ -306,7 +332,6 @@ export const OnboardingWizardView: React.FC = () => {
                     >
                       {item.name}
                     </Text>
-                    {isSelected && <Text style={styles.checkIcon}> ✓</Text>}
                   </TouchableOpacity>
                 );
               })}
@@ -334,10 +359,20 @@ export const OnboardingWizardView: React.FC = () => {
                     activeOpacity={0.7}
                   >
                     <View style={styles.cardInfoCol}>
-                      <View style={styles.cardHeaderRow}>
+                      <View
+                        style={[
+                          styles.cardHeaderRow,
+                          { flexDirection: 'row', alignItems: 'center', gap: 8 },
+                        ]}
+                      >
                         <Text style={[styles.cardTitle, { color: colors.textPrimary }]}>
-                          {spice.label} {spice.heat}
+                          {spice.label}
                         </Text>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 2 }}>
+                          {Array.from({ length: spice.flameCount }).map((_, i) => (
+                            <Icon key={i} name="flame" size={14} color={colors.primary} />
+                          ))}
+                        </View>
                       </View>
                       <Text style={[styles.cardDesc, { color: colors.textSecondary }]}>
                         {spice.desc}
@@ -383,7 +418,16 @@ export const OnboardingWizardView: React.FC = () => {
                     ]}
                     activeOpacity={0.7}
                   >
-                    <Text style={styles.dietEmoji}>{diet.emoji}</Text>
+                    <View
+                      style={{
+                        width: 34,
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        marginRight: 12,
+                      }}
+                    >
+                      <Icon name={diet.icon} size={22} color={colors.primary} />
+                    </View>
                     <View style={styles.cardInfoCol}>
                       <Text style={[styles.cardTitle, { color: colors.textPrimary }]}>
                         {diet.label}
@@ -421,18 +465,22 @@ export const OnboardingWizardView: React.FC = () => {
                       {
                         backgroundColor: isSelected ? colors.accent + '25' : colors.bgSurface,
                         borderColor: isSelected ? colors.accent : colors.borderLight,
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        gap: 6,
                       },
                       shadows.soft,
                     ]}
                     activeOpacity={0.7}
                   >
+                    {isSelected && <Icon name="alert" size={12} color={colors.accent} />}
                     <Text
                       style={[
                         styles.allergyText,
                         { color: isSelected ? colors.accent : colors.textPrimary },
                       ]}
                     >
-                      {isSelected ? `⚠️ ${allergy}` : allergy}
+                      {allergy}
                     </Text>
                   </TouchableOpacity>
                 );
@@ -465,9 +513,19 @@ export const OnboardingWizardView: React.FC = () => {
                     ]}
                     activeOpacity={0.7}
                   >
-                    <Text style={[styles.hubName, { color: colors.textPrimary }]}>
-                      {hub.name} {isSelected ? '📍' : ''}
-                    </Text>
+                    <View
+                      style={{
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        marginBottom: 2,
+                      }}
+                    >
+                      <Text style={[styles.hubName, { color: colors.textPrimary }]}>
+                        {hub.name}
+                      </Text>
+                      {isSelected && <Icon name="location" size={16} color={colors.primary} />}
+                    </View>
                     <Text style={[styles.hubDesc, { color: colors.textSecondary }]}>
                       {hub.cityInfo}
                     </Text>
@@ -490,16 +548,24 @@ export const OnboardingWizardView: React.FC = () => {
                     {
                       backgroundColor: addressTag === t ? colors.primary : colors.bgSurface,
                       borderColor: addressTag === t ? colors.primary : colors.borderLight,
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      gap: 6,
                     },
                   ]}
                 >
+                  <Icon
+                    name={t === 'Home' ? 'restaurant' : t === 'Work' ? 'bank' : 'location'}
+                    size={14}
+                    color={addressTag === t ? '#FFFFFF' : colors.textSecondary}
+                  />
                   <Text
                     style={[
                       styles.tagButtonText,
                       { color: addressTag === t ? '#FFFFFF' : colors.textPrimary },
                     ]}
                   >
-                    {t === 'Home' ? '🏠 Home' : t === 'Work' ? '🏢 Work' : '📍 Other'}
+                    {t}
                   </Text>
                 </TouchableOpacity>
               ))}
@@ -642,7 +708,13 @@ export const OnboardingWizardView: React.FC = () => {
                     ]}
                     activeOpacity={0.7}
                   >
-                    <Text style={styles.payEmoji}>{opt.icon}</Text>
+                    <View style={styles.payIconBox}>
+                      <Icon
+                        name={opt.icon}
+                        size={22}
+                        color={isSelected ? colors.primary : colors.textSecondary}
+                      />
+                    </View>
                     <View style={styles.cardInfoCol}>
                       <Text style={[styles.cardTitle, { color: colors.textPrimary }]}>
                         {opt.title}
@@ -672,9 +744,12 @@ export const OnboardingWizardView: React.FC = () => {
                 { backgroundColor: colors.primary + '12', borderColor: colors.primary + '35' },
               ]}
             >
-              <Text style={[styles.summaryTitle, { color: colors.primary }]}>
-                🎉 You’re all set for the RasoiGenie experience!
-              </Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                <Icon name="check-circle" size={18} color={colors.primary} />
+                <Text style={[styles.summaryTitle, { color: colors.primary, marginBottom: 0 }]}>
+                  You’re all set for the RasoiGenie experience!
+                </Text>
+              </View>
               <Text style={[styles.summaryText, { color: colors.textSecondary }]}>
                 Cuisines: {selectedCuisines.join(', ')} • Diet: {dietType.toUpperCase()} • Hub:{' '}
                 {regionHub}
@@ -695,24 +770,33 @@ export const OnboardingWizardView: React.FC = () => {
         {currentStep > 1 && (
           <TouchableOpacity
             onPress={() => setCurrentStep((prev) => prev - 1)}
-            style={[styles.backBtn, { borderColor: colors.borderLight }]}
+            style={[
+              styles.backBtn,
+              {
+                borderColor: colors.borderLight,
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: 4,
+              },
+            ]}
             activeOpacity={0.7}
           >
-            <Text style={[styles.backBtnText, { color: colors.textPrimary }]}>← Back</Text>
+            <Icon name="arrow-back" size={16} color={colors.textPrimary} />
+            <Text style={[styles.backBtnText, { color: colors.textPrimary }]}>Back</Text>
           </TouchableOpacity>
         )}
 
         <View style={{ flex: 1, marginLeft: currentStep > 1 ? 12 : 0 }}>
           {currentStep < totalSteps ? (
             <Button
-              title={`Next: Step ${currentStep + 1} →`}
+              title={`Next: Step ${currentStep + 1}`}
               onPress={handleNextStep}
               variant="primary"
               size="lg"
             />
           ) : (
             <Button
-              title={isSubmitting ? 'Saving Profile...' : 'Complete Setup & Start Cooking 🍲'}
+              title={isSubmitting ? 'Saving Profile...' : 'Complete Setup & Start Cooking'}
               onPress={handleFinish}
               variant="primary"
               size="lg"
@@ -850,8 +934,12 @@ const styles = StyleSheet.create({
   dietEmoji: {
     fontSize: 24,
   },
-  payEmoji: {
-    fontSize: 24,
+  payIconBox: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   radioCircle: {
     width: 20,

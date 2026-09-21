@@ -16,6 +16,7 @@ import { usePreferences } from '../../framework/context/PreferencesContext';
 import { PaymentMethod } from '../../framework/context/CartContext';
 import { Badge } from '../../framework/ui/Badge';
 import { Button } from '../../framework/ui/Button';
+import { Icon, AppIconName } from '../../framework/ui/Icon';
 import { AddressBookView } from './AddressBookView';
 import { DietaryPreferencesModal } from '../onboarding/DietaryPreferencesModal';
 import { NotificationsView } from '../notifications/NotificationsView';
@@ -43,9 +44,14 @@ export const ProfileView: React.FC = () => {
   const [dietModalVisible, setDietModalVisible] = useState(false);
 
   const handleReferFriend = () => {
+    const code = 'RASOI-FRIEND-50';
     Alert.alert(
-      'Refer a Cooking Friend 🎁',
-      'Share your unique code: RASOI-FRIEND-50\n\nYour friend gets ₹150 OFF their first box, and you get ₹150 wallet credits when they cook!',
+      'Refer a Cooking Friend',
+      `Share your referral code "${code}" with family and friends. When they order their first chef box, both of you get ₹150 in cooking wallet credits!`,
+      [
+        { text: 'Copy Code & Share', onPress: () => {} },
+        { text: 'Done', style: 'cancel' },
+      ],
     );
   };
 
@@ -131,9 +137,12 @@ export const ProfileView: React.FC = () => {
               <Text style={[styles.userContact, { color: colors.textSecondary }]}>
                 {userContact}
               </Text>
-              <Text style={[styles.userRegion, { color: colors.textMuted }]}>
-                📍 {preferences.currentCity} ({preferences.regionHub} Region)
-              </Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 }}>
+                <Icon name="location" size={13} color={colors.textMuted} />
+                <Text style={[styles.userRegion, { color: colors.textMuted, marginTop: 0 }]}>
+                  {preferences.currentCity} ({preferences.regionHub} Region)
+                </Text>
+              </View>
             </View>
           </View>
 
@@ -141,8 +150,15 @@ export const ProfileView: React.FC = () => {
             <Button
               title={
                 pendingApprovalCount > 0
-                  ? `Open Admin Panel ⚙️ (${pendingApprovalCount} Awaiting Approval)`
-                  : 'Open Company Admin Panel ⚙️'
+                  ? `Open Admin Panel (${pendingApprovalCount} Awaiting Approval)`
+                  : 'Open Company Admin Panel'
+              }
+              icon={
+                <Icon
+                  name="settings"
+                  size={16}
+                  color={pendingApprovalCount > 0 ? '#FFFFFF' : colors.textPrimary}
+                />
               }
               variant={pendingApprovalCount > 0 ? 'primary' : 'secondary'}
               size="sm"
@@ -203,70 +219,70 @@ export const ProfileView: React.FC = () => {
           ]}
         >
           <MenuRow
-            icon="📍"
+            icon="location"
             title="Saved Delivery Addresses"
             subtitle={`${defaultAddress?.flatAndStreet || 'Manage your delivery locations'}`}
             onPress={() => setSubView('addresses')}
           />
 
           <MenuRow
-            icon="💳"
+            icon="card"
             title="Preferred Payment Method"
             subtitle={`Default: ${preferredPaymentMethod} — Tap to switch`}
             onPress={() => setPaymentModalVisible(true)}
           />
 
           <MenuRow
-            icon="🥗"
+            icon="restaurant"
             title="Dietary & Cooking Preferences"
             subtitle="Diet type, spice tolerance, allergies, cuisines"
             onPress={() => setDietModalVisible(true)}
           />
 
           <MenuRow
-            icon={isDark ? '🌙' : '☀️'}
+            icon={isDark ? 'moon' : 'sun'}
             title={`Appearance: ${isDark ? 'Dark Mode' : 'Light Mode'}`}
             subtitle={`Currently in ${isDark ? 'Dark (Obsidian)' : 'Light (Warm Cream)'} — Tap to switch`}
             onPress={toggleColorMode}
           />
 
           <MenuRow
-            icon="📦"
+            icon="package"
             title="Order History & Live Tracking"
             subtitle="Past boxes, recipes cooked, invoices"
             onPress={() => router.push('/(tabs)/orders' as any)}
           />
 
           <MenuRow
-            icon="❤️"
+            icon="heart"
             title="Wishlist / Favorite Kits"
             subtitle="Saved recipes for upcoming meals"
             onPress={() => router.push('/(tabs)/orders' as any)}
           />
 
           <MenuRow
-            icon="🔄"
+            icon="refresh"
             title="Recurring Meal Plan (Phase 2)"
             subtitle="Weekly automatic fresh kit box"
             onPress={() => setSubView('subscription')}
           />
 
           <MenuRow
-            icon="🔔"
+            icon="bell"
             title="Notification Settings"
             subtitle="Push, SMS & Email communication"
             onPress={() => setSubView('notifications')}
           />
 
           <MenuRow
-            icon="🎁"
+            icon="gift"
             title="Refer a Friend (Earn ₹150)"
             subtitle="Give ₹150, Get ₹150 cooking credits"
             onPress={handleReferFriend}
           />
 
           <MenuRow
-            icon="💬"
+            icon="chat"
             title="Help & Support Desk"
             subtitle="FAQs, refund requests, chef assistance"
             onPress={() => setSubView('support')}
@@ -337,15 +353,21 @@ export const ProfileView: React.FC = () => {
                   ]}
                   activeOpacity={0.7}
                 >
-                  <Text style={styles.paymentMethodIcon}>
-                    {method === 'UPI'
-                      ? '⚡'
-                      : method === 'Card'
-                        ? '💳'
-                        : method === 'Cash on Delivery'
-                          ? '💵'
-                          : '🏦'}
-                  </Text>
+                  <View style={{ width: 32, alignItems: 'center', justifyContent: 'center' }}>
+                    <Icon
+                      name={
+                        method === 'UPI'
+                          ? 'flash'
+                          : method === 'Card'
+                            ? 'card'
+                            : method === 'Cash on Delivery'
+                              ? 'cash'
+                              : 'bank'
+                      }
+                      size={22}
+                      color={isSelected ? colors.primary : colors.textSecondary}
+                    />
+                  </View>
                   <View style={{ flex: 1, marginLeft: 10 }}>
                     <Text style={[styles.paymentOptionName, { color: colors.textPrimary }]}>
                       {method === 'UPI'
@@ -384,7 +406,7 @@ export const ProfileView: React.FC = () => {
 };
 
 const MenuRow: React.FC<{
-  icon: string;
+  icon: AppIconName;
   title: string;
   subtitle: string;
   onPress: () => void;
@@ -401,12 +423,14 @@ const MenuRow: React.FC<{
       onPress={onPress}
       activeOpacity={0.7}
     >
-      <Text style={styles.menuIcon}>{icon}</Text>
+      <View style={{ width: 34, alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
+        <Icon name={icon} size={20} color={colors.primary} />
+      </View>
       <View style={{ flex: 1 }}>
         <Text style={[styles.menuTitle, { color: colors.textPrimary }]}>{title}</Text>
         <Text style={[styles.menuSubtitle, { color: colors.textSecondary }]}>{subtitle}</Text>
       </View>
-      <Text style={[styles.menuChevron, { color: colors.textMuted }]}>›</Text>
+      <Icon name="chevron-right" size={16} color={colors.textMuted} />
     </TouchableOpacity>
   );
 };

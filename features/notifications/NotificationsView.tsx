@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Switch } from 're
 import { usePreferences } from '../../framework/context/PreferencesContext';
 import { useTheme } from '../../framework/theme/ThemeContext';
 import { Badge } from '../../framework/ui/Badge';
+import { Icon } from '../../framework/ui/Icon';
 
 interface AlertItem {
   id: string;
@@ -17,7 +18,7 @@ const INITIAL_ALERTS: AlertItem[] = [
   {
     id: 'n-1',
     type: 'order',
-    title: 'Order ORD-9821 Dispatched! 🛵',
+    title: 'Order ORD-9821 Dispatched!',
     message:
       'Your Paneer Butter Masala meal kit is out for delivery with temperature-controlled ice pack.',
     time: '25 mins ago',
@@ -34,7 +35,7 @@ const INITIAL_ALERTS: AlertItem[] = [
   {
     id: 'n-3',
     type: 'launch',
-    title: 'New Kit Alert: Coastal Prawns Ghee Roast 🦐',
+    title: 'New Kit Alert: Coastal Prawns Ghee Roast',
     message:
       'Authentic Mangalorean Kundapura recipe with freshly roasted Byadgi chili paste is now live!',
     time: '1 day ago',
@@ -60,8 +61,12 @@ export const NotificationsView: React.FC<{ onBack?: () => void }> = ({ onBack })
         ]}
       >
         {onBack && (
-          <TouchableOpacity onPress={onBack} style={styles.backBtn}>
-            <Text style={{ fontSize: 18 }}>←</Text>
+          <TouchableOpacity
+            onPress={onBack}
+            style={styles.backBtn}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Icon name="arrow-back" size={20} color={colors.textPrimary} />
           </TouchableOpacity>
         )}
         <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Notifications</Text>

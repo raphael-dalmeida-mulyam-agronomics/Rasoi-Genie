@@ -20,6 +20,7 @@ import { Button } from '../../framework/ui/Button';
 import { RatingStars } from '../../framework/ui/RatingStars';
 import { QuantityStepper } from '../../framework/ui/QuantityStepper';
 import { SegmentedControl } from '../../framework/ui/SegmentedControl';
+import { Icon } from '../../framework/ui/Icon';
 import { getReviewsByKit } from '../../framework/services/reviewsService';
 
 export interface MealDetailModalProps {
@@ -111,19 +112,23 @@ export const MealDetailModal: React.FC<MealDetailModalProps> = ({
 
   const handleAddToCart = () => {
     addItem(kit, quantity, selectedServings, selectedSpiceLevel);
-    Alert.alert(
-      'Added to Cart! 🛒',
-      `${quantity}x ${kit.name} (${selectedServings} Servings, ${selectedSpiceLevel} Spice) added to your basket.`,
-    );
-    onClose();
+    Alert.alert('Added to Cart', `${quantity}x ${kit.name} added to your basket. Ready to cook?`, [
+      { text: 'Keep Exploring', style: 'cancel' },
+      { text: 'View Basket', onPress: onClose },
+    ]);
   };
 
   const reviews = getReviewsByKit(kit.id);
 
   return (
-    <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
+    <Modal
+      visible={visible}
+      animationType="slide"
+      presentationStyle="pageSheet"
+      onRequestClose={onClose}
+    >
       <View style={[styles.container, { backgroundColor: colors.bgPrimary }]}>
-        {/* Top Floating App Bar */}
+        {/* Sticky App Bar Header */}
         <View
           style={[
             styles.appBar,
@@ -134,7 +139,7 @@ export const MealDetailModal: React.FC<MealDetailModalProps> = ({
             style={[styles.circleButton, { backgroundColor: colors.bgSubtle }]}
             onPress={onClose}
           >
-            <Text style={[styles.circleButtonText, { color: colors.textPrimary }]}>✕</Text>
+            <Icon name="close" size={20} color={colors.textPrimary} />
           </TouchableOpacity>
 
           <Text style={[styles.appBarTitle, { color: colors.textPrimary }]} numberOfLines={1}>
@@ -148,7 +153,11 @@ export const MealDetailModal: React.FC<MealDetailModalProps> = ({
             ]}
             onPress={() => toggleWishlist(kit.id)}
           >
-            <Text style={{ fontSize: 18 }}>{isFavorite ? '❤️' : '🤍'}</Text>
+            <Icon
+              name={isFavorite ? 'heart' : 'heart-outline'}
+              size={20}
+              color={isFavorite ? colors.primary : colors.textPrimary}
+            />
           </TouchableOpacity>
         </View>
 
@@ -520,7 +529,12 @@ export const MealDetailModal: React.FC<MealDetailModalProps> = ({
                           { backgroundColor: colors.bgSurface, borderRadius: radii.sm },
                         ]}
                       >
-                        <Text style={styles.tipIcon}>💡</Text>
+                        <Icon
+                          name="bulb"
+                          size={16}
+                          color={colors.accent}
+                          style={{ marginRight: 8, marginTop: 2 }}
+                        />
                         <Text style={[styles.tipText, { color: colors.textSecondary }]}>
                           <Text style={{ fontWeight: '700' }}>Chef Tip: </Text>
                           {step.tip}
@@ -540,7 +554,12 @@ export const MealDetailModal: React.FC<MealDetailModalProps> = ({
                         ]}
                         onPress={() => handleStartTimer(step.stepNumber, step.timerSeconds!)}
                       >
-                        <Text style={{ fontSize: 16 }}>⏱️</Text>
+                        <Icon
+                          name="time"
+                          size={16}
+                          color={isRunning ? colors.textInverse : colors.primary}
+                          style={{ marginRight: 6 }}
+                        />
                         <Text
                           style={[
                             styles.timerButtonText,
@@ -772,7 +791,8 @@ export const MealDetailModal: React.FC<MealDetailModalProps> = ({
           </View>
 
           <Button
-            title="Add to Cart 🛒"
+            title="Add to Cart"
+            icon={<Icon name="cart" size={18} color="#FFFFFF" />}
             style={{ flex: 1.4 }}
             size="lg"
             onPress={handleAddToCart}
@@ -1112,14 +1132,17 @@ const styles = StyleSheet.create({
   },
   macroGrid: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     justifyContent: 'space-between',
     marginTop: 8,
     gap: 8,
   },
   macroCard: {
     flex: 1,
+    minWidth: 68,
     padding: 12,
     alignItems: 'center',
+    overflow: 'hidden',
   },
   macroVal: {
     fontSize: 18,

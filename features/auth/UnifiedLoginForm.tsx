@@ -4,6 +4,7 @@ import { useAuth } from '../../framework/context/AuthContext';
 import { Button } from '../../framework/ui/Button';
 import { Input } from '../../framework/ui/Input';
 import { Card } from '../../framework/ui/Card';
+import { Icon } from '../../framework/ui/Icon';
 
 export interface UnifiedLoginFormProps {
   onSuccess?: () => void;
@@ -115,13 +116,15 @@ export const UnifiedLoginForm: React.FC<UnifiedLoginFormProps> = ({ onSuccess })
 
       {errorMsg ? (
         <View style={styles.errorBox}>
-          <Text style={styles.errorText}>⚠️ {errorMsg}</Text>
+          <Icon name="alert" size={16} color="#DC2626" />
+          <Text style={styles.errorText}>{errorMsg}</Text>
         </View>
       ) : null}
 
       {/* Google Auth Button */}
       <Button
-        title="🌐  Continue with Google"
+        title="Continue with Google"
+        icon={<Icon name="google" size={18} color="#4285F4" />}
         variant="outline"
         onPress={handleGoogleLogin}
         loading={loading}
@@ -145,9 +148,18 @@ export const UnifiedLoginForm: React.FC<UnifiedLoginFormProps> = ({ onSuccess })
             setErrorMsg('');
           }}
         >
-          <Text style={[styles.tabText, authMode === 'phone' && styles.tabTextActive]}>
-            📱 Mobile Number
-          </Text>
+          <View
+            style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 }}
+          >
+            <Icon
+              name="phone-device"
+              size={15}
+              color={authMode === 'phone' ? '#FFFFFF' : '#64748B'}
+            />
+            <Text style={[styles.tabText, authMode === 'phone' && styles.tabTextActive]}>
+              Mobile Number
+            </Text>
+          </View>
         </TouchableOpacity>
 
         <TouchableOpacity
@@ -158,9 +170,14 @@ export const UnifiedLoginForm: React.FC<UnifiedLoginFormProps> = ({ onSuccess })
             setErrorMsg('');
           }}
         >
-          <Text style={[styles.tabText, authMode === 'email' && styles.tabTextActive]}>
-            📧 Email Address
-          </Text>
+          <View
+            style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 }}
+          >
+            <Icon name="mail" size={15} color={authMode === 'email' ? '#FFFFFF' : '#64748B'} />
+            <Text style={[styles.tabText, authMode === 'email' && styles.tabTextActive]}>
+              Email Address
+            </Text>
+          </View>
         </TouchableOpacity>
       </View>
 
@@ -273,6 +290,9 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   errorBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
     backgroundColor: '#FEF2F2',
     borderColor: '#FCA5A5',
     borderWidth: 1,
