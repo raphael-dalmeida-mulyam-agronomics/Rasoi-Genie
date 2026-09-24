@@ -9,8 +9,8 @@ let clientInstance: SupabaseClient | null = null;
  */
 export function getSupabaseClient(): SupabaseClient {
   if (!clientInstance) {
-    const url = CONFIG.supabaseUrl || 'https://placeholder-project.supabase.co';
-    const anonKey = CONFIG.supabaseAnonKey || 'placeholder-anon-key';
+    const url = CONFIG.supabaseUrl || 'https://duokelhwmmkuoceuweuz.supabase.co';
+    const anonKey = CONFIG.supabaseAnonKey || 'sb_publishable_B2eyDzwM3SvTe8P3eJ8MBw_reqZmJCm';
 
     if (!CONFIG.supabaseUrl || !CONFIG.supabaseAnonKey) {
       console.warn('[Supabase] Missing Supabase URL or Anon Key. Using sandbox client.');

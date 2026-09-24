@@ -477,23 +477,23 @@ export function triggerRecipeCardPrint(
                 <div class="nutrition-title">Nutrition Facts (Per Serving)</div>
                 <div class="macro-grid">
                   <div class="macro-cell">
-                    <div class="macro-val">${kit.nutrition?.calories || 380}</div>
+                    <div class="macro-val">${kit.nutrition?.calories || 0}</div>
                     <div class="macro-lbl">Cal</div>
                   </div>
                   <div class="macro-cell">
-                    <div class="macro-val">${kit.nutrition?.protein || 14}g</div>
+                    <div class="macro-val">${kit.nutrition?.protein || 0}g</div>
                     <div class="macro-lbl">Prot</div>
                   </div>
                   <div class="macro-cell">
-                    <div class="macro-val">${kit.nutrition?.carbs || 26}g</div>
+                    <div class="macro-val">${kit.nutrition?.carbs || 0}g</div>
                     <div class="macro-lbl">Carb</div>
                   </div>
                   <div class="macro-cell">
-                    <div class="macro-val">${kit.nutrition?.fat || 18}g</div>
+                    <div class="macro-val">${kit.nutrition?.fat || 0}g</div>
                     <div class="macro-lbl">Fat</div>
                   </div>
                   <div class="macro-cell">
-                    <div class="macro-val">${kit.nutrition?.fiber || 4}g</div>
+                    <div class="macro-val">${kit.nutrition?.fiber || 0}g</div>
                     <div class="macro-lbl">Fib</div>
                   </div>
                 </div>
@@ -626,7 +626,7 @@ export const RecipeCardFrontView: React.FC<{
             <View style={styles.macroRow}>
               <View style={styles.macroItem}>
                 <Text style={styles.macroVal} numberOfLines={1}>
-                  {kit.nutrition?.calories || 380}
+                  {kit.nutrition?.calories || 0}
                 </Text>
                 <Text style={styles.macroLbl} numberOfLines={1}>
                   Cal
@@ -634,7 +634,7 @@ export const RecipeCardFrontView: React.FC<{
               </View>
               <View style={styles.macroItem}>
                 <Text style={styles.macroVal} numberOfLines={1}>
-                  {kit.nutrition?.protein || 14}g
+                  {kit.nutrition?.protein || 0}g
                 </Text>
                 <Text style={styles.macroLbl} numberOfLines={1}>
                   Prot
@@ -642,7 +642,7 @@ export const RecipeCardFrontView: React.FC<{
               </View>
               <View style={styles.macroItem}>
                 <Text style={styles.macroVal} numberOfLines={1}>
-                  {kit.nutrition?.carbs || 26}g
+                  {kit.nutrition?.carbs || 0}g
                 </Text>
                 <Text style={styles.macroLbl} numberOfLines={1}>
                   Carb
@@ -650,7 +650,7 @@ export const RecipeCardFrontView: React.FC<{
               </View>
               <View style={styles.macroItem}>
                 <Text style={styles.macroVal} numberOfLines={1}>
-                  {kit.nutrition?.fat || 18}g
+                  {kit.nutrition?.fat || 0}g
                 </Text>
                 <Text style={styles.macroLbl} numberOfLines={1}>
                   Fat
@@ -658,7 +658,7 @@ export const RecipeCardFrontView: React.FC<{
               </View>
               <View style={styles.macroItem}>
                 <Text style={styles.macroVal} numberOfLines={1}>
-                  {kit.nutrition?.fiber || 4}g
+                  {kit.nutrition?.fiber || 0}g
                 </Text>
                 <Text style={styles.macroLbl} numberOfLines={1}>
                   Fib

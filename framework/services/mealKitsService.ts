@@ -11,7 +11,9 @@ export type CuisineType =
   | 'Italian'
   | 'Mexican'
   | 'American'
-  | 'Continental';
+  | 'Continental'
+  | 'European'
+  | 'Mediterranean';
 
 export type DishCategory =
   | 'Curries & Gravies'
@@ -21,7 +23,8 @@ export type DishCategory =
   | 'Tacos'
   | 'Burritos & Bowls'
   | 'Pastas'
-  | 'Street Food';
+  | 'Street Food'
+  | 'Soups & Stews';
 export type SpiceLevel = 'Mild' | 'Medium' | 'Spicy' | 'Fiery';
 export type DifficultyLevel = 'Easy' | 'Medium' | 'Chef Special';
 export type RegionHub = 'North' | 'South' | 'West' | 'East';
@@ -40,6 +43,18 @@ export interface IngredientItem {
   quantity: string;
   icon?: string;
   isMasalaSachet?: boolean;
+}
+
+export interface MasalaSpiceEntry {
+  name: string;
+  quantity: string;
+}
+
+export interface SachetItem {
+  id: string;
+  name: string;
+  weight?: string;
+  spices: MasalaSpiceEntry[];
 }
 
 export interface NutritionFacts {
@@ -85,6 +100,8 @@ export interface MealKit {
   isTrending?: boolean;
   isChefSpecial?: boolean;
   availableRegions: RegionHub[];
+  cities: string[]; // city-level targeting, e.g. ['Bengaluru', 'Mumbai']. Empty = all cities in the hub.
+  isOutOfStock?: boolean;
   stockByRegion: Record<RegionHub, number>;
   rating: number;
   reviewCount: number;
@@ -92,6 +109,7 @@ export interface MealKit {
   allergens: string[];
   ingredients: IngredientItem[];
   masalaSachets: string[];
+  sachets?: SachetItem[];
   recipeSteps: RecipeStep[];
   reviews: BuyerReview[];
   salesByRegion: Record<string, number>; // state -> units sold
@@ -126,6 +144,7 @@ export const INITIAL_MEAL_KITS: MealKit[] = [
     dietaryTags: ['veg', 'gluten-free', 'jain'],
     isTrending: true,
     availableRegions: ['North', 'South', 'West', 'East'],
+    cities: [],
     stockByRegion: { North: 45, South: 38, West: 50, East: 22 },
     rating: 4.8,
     reviewCount: 342,
@@ -255,6 +274,7 @@ export const INITIAL_MEAL_KITS: MealKit[] = [
     dietaryTags: ['nonveg', 'gluten-free'],
     isTrending: true,
     availableRegions: ['North', 'South', 'West', 'East'],
+    cities: [],
     stockByRegion: { North: 30, South: 65, West: 42, East: 18 },
     rating: 4.9,
     reviewCount: 512,
@@ -369,6 +389,7 @@ export const INITIAL_MEAL_KITS: MealKit[] = [
     dietaryTags: ['veg', 'gluten-free', 'jain'],
     isTrending: false,
     availableRegions: ['North', 'South', 'West', 'East'],
+    cities: [],
     stockByRegion: { North: 60, South: 25, West: 40, East: 30 },
     rating: 4.7,
     reviewCount: 220,
@@ -470,11 +491,13 @@ export const INITIAL_MEAL_KITS: MealKit[] = [
     cookTimeMinutes: 15,
     diet: 'nonveg',
     cuisine: 'Coastal',
+    dishCategory: 'Curries & Gravies',
     spiceLevel: 'Fiery',
     difficulty: 'Chef Special',
     dietaryTags: ['nonveg', 'keto', 'gluten-free'],
     isTrending: true,
     availableRegions: ['South', 'West'],
+    cities: [],
     stockByRegion: { North: 0, South: 45, West: 35, East: 0 },
     rating: 4.9,
     reviewCount: 184,
@@ -573,11 +596,13 @@ export const INITIAL_MEAL_KITS: MealKit[] = [
     cookTimeMinutes: 10,
     diet: 'veg',
     cuisine: 'North Indian',
+    dishCategory: 'Street Food',
     spiceLevel: 'Medium',
     difficulty: 'Easy',
     dietaryTags: ['veg'],
     isTrending: false,
     availableRegions: ['North', 'South', 'West', 'East'],
+    cities: [],
     stockByRegion: { North: 40, South: 30, West: 25, East: 55 },
     rating: 4.6,
     reviewCount: 165,
@@ -662,11 +687,13 @@ export const INITIAL_MEAL_KITS: MealKit[] = [
     cookTimeMinutes: 15,
     diet: 'vegan',
     cuisine: 'North Indian',
+    dishCategory: 'Curries & Gravies',
     spiceLevel: 'Medium',
     difficulty: 'Easy',
     dietaryTags: ['veg', 'vegan', 'keto', 'gluten-free'],
     isTrending: false,
     availableRegions: ['North', 'South', 'West', 'East'],
+    cities: [],
     stockByRegion: { North: 35, South: 45, West: 40, East: 20 },
     rating: 4.7,
     reviewCount: 94,
@@ -752,6 +779,7 @@ export const INITIAL_MEAL_KITS: MealKit[] = [
     dietaryTags: ['veg'],
     isTrending: true,
     availableRegions: ['North', 'South', 'West', 'East'],
+    cities: [],
     stockByRegion: { North: 45, South: 55, West: 60, East: 30 },
     rating: 4.9,
     reviewCount: 278,
@@ -857,6 +885,7 @@ export const INITIAL_MEAL_KITS: MealKit[] = [
     dietaryTags: ['veg'],
     isTrending: true,
     availableRegions: ['North', 'South', 'West', 'East'],
+    cities: [],
     stockByRegion: { North: 35, South: 60, West: 50, East: 25 },
     rating: 4.8,
     reviewCount: 310,
@@ -967,6 +996,7 @@ export const INITIAL_MEAL_KITS: MealKit[] = [
     dietaryTags: ['veg', 'gluten-free'],
     isTrending: false,
     availableRegions: ['North', 'South', 'West', 'East'],
+    cities: [],
     stockByRegion: { North: 40, South: 50, West: 45, East: 20 },
     rating: 4.8,
     reviewCount: 165,
@@ -1073,6 +1103,7 @@ export const INITIAL_MEAL_KITS: MealKit[] = [
     dietaryTags: ['nonveg', 'gluten-free'],
     isTrending: true,
     availableRegions: ['North', 'South', 'West', 'East'],
+    cities: [],
     stockByRegion: { North: 50, South: 55, West: 48, East: 28 },
     rating: 4.9,
     reviewCount: 340,
@@ -1173,6 +1204,7 @@ export const INITIAL_MEAL_KITS: MealKit[] = [
     dietaryTags: ['veg'],
     isTrending: false,
     availableRegions: ['North', 'South', 'West', 'East'],
+    cities: [],
     stockByRegion: { North: 40, South: 45, West: 50, East: 30 },
     rating: 4.8,
     reviewCount: 198,
@@ -1279,6 +1311,7 @@ export const INITIAL_MEAL_KITS: MealKit[] = [
     dietaryTags: ['nonveg'],
     isTrending: true,
     availableRegions: ['North', 'South', 'West', 'East'],
+    cities: [],
     stockByRegion: { North: 60, South: 55, West: 50, East: 35 },
     rating: 4.9,
     reviewCount: 412,
@@ -1381,6 +1414,7 @@ export const INITIAL_MEAL_KITS: MealKit[] = [
     dietaryTags: ['nonveg'],
     isTrending: true,
     availableRegions: ['North', 'South', 'West', 'East'],
+    cities: [],
     stockByRegion: { North: 45, South: 50, West: 60, East: 25 },
     rating: 4.9,
     reviewCount: 388,
@@ -1485,6 +1519,7 @@ export const INITIAL_MEAL_KITS: MealKit[] = [
     dietaryTags: ['nonveg', 'gluten-free'],
     isTrending: true,
     availableRegions: ['North', 'South', 'West', 'East'],
+    cities: [],
     stockByRegion: { North: 40, South: 45, West: 55, East: 20 },
     rating: 4.9,
     reviewCount: 295,
@@ -1582,6 +1617,7 @@ export interface FilterOptions {
   maxPrice?: number;
   dietaryTags?: DietTag[];
   region?: RegionHub;
+  city?: string; // filter to kits available in a specific city (case-insensitive). Kits with empty cities[] are shown to all cities in the hub.
   sortBy?: 'popularity' | 'priceLowHigh' | 'priceHighLow' | 'prepTime';
 }
 
@@ -1658,6 +1694,17 @@ export function searchAndFilterMealKits(options: FilterOptions): MealKit[] {
     results = results.filter((kit) => kit.availableRegions.includes(options.region!));
   }
 
+  // Filter by city — kits with an empty cities[] are available to ALL cities in their hub
+  if (options.city && options.city.trim()) {
+    const targetCity = options.city.trim().toLowerCase();
+    results = results.filter(
+      (kit) =>
+        !kit.cities ||
+        kit.cities.length === 0 ||
+        kit.cities.some((c) => c.toLowerCase() === targetCity),
+    );
+  }
+
   // Sort
   if (options.sortBy) {
     switch (options.sortBy) {
@@ -1683,16 +1730,61 @@ export function searchAndFilterMealKits(options: FilterOptions): MealKit[] {
 }
 
 // Admin Catalog Operations
+const mealKitsListeners = new Set<() => void>();
+
+export function subscribeToMealKits(listener: (kits: MealKit[]) => void): () => void {
+  mealKitsListeners.add(listener as any);
+  return () => {
+    mealKitsListeners.delete(listener as any);
+  };
+}
+
+export function notifyMealKitsChanged(): void {
+  const current = [...catalogStore];
+  mealKitsListeners.forEach((fn: any) => {
+    try {
+      fn(current);
+    } catch (e) {
+      console.error('[MealKitsService] Error in listener:', e);
+    }
+  });
+}
+
+export async function syncMealKitsWithSupabase(): Promise<MealKit[]> {
+  try {
+    const { fetchPublishedMealKitsFromSupabase } = await import('./supabaseMealKitsService');
+    const liveKits = await fetchPublishedMealKitsFromSupabase();
+    if (liveKits && liveKits.length > 0) {
+      catalogStore = liveKits;
+      notifyMealKitsChanged();
+    }
+    return [...catalogStore];
+  } catch (err) {
+    console.warn('[MealKitsService] sync failed, retaining catalogStore:', err);
+    return [...catalogStore];
+  }
+}
+
+// Auto-sync in background on module load
+if (typeof setTimeout !== 'undefined') {
+  setTimeout(() => {
+    syncMealKitsWithSupabase().catch(() => {});
+  }, 100);
+}
+
 export function addMealKit(newKit: MealKit): void {
-  catalogStore = [newKit, ...catalogStore];
+  catalogStore = [newKit, ...catalogStore.filter((k) => k.id !== newKit.id)];
+  notifyMealKitsChanged();
 }
 
 export function updateMealKit(id: string, updatedFields: Partial<MealKit>): void {
   catalogStore = catalogStore.map((kit) => (kit.id === id ? { ...kit, ...updatedFields } : kit));
+  notifyMealKitsChanged();
 }
 
 export function deleteMealKit(id: string): void {
   catalogStore = catalogStore.filter((kit) => kit.id !== id);
+  notifyMealKitsChanged();
 }
 
 export function updateMealKitStock(id: string, region: RegionHub, stock: number): void {
@@ -1708,4 +1800,5 @@ export function updateMealKitStock(id: string, region: RegionHub, stock: number)
     }
     return kit;
   });
+  notifyMealKitsChanged();
 }

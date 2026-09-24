@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { SymbolView } from 'expo-symbols';
 import { Tabs } from 'expo-router';
 import { View } from 'react-native';
+import { Icon } from '../../framework/ui/Icon';
 import { useAuth } from '../../framework/context/AuthContext';
 import { useTheme } from '../../framework/theme/ThemeContext';
 import { useCart } from '../../framework/context/CartContext';
@@ -61,17 +61,7 @@ export default function TabLayout() {
         name="index"
         options={{
           title: 'Explore',
-          tabBarIcon: ({ color }) => (
-            <SymbolView
-              name={{
-                ios: 'fork.knife',
-                android: 'restaurant',
-                web: 'restaurant',
-              }}
-              tintColor={color}
-              size={22}
-            />
-          ),
+          tabBarIcon: ({ color }) => <Icon name="restaurant" size={22} color={color as string} />,
         }}
       />
 
@@ -79,17 +69,7 @@ export default function TabLayout() {
         name="search"
         options={{
           title: 'Search',
-          tabBarIcon: ({ color }) => (
-            <SymbolView
-              name={{
-                ios: 'magnifyingglass',
-                android: 'search',
-                web: 'search',
-              }}
-              tintColor={color}
-              size={22}
-            />
-          ),
+          tabBarIcon: ({ color }) => <Icon name="search" size={22} color={color as string} />,
         }}
       />
 
@@ -103,17 +83,7 @@ export default function TabLayout() {
             fontSize: 10,
             fontWeight: '800',
           },
-          tabBarIcon: ({ color }) => (
-            <SymbolView
-              name={{
-                ios: 'cart',
-                android: 'shopping_cart',
-                web: 'shopping_cart',
-              }}
-              tintColor={color}
-              size={22}
-            />
-          ),
+          tabBarIcon: ({ color }) => <Icon name="cart" size={22} color={color as string} />,
         }}
       />
 
@@ -121,17 +91,7 @@ export default function TabLayout() {
         name="orders"
         options={{
           title: 'My Orders',
-          tabBarIcon: ({ color }) => (
-            <SymbolView
-              name={{
-                ios: 'clock.arrow.circlepath',
-                android: 'history',
-                web: 'history',
-              }}
-              tintColor={color}
-              size={22}
-            />
-          ),
+          tabBarIcon: ({ color }) => <Icon name="time" size={22} color={color as string} />,
         }}
       />
 
@@ -139,17 +99,7 @@ export default function TabLayout() {
         name="login"
         options={{
           title: user ? 'Account' : 'Sign In',
-          tabBarIcon: ({ color }) => (
-            <SymbolView
-              name={{
-                ios: 'person.crop.circle',
-                android: 'person',
-                web: 'person',
-              }}
-              tintColor={color}
-              size={22}
-            />
-          ),
+          tabBarIcon: ({ color }) => <Icon name="people" size={22} color={color as string} />,
         }}
       />
 
@@ -165,17 +115,7 @@ export default function TabLayout() {
             fontSize: 10,
             fontWeight: '800',
           },
-          tabBarIcon: ({ color }) => (
-            <SymbolView
-              name={{
-                ios: 'chart.bar',
-                android: 'bar_chart',
-                web: 'bar_chart',
-              }}
-              tintColor={color}
-              size={22}
-            />
-          ),
+          tabBarIcon: ({ color }) => <Icon name="stats" size={22} color={color as string} />,
         }}
       />
 

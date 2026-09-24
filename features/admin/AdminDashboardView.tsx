@@ -30,8 +30,12 @@ import {
   updateMealKit,
   deleteMealKit,
   updateMealKitStock,
+  subscribeToMealKits,
+  syncMealKitsWithSupabase,
   RegionHub,
   DietTag,
+  CuisineType,
+  DishCategory,
 } from '../../framework/services/mealKitsService';
 import {
   INDIAN_STATES_ANALYTICS,
@@ -71,7 +75,12 @@ import {
   updateOrderStatusInSupabase,
   clearAllOrdersFromSupabase,
 } from '../../framework/services/supabaseOrdersService';
-import { saveMealKitToSupabase } from '../../framework/services/supabaseMealKitsService';
+import {
+  saveMealKitToSupabase,
+  toggleMealKitPublishStatus,
+  toggleMealKitOutOfStockStatus,
+  deleteMealKitFromSupabase,
+} from '../../framework/services/supabaseMealKitsService';
 import {
   subscribeToPendingApprovalCount,
   playOrderAlertSound,
@@ -88,6 +97,47 @@ const STATUS_FILTERS: (OrderStatus | 'All')[] = [
   'Delivered',
   'Cancelled',
   'Refunded',
+];
+
+const ADMIN_DIET_FILTERS: { id: 'All' | DietTag; label: string }[] = [
+  { id: 'All', label: 'All Diets' },
+  { id: 'veg', label: 'Pure Veg' },
+  { id: 'nonveg', label: 'Non-Veg' },
+  { id: 'vegan', label: 'Vegan' },
+  { id: 'jain', label: 'Jain' },
+  { id: 'keto', label: 'Keto' },
+  { id: 'gluten-free', label: 'Gluten-Free' },
+];
+
+const ADMIN_CUISINE_FILTERS: ('All' | CuisineType)[] = [
+  'All',
+  'North Indian',
+  'South Indian',
+  'Hyderabadi',
+  'Punjabi',
+  'Mughlai',
+  'Coastal',
+  'Gujarati',
+  'Indo-Chinese',
+  'Italian',
+  'Mexican',
+  'American',
+  'Continental',
+  'European',
+  'Mediterranean',
+];
+
+const ADMIN_DISH_FILTERS: ('All' | DishCategory)[] = [
+  'All',
+  'Curries & Gravies',
+  'Biryani & Rice',
+  'Burgers & Sliders',
+  'Pizzas',
+  'Tacos',
+  'Burritos & Bowls',
+  'Pastas',
+  'Street Food',
+  'Soups & Stews',
 ];
 
 export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = ({
@@ -120,10 +170,20 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
 
   // Meal Kits Management State
   const [kits, setKits] = useState<MealKit[]>(getMealKits());
+  const [kitSearchQuery, setKitSearchQuery] = useState('');
+  const [selectedKitDietFilter, setSelectedKitDietFilter] = useState<'All' | DietTag>('All');
+  const [selectedKitCuisineFilter, setSelectedKitCuisineFilter] = useState<'All' | CuisineType>(
+    'All',
+  );
+  const [selectedKitDishFilter, setSelectedKitDishFilter] = useState<'All' | DishCategory>('All');
+  const [openDropdown, setOpenDropdown] = useState<'diet' | 'cuisine' | 'dish' | null>(null);
   const [kitModalVisible, setKitModalVisible] = useState(false);
   const [editingKit, setEditingKit] = useState<MealKit | null>(null);
   const [printCardKit, setPrintCardKit] = useState<MealKit | null>(null);
   const [printCardModalVisible, setPrintCardModalVisible] = useState(false);
+  const [kitToDelete, setKitToDelete] = useState<MealKit | null>(null);
+  const [deleteModalVisible, setDeleteModalVisible] = useState(false);
+  const [isDeletingKit, setIsDeletingKit] = useState(false);
 
   // Regional Analytics State
   const [selectedState, setSelectedState] = useState('Maharashtra');
@@ -166,6 +226,7 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
 
     reloadSupabaseOrders();
     refreshPendingApprovalCount();
+    syncMealKitsWithSupabase();
 
     const unsubscribeRealtime = subscribeToOrdersRealtime(() => {
       reloadSupabaseOrders();
@@ -178,6 +239,10 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
 
     const unsubscribeFb = subscribeToOrders((updatedOrders) => {
       setOrders(updatedOrders.filter((o) => !MOCK_ORDER_IDS.has(o.id)));
+    });
+
+    const unsubscribeKits = subscribeToMealKits((updatedKits) => {
+      setKits(updatedKits);
     });
 
     const handleStorageChange = () => {
@@ -202,6 +267,7 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
       unsubscribeRealtime();
       unsubscribeCount();
       unsubscribeFb();
+      unsubscribeKits();
     };
   }, [isMulyamAdmin]);
 
@@ -342,12 +408,128 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
     setKits(getMealKits());
   };
 
+  const handleToggleOutOfStock = async (kit: MealKit) => {
+    const nextStatus = !kit.isOutOfStock;
+    updateMealKit(kit.id, { isOutOfStock: nextStatus });
+    setKits(getMealKits());
+    try {
+      await toggleMealKitOutOfStockStatus(kit.id, nextStatus);
+    } catch (e) {
+      console.warn('[Admin] Failed to update stock status in Supabase:', e);
+    }
+    Alert.alert(
+      nextStatus ? 'Marked Out of Stock' : 'Marked In Stock',
+      `${kit.name} has been marked as ${nextStatus ? 'out of stock' : 'in stock'}.`,
+    );
+  };
+
+  const handleRequestDeleteKit = (kit: MealKit) => {
+    setKitToDelete(kit);
+    setDeleteModalVisible(true);
+  };
+
+  const handleConfirmDeleteKit = async () => {
+    if (!kitToDelete) return;
+    const targetKit = kitToDelete;
+    setIsDeletingKit(true);
+    try {
+      deleteMealKit(targetKit.id);
+      await deleteMealKitFromSupabase(targetKit.id);
+      await toggleMealKitPublishStatus(targetKit.id, false);
+      setKits(getMealKits());
+      setDeleteModalVisible(false);
+      setKitToDelete(null);
+      Alert.alert('Kit Deleted', `${targetKit.name} was successfully deleted.`);
+    } catch (err: any) {
+      Alert.alert('Error', err?.message || 'Could not delete meal kit.');
+    } finally {
+      setIsDeletingKit(false);
+    }
+  };
+
   const handleExportCSV = () => {
     const csv = generateRegionalCSV(selectedState);
     Alert.alert(
       'Regional Analytics Exported',
       `CSV Report Generated:\n\n${csv.substring(0, 300)}...`,
     );
+  };
+
+  const filteredKits = useMemo(() => {
+    return kits.filter((kit) => {
+      // 1. Text search query
+      if (kitSearchQuery.trim()) {
+        const q = kitSearchQuery.trim().toLowerCase();
+        const matchesName = kit.name?.toLowerCase().includes(q);
+        const matchesHindi = kit.hindiName ? kit.hindiName.toLowerCase().includes(q) : false;
+        const matchesTagline = kit.tagline ? kit.tagline.toLowerCase().includes(q) : false;
+        const matchesDesc = kit.description ? kit.description.toLowerCase().includes(q) : false;
+        const matchesCuisine = kit.cuisine ? kit.cuisine.toLowerCase().includes(q) : false;
+        const matchesDishCategory = kit.dishCategory
+          ? kit.dishCategory.toLowerCase().includes(q)
+          : false;
+        const matchesIngredient = kit.ingredients?.some((ing) =>
+          ing.name?.toLowerCase().includes(q),
+        );
+        const matchesSachet = kit.masalaSachets?.some((s) => s.toLowerCase().includes(q));
+
+        if (
+          !matchesName &&
+          !matchesHindi &&
+          !matchesTagline &&
+          !matchesDesc &&
+          !matchesCuisine &&
+          !matchesDishCategory &&
+          !matchesIngredient &&
+          !matchesSachet
+        ) {
+          return false;
+        }
+      }
+
+      // 2. Diet Filter
+      if (selectedKitDietFilter !== 'All') {
+        const matchesDiet =
+          kit.diet === selectedKitDietFilter ||
+          (Array.isArray(kit.dietaryTags) && kit.dietaryTags.includes(selectedKitDietFilter));
+        if (!matchesDiet) return false;
+      }
+
+      // 3. Cuisine Type Filter
+      if (selectedKitCuisineFilter !== 'All') {
+        if (kit.cuisine !== selectedKitCuisineFilter) return false;
+      }
+
+      // 4. Dish Type (Category) Filter
+      if (selectedKitDishFilter !== 'All') {
+        if (kit.dishCategory !== selectedKitDishFilter) return false;
+      }
+
+      return true;
+    });
+  }, [
+    kits,
+    kitSearchQuery,
+    selectedKitDietFilter,
+    selectedKitCuisineFilter,
+    selectedKitDishFilter,
+  ]);
+
+  const activeKitFilterCount = useMemo(() => {
+    let count = 0;
+    if (kitSearchQuery.trim()) count++;
+    if (selectedKitDietFilter !== 'All') count++;
+    if (selectedKitCuisineFilter !== 'All') count++;
+    if (selectedKitDishFilter !== 'All') count++;
+    return count;
+  }, [kitSearchQuery, selectedKitDietFilter, selectedKitCuisineFilter, selectedKitDishFilter]);
+
+  const handleClearKitFilters = () => {
+    setKitSearchQuery('');
+    setSelectedKitDietFilter('All');
+    setSelectedKitCuisineFilter('All');
+    setSelectedKitDishFilter('All');
+    setOpenDropdown(null);
   };
 
   const getBadgeVariant = (status: OrderStatus): BadgeVariant => {
@@ -456,7 +638,6 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
               { backgroundColor: colors.primaryLight, borderColor: colors.primary + '40' },
             ]}
           >
-            <View style={styles.adminDot} />
             <Text style={[styles.adminPillText, { color: colors.primary }]}>
               {user?.email?.split('@')[0] || 'Admin'}
             </Text>
@@ -1211,71 +1392,571 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
               />
             </View>
 
-            {kits.map((kit) => (
+            {/* MEAL KITS SEARCH BAR & FILTERING SYSTEM */}
+            <View
+              style={[
+                styles.kitFilterContainer,
+                {
+                  backgroundColor: colors.bgSurface,
+                  borderRadius: radii.xl,
+                  borderColor: colors.borderLight,
+                  position: 'relative',
+                  ...shadows.card,
+                },
+                {
+                  zIndex: openDropdown ? 99999 : 10,
+                  elevation: openDropdown ? 99999 : 2,
+                },
+              ]}
+            >
+              {/* Search Bar Input */}
               <View
-                key={kit.id}
+                style={[
+                  styles.kitSearchBar,
+                  {
+                    backgroundColor: colors.bgSubtle,
+                    borderColor: colors.border,
+                    borderRadius: radii.lg,
+                  },
+                ]}
+              >
+                <Icon name="search" size={18} color={colors.textSecondary} />
+                <TextInput
+                  style={[styles.kitSearchInput, { color: colors.textPrimary }]}
+                  placeholder="Search meal kits by name, ingredient, cuisine..."
+                  placeholderTextColor={colors.textMuted}
+                  value={kitSearchQuery}
+                  onChangeText={setKitSearchQuery}
+                  autoCorrect={false}
+                />
+                {kitSearchQuery.length > 0 && (
+                  <TouchableOpacity
+                    onPress={() => setKitSearchQuery('')}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    style={{ padding: 4 }}
+                  >
+                    <Icon name="close" size={16} color={colors.textSecondary} />
+                  </TouchableOpacity>
+                )}
+              </View>
+
+              {/* Dropdown Filters Row: Diet, Cuisine Type & Dish Type */}
+              <View
+                style={[
+                  styles.dropdownFiltersRow,
+                  {
+                    position: 'relative',
+                    zIndex: openDropdown ? 99999 : 5,
+                    elevation: openDropdown ? 99999 : 1,
+                  },
+                ]}
+              >
+                {/* 1. Diet Dropdown */}
+                <View
+                  style={[
+                    styles.dropdownContainer,
+                    {
+                      zIndex: openDropdown === 'diet' ? 99999 : 1,
+                      elevation: openDropdown === 'diet' ? 99999 : 1,
+                    },
+                  ]}
+                >
+                  <Text style={[styles.dropdownLabel, { color: colors.textSecondary }]}>DIET</Text>
+                  <TouchableOpacity
+                    style={[
+                      styles.dropdownTrigger,
+                      {
+                        backgroundColor:
+                          selectedKitDietFilter !== 'All' ? colors.primary + '12' : colors.bgSubtle,
+                        borderColor:
+                          openDropdown === 'diet'
+                            ? colors.primary
+                            : selectedKitDietFilter !== 'All'
+                              ? colors.primary
+                              : colors.border,
+                        borderRadius: radii.md,
+                      },
+                    ]}
+                    onPress={() => setOpenDropdown((prev) => (prev === 'diet' ? null : 'diet'))}
+                    activeOpacity={0.8}
+                  >
+                    <View style={styles.dropdownTriggerContent}>
+                      <Icon
+                        name="restaurant"
+                        size={14}
+                        color={
+                          selectedKitDietFilter !== 'All' ? colors.primary : colors.textSecondary
+                        }
+                      />
+                      <Text
+                        style={[
+                          styles.dropdownTriggerText,
+                          {
+                            color:
+                              selectedKitDietFilter !== 'All' ? colors.primary : colors.textPrimary,
+                            fontWeight: selectedKitDietFilter !== 'All' ? '700' : '500',
+                          },
+                        ]}
+                        numberOfLines={1}
+                      >
+                        {selectedKitDietFilter === 'All'
+                          ? 'All Diets'
+                          : ADMIN_DIET_FILTERS.find((d) => d.id === selectedKitDietFilter)?.label ||
+                            selectedKitDietFilter}
+                      </Text>
+                    </View>
+                    <Icon
+                      name={openDropdown === 'diet' ? 'chevron-up' : 'chevron-down'}
+                      size={14}
+                      color={selectedKitDietFilter !== 'All' ? colors.primary : colors.textMuted}
+                    />
+                  </TouchableOpacity>
+
+                  {openDropdown === 'diet' && (
+                    <View
+                      style={[
+                        styles.dropdownMenu,
+                        {
+                          backgroundColor: colors.bgSurface,
+                          borderColor: colors.borderLight,
+                          borderRadius: radii.lg,
+                          ...shadows.card,
+                        },
+                      ]}
+                    >
+                      <ScrollView
+                        nestedScrollEnabled
+                        style={styles.dropdownMenuList}
+                        showsVerticalScrollIndicator
+                      >
+                        {ADMIN_DIET_FILTERS.map((f) => {
+                          const isSelected = selectedKitDietFilter === f.id;
+                          return (
+                            <TouchableOpacity
+                              key={f.id}
+                              style={[
+                                styles.dropdownMenuItem,
+                                {
+                                  backgroundColor: isSelected
+                                    ? colors.primary + '15'
+                                    : 'transparent',
+                                },
+                              ]}
+                              onPress={() => {
+                                setSelectedKitDietFilter(f.id);
+                                setOpenDropdown(null);
+                              }}
+                            >
+                              <Text
+                                style={[
+                                  styles.dropdownMenuItemText,
+                                  {
+                                    color: isSelected ? colors.primary : colors.textPrimary,
+                                    fontWeight: isSelected ? '700' : '500',
+                                  },
+                                ]}
+                              >
+                                {f.label}
+                              </Text>
+                              {isSelected && <Icon name="check" size={14} color={colors.primary} />}
+                            </TouchableOpacity>
+                          );
+                        })}
+                      </ScrollView>
+                    </View>
+                  )}
+                </View>
+
+                {/* 2. Cuisine Type Dropdown */}
+                <View
+                  style={[
+                    styles.dropdownContainer,
+                    {
+                      zIndex: openDropdown === 'cuisine' ? 99999 : 1,
+                      elevation: openDropdown === 'cuisine' ? 99999 : 1,
+                    },
+                  ]}
+                >
+                  <Text style={[styles.dropdownLabel, { color: colors.textSecondary }]}>
+                    CUISINE TYPE
+                  </Text>
+                  <TouchableOpacity
+                    style={[
+                      styles.dropdownTrigger,
+                      {
+                        backgroundColor:
+                          selectedKitCuisineFilter !== 'All'
+                            ? colors.primary + '12'
+                            : colors.bgSubtle,
+                        borderColor:
+                          openDropdown === 'cuisine'
+                            ? colors.primary
+                            : selectedKitCuisineFilter !== 'All'
+                              ? colors.primary
+                              : colors.border,
+                        borderRadius: radii.md,
+                      },
+                    ]}
+                    onPress={() =>
+                      setOpenDropdown((prev) => (prev === 'cuisine' ? null : 'cuisine'))
+                    }
+                    activeOpacity={0.8}
+                  >
+                    <View style={styles.dropdownTriggerContent}>
+                      <Icon
+                        name="globe"
+                        size={14}
+                        color={
+                          selectedKitCuisineFilter !== 'All' ? colors.primary : colors.textSecondary
+                        }
+                      />
+                      <Text
+                        style={[
+                          styles.dropdownTriggerText,
+                          {
+                            color:
+                              selectedKitCuisineFilter !== 'All'
+                                ? colors.primary
+                                : colors.textPrimary,
+                            fontWeight: selectedKitCuisineFilter !== 'All' ? '700' : '500',
+                          },
+                        ]}
+                        numberOfLines={1}
+                      >
+                        {selectedKitCuisineFilter === 'All'
+                          ? 'All Cuisines'
+                          : selectedKitCuisineFilter}
+                      </Text>
+                    </View>
+                    <Icon
+                      name={openDropdown === 'cuisine' ? 'chevron-up' : 'chevron-down'}
+                      size={14}
+                      color={selectedKitCuisineFilter !== 'All' ? colors.primary : colors.textMuted}
+                    />
+                  </TouchableOpacity>
+
+                  {openDropdown === 'cuisine' && (
+                    <View
+                      style={[
+                        styles.dropdownMenu,
+                        {
+                          backgroundColor: colors.bgSurface,
+                          borderColor: colors.borderLight,
+                          borderRadius: radii.lg,
+                          ...shadows.card,
+                        },
+                      ]}
+                    >
+                      <ScrollView
+                        nestedScrollEnabled
+                        style={styles.dropdownMenuList}
+                        showsVerticalScrollIndicator
+                      >
+                        {ADMIN_CUISINE_FILTERS.map((c) => {
+                          const isSelected = selectedKitCuisineFilter === c;
+                          return (
+                            <TouchableOpacity
+                              key={c}
+                              style={[
+                                styles.dropdownMenuItem,
+                                {
+                                  backgroundColor: isSelected
+                                    ? colors.primary + '15'
+                                    : 'transparent',
+                                },
+                              ]}
+                              onPress={() => {
+                                setSelectedKitCuisineFilter(c);
+                                setOpenDropdown(null);
+                              }}
+                            >
+                              <Text
+                                style={[
+                                  styles.dropdownMenuItemText,
+                                  {
+                                    color: isSelected ? colors.primary : colors.textPrimary,
+                                    fontWeight: isSelected ? '700' : '500',
+                                  },
+                                ]}
+                              >
+                                {c === 'All' ? 'All Cuisines' : c}
+                              </Text>
+                              {isSelected && <Icon name="check" size={14} color={colors.primary} />}
+                            </TouchableOpacity>
+                          );
+                        })}
+                      </ScrollView>
+                    </View>
+                  )}
+                </View>
+
+                {/* 3. Dish Type Dropdown */}
+                <View
+                  style={[
+                    styles.dropdownContainer,
+                    {
+                      zIndex: openDropdown === 'dish' ? 99999 : 1,
+                      elevation: openDropdown === 'dish' ? 99999 : 1,
+                    },
+                  ]}
+                >
+                  <Text style={[styles.dropdownLabel, { color: colors.textSecondary }]}>
+                    DISH TYPE
+                  </Text>
+                  <TouchableOpacity
+                    style={[
+                      styles.dropdownTrigger,
+                      {
+                        backgroundColor:
+                          selectedKitDishFilter !== 'All' ? colors.primary + '12' : colors.bgSubtle,
+                        borderColor:
+                          openDropdown === 'dish'
+                            ? colors.primary
+                            : selectedKitDishFilter !== 'All'
+                              ? colors.primary
+                              : colors.border,
+                        borderRadius: radii.md,
+                      },
+                    ]}
+                    onPress={() => setOpenDropdown((prev) => (prev === 'dish' ? null : 'dish'))}
+                    activeOpacity={0.8}
+                  >
+                    <View style={styles.dropdownTriggerContent}>
+                      <Icon
+                        name="options"
+                        size={14}
+                        color={
+                          selectedKitDishFilter !== 'All' ? colors.primary : colors.textSecondary
+                        }
+                      />
+                      <Text
+                        style={[
+                          styles.dropdownTriggerText,
+                          {
+                            color:
+                              selectedKitDishFilter !== 'All' ? colors.primary : colors.textPrimary,
+                            fontWeight: selectedKitDishFilter !== 'All' ? '700' : '500',
+                          },
+                        ]}
+                        numberOfLines={1}
+                      >
+                        {selectedKitDishFilter === 'All' ? 'All Dish Types' : selectedKitDishFilter}
+                      </Text>
+                    </View>
+                    <Icon
+                      name={openDropdown === 'dish' ? 'chevron-up' : 'chevron-down'}
+                      size={14}
+                      color={selectedKitDishFilter !== 'All' ? colors.primary : colors.textMuted}
+                    />
+                  </TouchableOpacity>
+
+                  {openDropdown === 'dish' && (
+                    <View
+                      style={[
+                        styles.dropdownMenu,
+                        {
+                          backgroundColor: colors.bgSurface,
+                          borderColor: colors.borderLight,
+                          borderRadius: radii.lg,
+                          ...shadows.card,
+                        },
+                      ]}
+                    >
+                      <ScrollView
+                        nestedScrollEnabled
+                        style={styles.dropdownMenuList}
+                        showsVerticalScrollIndicator
+                      >
+                        {ADMIN_DISH_FILTERS.map((d) => {
+                          const isSelected = selectedKitDishFilter === d;
+                          return (
+                            <TouchableOpacity
+                              key={d}
+                              style={[
+                                styles.dropdownMenuItem,
+                                {
+                                  backgroundColor: isSelected
+                                    ? colors.primary + '15'
+                                    : 'transparent',
+                                },
+                              ]}
+                              onPress={() => {
+                                setSelectedKitDishFilter(d);
+                                setOpenDropdown(null);
+                              }}
+                            >
+                              <Text
+                                style={[
+                                  styles.dropdownMenuItemText,
+                                  {
+                                    color: isSelected ? colors.primary : colors.textPrimary,
+                                    fontWeight: isSelected ? '700' : '500',
+                                  },
+                                ]}
+                              >
+                                {d === 'All' ? 'All Dish Types' : d}
+                              </Text>
+                              {isSelected && <Icon name="check" size={14} color={colors.primary} />}
+                            </TouchableOpacity>
+                          );
+                        })}
+                      </ScrollView>
+                    </View>
+                  )}
+                </View>
+              </View>
+
+              {/* Active Filter Counter & Quick Reset Bar */}
+              <View style={[styles.filterStatsBar, { borderTopColor: colors.borderLight }]}>
+                <Text style={[styles.filterStatsText, { color: colors.textSecondary }]}>
+                  Showing{' '}
+                  <Text style={{ fontWeight: '800', color: colors.textPrimary }}>
+                    {filteredKits.length}
+                  </Text>{' '}
+                  of {kits.length} meal kits
+                </Text>
+                {activeKitFilterCount > 0 && (
+                  <TouchableOpacity style={styles.clearAllBtn} onPress={handleClearKitFilters}>
+                    <Icon name="close-circle" size={14} color="#DC2626" />
+                    <Text style={styles.clearAllBtnText}>
+                      Clear Filters ({activeKitFilterCount})
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            </View>
+
+            {/* Results or Empty State */}
+            {filteredKits.length === 0 ? (
+              <View
                 style={[
                   styles.adminKitCard,
                   {
                     backgroundColor: colors.bgSurface,
+                    padding: 32,
+                    alignItems: 'center',
                     borderRadius: radii.xl,
                     borderColor: colors.borderLight,
                     ...shadows.card,
+                    position: 'relative',
+                    zIndex: 1,
+                    elevation: 1,
                   },
                 ]}
               >
-                <View style={styles.kitCardTop}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={[styles.kitCardName, { color: colors.textPrimary }]}>
-                      {kit.name}
-                    </Text>
-                    <Text style={[styles.kitCardTag, { color: colors.textSecondary }]}>
-                      {kit.tagline}
-                    </Text>
-                    <Text style={[styles.kitCardMeta, { color: colors.textMuted }]}>
-                      {kit.cuisine} • {kit.diet.toUpperCase()} • {kit.spiceLevel} • ₹{kit.price}
-                    </Text>
-                  </View>
-                  {(() => {
-                    const badge = getDietBadgeInfo(kit.diet);
-                    return <Badge label={badge.label} variant={badge.variant} />;
-                  })()}
+                <View style={{ marginBottom: 12 }}>
+                  <Icon name="search" size={40} color={colors.textMuted} />
                 </View>
-
-                <View style={styles.kitActionsRow}>
-                  <Button
-                    title="Print Recipe Card"
-                    variant="primary"
-                    size="sm"
-                    style={{ marginRight: 8 }}
-                    onPress={() => {
-                      setPrintCardKit(kit);
-                      setPrintCardModalVisible(true);
-                    }}
-                  />
-                  <Button
-                    title="Edit Recipe & Price"
-                    variant="outline"
-                    size="sm"
-                    style={{ marginRight: 8 }}
-                    onPress={() => {
-                      setEditingKit(kit);
-                      setKitModalVisible(true);
-                    }}
-                  />
-                  <Button
-                    title="Archive / Delete"
-                    variant="danger"
-                    size="sm"
-                    onPress={() => {
-                      deleteMealKit(kit.id);
-                      setKits(getMealKits());
-                      Alert.alert('Kit Archived', `${kit.name} removed from catalog.`);
-                    }}
-                  />
-                </View>
+                <Text
+                  style={{
+                    fontSize: 16,
+                    fontWeight: '700',
+                    color: colors.textPrimary,
+                    marginBottom: 4,
+                  }}
+                >
+                  No Meal Kits Found
+                </Text>
+                <Text
+                  style={{
+                    fontSize: 13,
+                    color: colors.textSecondary,
+                    textAlign: 'center',
+                    marginBottom: 16,
+                    lineHeight: 18,
+                  }}
+                >
+                  {kitSearchQuery
+                    ? `No meal kits matched "${kitSearchQuery}" with current filter options.`
+                    : 'No meal kits matched the selected filter criteria.'}
+                </Text>
+                <Button
+                  title="Reset All Filters"
+                  variant="outline"
+                  size="sm"
+                  onPress={handleClearKitFilters}
+                />
               </View>
-            ))}
+            ) : (
+              <View style={styles.kitsCardsListContainer}>
+                {filteredKits.map((kit) => (
+                  <View
+                    key={kit.id}
+                    style={[
+                      styles.adminKitCard,
+                      {
+                        backgroundColor: colors.bgSurface,
+                        borderRadius: radii.xl,
+                        borderColor: colors.borderLight,
+                        ...shadows.card,
+                      },
+                    ]}
+                  >
+                    <View style={styles.kitCardTop}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={[styles.kitCardName, { color: colors.textPrimary }]}>
+                          {kit.name}
+                        </Text>
+                        <Text style={[styles.kitCardTag, { color: colors.textSecondary }]}>
+                          {kit.tagline}
+                        </Text>
+                        <Text style={[styles.kitCardMeta, { color: colors.textMuted }]}>
+                          {kit.cuisine}
+                          {kit.dishCategory ? ` • ${kit.dishCategory}` : ''} •{' '}
+                          {kit.diet.toUpperCase()} • {kit.spiceLevel} • ₹{kit.price}
+                        </Text>
+                      </View>
+                      <View style={{ alignItems: 'flex-end', gap: 4 }}>
+                        {(() => {
+                          const badge = getDietBadgeInfo(kit.diet);
+                          return <Badge label={badge.label} variant={badge.variant} />;
+                        })()}
+                        {kit.isOutOfStock ? (
+                          <Badge label="OUT OF STOCK" variant="danger" size="sm" />
+                        ) : null}
+                      </View>
+                    </View>
+
+                    <View style={styles.kitActionsRow}>
+                      <Button
+                        title="Print Recipe Card"
+                        variant="primary"
+                        size="sm"
+                        style={{ marginRight: 8, marginBottom: 4 }}
+                        onPress={() => {
+                          setPrintCardKit(kit);
+                          setPrintCardModalVisible(true);
+                        }}
+                      />
+                      <Button
+                        title="Edit Recipe & Price"
+                        variant="outline"
+                        size="sm"
+                        style={{ marginRight: 8, marginBottom: 4 }}
+                        onPress={() => {
+                          setEditingKit(kit);
+                          setKitModalVisible(true);
+                        }}
+                      />
+                      <Button
+                        title={kit.isOutOfStock ? 'Mark In Stock' : 'Mark Out of Stock'}
+                        variant={kit.isOutOfStock ? 'secondary' : 'outline'}
+                        size="sm"
+                        style={{ marginRight: 8, marginBottom: 4 }}
+                        onPress={() => handleToggleOutOfStock(kit)}
+                      />
+                      <Button
+                        title="Delete"
+                        variant="danger"
+                        size="sm"
+                        style={{ marginBottom: 4 }}
+                        onPress={() => handleRequestDeleteKit(kit)}
+                      />
+                    </View>
+                  </View>
+                ))}
+              </View>
+            )}
           </View>
         )}
 
@@ -2102,6 +2783,117 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
         </View>
       </Modal>
 
+      {/* DELETE MEAL KIT CONFIRMATION MODAL */}
+      <Modal
+        visible={deleteModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {
+          if (!isDeletingKit) {
+            setDeleteModalVisible(false);
+            setKitToDelete(null);
+          }
+        }}
+      >
+        <View style={styles.modalOverlay}>
+          <View
+            style={[
+              styles.modalBox,
+              {
+                backgroundColor: colors.bgSurface,
+                borderRadius: radii.xl,
+                ...shadows.card,
+              },
+            ]}
+          >
+            <View style={{ alignItems: 'center', marginBottom: 12 }}>
+              <View
+                style={{
+                  width: 48,
+                  height: 48,
+                  borderRadius: 24,
+                  backgroundColor: '#FEE2E2',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  marginBottom: 10,
+                }}
+              >
+                <Icon name="trash" size={24} color="#DC2626" />
+              </View>
+              <Text style={[styles.modalHeading, { color: '#DC2626', textAlign: 'center' }]}>
+                Delete Meal Kit
+              </Text>
+            </View>
+
+            <Text
+              style={{
+                fontSize: 15,
+                fontWeight: '600',
+                color: colors.textPrimary,
+                textAlign: 'center',
+                lineHeight: 22,
+                marginTop: 4,
+                marginBottom: 12,
+              }}
+            >
+              Are you sure you want to delete this meal kit?
+            </Text>
+
+            {kitToDelete ? (
+              <View
+                style={{
+                  backgroundColor: colors.bgSubtle,
+                  padding: 12,
+                  borderRadius: radii.md,
+                  marginBottom: 16,
+                  borderWidth: 1,
+                  borderColor: colors.border,
+                }}
+              >
+                <Text style={{ fontWeight: '700', fontSize: 14, color: colors.textPrimary }}>
+                  {kitToDelete.name}
+                </Text>
+                <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 2 }}>
+                  {kitToDelete.cuisine} • {kitToDelete.diet.toUpperCase()} • ₹{kitToDelete.price}
+                </Text>
+              </View>
+            ) : null}
+
+            <Text
+              style={{
+                fontSize: 12,
+                color: colors.textMuted,
+                textAlign: 'center',
+                marginBottom: 16,
+              }}
+            >
+              This will permanently delete the recipe from your catalog and fulfillment inventory.
+            </Text>
+
+            <View style={{ flexDirection: 'row', gap: 10 }}>
+              <Button
+                title="Cancel"
+                variant="secondary"
+                disabled={isDeletingKit}
+                style={{ flex: 1 }}
+                onPress={() => {
+                  setDeleteModalVisible(false);
+                  setKitToDelete(null);
+                }}
+              />
+              <Button
+                title={isDeletingKit ? 'Deleting...' : 'Delete'}
+                variant="danger"
+                disabled={isDeletingKit}
+                loading={isDeletingKit}
+                style={{ flex: 1 }}
+                onPress={handleConfirmDeleteKit}
+              />
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       {/* INSPECT ORDER DETAILS MODAL */}
       <Modal
         visible={inspectModalVisible}
@@ -2710,7 +3502,11 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
           } else {
             addMealKit(savedKit);
           }
-          await saveMealKitToSupabase(savedKit, true);
+          try {
+            await saveMealKitToSupabase(savedKit, true);
+          } catch (err) {
+            console.warn('[Admin] Failed saving meal kit to Supabase:', err);
+          }
           setKits(getMealKits());
           setKitModalVisible(false);
           setEditingKit(null);
@@ -2864,13 +3660,6 @@ const styles = StyleSheet.create({
     paddingVertical: 5,
     borderRadius: 16,
     borderWidth: 1,
-    gap: 6,
-  },
-  adminDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: '#10B981',
   },
   adminPillText: {
     fontSize: 12,
@@ -2987,6 +3776,115 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginTop: 2,
   },
+  kitFilterContainer: {
+    padding: 14,
+    marginBottom: 16,
+    borderWidth: 1,
+  },
+  kitSearchBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    height: 42,
+    borderWidth: 1,
+    marginBottom: 12,
+  },
+  kitSearchInput: {
+    flex: 1,
+    marginLeft: 8,
+    fontSize: 13,
+    paddingVertical: 0,
+  },
+  dropdownFiltersRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    marginBottom: 12,
+  },
+  dropdownContainer: {
+    flex: 1,
+    minWidth: 140,
+    position: 'relative',
+  },
+  dropdownLabel: {
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+    marginBottom: 5,
+  },
+  dropdownTrigger: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 12,
+    height: 40,
+    borderWidth: 1,
+  },
+  dropdownTriggerContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    flex: 1,
+    marginRight: 6,
+  },
+  dropdownTriggerText: {
+    fontSize: 12,
+  },
+  dropdownMenu: {
+    position: 'absolute',
+    top: 66,
+    left: 0,
+    right: 0,
+    borderWidth: 1,
+    zIndex: 99999,
+    elevation: 99999,
+    overflow: 'hidden',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.22,
+    shadowRadius: 16,
+  },
+  dropdownMenuList: {
+    maxHeight: 220,
+    paddingVertical: 4,
+  },
+  dropdownMenuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  dropdownMenuItemText: {
+    fontSize: 12,
+    flex: 1,
+  },
+  filterStatsBar: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingTop: 10,
+    marginTop: 4,
+    borderTopWidth: 1,
+  },
+  kitsCardsListContainer: {
+    position: 'relative',
+    zIndex: 1,
+    elevation: 1,
+  },
+  filterStatsText: {
+    fontSize: 12,
+  },
+  clearAllBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  clearAllBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#DC2626',
+  },
   adminKitCard: {
     padding: 16,
     marginBottom: 12,
@@ -3011,9 +3909,11 @@ const styles = StyleSheet.create({
   },
   kitActionsRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     paddingTop: 8,
     borderTopWidth: 1,
     borderTopColor: '#F1F5F9',
+    gap: 6,
   },
   stockCard: {
     padding: 16,

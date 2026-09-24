@@ -80,6 +80,9 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     servings = kit.servings || 2,
     spiceLevel: string = kit.spiceLevel || 'Medium',
   ) => {
+    if (kit.isOutOfStock) {
+      return;
+    }
     const baseServings = kit.servings || 2;
     const unitPrice = Math.round((kit.price / baseServings) * servings);
 
