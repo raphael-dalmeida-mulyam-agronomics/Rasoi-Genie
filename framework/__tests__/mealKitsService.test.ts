@@ -100,4 +100,96 @@ describe('mealKitsService', () => {
     expect(gfKits.length).toBeGreaterThan(0);
     gfKits.forEach((k) => expect(k.dietaryTags).toContain('gluten-free'));
   });
+
+  it('allows adding and publishing newly created meal kits with sanitized prices', () => {
+    const rawPrice = '₹349/-';
+    const parsedPrice = parseFloat(rawPrice.replace(/[^0-9.]/g, '')) || 299;
+    expect(parsedPrice).toBe(349);
+
+    const newKit = {
+      id: 'kit-custom-zafrani',
+      name: 'Awadhi Zafrani Biryani',
+      slug: 'awadhi-zafrani-biryani',
+      tagline: 'Aromatic layered basmati rice with royal saffron',
+      description: 'Royal gourmet biryani',
+      heroImage: 'https://images.unsplash.com/photo-1546833999-b9f581a1996d',
+      galleryImages: ['https://images.unsplash.com/photo-1546833999-b9f581a1996d'],
+      price: parsedPrice,
+      servings: 2,
+      prepTimeMinutes: 15,
+      cookTimeMinutes: 30,
+      diet: 'veg' as const,
+      cuisine: 'Mughlai' as const,
+      spiceLevel: 'Medium' as const,
+      difficulty: 'Easy' as const,
+      dietaryTags: ['veg'],
+      availableRegions: ['North' as const],
+      stockByRegion: { North: 25, South: 0, West: 0, East: 0 },
+      rating: 5.0,
+      reviewCount: 0,
+      nutrition: { calories: 420, protein: 12, carbs: 60, fat: 14, fiber: 5 },
+      allergens: ['Dairy'],
+      ingredients: [{ name: 'Basmati Rice', quantity: '250g', isMasalaSachet: false }],
+      recipeSteps: [
+        { stepNumber: 1, title: 'Dum Cooking', instruction: 'Steam sealed pot on low flame' },
+      ],
+      reviews: [],
+      salesByRegion: {},
+    };
+
+    const { addMealKit } = require('../services/mealKitsService');
+    addMealKit(newKit);
+
+    const kits = getMealKits();
+    const found = kits.find((k) => k.id === 'kit-custom-zafrani');
+    expect(found).toBeDefined();
+    expect(found?.name).toBe('Awadhi Zafrani Biryani');
+    expect(found?.price).toBe(349);
+  });
+
+  it('toggles meal kit out of stock status', () => {
+    const { updateMealKit } = require('../services/mealKitsService');
+    updateMealKit('kit-101', { isOutOfStock: true });
+    let kit = getMealKits().find((k) => k.id === 'kit-101');
+    expect(kit?.isOutOfStock).toBe(true);
+
+    updateMealKit('kit-101', { isOutOfStock: false });
+    kit = getMealKits().find((k) => k.id === 'kit-101');
+    expect(kit?.isOutOfStock).toBe(false);
+  });
+
+  it('deletes meal kit from catalog store', () => {
+    const { deleteMealKit } = require('../services/mealKitsService');
+    const targetId = 'kit-custom-zafrani';
+    deleteMealKit(targetId);
+    const kit = getMealKits().find((k) => k.id === targetId);
+    expect(kit).toBeUndefined();
+  });
+
+  it('filters meal kits by diet, cuisine type and dish type', () => {
+    const kits = getMealKits();
+    // Test search by text
+    const paneerKits = kits.filter((k) => k.name.toLowerCase().includes('paneer'));
+    expect(paneerKits.length).toBeGreaterThan(0);
+
+    // Test filter by diet
+    const vegKits = kits.filter((k) => k.diet === 'veg' || k.dietaryTags.includes('veg'));
+    expect(vegKits.length).toBeGreaterThan(0);
+
+    // Test filter by cuisine
+    const northIndianKits = kits.filter((k) => k.cuisine === 'North Indian');
+    expect(northIndianKits.length).toBeGreaterThan(0);
+
+    // Test filter by dish category
+    const curries = kits.filter((k) => k.dishCategory === 'Curries & Gravies');
+    expect(curries.length).toBeGreaterThan(0);
+
+    // Combined filter
+    const combined = kits.filter(
+      (k) =>
+        k.diet === 'veg' && k.cuisine === 'North Indian' && k.dishCategory === 'Curries & Gravies',
+    );
+    expect(combined.length).toBeGreaterThan(0);
+    expect(combined.some((k) => k.name.includes('Paneer'))).toBe(true);
+  });
 });

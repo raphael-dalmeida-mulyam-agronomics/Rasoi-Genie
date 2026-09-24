@@ -1,45 +1,53 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
+  ActivityIndicator,
+  Alert,
+  Image,
   Modal,
+  Platform,
   ScrollView,
+  StyleSheet,
+  Text,
   TextInput,
   TouchableOpacity,
-  Image,
-  Alert,
-  ActivityIndicator,
-  Platform,
+  View,
 } from 'react-native';
-import { useTheme } from '../../framework/theme/ThemeContext';
 import {
-  MealKit,
   CuisineType,
   DietTag,
-  SpiceLevel,
+  MealKit,
   NutritionFacts,
+  SachetItem,
+  SpiceLevel,
 } from '../../framework/services/mealKitsService';
-import { Button } from '../../framework/ui/Button';
+import { useTheme } from '../../framework/theme/ThemeContext';
 import { Badge, getDietBadgeInfo } from '../../framework/ui/Badge';
-import { Icon, AppIconName } from '../../framework/ui/Icon';
-import { estimateNutritionWithAI, NutritionEstimationResult } from './nutritionEstimatorService';
+import { Button } from '../../framework/ui/Button';
+import { AppIconName, Icon } from '../../framework/ui/Icon';
 import {
+  AI_STEP_PREPARATION_PRESETS,
   generateDishPhotoWithAI,
   generateStepPhotoWithAI,
-  AI_STEP_PREPARATION_PRESETS,
 } from './aiPhotoGeneratorService';
+import { estimateNutritionWithAI, NutritionEstimationResult } from './nutritionEstimatorService';
 import {
-  RecipeCardFrontView,
   RecipeCardBackView,
+  RecipeCardFrontView,
   RecipeCardPrintModal,
-  triggerRecipeCardPrint,
 } from './RecipeCardPrintModal';
+
+export const showWebSafeAlert = (title: string, message?: string) => {
+  if (Platform.OS === 'web' && typeof window !== 'undefined') {
+    window.alert(`${title}${message ? '\n\n' + message : ''}`);
+  } else {
+    Alert.alert(title, message);
+  }
+};
 
 export interface AddMealKitWizardModalProps {
   visible: boolean;
   onClose: () => void;
-  onSaveKit: (kit: MealKit) => void;
+  onSaveKit: (kit: MealKit) => void | Promise<void>;
   initialKit?: MealKit | null;
 }
 
@@ -68,17 +76,221 @@ const PRESET_DISH_IMAGES = [
   },
 ];
 
-const COMMON_CHEF_STAPLES = [
-  { name: 'Fresh Malai Paneer', quantity: '250g', isSachet: false },
-  { name: 'Boneless Tender Chicken', quantity: '300g', isSachet: false },
-  { name: 'Aged Basmati Rice', quantity: '200g', isSachet: false },
-  { name: 'Sachet 1: Whole Khada Spices', quantity: '15g', isSachet: true },
-  { name: 'Sachet 2: Chef Gravy Base', quantity: '80g', isSachet: true },
-  { name: 'Ginger Garlic Aromatics Paste', quantity: '2 tbsp', isSachet: false },
-  { name: 'Diced Onions & Tomatoes', quantity: '200g', isSachet: false },
-  { name: 'Fresh Dairy Cream', quantity: '50ml', isSachet: false },
-  { name: 'Pure Cow Desi Ghee', quantity: '2 tbsp', isSachet: false },
-  { name: 'Kasuri Methi Herb Sachet', quantity: '5g', isSachet: true },
+export interface SpiceCatalogItem {
+  name: string;
+  hindi?: string;
+  category: 'Whole' | 'Ground' | 'Blend' | 'Herb/Seed' | 'Seasoning';
+  defaultQty?: string;
+}
+
+export const MASTER_SPICE_CATALOG: SpiceCatalogItem[] = [
+  // Whole Spices (Khada Masala)
+  { name: 'Jeera (Cumin Seeds)', hindi: 'जीरा', category: 'Whole', defaultQty: '1 tsp' },
+  {
+    name: 'Sabut Dhaniya (Coriander Seeds)',
+    hindi: 'साबुत धनिया',
+    category: 'Whole',
+    defaultQty: '1 tsp',
+  },
+  {
+    name: 'Elaichi (Green Cardamom)',
+    hindi: 'हरी इलायची',
+    category: 'Whole',
+    defaultQty: '3 pods',
+  },
+  {
+    name: 'Badi Elaichi (Black Cardamom)',
+    hindi: 'बड़ी इलायची',
+    category: 'Whole',
+    defaultQty: '1 pod',
+  },
+  { name: 'Dalchini (Cinnamon Stick)', hindi: 'दालचीनी', category: 'Whole', defaultQty: '1 stick' },
+  { name: 'Laung (Cloves)', hindi: 'लौंग', category: 'Whole', defaultQty: '4 pieces' },
+  {
+    name: 'Tejpatta (Indian Bay Leaf)',
+    hindi: 'तेजपत्ता',
+    category: 'Whole',
+    defaultQty: '2 leaves',
+  },
+  {
+    name: 'Kali Mirch (Black Peppercorns)',
+    hindi: 'काली मिर्च',
+    category: 'Whole',
+    defaultQty: '0.5 tsp',
+  },
+  {
+    name: 'Star Anise (Chakra Phool)',
+    hindi: 'चक्र फूल',
+    category: 'Whole',
+    defaultQty: '1 piece',
+  },
+  { name: 'Mace (Javitri)', hindi: 'जावित्री', category: 'Whole', defaultQty: '1 blade' },
+  { name: 'Jaiphal (Nutmeg)', hindi: 'जायफल', category: 'Whole', defaultQty: '0.25 tsp' },
+  {
+    name: 'Shahi Jeera (Caraway Seeds)',
+    hindi: 'शाही जीरा',
+    category: 'Whole',
+    defaultQty: '0.5 tsp',
+  },
+  {
+    name: 'Mustard Seeds (Rai / Sarson)',
+    hindi: 'राई / सरसों',
+    category: 'Whole',
+    defaultQty: '0.5 tsp',
+  },
+  {
+    name: 'Methi Seeds (Fenugreek Seeds)',
+    hindi: 'मेथी दाना',
+    category: 'Whole',
+    defaultQty: '0.25 tsp',
+  },
+  { name: 'Saunf (Fennel Seeds)', hindi: 'सौंफ', category: 'Whole', defaultQty: '0.5 tsp' },
+  { name: 'Ajwain (Carom Seeds)', hindi: 'अजवाइन', category: 'Whole', defaultQty: '0.25 tsp' },
+  { name: 'Kalonji (Nigella Seeds)', hindi: 'कलौंजी', category: 'Whole', defaultQty: '0.25 tsp' },
+  { name: 'White Sesame Seeds (Til)', hindi: 'सफेद तिल', category: 'Whole', defaultQty: '1 tsp' },
+  { name: 'Khus Khus (Poppy Seeds)', hindi: 'खसखस', category: 'Whole', defaultQty: '1 tsp' },
+
+  // Ground Masalas (Pisa Masala)
+  {
+    name: 'Haldi (Turmeric Powder)',
+    hindi: 'हल्दी पाउडर',
+    category: 'Ground',
+    defaultQty: '0.5 tsp',
+  },
+  {
+    name: 'Kashmiri Red Chilli Powder',
+    hindi: 'कश्मीरी लाल मिर्च',
+    category: 'Ground',
+    defaultQty: '1 tsp',
+  },
+  {
+    name: 'Lal Mirch (Spicy Red Chilli)',
+    hindi: 'तीखी लाल मिर्च',
+    category: 'Ground',
+    defaultQty: '0.5 tsp',
+  },
+  { name: 'Degi Mirch Powder', hindi: 'देगी मिर्च', category: 'Ground', defaultQty: '1 tsp' },
+  {
+    name: 'Dhaniya Powder (Coriander)',
+    hindi: 'धनिया पाउडर',
+    category: 'Ground',
+    defaultQty: '1.5 tsp',
+  },
+  {
+    name: 'Jeera Powder (Roasted Cumin)',
+    hindi: 'भुना जीरा पाउडर',
+    category: 'Ground',
+    defaultQty: '1 tsp',
+  },
+  {
+    name: 'Kali Mirch Powder (Black Pepper)',
+    hindi: 'काली मिर्च पाउडर',
+    category: 'Ground',
+    defaultQty: '0.5 tsp',
+  },
+  {
+    name: 'Amchur (Dry Mango Powder)',
+    hindi: 'आमचूर पाउडर',
+    category: 'Ground',
+    defaultQty: '0.75 tsp',
+  },
+  {
+    name: 'Saunth (Dry Ginger Powder)',
+    hindi: 'सोंठ पाउडर',
+    category: 'Ground',
+    defaultQty: '0.5 tsp',
+  },
+  {
+    name: 'Anardana Powder (Pomegranate)',
+    hindi: 'अनारदाना',
+    category: 'Ground',
+    defaultQty: '0.5 tsp',
+  },
+
+  // Blends & Special Masalas
+  { name: 'Garam Masala (Chef Blend)', hindi: 'गरम मसाला', category: 'Blend', defaultQty: '1 tsp' },
+  { name: 'Chaat Masala', hindi: 'चाट मसाला', category: 'Blend', defaultQty: '0.5 tsp' },
+  { name: 'Kitchen King Masala', hindi: 'किचन किंग', category: 'Blend', defaultQty: '1 tsp' },
+  {
+    name: 'Chana Masala (Chole Blend)',
+    hindi: 'चना मसाला',
+    category: 'Blend',
+    defaultQty: '1.5 tsp',
+  },
+  {
+    name: 'Biryani Masala (Potli Blend)',
+    hindi: 'बिरयानी मसाला',
+    category: 'Blend',
+    defaultQty: '2 tsp',
+  },
+  { name: 'Pav Bhaji Masala', hindi: 'पाव भाजी मसाला', category: 'Blend', defaultQty: '1.5 tsp' },
+  { name: 'Sambhar Masala', hindi: 'सांभर मसाला', category: 'Blend', defaultQty: '2 tsp' },
+  { name: 'Rasam Powder', hindi: 'रसम पाउडर', category: 'Blend', defaultQty: '1.5 tsp' },
+  {
+    name: 'Panch Phoron (Bengali 5-Spice)',
+    hindi: 'पांच फोड़न',
+    category: 'Blend',
+    defaultQty: '1 tsp',
+  },
+  { name: 'Tandoori Tikka Masala', hindi: 'तंदूरी मसाला', category: 'Blend', defaultQty: '2 tsp' },
+  {
+    name: 'Kadhai Masala (Crushed)',
+    hindi: 'कढ़ाई मसाला',
+    category: 'Blend',
+    defaultQty: '1.5 tsp',
+  },
+
+  // Herbs & Seasonings
+  {
+    name: 'Kasuri Methi (Fenugreek Leaves)',
+    hindi: 'कसूरी मेथी',
+    category: 'Herb/Seed',
+    defaultQty: '1 tbsp',
+  },
+  { name: 'Hing (Asafoetida)', hindi: 'हींग', category: 'Seasoning', defaultQty: '1 pinch' },
+  {
+    name: 'Kala Namak (Black Salt)',
+    hindi: 'काला नमक',
+    category: 'Seasoning',
+    defaultQty: '0.5 tsp',
+  },
+  {
+    name: 'Sendha Namak (Rock Salt)',
+    hindi: 'सेंधा नमक',
+    category: 'Seasoning',
+    defaultQty: '1 tsp',
+  },
+  {
+    name: 'Saffron Strands (Kesar)',
+    hindi: 'केसर',
+    category: 'Seasoning',
+    defaultQty: '6 strands',
+  },
+  {
+    name: 'Curry Leaves (Dried / Flaked)',
+    hindi: 'कढ़ी पत्ता',
+    category: 'Herb/Seed',
+    defaultQty: '8 leaves',
+  },
+];
+
+export const COMMON_INDIAN_SPICES = MASTER_SPICE_CATALOG.map((s) => s.name);
+
+export const SPICE_QUANTITY_PRESETS = [
+  '0.25 tsp',
+  '0.5 tsp',
+  '0.75 tsp',
+  '1 tsp',
+  '1.5 tsp',
+  '2 tsp',
+  '1 tbsp',
+  '2 tbsp',
+  '2g',
+  '5g',
+  '10g',
+  '1 piece',
+  '2 pieces',
+  '1 pinch',
 ];
 
 export const AddMealKitWizardModal: React.FC<AddMealKitWizardModalProps> = ({
@@ -91,25 +303,31 @@ export const AddMealKitWizardModal: React.FC<AddMealKitWizardModalProps> = ({
 
   // Step state
   const [currentStep, setCurrentStep] = useState<WizardStep>(1);
+  const [isPublishing, setIsPublishing] = useState(false);
+  const [step1Error, setStep1Error] = useState<string | null>(null);
+  const [step5Error, setStep5Error] = useState<string | null>(null);
+  const prevVisibleRef = useRef(false);
+  const prevKitIdRef = useRef<string | undefined>(undefined);
 
   // Step 1: Dish Basics
   const [name, setName] = useState(initialKit?.name || '');
   const [hindiName, setHindiName] = useState(initialKit?.hindiName || '');
-  const [tagline, setTagline] = useState(
-    initialKit?.tagline || 'Chef handcrafted gourmet meal kit with exact portioned masalas',
-  );
+  const [tagline, setTagline] = useState(initialKit?.tagline || '');
   const [cuisine, setCuisine] = useState<CuisineType>(initialKit?.cuisine || 'North Indian');
   const [diet, setDiet] = useState<DietTag>(initialKit?.diet || 'veg');
   const [spiceLevel, setSpiceLevel] = useState<SpiceLevel>(initialKit?.spiceLevel || 'Medium');
-  const [servings, setServings] = useState(String(initialKit?.servings || '2'));
-  const [prepTime, setPrepTime] = useState(String(initialKit?.prepTimeMinutes || '10'));
-  const [cookTime, setCookTime] = useState(String(initialKit?.cookTimeMinutes || '20'));
-  const [price, setPrice] = useState(String(initialKit?.price || '299'));
-  const [heroImage, setHeroImage] = useState(
-    initialKit?.heroImage ||
-      PRESET_DISH_IMAGES[0]?.url ||
-      'https://images.unsplash.com/photo-1631452180519-c014fe946bc7?auto=format&fit=crop&w=800&q=80',
+  const [servings, setServings] = useState(initialKit ? String(initialKit.servings) : '');
+  const [prepTime, setPrepTime] = useState(initialKit ? String(initialKit.prepTimeMinutes) : '');
+  const [cookTime, setCookTime] = useState(initialKit ? String(initialKit.cookTimeMinutes) : '');
+  const [price, setPrice] = useState(initialKit ? String(initialKit.price) : '');
+  const [heroImage, setHeroImage] = useState(initialKit?.heroImage || '');
+
+  // City targeting: empty = all cities in hub, otherwise explicit city list
+  const [allCitiesMode, setAllCitiesMode] = useState<boolean>(
+    !initialKit?.cities || initialKit.cities.length === 0,
   );
+  const [kitCities, setKitCities] = useState<string[]>(initialKit?.cities || []);
+  const [cityInputValue, setCityInputValue] = useState('');
 
   // Dish Photo Customization (Upload & AI)
   type PhotoMode = 'ai' | 'upload' | 'presets';
@@ -117,7 +335,9 @@ export const AddMealKitWizardModal: React.FC<AddMealKitWizardModalProps> = ({
   const [isGeneratingPhoto, setIsGeneratingPhoto] = useState(false);
   const [photoStyle, setPhotoStyle] = useState<'handi' | 'finedining' | 'flatlay'>('handi');
   const [customPhotoUrl, setCustomPhotoUrl] = useState('');
-  const [photoBadge, setPhotoBadge] = useState(initialKit ? 'Existing Photo' : 'Preset Showcase');
+  const [photoBadge, setPhotoBadge] = useState(
+    initialKit?.heroImage ? 'Existing Photo' : 'No Photo Selected',
+  );
 
   const handleUploadFromDevice = () => {
     if (Platform.OS === 'web' && typeof document !== 'undefined') {
@@ -132,7 +352,7 @@ export const AddMealKitWizardModal: React.FC<AddMealKitWizardModalProps> = ({
             if (evt.target?.result) {
               setHeroImage(evt.target.result as string);
               setPhotoBadge('Uploaded Photo');
-              Alert.alert('Photo Uploaded', 'Your custom dish presentation photo is ready.');
+              showWebSafeAlert('Photo Uploaded', 'Your custom dish presentation photo is ready.');
             }
           };
           reader.readAsDataURL(file);
@@ -140,7 +360,7 @@ export const AddMealKitWizardModal: React.FC<AddMealKitWizardModalProps> = ({
       };
       input.click();
     } else {
-      Alert.alert(
+      showWebSafeAlert(
         'Upload Photo',
         'Please enter the photo URL below or select AI Generation on this device.',
       );
@@ -148,22 +368,34 @@ export const AddMealKitWizardModal: React.FC<AddMealKitWizardModalProps> = ({
   };
 
   const handleGenerateAiPhoto = async () => {
+    if (!name.trim()) {
+      showWebSafeAlert(
+        'Dish Name Required',
+        'Please enter a dish name first so the AI can craft an authentic presentation photo.',
+      );
+      return;
+    }
     setIsGeneratingPhoto(true);
     try {
       const result = await generateDishPhotoWithAI({
-        dishName: name || 'Artisanal Indian Dish',
+        dishName: name.trim(),
+        hindiName: hindiName.trim(),
+        tagline: tagline.trim(),
         cuisine,
         diet,
+        spiceLevel,
+        ingredients: ingredients.map((i) => i.name),
+        sachets: sachets.map((s) => s.name),
         presentationStyle: photoStyle,
       });
       setHeroImage(result.imageUrl);
       setPhotoBadge(`AI Generated (${result.presentationStyle})`);
-      Alert.alert(
+      showWebSafeAlert(
         'AI Photo Generated',
-        `Gourmet presentation photo generated for "${name || 'your recipe'}".`,
+        `Gourmet presentation photo generated for "${name.trim()}" in ${result.presentationStyle} style.`,
       );
     } catch {
-      Alert.alert('Notice', 'Using chef presentation library.');
+      showWebSafeAlert('Notice', 'Using chef presentation library.');
     } finally {
       setIsGeneratingPhoto(false);
     }
@@ -174,26 +406,41 @@ export const AddMealKitWizardModal: React.FC<AddMealKitWizardModalProps> = ({
     setHeroImage(customPhotoUrl.trim());
     setPhotoBadge('Custom Web URL');
     setCustomPhotoUrl('');
-    Alert.alert('Photo Updated', 'Custom dish image URL applied.');
+    showWebSafeAlert('Photo Updated', 'Custom dish image URL applied.');
   };
 
-  // Step 2: Ingredients & Sachets
+  // Step 2: Fresh Produce & Groceries
   const [ingredients, setIngredients] = useState<
     { name: string; quantity: string; isMasalaSachet: boolean }[]
   >(
-    initialKit?.ingredients?.map((i) => ({
-      name: i.name,
-      quantity: i.quantity,
-      isMasalaSachet: !!i.isMasalaSachet,
-    })) || [
-      { name: 'Fresh Malai Paneer', quantity: '250g', isMasalaSachet: false },
-      { name: 'Sachet 1: Whole Khada Spices', quantity: '15g', isMasalaSachet: true },
-      { name: 'Sachet 2: Chef Gravy Base', quantity: '80g', isMasalaSachet: true },
-    ],
+    initialKit?.ingredients
+      ?.filter((i) => !i.isMasalaSachet)
+      .map((i) => ({
+        name: i.name,
+        quantity: i.quantity,
+        isMasalaSachet: false,
+      })) || [],
   );
-  const [newIngName, setNewIngName] = useState('');
-  const [newIngQty, setNewIngQty] = useState('');
-  const [newIngIsSachet, setNewIngIsSachet] = useState(false);
+  const [newFreshName, setNewFreshName] = useState('');
+  const [newFreshQty, setNewFreshQty] = useState('');
+
+  // Step 2: Pre-Portioned Masala Sachets (Multi-Sachet Mix)
+  const [sachets, setSachets] = useState<SachetItem[]>(() => {
+    if (initialKit?.sachets && initialKit.sachets.length > 0) {
+      return initialKit.sachets;
+    }
+    if (initialKit?.masalaSachets && initialKit.masalaSachets.length > 0) {
+      return initialKit.masalaSachets.map((mName, idx) => ({
+        id: `sachet-${idx + 1}`,
+        name: mName,
+        spices: [],
+      }));
+    }
+    return [];
+  });
+  const [sachetDrafts, setSachetDrafts] = useState<
+    Record<string, { spiceName: string; quantity: string; searchQuery: string }>
+  >({});
 
   // Step 3: Step-by-Step Recipe Guide
   const [recipeSteps, setRecipeSteps] = useState<
@@ -205,43 +452,10 @@ export const AddMealKitWizardModal: React.FC<AddMealKitWizardModalProps> = ({
       tip?: string;
       imageUrl?: string;
     }[]
-  >(
-    initialKit?.recipeSteps || [
-      {
-        stepNumber: 1,
-        title: 'Temper Whole Spices',
-        instruction:
-          'Heat 2 tbsp ghee or oil in a pan. Empty Sachet 1 (Khada Spices) and sizzle for 45 seconds until fragrant.',
-        timerSeconds: 45,
-        tip: 'Keep flame low so whole spices release aromatics without browning.',
-        imageUrl:
-          'https://images.unsplash.com/photo-1596797038530-2c107229654b?auto=format&fit=crop&w=800&q=80',
-      },
-      {
-        stepNumber: 2,
-        title: 'Simmer Base Gravy',
-        instruction:
-          'Pour in Sachet 2 (Chef Gravy Base) with 100ml warm water. Bring to a gentle boil for 4-5 minutes.',
-        timerSeconds: 300,
-        tip: 'Stir occasionally to create a silky, velvety restaurant texture.',
-        imageUrl:
-          'https://images.unsplash.com/photo-1631452180519-c014fe946bc7?auto=format&fit=crop&w=800&q=80',
-      },
-      {
-        stepNumber: 3,
-        title: 'Add Fresh Produce & Finish',
-        instruction:
-          'Fold in the diced paneer cubes or vegetables. Simmer gently for 3 minutes. Garnish with fresh cream.',
-        timerSeconds: 180,
-        tip: 'Do not overcook paneer so it remains melt-in-the-mouth tender.',
-        imageUrl:
-          'https://images.unsplash.com/photo-1626777552726-4a6b54c97e46?auto=format&fit=crop&w=800&q=80',
-      },
-    ],
-  );
+  >(initialKit?.recipeSteps || []);
   const [newStepTitle, setNewStepTitle] = useState('');
   const [newStepInstruction, setNewStepInstruction] = useState('');
-  const [newStepMinutes, setNewStepMinutes] = useState('3');
+  const [newStepMinutes, setNewStepMinutes] = useState('');
   const [newStepTip, setNewStepTip] = useState('');
 
   // Step 3 Photo Management State (Upload, Presets & AI Contextual Generation)
@@ -258,40 +472,244 @@ export const AddMealKitWizardModal: React.FC<AddMealKitWizardModalProps> = ({
 
   // Step 4: AI Nutrition Estimator
   const [nutrition, setNutrition] = useState<NutritionFacts>(
-    initialKit?.nutrition || { calories: 380, protein: 16, carbs: 28, fat: 18, fiber: 5 },
+    initialKit?.nutrition || { calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0 },
   );
   const [isEstimatingAI, setIsEstimatingAI] = useState(false);
   const [aiBreakdown, setAiBreakdown] = useState<NutritionEstimationResult | null>(null);
 
-  // Quick add an ingredient from pantry staples
-  const handleAddStaple = (staple: { name: string; quantity: string; isSachet: boolean }) => {
-    setIngredients((prev) => [
-      ...prev,
-      { name: staple.name, quantity: staple.quantity, isMasalaSachet: staple.isSachet },
-    ]);
+  // Form Reset Function (Blanks out all fields, ingredients, sachets & steps)
+  const resetForm = () => {
+    setName('');
+    setHindiName('');
+    setTagline('');
+    setCuisine('North Indian');
+    setDiet('veg');
+    setSpiceLevel('Medium');
+    setServings('');
+    setPrepTime('');
+    setCookTime('');
+    setPrice('');
+    setHeroImage('');
+    setPhotoBadge('No Photo Selected');
+    setAllCitiesMode(true);
+    setKitCities([]);
+    setCityInputValue('');
+    setIngredients([]);
+    setSachets([]);
+    setSachetDrafts({});
+    setNewFreshName('');
+    setNewFreshQty('');
+    setRecipeSteps([]);
+    setNutrition({ calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0 });
+    setAiBreakdown(null);
+    setNewStepTitle('');
+    setNewStepInstruction('');
+    setNewStepMinutes('');
+    setNewStepTip('');
+    setNewStepPhotoUrl('');
+    setCustomStepPhotoUrl('');
+    setStepAiBadge('');
+    setStep1Error(null);
+    setStep5Error(null);
+    setCurrentStep(1);
   };
 
-  // Add custom ingredient
-  const handleAddCustomIngredient = () => {
-    if (!newIngName.trim()) {
-      Alert.alert('Missing Ingredient', 'Please type the ingredient name.');
+  // Reset or populate fields only when modal opens or initialKit ID changes
+  useEffect(() => {
+    const isOpening = visible && !prevVisibleRef.current;
+    const isKitChanged = Boolean(initialKit && initialKit.id !== prevKitIdRef.current);
+
+    if (visible && (isOpening || isKitChanged)) {
+      prevKitIdRef.current = initialKit?.id;
+      if (initialKit) {
+        setName(initialKit.name || '');
+        setHindiName(initialKit.hindiName || '');
+        setTagline(initialKit.tagline || '');
+        setCuisine(initialKit.cuisine || 'North Indian');
+        setDiet(initialKit.diet || 'veg');
+        setSpiceLevel(initialKit.spiceLevel || 'Medium');
+        setServings(initialKit.servings ? String(initialKit.servings) : '');
+        setPrepTime(initialKit.prepTimeMinutes ? String(initialKit.prepTimeMinutes) : '');
+        setCookTime(initialKit.cookTimeMinutes ? String(initialKit.cookTimeMinutes) : '');
+        setPrice(initialKit.price ? String(initialKit.price) : '');
+        setHeroImage(initialKit.heroImage || '');
+        setPhotoBadge(initialKit.heroImage ? 'Existing Photo' : 'No Photo Selected');
+        setAllCitiesMode(!initialKit.cities || initialKit.cities.length === 0);
+        setKitCities(initialKit.cities || []);
+        setCityInputValue('');
+        setIngredients(
+          initialKit.ingredients
+            ?.filter((i) => !i.isMasalaSachet)
+            .map((i) => ({
+              name: i.name,
+              quantity: i.quantity,
+              isMasalaSachet: false,
+            })) || [],
+        );
+        if (initialKit.sachets && initialKit.sachets.length > 0) {
+          setSachets(initialKit.sachets);
+        } else if (initialKit.masalaSachets && initialKit.masalaSachets.length > 0) {
+          setSachets(
+            initialKit.masalaSachets.map((mName, idx) => ({
+              id: `sachet-${idx + 1}`,
+              name: mName,
+              spices: [],
+            })),
+          );
+        } else {
+          setSachets([]);
+        }
+        setRecipeSteps(
+          initialKit.recipeSteps?.map((s, idx) => ({
+            stepNumber: s.stepNumber || idx + 1,
+            title: s.title || '',
+            instruction: s.instruction || '',
+            timerSeconds: s.timerSeconds,
+            tip: s.tip,
+            imageUrl: s.imageUrl,
+          })) || [],
+        );
+        setNutrition(
+          initialKit.nutrition || { calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0 },
+        );
+      } else {
+        resetForm();
+      }
+    }
+    prevVisibleRef.current = visible;
+  }, [visible, initialKit?.id]);
+
+  // Real-time Live Nutrition Calculation based on all fresh ingredients + all sachet spices
+  useEffect(() => {
+    const s = parseInt(servings) || 2;
+    const freshItems = ingredients.map((i) => ({
+      name: i.name,
+      quantity: i.quantity,
+      isMasalaSachet: false,
+    }));
+    const sachetItems = sachets.flatMap((sachet) =>
+      sachet.spices.map((spice) => ({
+        name: spice.name,
+        quantity: spice.quantity,
+        isMasalaSachet: true,
+      })),
+    );
+    const combined = [...freshItems, ...sachetItems];
+
+    if (combined.length === 0) {
+      setNutrition({ calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0 });
+      setAiBreakdown(null);
+      return;
+    }
+
+    const result = estimateNutritionWithAI(combined, s);
+    setNutrition(result.perServing);
+    setAiBreakdown(result);
+  }, [ingredients, sachets, servings]);
+
+  // Fresh produce handlers
+  const handleAddFreshIngredient = () => {
+    if (!newFreshName.trim()) {
+      showWebSafeAlert('Missing Name', 'Please enter the produce / grocery name.');
       return;
     }
     setIngredients((prev) => [
       ...prev,
       {
-        name: newIngName.trim(),
-        quantity: newIngQty.trim() || '1 portion',
-        isMasalaSachet: newIngIsSachet,
+        name: newFreshName.trim(),
+        quantity: newFreshQty.trim() || '1 portion',
+        isMasalaSachet: false,
       },
     ]);
-    setNewIngName('');
-    setNewIngQty('');
-    setNewIngIsSachet(false);
+    setNewFreshName('');
+    setNewFreshQty('');
   };
 
-  const handleRemoveIngredient = (index: number) => {
+  const handleRemoveFreshIngredient = (index: number) => {
     setIngredients((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handleUpdateFreshIngredientQty = (index: number, newQty: string) => {
+    setIngredients((prev) =>
+      prev.map((item, idx) => (idx === index ? { ...item, quantity: newQty } : item)),
+    );
+  };
+
+  // Masala Sachet Management Handlers
+  const handleAddSachet = () => {
+    const nextNum = sachets.length + 1;
+    const newId = `sachet-${Date.now()}-${nextNum}`;
+    const newSachet: SachetItem = {
+      id: newId,
+      name: `Sachet ${nextNum}: Masala Blend`,
+      spices: [],
+    };
+    setSachets((prev) => [...prev, newSachet]);
+    setSachetDrafts((prev) => ({
+      ...prev,
+      [newId]: { spiceName: '', quantity: '1 tsp', searchQuery: '' },
+    }));
+  };
+
+  const handleRemoveSachet = (id: string) => {
+    setSachets((prev) => prev.filter((s) => s.id !== id));
+    setSachetDrafts((prev) => {
+      const copy = { ...prev };
+      delete copy[id];
+      return copy;
+    });
+  };
+
+  const handleUpdateSachetName = (id: string, name: string) => {
+    setSachets((prev) => prev.map((s) => (s.id === id ? { ...s, name } : s)));
+  };
+
+  const handleUpdateSachetDraft = (
+    sachetId: string,
+    updates: Partial<{ spiceName: string; quantity: string; searchQuery: string }>,
+  ) => {
+    setSachetDrafts((prev) => {
+      const current = prev[sachetId] || { spiceName: '', quantity: '1 tsp', searchQuery: '' };
+      return {
+        ...prev,
+        [sachetId]: { ...current, ...updates },
+      };
+    });
+  };
+
+  const handleAddSpiceToSachet = (sachetId: string) => {
+    const draft = sachetDrafts[sachetId] || { spiceName: '', quantity: '1 tsp', searchQuery: '' };
+    const spiceToAdd = (draft.spiceName || draft.searchQuery || '').trim();
+    if (!spiceToAdd) {
+      showWebSafeAlert('Missing Spice', 'Please search and select a spice, or enter a spice name.');
+      return;
+    }
+    const qty = (draft.quantity || '1 tsp').trim();
+    setSachets((prev) =>
+      prev.map((s) => {
+        if (s.id !== sachetId) return s;
+        return {
+          ...s,
+          spices: [...s.spices, { name: spiceToAdd, quantity: qty }],
+        };
+      }),
+    );
+    setSachetDrafts((prev) => ({
+      ...prev,
+      [sachetId]: { spiceName: '', quantity: '1 tsp', searchQuery: '' },
+    }));
+  };
+
+  const handleRemoveSpiceFromSachet = (sachetId: string, spiceIndex: number) => {
+    setSachets((prev) =>
+      prev.map((s) => {
+        if (s.id !== sachetId) return s;
+        return {
+          ...s,
+          spices: s.spices.filter((_, idx) => idx !== spiceIndex),
+        };
+      }),
+    );
   };
 
   // Upload step preparation photo from device
@@ -308,7 +726,7 @@ export const AddMealKitWizardModal: React.FC<AddMealKitWizardModalProps> = ({
             if (evt.target?.result) {
               setNewStepPhotoUrl(evt.target.result as string);
               setStepAiBadge('Custom Uploaded Photo');
-              Alert.alert('Step Photo Attached', 'Preparation step photo ready.');
+              showWebSafeAlert('Step Photo Attached', 'Preparation step photo ready.');
             }
           };
           reader.readAsDataURL(file);
@@ -316,7 +734,7 @@ export const AddMealKitWizardModal: React.FC<AddMealKitWizardModalProps> = ({
       };
       input.click();
     } else {
-      Alert.alert('Upload Photo', 'Please paste the image URL below or select AI Generation.');
+      showWebSafeAlert('Upload Photo', 'Please paste the image URL below or select AI Generation.');
     }
   };
 
@@ -324,7 +742,7 @@ export const AddMealKitWizardModal: React.FC<AddMealKitWizardModalProps> = ({
   // and all previous cooking instructions to create the most accurate culinary stage photo
   const handleGenerateStepAiPhoto = async () => {
     if (!newStepTitle.trim() && !newStepInstruction.trim()) {
-      Alert.alert(
+      showWebSafeAlert(
         'Step Details Needed',
         'Please enter at least a step title or cooking instruction so the AI can read what stage is being prepared!',
       );
@@ -340,17 +758,30 @@ export const AddMealKitWizardModal: React.FC<AddMealKitWizardModalProps> = ({
         stepNumber: recipeSteps.length + 1,
         stepTitle: newStepTitle.trim() || `Step ${recipeSteps.length + 1}`,
         stepInstruction: newStepInstruction.trim() || newStepTitle.trim(),
-        allIngredients: ingredients,
+        allIngredients: [
+          ...ingredients.map((i) => ({
+            name: i.name,
+            quantity: i.quantity,
+            isMasalaSachet: false,
+          })),
+          ...sachets.flatMap((s) =>
+            s.spices.map((sp) => ({
+              name: `${sp.name} (${s.name})`,
+              quantity: sp.quantity,
+              isMasalaSachet: true,
+            })),
+          ),
+        ],
         previousSteps: recipeSteps,
       });
       setNewStepPhotoUrl(result.imageUrl);
       setStepAiBadge(result.presentationStyle);
-      Alert.alert(
+      showWebSafeAlert(
         'AI Step Photo Generated',
-        `Generated reference photo based on ${ingredients.length} ingredients and ${recipeSteps.length} previous instructions (${result.presentationStyle}).`,
+        `Generated reference photo based on dish ingredients and cooking instructions (${result.presentationStyle}).`,
       );
     } catch {
-      Alert.alert('Notice', 'Using chef preparation library.');
+      showWebSafeAlert('Notice', 'Using chef preparation library.');
     } finally {
       setIsGeneratingStepPhoto(false);
     }
@@ -370,18 +801,31 @@ export const AddMealKitWizardModal: React.FC<AddMealKitWizardModalProps> = ({
         stepNumber: targetStep.stepNumber,
         stepTitle: targetStep.title,
         stepInstruction: targetStep.instruction,
-        allIngredients: ingredients,
+        allIngredients: [
+          ...ingredients.map((i) => ({
+            name: i.name,
+            quantity: i.quantity,
+            isMasalaSachet: false,
+          })),
+          ...sachets.flatMap((s) =>
+            s.spices.map((sp) => ({
+              name: `${sp.name} (${s.name})`,
+              quantity: sp.quantity,
+              isMasalaSachet: true,
+            })),
+          ),
+        ],
         previousSteps: priorSteps,
       });
       setRecipeSteps((prev) =>
         prev.map((s) => (s.stepNumber === stepNumber ? { ...s, imageUrl: result.imageUrl } : s)),
       );
-      Alert.alert(
+      showWebSafeAlert(
         'Step Photo Refreshed',
         `AI updated photo for Step ${stepNumber} (${result.presentationStyle}).`,
       );
     } catch {
-      Alert.alert('Notice', 'Existing photo kept.');
+      showWebSafeAlert('Notice', 'Existing photo kept.');
     }
   };
 
@@ -390,13 +834,13 @@ export const AddMealKitWizardModal: React.FC<AddMealKitWizardModalProps> = ({
     setNewStepPhotoUrl(customStepPhotoUrl.trim());
     setStepAiBadge('Custom Web URL');
     setCustomStepPhotoUrl('');
-    Alert.alert('Photo Updated', 'Custom step image URL applied.');
+    showWebSafeAlert('Photo Updated', 'Custom step image URL applied.');
   };
 
   // Add recipe step (with photo)
   const handleAddStep = () => {
     if (!newStepTitle.trim() || !newStepInstruction.trim()) {
-      Alert.alert('Incomplete Step', 'Please enter a step title and cooking instruction.');
+      showWebSafeAlert('Incomplete Step', 'Please enter a step title and cooking instruction.');
       return;
     }
     const mins = parseFloat(newStepMinutes) || 0;
@@ -426,127 +870,182 @@ export const AddMealKitWizardModal: React.FC<AddMealKitWizardModalProps> = ({
     );
   };
 
-  // AI Nutrition Calculation
+  // AI Nutrition Manual Recalculation
   const handleRunAiNutrition = () => {
-    if (ingredients.length === 0) {
-      Alert.alert('No Ingredients Found', 'Please add ingredients in Step 2 first.');
+    const s = parseInt(servings) || 2;
+    const freshItems = ingredients.map((i) => ({
+      name: i.name,
+      quantity: i.quantity,
+      isMasalaSachet: false,
+    }));
+    const sachetItems = sachets.flatMap((sachet) =>
+      sachet.spices.map((spice) => ({
+        name: spice.name,
+        quantity: spice.quantity,
+        isMasalaSachet: true,
+      })),
+    );
+    const combined = [...freshItems, ...sachetItems];
+
+    if (combined.length === 0) {
+      showWebSafeAlert('No Items Found', 'Please add fresh produce or masala sachets in Step 2.');
       return;
     }
 
     setIsEstimatingAI(true);
     setTimeout(() => {
-      const s = parseInt(servings) || 2;
-      const result = estimateNutritionWithAI(ingredients, s);
+      const result = estimateNutritionWithAI(combined, s);
       setAiBreakdown(result);
       setNutrition(result.perServing);
       setIsEstimatingAI(false);
-    }, 600);
+    }, 400);
   };
 
   // Publish / Save Kit
-  const handleFinalPublish = () => {
-    if (!name.trim()) {
-      Alert.alert('Dish Name Required', 'Please enter the dish name.');
-      setCurrentStep(1);
+  const handleFinalPublish = async () => {
+    const trimmedName = name.trim();
+    if (!trimmedName) {
+      setStep5Error('Dish Name is required before publishing.');
+      showWebSafeAlert('Dish Name Required', 'Please enter a dish name for your meal kit.');
       return;
     }
-    if (!price.trim() || isNaN(Number(price))) {
-      Alert.alert('Price Required', 'Please enter a valid price.');
-      setCurrentStep(1);
-      return;
-    }
+    setStep5Error(null);
+
+    // Clean price string; default to 299 if empty, whitespace, or invalid
+    const cleanPriceStr = price.replace(/[^0-9.]/g, '');
+    const parsedPrice = parseFloat(cleanPriceStr);
+    const finalPrice = !isNaN(parsedPrice) && parsedPrice > 0 ? Math.round(parsedPrice) : 299;
 
     const kitId = initialKit?.id || 'kit-' + Math.floor(100 + Math.random() * 900);
-    const masalaSachets = ingredients.filter((i) => i.isMasalaSachet).map((i) => i.name);
+    const masalaSachets = sachets.map((s) => s.name);
+    const imageToUse =
+      heroImage ||
+      'https://images.unsplash.com/photo-1546833999-b9f581a1996d?auto=format&fit=crop&w=800&q=80';
+
+    // Format all ingredients: fresh produce + sachet summaries
+    const sachetIngredientsForKit = sachets.map((s) => ({
+      name: s.name,
+      quantity:
+        s.spices.length > 0
+          ? `${s.spices.map((sp) => `${sp.name} (${sp.quantity})`).join(', ')}`
+          : 'Chef Masala Sachet',
+      isMasalaSachet: true,
+    }));
+    const allKitIngredients = [...ingredients, ...sachetIngredientsForKit];
+
+    const cleanServings = parseInt(String(servings).replace(/[^0-9]/g, '')) || 2;
+    const cleanPrepTime = parseInt(String(prepTime).replace(/[^0-9]/g, '')) || 10;
+    const cleanCookTime = parseInt(String(cookTime).replace(/[^0-9]/g, '')) || 20;
 
     const savedKit: MealKit = {
       id: kitId,
-      name: name.trim(),
+      name: trimmedName,
       hindiName: hindiName.trim() || undefined,
-      slug: name.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+      slug: trimmedName.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
       tagline: tagline.trim(),
-      description: `${name} kit carefully prepared by master chefs with fresh ingredients and authentic masala sachets for restaurant taste at home.`,
-      heroImage,
-      galleryImages: [heroImage],
-      price: parseInt(price) || 299,
-      servings: parseInt(servings) || 2,
-      prepTimeMinutes: parseInt(prepTime) || 10,
-      cookTimeMinutes: parseInt(cookTime) || 20,
+      description: `${trimmedName} kit carefully prepared by master chefs with fresh ingredients and authentic masala sachets for restaurant taste at home.`,
+      heroImage: imageToUse,
+      galleryImages: [imageToUse],
+      price: finalPrice,
+      servings: cleanServings,
+      prepTimeMinutes: cleanPrepTime,
+      cookTimeMinutes: cleanCookTime,
       diet,
       cuisine,
       spiceLevel,
       difficulty: 'Easy',
       dietaryTags: [diet],
       availableRegions: ['North', 'South', 'West', 'East'],
-      stockByRegion: { North: 50, South: 50, West: 50, East: 50 },
+      cities: allCitiesMode ? [] : kitCities,
+      stockByRegion: initialKit?.stockByRegion || { North: 50, South: 50, West: 50, East: 50 },
       rating: initialKit?.rating || 5.0,
-      reviewCount: initialKit?.reviewCount || 1,
+      reviewCount: initialKit?.reviewCount || 0,
       nutrition,
-      allergens: diet === 'nonveg' ? [] : ['Dairy'],
-      ingredients: ingredients.map((i) => ({
-        name: i.name,
-        quantity: i.quantity,
-        isMasalaSachet: i.isMasalaSachet,
-      })),
-      masalaSachets:
-        masalaSachets.length > 0
-          ? masalaSachets
-          : ['Whole Khada Spices Sachet', 'Signature Gravy Base'],
+      allergens: initialKit?.allergens || (diet === 'nonveg' ? [] : ['Dairy']),
+      ingredients: allKitIngredients,
+      masalaSachets,
+      sachets,
       recipeSteps,
       reviews: initialKit?.reviews || [],
-      salesByRegion: initialKit?.salesByRegion || { Maharashtra: 120, Karnataka: 80 },
+      salesByRegion: initialKit?.salesByRegion || {},
     };
 
-    onSaveKit(savedKit);
-    Alert.alert(
-      'Meal Kit Published',
-      `"${savedKit.name}" is now live in your RasoiGenie catalog with AI-calculated nutrition facts.`,
-    );
-    onClose();
+    setIsPublishing(true);
+    try {
+      await onSaveKit(savedKit);
+      showWebSafeAlert(
+        'Meal Kit Published! 🎉',
+        `"${savedKit.name}" (₹${savedKit.price}) is now live in your RasoiGenie catalog and saved to the database.`,
+      );
+      resetForm();
+      onClose();
+    } catch (err: any) {
+      const errMsg = err?.message || 'Could not save meal kit to database.';
+      setStep5Error(errMsg);
+      showWebSafeAlert('Save Failed', errMsg);
+    } finally {
+      setIsPublishing(false);
+    }
   };
 
   const currentKitForPreview: MealKit = {
     id: initialKit?.id || 'kit-preview',
-    name: name.trim() || 'Artisanal Indian Recipe',
+    name: name.trim() || 'Untitled Recipe',
     hindiName: hindiName.trim() || undefined,
     slug: (name || 'recipe').toLowerCase().replace(/[^a-z0-9]+/g, '-'),
-    tagline: tagline.trim() || 'Chef handcrafted gourmet meal kit with exact portioned masalas',
-    description: `${name || 'Dish'} kit carefully prepared by master chefs with fresh ingredients and authentic masala sachets.`,
+    tagline: tagline.trim() || '',
+    description: `${name || 'Dish'} kit carefully prepared with fresh ingredients and authentic masala sachets.`,
     heroImage:
       heroImage ||
-      'https://images.unsplash.com/photo-1631452180519-c014fe946bc7?auto=format&fit=crop&w=800&q=80',
-    galleryImages: [heroImage],
-    price: parseInt(price) || 299,
-    servings: parseInt(servings) || 2,
-    prepTimeMinutes: parseInt(prepTime) || 10,
-    cookTimeMinutes: parseInt(cookTime) || 20,
+      'https://images.unsplash.com/photo-1546833999-b9f581a1996d?auto=format&fit=crop&w=800&q=80',
+    galleryImages: [
+      heroImage ||
+        'https://images.unsplash.com/photo-1546833999-b9f581a1996d?auto=format&fit=crop&w=800&q=80',
+    ],
+    price: parseInt(price) || 0,
+    servings: parseInt(servings) || 0,
+    prepTimeMinutes: parseInt(prepTime) || 0,
+    cookTimeMinutes: parseInt(cookTime) || 0,
     diet,
     cuisine,
     spiceLevel,
     difficulty: 'Easy',
     dietaryTags: [diet],
     availableRegions: ['North', 'South', 'West', 'East'],
+    cities: allCitiesMode ? [] : kitCities,
     stockByRegion: { North: 50, South: 50, West: 50, East: 50 },
     rating: 5.0,
-    reviewCount: 1,
+    reviewCount: 0,
     nutrition,
     allergens: diet === 'nonveg' ? [] : ['Dairy'],
-    ingredients: ingredients.map((i) => ({
-      name: i.name,
-      quantity: i.quantity,
-      isMasalaSachet: i.isMasalaSachet,
-    })),
-    masalaSachets: ingredients.filter((i) => i.isMasalaSachet).map((i) => i.name),
+    ingredients: [
+      ...ingredients,
+      ...sachets.map((s) => ({
+        name: s.name,
+        quantity:
+          s.spices.length > 0
+            ? `${s.spices.map((sp) => `${sp.name} (${sp.quantity})`).join(', ')}`
+            : 'Masala Sachet',
+        isMasalaSachet: true,
+      })),
+    ],
+    masalaSachets: sachets.map((s) => s.name),
+    sachets,
     recipeSteps: recipeSteps.map((s) => ({
       ...s,
       imageUrl: s.imageUrl || heroImage,
     })),
     reviews: [],
-    salesByRegion: { Maharashtra: 120 },
+    salesByRegion: {},
+  };
+
+  const handleModalClose = () => {
+    resetForm();
+    onClose();
   };
 
   return (
-    <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
+    <Modal visible={visible} animationType="slide" onRequestClose={handleModalClose}>
       <View style={[styles.container, { backgroundColor: colors.bgPrimary }]}>
         {/* Top Chef Header */}
         <View
@@ -555,7 +1054,7 @@ export const AddMealKitWizardModal: React.FC<AddMealKitWizardModalProps> = ({
             { backgroundColor: colors.bgSurface, borderBottomColor: colors.borderLight },
           ]}
         >
-          <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
+          <TouchableOpacity onPress={handleModalClose} style={styles.closeBtn}>
             <Text style={[styles.closeBtnText, { color: colors.textPrimary }]}>Cancel</Text>
           </TouchableOpacity>
           <View style={{ alignItems: 'center' }}>
@@ -568,9 +1067,17 @@ export const AddMealKitWizardModal: React.FC<AddMealKitWizardModalProps> = ({
           </View>
           <TouchableOpacity
             onPress={handleFinalPublish}
-            style={[styles.publishHeaderBtn, { backgroundColor: colors.primary }]}
+            disabled={isPublishing}
+            style={[
+              styles.publishHeaderBtn,
+              { backgroundColor: colors.primary, opacity: isPublishing ? 0.7 : 1 },
+            ]}
           >
-            <Text style={styles.publishHeaderBtnText}>Save</Text>
+            {isPublishing ? (
+              <ActivityIndicator color="#fff" size="small" />
+            ) : (
+              <Text style={styles.publishHeaderBtnText}>Save</Text>
+            )}
           </TouchableOpacity>
         </View>
 
@@ -904,8 +1411,9 @@ export const AddMealKitWizardModal: React.FC<AddMealKitWizardModalProps> = ({
                   {photoMode === 'ai' && (
                     <View style={styles.aiPhotoPanel}>
                       <Text style={{ fontSize: 12, color: colors.textSecondary, marginBottom: 8 }}>
-                        AI generates authentic culinary photography based on recipe name "
-                        {name || 'your dish'}" and cuisine style.
+                        AI creates an authentic presentation cover photo tailored to recipe name "
+                        {name || 'your dish'}", chef tagline "{tagline || 'your tagline'}", and
+                        selected presentation style.
                       </Text>
 
                       <Text
@@ -1057,27 +1565,229 @@ export const AddMealKitWizardModal: React.FC<AddMealKitWizardModalProps> = ({
                       { backgroundColor: colors.bgSurface, borderColor: colors.borderLight },
                     ]}
                   >
-                    <Image
-                      source={{ uri: heroImage }}
-                      style={styles.activePhotoImg}
-                      resizeMode="cover"
-                    />
+                    {heroImage ? (
+                      <Image
+                        source={{ uri: heroImage }}
+                        style={styles.activePhotoImg}
+                        resizeMode="cover"
+                      />
+                    ) : (
+                      <View
+                        style={[
+                          styles.activePhotoImg,
+                          {
+                            backgroundColor: colors.bgSubtle,
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                          },
+                        ]}
+                      >
+                        <Icon name="image" size={28} color={colors.textMuted} />
+                      </View>
+                    )}
                     <View style={styles.activePhotoInfo}>
                       <Text style={[styles.activePhotoTitle, { color: colors.textPrimary }]}>
                         Selected Presentation Cover
                       </Text>
                       <Text style={{ fontSize: 11, color: colors.textMuted }} numberOfLines={1}>
-                        {heroImage.startsWith('data:') ? 'Custom Uploaded File' : heroImage}
+                        {!heroImage
+                          ? 'No photo selected yet'
+                          : heroImage.startsWith('data:')
+                            ? 'Custom Uploaded File'
+                            : heroImage}
                       </Text>
                     </View>
                   </View>
                 </View>
               </View>
 
+              {/* City Targeting */}
+              <View
+                style={[styles.card, { backgroundColor: colors.bgSurface, borderRadius: radii.xl }]}
+              >
+                <View
+                  style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 }}
+                >
+                  <Icon name="location" size={18} color={colors.primary} />
+                  <Text
+                    style={[styles.sectionHeading, { color: colors.textPrimary, marginBottom: 0 }]}
+                  >
+                    City Availability
+                  </Text>
+                </View>
+                <Text style={[styles.sectionHint, { color: colors.textSecondary }]}>
+                  Choose whether this kit is available to everyone in the region hub, or only in
+                  specific cities.
+                </Text>
+
+                {/* All cities toggle */}
+                <View style={{ flexDirection: 'row', gap: 10, marginTop: 12 }}>
+                  <TouchableOpacity
+                    activeOpacity={0.8}
+                    onPress={() => setAllCitiesMode(true)}
+                    style={[
+                      styles.photoModeTab,
+                      allCitiesMode && {
+                        backgroundColor: colors.primary,
+                        borderColor: colors.primary,
+                      },
+                      { flex: 1 },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.photoModeTabText,
+                        { color: allCitiesMode ? '#fff' : colors.textPrimary },
+                      ]}
+                    >
+                      🌐 All Cities in Hub
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    activeOpacity={0.8}
+                    onPress={() => setAllCitiesMode(false)}
+                    style={[
+                      styles.photoModeTab,
+                      !allCitiesMode && {
+                        backgroundColor: colors.primary,
+                        borderColor: colors.primary,
+                      },
+                      { flex: 1 },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.photoModeTabText,
+                        { color: !allCitiesMode ? '#fff' : colors.textPrimary },
+                      ]}
+                    >
+                      📍 Specific Cities
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+
+                {/* City chips + input */}
+                {!allCitiesMode && (
+                  <View style={{ marginTop: 12 }}>
+                    {/* Selected city chips */}
+                    {kitCities.length > 0 && (
+                      <View
+                        style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}
+                      >
+                        {kitCities.map((city) => (
+                          <TouchableOpacity
+                            key={city}
+                            activeOpacity={0.75}
+                            onPress={() => setKitCities((prev) => prev.filter((c) => c !== city))}
+                            style={{
+                              flexDirection: 'row',
+                              alignItems: 'center',
+                              backgroundColor: colors.primaryLight,
+                              borderRadius: 20,
+                              paddingHorizontal: 10,
+                              paddingVertical: 5,
+                              gap: 5,
+                            }}
+                          >
+                            <Text
+                              style={{ fontSize: 12, fontWeight: '700', color: colors.primary }}
+                            >
+                              {city}
+                            </Text>
+                            <Icon name="close-circle" size={14} color={colors.primary} />
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                    )}
+
+                    {/* Add city input */}
+                    <View style={{ flexDirection: 'row', gap: 8 }}>
+                      <TextInput
+                        style={[
+                          styles.textInput,
+                          {
+                            flex: 1,
+                            backgroundColor: colors.bgSubtle,
+                            borderColor: colors.border,
+                            color: colors.textPrimary,
+                          },
+                        ]}
+                        placeholder="Type city name (e.g. Bengaluru)"
+                        placeholderTextColor={colors.textMuted}
+                        value={cityInputValue}
+                        onChangeText={setCityInputValue}
+                        onSubmitEditing={() => {
+                          const city = cityInputValue.trim();
+                          if (
+                            city &&
+                            !kitCities.some((c) => c.toLowerCase() === city.toLowerCase())
+                          ) {
+                            setKitCities((prev) => [...prev, city]);
+                          }
+                          setCityInputValue('');
+                        }}
+                        returnKeyType="done"
+                      />
+                      <TouchableOpacity
+                        style={[
+                          {
+                            backgroundColor: colors.primary,
+                            paddingHorizontal: 14,
+                            paddingVertical: 10,
+                            borderRadius: 8,
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                          },
+                        ]}
+                        onPress={() => {
+                          const city = cityInputValue.trim();
+                          if (
+                            city &&
+                            !kitCities.some((c) => c.toLowerCase() === city.toLowerCase())
+                          ) {
+                            setKitCities((prev) => [...prev, city]);
+                          }
+                          setCityInputValue('');
+                        }}
+                      >
+                        <Icon name="add" size={18} color="#fff" />
+                      </TouchableOpacity>
+                    </View>
+
+                    {kitCities.length === 0 && (
+                      <Text style={{ fontSize: 11, color: colors.textMuted, marginTop: 6 }}>
+                        Add at least one city, or switch to "All Cities in Hub".
+                      </Text>
+                    )}
+                  </View>
+                )}
+
+                {allCitiesMode && (
+                  <Text style={{ fontSize: 11, color: colors.textMuted, marginTop: 8 }}>
+                    This kit will appear in the catalog for all users in the selected region hub.
+                  </Text>
+                )}
+              </View>
+
+              {step1Error ? (
+                <View style={styles.errorAlertBox}>
+                  <Icon name="alert-circle" size={16} color="#ef4444" />
+                  <Text style={styles.errorAlertText}>{step1Error}</Text>
+                </View>
+              ) : null}
+
               <Button
                 title="Next: Add Ingredients"
                 size="lg"
-                onPress={() => setCurrentStep(2)}
+                onPress={() => {
+                  if (!name.trim()) {
+                    setStep1Error('Please enter a dish name before proceeding.');
+                    showWebSafeAlert('Dish Name Required', 'Please enter a name for the dish.');
+                    return;
+                  }
+                  setStep1Error(null);
+                  setCurrentStep(2);
+                }}
                 style={{ marginTop: 16 }}
               />
             </View>
@@ -1086,46 +1796,36 @@ export const AddMealKitWizardModal: React.FC<AddMealKitWizardModalProps> = ({
           {/* STEP 2: INGREDIENTS & MASALA SACHETS */}
           {currentStep === 2 && (
             <View style={styles.stepContent}>
+              {/* SECTION 1: FRESH PRODUCE & GROCERIES */}
               <View
-                style={[styles.card, { backgroundColor: colors.bgSurface, borderRadius: radii.xl }]}
+                style={[
+                  styles.card,
+                  { backgroundColor: colors.bgSurface, borderRadius: radii.xl, marginBottom: 16 },
+                ]}
               >
-                <Text style={[styles.sectionHeading, { color: colors.textPrimary }]}>
-                  Ingredients & Masala Sachets
-                </Text>
-                <Text style={[styles.sectionHint, { color: colors.textSecondary }]}>
-                  List all pre-portioned items packed into this meal kit box.
-                </Text>
-
-                {/* Quick-Add Staples */}
-                <Text style={[styles.inputLabel, { color: colors.primary, marginTop: 4 }]}>
-                  1-Tap Quick Add Pantry Staples:
-                </Text>
-                <View style={styles.staplesRow}>
-                  {COMMON_CHEF_STAPLES.map((staple, idx) => (
-                    <TouchableOpacity
-                      key={idx}
-                      onPress={() => handleAddStaple(staple)}
-                      style={[
-                        styles.stapleChip,
-                        { backgroundColor: colors.bgSubtle, borderColor: colors.borderLight },
-                      ]}
-                    >
-                      <Text style={{ fontSize: 11, fontWeight: '700', color: colors.textPrimary }}>
-                        + {staple.name} ({staple.quantity})
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
+                <View
+                  style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 }}
+                >
+                  <Icon name="basket" size={20} color={colors.primary} />
+                  <Text
+                    style={[styles.sectionHeading, { color: colors.textPrimary, marginBottom: 0 }]}
+                  >
+                    1. Fresh Produce & Main Ingredients
+                  </Text>
                 </View>
+                <Text style={[styles.sectionHint, { color: colors.textSecondary }]}>
+                  List all fresh vegetables, dairy, grains, and proteins packed into this kit box.
+                </Text>
 
-                {/* Add Custom Ingredient Form */}
+                {/* Add Fresh Produce Input Form */}
                 <View
                   style={[
                     styles.customIngBox,
-                    { backgroundColor: colors.bgSubtle, borderRadius: radii.lg },
+                    { backgroundColor: colors.bgSubtle, borderRadius: radii.lg, marginTop: 10 },
                   ]}
                 >
                   <Text style={[styles.inputLabel, { color: colors.textPrimary, marginBottom: 8 }]}>
-                    Add Custom Item:
+                    Add Produce or Base Ingredient:
                   </Text>
                   <View style={{ flexDirection: 'row', gap: 8 }}>
                     <TextInput
@@ -1133,92 +1833,896 @@ export const AddMealKitWizardModal: React.FC<AddMealKitWizardModalProps> = ({
                         styles.textInput,
                         { flex: 2, backgroundColor: colors.bgSurface, borderColor: colors.border },
                       ]}
-                      placeholder="Ingredient Name (e.g. Kasuri Methi)"
+                      placeholder="Item Name (e.g. Fresh Malai Paneer)"
                       placeholderTextColor={colors.textMuted}
-                      value={newIngName}
-                      onChangeText={setNewIngName}
+                      value={newFreshName}
+                      onChangeText={setNewFreshName}
                     />
                     <TextInput
                       style={[
                         styles.textInput,
                         { flex: 1, backgroundColor: colors.bgSurface, borderColor: colors.border },
                       ]}
-                      placeholder="Qty (e.g. 100g)"
+                      placeholder="Qty (e.g. 250g)"
                       placeholderTextColor={colors.textMuted}
-                      value={newIngQty}
-                      onChangeText={setNewIngQty}
+                      value={newFreshQty}
+                      onChangeText={setNewFreshQty}
                     />
                   </View>
-
-                  <View
-                    style={{
-                      flexDirection: 'row',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                      marginTop: 8,
-                    }}
-                  >
-                    <TouchableOpacity
-                      onPress={() => setNewIngIsSachet(!newIngIsSachet)}
-                      style={{ flexDirection: 'row', alignItems: 'center' }}
-                    >
-                      <Text style={{ fontSize: 16, marginRight: 6 }}>
-                        <Icon
-                          name={newIngIsSachet ? 'checkbox' : 'square-outline'}
-                          size={16}
-                          color={newIngIsSachet ? colors.primary : colors.textMuted}
-                        />
-                      </Text>
-                      <Text style={{ fontSize: 12, fontWeight: '700', color: colors.textPrimary }}>
-                        Packaged as Masala Sachet
-                      </Text>
-                    </TouchableOpacity>
-
-                    <Button title="+ Add Item" size="sm" onPress={handleAddCustomIngredient} />
+                  <View style={{ alignItems: 'flex-end', marginTop: 8 }}>
+                    <Button
+                      title="+ Add Produce Item"
+                      size="sm"
+                      onPress={handleAddFreshIngredient}
+                    />
                   </View>
                 </View>
 
-                {/* Current Ingredients List */}
-                <Text style={[styles.inputLabel, { color: colors.textPrimary, marginTop: 16 }]}>
-                  Items in Kit Box ({ingredients.length} total):
+                {/* Fresh Produce Items List */}
+                <Text style={[styles.inputLabel, { color: colors.textPrimary, marginTop: 14 }]}>
+                  Fresh Produce in Kit ({ingredients.length} items):
                 </Text>
-                {ingredients.map((ing, idx) => (
+                {ingredients.length === 0 ? (
                   <View
-                    key={idx}
-                    style={[
-                      styles.ingItemRow,
-                      { backgroundColor: colors.bgSubtle, borderColor: colors.borderLight },
-                    ]}
+                    style={{
+                      padding: 14,
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      backgroundColor: colors.bgSubtle,
+                      borderRadius: radii.md,
+                      marginTop: 6,
+                      borderWidth: 1,
+                      borderColor: colors.borderLight,
+                      borderStyle: 'dashed',
+                    }}
                   >
-                    <View style={{ flex: 1 }}>
-                      <Text style={[styles.ingItemName, { color: colors.textPrimary }]}>
-                        {ing.name}
-                      </Text>
-                      <Text
-                        style={{
-                          fontSize: 11,
-                          color: ing.isMasalaSachet ? colors.primary : colors.textMuted,
-                          fontWeight: '700',
-                        }}
-                      >
-                        {ing.isMasalaSachet ? 'Chef Secret Masala Sachet' : 'Fresh Produce / Base'}
-                      </Text>
-                    </View>
-                    <Badge
-                      label={ing.quantity}
-                      variant={ing.isMasalaSachet ? 'primary' : 'neutral'}
-                    />
-                    <TouchableOpacity
-                      onPress={() => handleRemoveIngredient(idx)}
-                      style={styles.deleteIngBtn}
-                    >
-                      <Icon name="close" size={14} color={colors.danger} />
-                    </TouchableOpacity>
+                    <Text style={{ fontSize: 13, color: colors.textMuted }}>
+                      No fresh produce added yet. Type an item above to add.
+                    </Text>
                   </View>
-                ))}
+                ) : (
+                  ingredients.map((ing, idx) => (
+                    <View
+                      key={idx}
+                      style={[
+                        styles.ingItemRow,
+                        { backgroundColor: colors.bgSubtle, borderColor: colors.borderLight },
+                      ]}
+                    >
+                      <View style={{ flex: 1 }}>
+                        <Text style={[styles.ingItemName, { color: colors.textPrimary }]}>
+                          {ing.name}
+                        </Text>
+                        <Text style={{ fontSize: 11, color: colors.textMuted }}>
+                          Fresh Base Ingredient
+                        </Text>
+                      </View>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                        <TextInput
+                          style={[
+                            styles.textInput,
+                            {
+                              backgroundColor: colors.bgSurface,
+                              borderColor: colors.border,
+                              width: 85,
+                              height: 32,
+                              paddingVertical: 2,
+                              paddingHorizontal: 8,
+                              fontSize: 12,
+                              fontWeight: '800',
+                              textAlign: 'center',
+                              color: colors.primary,
+                            },
+                          ]}
+                          value={ing.quantity}
+                          onChangeText={(newQty) => handleUpdateFreshIngredientQty(idx, newQty)}
+                          placeholder="Qty"
+                          placeholderTextColor={colors.textMuted}
+                        />
+                        <TouchableOpacity
+                          onPress={() => handleRemoveFreshIngredient(idx)}
+                          style={styles.deleteIngBtn}
+                        >
+                          <Icon name="close" size={14} color={colors.danger} />
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  ))
+                )}
               </View>
 
-              <View style={styles.navBtnRow}>
+              {/* SECTION 2: SEPARATE MASALA SACHETS MIXER */}
+              <View
+                style={[styles.card, { backgroundColor: colors.bgSurface, borderRadius: radii.xl }]}
+              >
+                <View
+                  style={{
+                    flexDirection: 'row',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    marginBottom: 4,
+                  }}
+                >
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                    <Icon name="sparkles" size={20} color={colors.primary} />
+                    <Text
+                      style={[
+                        styles.sectionHeading,
+                        { color: colors.textPrimary, marginBottom: 0 },
+                      ]}
+                    >
+                      2. Pre-Portioned Masala Sachets
+                    </Text>
+                  </View>
+                  <Button
+                    title="+ New Sachet"
+                    size="sm"
+                    variant="outline"
+                    onPress={handleAddSachet}
+                  />
+                </View>
+
+                <Text
+                  style={[styles.sectionHint, { color: colors.textSecondary, marginBottom: 12 }]}
+                >
+                  Curate custom spice sachets. Enter exactly how much of each masala is to be mixed
+                  together inside each sachet (multiple sachets supported per dish).
+                </Text>
+
+                {sachets.length === 0 ? (
+                  <View
+                    style={{
+                      padding: 16,
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      backgroundColor: colors.bgSubtle,
+                      borderRadius: radii.md,
+                      borderWidth: 1,
+                      borderColor: colors.borderLight,
+                      borderStyle: 'dashed',
+                    }}
+                  >
+                    <Icon name="cube" size={24} color={colors.textMuted} />
+                    <Text
+                      style={{
+                        fontSize: 13,
+                        color: colors.textMuted,
+                        marginTop: 6,
+                        textAlign: 'center',
+                      }}
+                    >
+                      No masala sachets created yet. Tap "+ New Sachet" above to add your first
+                      spice blend sachet.
+                    </Text>
+                  </View>
+                ) : (
+                  sachets.map((sachet) => {
+                    const draft = sachetDrafts[sachet.id] || {
+                      spiceName: '',
+                      quantity: '1 tsp',
+                      searchQuery: '',
+                    };
+                    return (
+                      <View
+                        key={sachet.id}
+                        style={{
+                          backgroundColor: colors.bgSubtle,
+                          borderRadius: radii.lg,
+                          padding: 12,
+                          marginBottom: 14,
+                          borderWidth: 1.5,
+                          borderColor: colors.borderLight,
+                        }}
+                      >
+                        {/* Sachet Header with Name Edit and Delete */}
+                        <View
+                          style={{
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            marginBottom: 8,
+                            gap: 8,
+                          }}
+                        >
+                          <TextInput
+                            style={[
+                              styles.textInput,
+                              {
+                                flex: 1,
+                                fontWeight: '800',
+                                fontSize: 14,
+                                backgroundColor: colors.bgSurface,
+                                borderColor: colors.border,
+                                paddingVertical: 6,
+                              },
+                            ]}
+                            value={sachet.name}
+                            onChangeText={(text) => handleUpdateSachetName(sachet.id, text)}
+                            placeholder="Sachet Name (e.g. Sachet 1: Whole Khada Masala)"
+                            placeholderTextColor={colors.textMuted}
+                          />
+                          <TouchableOpacity
+                            onPress={() => handleRemoveSachet(sachet.id)}
+                            style={{ padding: 6 }}
+                          >
+                            <Icon name="trash" size={16} color={colors.danger} />
+                          </TouchableOpacity>
+                        </View>
+
+                        {/* List of Mixed Spices in this Sachet */}
+                        <Text
+                          style={{
+                            fontSize: 11,
+                            fontWeight: '700',
+                            color: colors.primary,
+                            marginBottom: 6,
+                          }}
+                        >
+                          Mixed Inside ({sachet.spices.length} masala
+                          {sachet.spices.length !== 1 ? 's' : ''}):
+                        </Text>
+                        {sachet.spices.length === 0 ? (
+                          <Text
+                            style={{
+                              fontSize: 11,
+                              color: colors.textMuted,
+                              fontStyle: 'italic',
+                              marginBottom: 8,
+                            }}
+                          >
+                            No masalas mixed yet. Select spices and amounts below to blend into this
+                            sachet.
+                          </Text>
+                        ) : (
+                          <View
+                            style={{
+                              flexDirection: 'row',
+                              flexWrap: 'wrap',
+                              gap: 6,
+                              marginBottom: 10,
+                            }}
+                          >
+                            {sachet.spices.map((spice, spIdx) => (
+                              <View
+                                key={spIdx}
+                                style={{
+                                  flexDirection: 'row',
+                                  alignItems: 'center',
+                                  backgroundColor: colors.bgSurface,
+                                  borderColor: colors.primary,
+                                  borderWidth: 1,
+                                  borderRadius: 14,
+                                  paddingVertical: 3,
+                                  paddingHorizontal: 8,
+                                  gap: 6,
+                                }}
+                              >
+                                <Text
+                                  style={{
+                                    fontSize: 11,
+                                    fontWeight: '800',
+                                    color: colors.textPrimary,
+                                  }}
+                                >
+                                  {spice.name}:
+                                </Text>
+                                <Text
+                                  style={{
+                                    fontSize: 11,
+                                    fontWeight: '700',
+                                    color: colors.primary,
+                                  }}
+                                >
+                                  {spice.quantity}
+                                </Text>
+                                <TouchableOpacity
+                                  onPress={() => handleRemoveSpiceFromSachet(sachet.id, spIdx)}
+                                >
+                                  <Icon name="close" size={12} color={colors.danger} />
+                                </TouchableOpacity>
+                              </View>
+                            ))}
+                          </View>
+                        )}
+
+                        {/* Spice Search & Exact Quantity Selector inside this sachet */}
+                        {(() => {
+                          const query = (draft.searchQuery || '').trim().toLowerCase();
+                          const filteredSpices = query
+                            ? MASTER_SPICE_CATALOG.filter(
+                                (sp) =>
+                                  sp.name.toLowerCase().includes(query) ||
+                                  (sp.hindi && sp.hindi.toLowerCase().includes(query)) ||
+                                  sp.category.toLowerCase().includes(query),
+                              ).slice(0, 12)
+                            : [];
+
+                          const exactMatchExists = query
+                            ? MASTER_SPICE_CATALOG.some((sp) => sp.name.toLowerCase() === query)
+                            : false;
+
+                          return (
+                            <View
+                              style={{
+                                backgroundColor: colors.bgSurface,
+                                padding: 12,
+                                borderRadius: radii.md,
+                                borderWidth: 1,
+                                borderColor: colors.borderLight,
+                              }}
+                            >
+                              <Text
+                                style={{
+                                  fontSize: 11,
+                                  fontWeight: '700',
+                                  color: colors.textPrimary,
+                                  marginBottom: 6,
+                                }}
+                              >
+                                Search Spice to Add:
+                              </Text>
+
+                              {/* Search Bar Input */}
+                              <View
+                                style={{
+                                  flexDirection: 'row',
+                                  alignItems: 'center',
+                                  backgroundColor: colors.bgSubtle,
+                                  borderRadius: radii.md,
+                                  borderWidth: 1,
+                                  borderColor: draft.spiceName ? colors.primary : colors.border,
+                                  paddingHorizontal: 10,
+                                  paddingVertical: Platform.OS === 'ios' ? 8 : 4,
+                                  marginBottom: 8,
+                                }}
+                              >
+                                <Icon name="search" size={16} color={colors.textMuted} />
+                                <TextInput
+                                  style={{
+                                    flex: 1,
+                                    fontSize: 12,
+                                    color: colors.textPrimary,
+                                    marginLeft: 8,
+                                    paddingVertical: 4,
+                                  }}
+                                  placeholder="Search spice by English or Hindi name (e.g. Cumin, Haldi, Cardamom)..."
+                                  placeholderTextColor={colors.textMuted}
+                                  value={
+                                    draft.searchQuery !== undefined
+                                      ? draft.searchQuery
+                                      : draft.spiceName
+                                  }
+                                  onChangeText={(text) =>
+                                    handleUpdateSachetDraft(sachet.id, {
+                                      searchQuery: text,
+                                      spiceName: text.trim() === '' ? '' : draft.spiceName,
+                                    })
+                                  }
+                                />
+                                {draft.searchQuery || draft.spiceName ? (
+                                  <TouchableOpacity
+                                    onPress={() =>
+                                      handleUpdateSachetDraft(sachet.id, {
+                                        searchQuery: '',
+                                        spiceName: '',
+                                      })
+                                    }
+                                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                                    style={{ padding: 2 }}
+                                  >
+                                    <Icon name="close" size={14} color={colors.textMuted} />
+                                  </TouchableOpacity>
+                                ) : null}
+                              </View>
+
+                              {/* Filtered Spice Suggestions (when typing in search bar) */}
+                              {query.length > 0 && (
+                                <View
+                                  style={{
+                                    backgroundColor: colors.bgSubtle,
+                                    borderRadius: radii.sm,
+                                    padding: 8,
+                                    marginBottom: 8,
+                                    borderWidth: 1,
+                                    borderColor: colors.borderLight,
+                                  }}
+                                >
+                                  <Text
+                                    style={{
+                                      fontSize: 10,
+                                      fontWeight: '700',
+                                      color: colors.textSecondary,
+                                      marginBottom: 6,
+                                    }}
+                                  >
+                                    Found Spices ({filteredSpices.length}):
+                                  </Text>
+                                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+                                    {filteredSpices.map((spice, spIdx) => {
+                                      const isSelected = draft.spiceName === spice.name;
+                                      return (
+                                        <TouchableOpacity
+                                          key={spIdx}
+                                          onPress={() =>
+                                            handleUpdateSachetDraft(sachet.id, {
+                                              spiceName: spice.name,
+                                              searchQuery: spice.name,
+                                              quantity:
+                                                draft.quantity || spice.defaultQty || '1 tsp',
+                                            })
+                                          }
+                                          style={{
+                                            flexDirection: 'row',
+                                            alignItems: 'center',
+                                            backgroundColor: isSelected
+                                              ? colors.primary
+                                              : colors.bgSurface,
+                                            borderColor: isSelected
+                                              ? colors.primary
+                                              : colors.border,
+                                            borderWidth: 1,
+                                            borderRadius: 12,
+                                            paddingVertical: 4,
+                                            paddingHorizontal: 8,
+                                            gap: 4,
+                                          }}
+                                        >
+                                          <Text
+                                            style={{
+                                              fontSize: 10,
+                                              fontWeight: '700',
+                                              color: isSelected ? '#FFFFFF' : colors.textPrimary,
+                                            }}
+                                          >
+                                            {spice.name}
+                                          </Text>
+                                          {spice.hindi && (
+                                            <Text
+                                              style={{
+                                                fontSize: 9,
+                                                color: isSelected
+                                                  ? 'rgba(255,255,255,0.85)'
+                                                  : colors.textMuted,
+                                              }}
+                                            >
+                                              ({spice.hindi})
+                                            </Text>
+                                          )}
+                                          <View
+                                            style={{
+                                              backgroundColor: isSelected
+                                                ? 'rgba(255,255,255,0.25)'
+                                                : colors.bgSubtle,
+                                              borderRadius: 4,
+                                              paddingHorizontal: 4,
+                                              paddingVertical: 1,
+                                            }}
+                                          >
+                                            <Text
+                                              style={{
+                                                fontSize: 8,
+                                                fontWeight: '700',
+                                                color: isSelected
+                                                  ? '#FFFFFF'
+                                                  : colors.textSecondary,
+                                              }}
+                                            >
+                                              {spice.category}
+                                            </Text>
+                                          </View>
+                                        </TouchableOpacity>
+                                      );
+                                    })}
+
+                                    {/* Custom spice button if no exact match */}
+                                    {!exactMatchExists && draft.searchQuery.trim().length > 0 && (
+                                      <TouchableOpacity
+                                        onPress={() =>
+                                          handleUpdateSachetDraft(sachet.id, {
+                                            spiceName: draft.searchQuery.trim(),
+                                            searchQuery: draft.searchQuery.trim(),
+                                          })
+                                        }
+                                        style={{
+                                          flexDirection: 'row',
+                                          alignItems: 'center',
+                                          backgroundColor: colors.primary + '15',
+                                          borderColor: colors.primary,
+                                          borderWidth: 1,
+                                          borderRadius: 12,
+                                          paddingVertical: 4,
+                                          paddingHorizontal: 8,
+                                          gap: 4,
+                                        }}
+                                      >
+                                        <Text
+                                          style={{
+                                            fontSize: 10,
+                                            fontWeight: '700',
+                                            color: colors.primary,
+                                          }}
+                                        >
+                                          + Use custom spice: "{draft.searchQuery.trim()}"
+                                        </Text>
+                                      </TouchableOpacity>
+                                    )}
+                                  </View>
+                                </View>
+                              )}
+
+                              {/* Popular Quick Suggestions when search is empty and nothing selected */}
+                              {!query && !draft.spiceName && (
+                                <View style={{ marginBottom: 8 }}>
+                                  <Text
+                                    style={{
+                                      fontSize: 9,
+                                      fontWeight: '600',
+                                      color: colors.textMuted,
+                                      marginBottom: 4,
+                                    }}
+                                  >
+                                    Popular staples (or search 40+ spices above):
+                                  </Text>
+                                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 4 }}>
+                                    {[
+                                      'Jeera (Cumin Seeds)',
+                                      'Haldi (Turmeric Powder)',
+                                      'Kashmiri Red Chilli Powder',
+                                      'Garam Masala (Chef Blend)',
+                                      'Dhaniya Powder (Coriander)',
+                                      'Kasuri Methi (Fenugreek Leaves)',
+                                    ].map((popName, pIdx) => {
+                                      const found = MASTER_SPICE_CATALOG.find(
+                                        (s) => s.name === popName,
+                                      );
+                                      return (
+                                        <TouchableOpacity
+                                          key={pIdx}
+                                          onPress={() =>
+                                            handleUpdateSachetDraft(sachet.id, {
+                                              spiceName: popName,
+                                              searchQuery: popName,
+                                              quantity:
+                                                draft.quantity || found?.defaultQty || '1 tsp',
+                                            })
+                                          }
+                                          style={{
+                                            paddingVertical: 2,
+                                            paddingHorizontal: 6,
+                                            borderRadius: 8,
+                                            backgroundColor: colors.bgSubtle,
+                                            borderWidth: 1,
+                                            borderColor: colors.borderLight,
+                                          }}
+                                        >
+                                          <Text
+                                            style={{
+                                              fontSize: 9,
+                                              fontWeight: '600',
+                                              color: colors.textSecondary,
+                                            }}
+                                          >
+                                            + {(popName.split('(')[0] || popName).trim()}
+                                          </Text>
+                                        </TouchableOpacity>
+                                      );
+                                    })}
+                                  </View>
+                                </View>
+                              )}
+
+                              {/* Selected Spice Indicator Badge */}
+                              {draft.spiceName ? (
+                                <View
+                                  style={{
+                                    flexDirection: 'row',
+                                    alignItems: 'center',
+                                    justifyContent: 'space-between',
+                                    backgroundColor: colors.primary + '12',
+                                    borderColor: colors.primary,
+                                    borderWidth: 1,
+                                    borderRadius: radii.sm,
+                                    paddingVertical: 6,
+                                    paddingHorizontal: 10,
+                                    marginBottom: 8,
+                                  }}
+                                >
+                                  <View
+                                    style={{
+                                      flexDirection: 'row',
+                                      alignItems: 'center',
+                                      gap: 6,
+                                      flex: 1,
+                                    }}
+                                  >
+                                    <Icon name="restaurant" size={13} color={colors.primary} />
+                                    <Text
+                                      style={{
+                                        fontSize: 11,
+                                        fontWeight: '700',
+                                        color: colors.primary,
+                                      }}
+                                    >
+                                      Selected Spice:
+                                    </Text>
+                                    <Text
+                                      style={{
+                                        fontSize: 11,
+                                        fontWeight: '800',
+                                        color: colors.textPrimary,
+                                        flexShrink: 1,
+                                      }}
+                                    >
+                                      {draft.spiceName}
+                                    </Text>
+                                  </View>
+                                  <TouchableOpacity
+                                    onPress={() =>
+                                      handleUpdateSachetDraft(sachet.id, {
+                                        spiceName: '',
+                                        searchQuery: '',
+                                      })
+                                    }
+                                  >
+                                    <Text
+                                      style={{
+                                        fontSize: 10,
+                                        fontWeight: '700',
+                                        color: colors.danger,
+                                      }}
+                                    >
+                                      Change
+                                    </Text>
+                                  </TouchableOpacity>
+                                </View>
+                              ) : null}
+
+                              {/* Exact Quantity Selection */}
+                              <View style={{ marginBottom: 6 }}>
+                                <View
+                                  style={{
+                                    flexDirection: 'row',
+                                    justifyContent: 'space-between',
+                                    alignItems: 'center',
+                                    marginBottom: 4,
+                                  }}
+                                >
+                                  <Text
+                                    style={{
+                                      fontSize: 10,
+                                      fontWeight: '700',
+                                      color: colors.textSecondary,
+                                    }}
+                                  >
+                                    Select Exact Quantity:
+                                  </Text>
+                                  <Text style={{ fontSize: 9, color: colors.textMuted }}>
+                                    Tap pill or type custom
+                                  </Text>
+                                </View>
+
+                                {/* Quantity Input */}
+                                <TextInput
+                                  style={[
+                                    styles.textInput,
+                                    {
+                                      backgroundColor: colors.bgSubtle,
+                                      borderColor: colors.border,
+                                      paddingVertical: 6,
+                                      fontSize: 11,
+                                      marginBottom: 6,
+                                    },
+                                  ]}
+                                  placeholder="Exact Quantity (e.g. 0.5 tsp, 1.5 tsp, 5g, 2 pieces)"
+                                  placeholderTextColor={colors.textMuted}
+                                  value={draft.quantity}
+                                  onChangeText={(quantity) =>
+                                    handleUpdateSachetDraft(sachet.id, { quantity })
+                                  }
+                                />
+
+                                {/* Exact Quantity Preset Pills */}
+                                <View style={{ flexDirection: 'row', gap: 4, flexWrap: 'wrap' }}>
+                                  {SPICE_QUANTITY_PRESETS.map((qtyOption, qIdx) => {
+                                    const isQtySelected = draft.quantity === qtyOption;
+                                    return (
+                                      <TouchableOpacity
+                                        key={qIdx}
+                                        onPress={() =>
+                                          handleUpdateSachetDraft(sachet.id, {
+                                            quantity: qtyOption,
+                                          })
+                                        }
+                                        style={{
+                                          paddingVertical: 3,
+                                          paddingHorizontal: 7,
+                                          borderRadius: 6,
+                                          backgroundColor: isQtySelected
+                                            ? colors.primary
+                                            : colors.bgSubtle,
+                                          borderWidth: 1,
+                                          borderColor: isQtySelected
+                                            ? colors.primary
+                                            : colors.borderLight,
+                                        }}
+                                      >
+                                        <Text
+                                          style={{
+                                            fontSize: 9,
+                                            fontWeight: isQtySelected ? '800' : '600',
+                                            color: isQtySelected ? '#FFFFFF' : colors.textSecondary,
+                                          }}
+                                        >
+                                          {qtyOption}
+                                        </Text>
+                                      </TouchableOpacity>
+                                    );
+                                  })}
+                                </View>
+                              </View>
+
+                              {/* Action Buttons */}
+                              <View
+                                style={{
+                                  flexDirection: 'row',
+                                  justifyContent: 'flex-end',
+                                  alignItems: 'center',
+                                  marginTop: 8,
+                                  gap: 8,
+                                }}
+                              >
+                                <Button
+                                  title={
+                                    draft.spiceName
+                                      ? `+ Add ${(draft.spiceName.split('(')[0] || draft.spiceName).trim()} (${draft.quantity || '1 tsp'})`
+                                      : draft.searchQuery.trim()
+                                        ? `+ Add "${draft.searchQuery.trim()}" (${draft.quantity || '1 tsp'})`
+                                        : '+ Mix into Sachet'
+                                  }
+                                  size="sm"
+                                  onPress={() => handleAddSpiceToSachet(sachet.id)}
+                                />
+                              </View>
+                            </View>
+                          );
+                        })()}
+                      </View>
+                    );
+                  })
+                )}
+              </View>
+
+              {/* LIVE REAL-TIME NUTRITIONAL STATUS HUD IN STEP 2 */}
+              <View
+                style={[
+                  styles.liveNutritionHud,
+                  {
+                    backgroundColor: colors.bgSurface,
+                    borderRadius: radii.xl,
+                    borderColor: colors.borderLight,
+                    borderWidth: 1,
+                    marginTop: 14,
+                  },
+                ]}
+              >
+                <View
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    marginBottom: 10,
+                  }}
+                >
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    <Icon name="sparkles" size={16} color={colors.primary} />
+                    <Text
+                      style={{
+                        fontSize: 13,
+                        fontWeight: '800',
+                        color: colors.textPrimary,
+                      }}
+                    >
+                      Live Total Recipe Nutrition
+                    </Text>
+                  </View>
+                  <View
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      backgroundColor: '#DCFCE7',
+                      paddingVertical: 2,
+                      paddingHorizontal: 8,
+                      borderRadius: 10,
+                      gap: 4,
+                    }}
+                  >
+                    <View
+                      style={{
+                        width: 6,
+                        height: 6,
+                        borderRadius: 3,
+                        backgroundColor: '#16A34A',
+                      }}
+                    />
+                    <Text
+                      style={{
+                        fontSize: 10,
+                        fontWeight: '800',
+                        color: '#15803D',
+                        textTransform: 'uppercase',
+                      }}
+                    >
+                      Live Synced
+                    </Text>
+                  </View>
+                </View>
+
+                <View
+                  style={{
+                    flexDirection: 'row',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    backgroundColor: colors.bgSubtle,
+                    borderRadius: radii.lg,
+                    paddingVertical: 8,
+                    paddingHorizontal: 12,
+                  }}
+                >
+                  <View style={{ alignItems: 'center', flex: 1 }}>
+                    <Text style={{ fontSize: 16, fontWeight: '900', color: colors.primary }}>
+                      {aiBreakdown?.totalRecipe.calories ?? nutrition.calories}
+                    </Text>
+                    <Text style={{ fontSize: 10, color: colors.textMuted, fontWeight: '700' }}>
+                      kcal
+                    </Text>
+                  </View>
+                  <View style={{ width: 1, height: 24, backgroundColor: colors.borderLight }} />
+                  <View style={{ alignItems: 'center', flex: 1 }}>
+                    <Text style={{ fontSize: 14, fontWeight: '800', color: colors.textPrimary }}>
+                      {aiBreakdown?.totalRecipe.protein ?? nutrition.protein}g
+                    </Text>
+                    <Text style={{ fontSize: 10, color: colors.textMuted }}>Protein</Text>
+                  </View>
+                  <View style={{ width: 1, height: 24, backgroundColor: colors.borderLight }} />
+                  <View style={{ alignItems: 'center', flex: 1 }}>
+                    <Text style={{ fontSize: 14, fontWeight: '800', color: colors.textPrimary }}>
+                      {aiBreakdown?.totalRecipe.carbs ?? nutrition.carbs}g
+                    </Text>
+                    <Text style={{ fontSize: 10, color: colors.textMuted }}>Carbs</Text>
+                  </View>
+                  <View style={{ width: 1, height: 24, backgroundColor: colors.borderLight }} />
+                  <View style={{ alignItems: 'center', flex: 1 }}>
+                    <Text style={{ fontSize: 14, fontWeight: '800', color: colors.textPrimary }}>
+                      {aiBreakdown?.totalRecipe.fat ?? nutrition.fat}g
+                    </Text>
+                    <Text style={{ fontSize: 10, color: colors.textMuted }}>Fats</Text>
+                  </View>
+                  <View style={{ width: 1, height: 24, backgroundColor: colors.borderLight }} />
+                  <View style={{ alignItems: 'center', flex: 1 }}>
+                    <Text style={{ fontSize: 14, fontWeight: '800', color: colors.textPrimary }}>
+                      {aiBreakdown?.totalRecipe.fiber ?? nutrition.fiber}g
+                    </Text>
+                    <Text style={{ fontSize: 10, color: colors.textMuted }}>Fiber</Text>
+                  </View>
+                </View>
+
+                {aiBreakdown?.keyHighlights ? (
+                  <Text
+                    style={{
+                      fontSize: 11,
+                      color: colors.primary,
+                      fontWeight: '700',
+                      marginTop: 8,
+                      textAlign: 'center',
+                    }}
+                  >
+                    💡 {aiBreakdown.keyHighlights}
+                  </Text>
+                ) : null}
+              </View>
+
+              {/* Navigation Buttons */}
+              <View style={[styles.navBtnRow, { marginTop: 16 }]}>
                 <Button
                   title="← Back"
                   variant="secondary"
@@ -1253,103 +2757,128 @@ export const AddMealKitWizardModal: React.FC<AddMealKitWizardModalProps> = ({
                   Steps In This Recipe ({recipeSteps.length} steps):
                 </Text>
 
-                {recipeSteps.map((step) => (
+                {recipeSteps.length === 0 ? (
                   <View
-                    key={step.stepNumber}
-                    style={[
-                      styles.recipeStepCard,
-                      { backgroundColor: colors.bgSubtle, borderColor: colors.borderLight },
-                    ]}
+                    style={{
+                      padding: 16,
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      backgroundColor: colors.bgSubtle,
+                      borderRadius: radii.md,
+                      marginTop: 8,
+                      borderWidth: 1,
+                      borderColor: colors.borderLight,
+                      borderStyle: 'dashed',
+                    }}
                   >
-                    <View style={styles.recipeStepHeader}>
-                      <View style={[styles.stepNumBadge, { backgroundColor: colors.primary }]}>
-                        <Text style={styles.stepNumBadgeText}>{step.stepNumber}</Text>
-                      </View>
-                      <Text
-                        style={[styles.recipeStepTitle, { color: colors.textPrimary }]}
-                        numberOfLines={1}
-                      >
-                        {step.title}
-                      </Text>
-                      <TouchableOpacity onPress={() => handleRemoveStep(step.stepNumber)}>
-                        <Icon name="close" size={16} color={colors.danger} />
-                      </TouchableOpacity>
-                    </View>
-
-                    {/* Step Photo & Details Split */}
-                    <View style={{ flexDirection: 'row', gap: 10, marginVertical: 6 }}>
-                      {step.imageUrl ? (
-                        <View style={styles.stepPhotoThumbWrapper}>
-                          <Image
-                            source={{ uri: step.imageUrl }}
-                            style={styles.stepPhotoThumb}
-                            resizeMode="cover"
-                          />
-                          <View style={styles.stepPhotoBadge}>
-                            <Text style={styles.stepPhotoBadgeText}>Step Photo</Text>
-                          </View>
+                    <Icon name="document-text" size={24} color={colors.textMuted} />
+                    <Text style={{ fontSize: 13, color: colors.textMuted, marginTop: 6 }}>
+                      No recipe steps added yet. Use the form below to add cooking steps.
+                    </Text>
+                  </View>
+                ) : (
+                  recipeSteps.map((step) => (
+                    <View
+                      key={step.stepNumber}
+                      style={[
+                        styles.recipeStepCard,
+                        { backgroundColor: colors.bgSubtle, borderColor: colors.borderLight },
+                      ]}
+                    >
+                      <View style={styles.recipeStepHeader}>
+                        <View style={[styles.stepNumBadge, { backgroundColor: colors.primary }]}>
+                          <Text style={styles.stepNumBadgeText}>{step.stepNumber}</Text>
                         </View>
-                      ) : null}
-
-                      <View style={{ flex: 1 }}>
-                        <Text style={[styles.recipeStepText, { color: colors.textSecondary }]}>
-                          {step.instruction}
+                        <Text
+                          style={[styles.recipeStepTitle, { color: colors.textPrimary }]}
+                          numberOfLines={1}
+                        >
+                          {step.title}
                         </Text>
+                        <TouchableOpacity onPress={() => handleRemoveStep(step.stepNumber)}>
+                          <Icon name="close" size={16} color={colors.danger} />
+                        </TouchableOpacity>
+                      </View>
 
-                        {step.tip ? (
-                          <View style={styles.tipBox}>
-                            <Text
-                              style={{ fontSize: 11, color: colors.primaryDark, fontWeight: '600' }}
-                            >
-                              Chef Tip: {step.tip}
-                            </Text>
+                      {/* Step Photo & Details Split */}
+                      <View style={{ flexDirection: 'row', gap: 10, marginVertical: 6 }}>
+                        {step.imageUrl ? (
+                          <View style={styles.stepPhotoThumbWrapper}>
+                            <Image
+                              source={{ uri: step.imageUrl }}
+                              style={styles.stepPhotoThumb}
+                              resizeMode="cover"
+                            />
+                            <View style={styles.stepPhotoBadge}>
+                              <Text style={styles.stepPhotoBadgeText}>Step Photo</Text>
+                            </View>
                           </View>
                         ) : null}
 
-                        <View
-                          style={{
-                            flexDirection: 'row',
-                            justifyContent: 'space-between',
-                            alignItems: 'center',
-                            marginTop: 6,
-                          }}
-                        >
-                          {step.timerSeconds ? (
-                            <Text
-                              style={{
-                                fontSize: 11,
-                                fontWeight: '700',
-                                color: colors.primary,
-                              }}
-                            >
-                              ⏱️ Timer: {Math.round(step.timerSeconds / 60)} mins
-                            </Text>
-                          ) : (
-                            <View />
-                          )}
+                        <View style={{ flex: 1 }}>
+                          <Text style={[styles.recipeStepText, { color: colors.textSecondary }]}>
+                            {step.instruction}
+                          </Text>
 
-                          <TouchableOpacity
-                            onPress={() => handleRegenerateExistingStepPhoto(step.stepNumber)}
+                          {step.tip ? (
+                            <View style={styles.tipBox}>
+                              <Text
+                                style={{
+                                  fontSize: 11,
+                                  color: colors.primaryDark,
+                                  fontWeight: '600',
+                                }}
+                              >
+                                Chef Tip: {step.tip}
+                              </Text>
+                            </View>
+                          ) : null}
+
+                          <View
                             style={{
-                              paddingHorizontal: 8,
-                              paddingVertical: 3,
-                              borderRadius: 6,
-                              backgroundColor: colors.bgSurface,
-                              borderWidth: 1,
-                              borderColor: colors.borderLight,
+                              flexDirection: 'row',
+                              justifyContent: 'space-between',
+                              alignItems: 'center',
+                              marginTop: 6,
                             }}
                           >
-                            <Text
-                              style={{ fontSize: 10, fontWeight: '700', color: colors.primary }}
+                            {step.timerSeconds ? (
+                              <Text
+                                style={{
+                                  fontSize: 11,
+                                  fontWeight: '700',
+                                  color: colors.primary,
+                                }}
+                              >
+                                ⏱️ Timer: {Math.round(step.timerSeconds / 60)} mins
+                              </Text>
+                            ) : (
+                              <View />
+                            )}
+
+                            <TouchableOpacity
+                              onPress={() => handleRegenerateExistingStepPhoto(step.stepNumber)}
+                              style={{
+                                paddingHorizontal: 8,
+                                paddingVertical: 3,
+                                borderRadius: 6,
+                                backgroundColor: colors.bgSurface,
+                                borderWidth: 1,
+                                borderColor: colors.borderLight,
+                              }}
                             >
-                              Regenerate AI Photo
-                            </Text>
-                          </TouchableOpacity>
+                              <Text
+                                style={{ fontSize: 10, fontWeight: '700', color: colors.primary }}
+                              >
+                                Regenerate AI Photo
+                              </Text>
+                            </TouchableOpacity>
+                          </View>
                         </View>
                       </View>
                     </View>
-                  </View>
-                ))}
+                  ))
+                )}
 
                 {/* Add Step Card */}
                 <View
@@ -1799,11 +3328,11 @@ export const AddMealKitWizardModal: React.FC<AddMealKitWizardModalProps> = ({
                 style={[styles.card, { backgroundColor: colors.bgSurface, borderRadius: radii.xl }]}
               >
                 <Text style={[styles.sectionHeading, { color: colors.textPrimary }]}>
-                  AI Nutrition Value Estimator
+                  Live Nutritional Information
                 </Text>
                 <Text style={[styles.sectionHint, { color: colors.textSecondary }]}>
-                  Our AI evaluates your listed ingredients and portions to calculate approximate
-                  calories and macronutrients automatically.
+                  Updates in real time automatically based on all ingredients, portions, and sachet
+                  spices.
                 </Text>
 
                 {/* AI Calculation Trigger Button */}
@@ -1817,14 +3346,34 @@ export const AddMealKitWizardModal: React.FC<AddMealKitWizardModalProps> = ({
                   ) : (
                     <>
                       <Icon name="sparkles" size={16} color="#FFFFFF" />
-                      <Text style={styles.aiActionText}>
-                        Calculate Approximate Nutrition with AI
-                      </Text>
+                      <Text style={styles.aiActionText}>Recalculate Real-Time Nutrition</Text>
                     </>
                   )}
                 </TouchableOpacity>
 
                 {/* Macro Results Display */}
+                <View
+                  style={{
+                    flexDirection: 'row',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    marginBottom: 6,
+                  }}
+                >
+                  <Text
+                    style={[
+                      styles.inputLabel,
+                      { color: colors.textPrimary, marginTop: 8, marginBottom: 0 },
+                    ]}
+                  >
+                    Total Recipe Nutrition
+                  </Text>
+                  {aiBreakdown && (
+                    <Text style={{ fontSize: 11, color: colors.textMuted }}>
+                      ÷{parseInt(servings) || 2} servings = per serving below
+                    </Text>
+                  )}
+                </View>
                 <View style={styles.macroCardsGrid}>
                   <View
                     style={[
@@ -1833,11 +3382,11 @@ export const AddMealKitWizardModal: React.FC<AddMealKitWizardModalProps> = ({
                     ]}
                   >
                     <Text style={[styles.macroNumber, { color: colors.primary }]}>
-                      {nutrition.calories}
+                      {aiBreakdown?.totalRecipe.calories ?? nutrition.calories}
                     </Text>
                     <Text style={[styles.macroLabel, { color: colors.textMuted }]}>Calories</Text>
                     <Text style={[styles.macroSub, { color: colors.textSecondary }]}>
-                      kcal/serving
+                      kcal total
                     </Text>
                   </View>
 
@@ -1848,11 +3397,11 @@ export const AddMealKitWizardModal: React.FC<AddMealKitWizardModalProps> = ({
                     ]}
                   >
                     <Text style={[styles.macroNumber, { color: colors.textPrimary }]}>
-                      {nutrition.protein}g
+                      {aiBreakdown?.totalRecipe.protein ?? nutrition.protein}g
                     </Text>
                     <Text style={[styles.macroLabel, { color: colors.textMuted }]}>Protein</Text>
                     <Text style={[styles.macroSub, { color: colors.textSecondary }]}>
-                      muscle health
+                      total recipe
                     </Text>
                   </View>
 
@@ -1863,11 +3412,11 @@ export const AddMealKitWizardModal: React.FC<AddMealKitWizardModalProps> = ({
                     ]}
                   >
                     <Text style={[styles.macroNumber, { color: colors.textPrimary }]}>
-                      {nutrition.carbs}g
+                      {aiBreakdown?.totalRecipe.carbs ?? nutrition.carbs}g
                     </Text>
                     <Text style={[styles.macroLabel, { color: colors.textMuted }]}>Carbs</Text>
                     <Text style={[styles.macroSub, { color: colors.textSecondary }]}>
-                      energy supply
+                      total recipe
                     </Text>
                   </View>
 
@@ -1878,11 +3427,11 @@ export const AddMealKitWizardModal: React.FC<AddMealKitWizardModalProps> = ({
                     ]}
                   >
                     <Text style={[styles.macroNumber, { color: colors.textPrimary }]}>
-                      {nutrition.fat}g
+                      {aiBreakdown?.totalRecipe.fat ?? nutrition.fat}g
                     </Text>
                     <Text style={[styles.macroLabel, { color: colors.textMuted }]}>Fats</Text>
                     <Text style={[styles.macroSub, { color: colors.textSecondary }]}>
-                      essential lipids
+                      total recipe
                     </Text>
                   </View>
 
@@ -1893,106 +3442,186 @@ export const AddMealKitWizardModal: React.FC<AddMealKitWizardModalProps> = ({
                     ]}
                   >
                     <Text style={[styles.macroNumber, { color: colors.textPrimary }]}>
-                      {nutrition.fiber}g
+                      {aiBreakdown?.totalRecipe.fiber ?? nutrition.fiber}g
                     </Text>
                     <Text style={[styles.macroLabel, { color: colors.textMuted }]}>Fiber</Text>
                     <Text style={[styles.macroSub, { color: colors.textSecondary }]}>
-                      gut health
+                      total recipe
                     </Text>
                   </View>
                 </View>
 
-                {/* AI Explanation Breakdown */}
+                {/* Per-Serving Summary Row */}
                 {aiBreakdown && (
                   <View
-                    style={[
-                      styles.aiBreakdownBox,
-                      { backgroundColor: '#F0FDF4', borderColor: '#BBF7D0' },
-                    ]}
+                    style={{
+                      flexDirection: 'row',
+                      justifyContent: 'space-around',
+                      backgroundColor: colors.bgSubtle,
+                      borderRadius: radii.lg,
+                      paddingVertical: 10,
+                      paddingHorizontal: 8,
+                      marginTop: 10,
+                      marginBottom: 4,
+                      borderWidth: 1,
+                      borderColor: colors.borderLight,
+                    }}
                   >
-                    <Text
-                      style={{ fontSize: 13, fontWeight: '800', color: '#166534', marginBottom: 6 }}
-                    >
-                      AI Culinary Nutritional Analysis:
-                    </Text>
-                    <Text
-                      style={{ fontSize: 12, fontWeight: '700', color: '#15803D', marginBottom: 6 }}
-                    >
-                      {aiBreakdown.keyHighlights}
-                    </Text>
-                    {aiBreakdown.breakdownSummary.map((item, idx) => (
-                      <Text key={idx} style={{ fontSize: 12, color: '#166534', lineHeight: 18 }}>
-                        {item}
+                    <View style={{ alignItems: 'center' }}>
+                      <Text style={{ fontSize: 13, fontWeight: '800', color: colors.primary }}>
+                        {nutrition.calories}
                       </Text>
-                    ))}
+                      <Text style={{ fontSize: 10, color: colors.textMuted }}>kcal</Text>
+                    </View>
+                    <View style={{ width: 1, backgroundColor: colors.borderLight }} />
+                    <View style={{ alignItems: 'center' }}>
+                      <Text style={{ fontSize: 13, fontWeight: '700', color: colors.textPrimary }}>
+                        {nutrition.protein}g
+                      </Text>
+                      <Text style={{ fontSize: 10, color: colors.textMuted }}>protein</Text>
+                    </View>
+                    <View style={{ width: 1, backgroundColor: colors.borderLight }} />
+                    <View style={{ alignItems: 'center' }}>
+                      <Text style={{ fontSize: 13, fontWeight: '700', color: colors.textPrimary }}>
+                        {nutrition.carbs}g
+                      </Text>
+                      <Text style={{ fontSize: 10, color: colors.textMuted }}>carbs</Text>
+                    </View>
+                    <View style={{ width: 1, backgroundColor: colors.borderLight }} />
+                    <View style={{ alignItems: 'center' }}>
+                      <Text style={{ fontSize: 13, fontWeight: '700', color: colors.textPrimary }}>
+                        {nutrition.fat}g
+                      </Text>
+                      <Text style={{ fontSize: 10, color: colors.textMuted }}>fat</Text>
+                    </View>
+                    <View style={{ width: 1, backgroundColor: colors.borderLight }} />
+                    <View style={{ alignItems: 'center' }}>
+                      <Text style={{ fontSize: 13, fontWeight: '700', color: colors.textPrimary }}>
+                        {nutrition.fiber}g
+                      </Text>
+                      <Text style={{ fontSize: 10, color: colors.textMuted }}>fiber</Text>
+                    </View>
+                    <View style={{ alignItems: 'center', justifyContent: 'center' }}>
+                      <Text style={{ fontSize: 9, color: colors.textMuted, fontStyle: 'italic' }}>
+                        per serving
+                      </Text>
+                      <Text style={{ fontSize: 9, color: colors.textMuted, fontStyle: 'italic' }}>
+                        (saved to kit)
+                      </Text>
+                    </View>
                   </View>
                 )}
 
-                {/* Manual Fine Tuning Accordion */}
+                {/* Chef Manual Adjustments */}
                 <Text style={[styles.inputLabel, { color: colors.textPrimary, marginTop: 14 }]}>
-                  Chef Manual Adjustments (Optional):
+                  Chef Manual Adjustments (Optional)
                 </Text>
-                <View style={{ flexDirection: 'row', gap: 6 }}>
-                  <TextInput
-                    style={[
-                      styles.textInput,
-                      { flex: 1, backgroundColor: colors.bgSubtle, borderColor: colors.border },
-                    ]}
-                    placeholder="Cal"
-                    value={String(nutrition.calories)}
-                    onChangeText={(t) =>
-                      setNutrition((prev) => ({ ...prev, calories: parseInt(t) || 0 }))
-                    }
-                    keyboardType="numeric"
-                  />
-                  <TextInput
-                    style={[
-                      styles.textInput,
-                      { flex: 1, backgroundColor: colors.bgSubtle, borderColor: colors.border },
-                    ]}
-                    placeholder="Pro(g)"
-                    value={String(nutrition.protein)}
-                    onChangeText={(t) =>
-                      setNutrition((prev) => ({ ...prev, protein: parseFloat(t) || 0 }))
-                    }
-                    keyboardType="numeric"
-                  />
-                  <TextInput
-                    style={[
-                      styles.textInput,
-                      { flex: 1, backgroundColor: colors.bgSubtle, borderColor: colors.border },
-                    ]}
-                    placeholder="Carb(g)"
-                    value={String(nutrition.carbs)}
-                    onChangeText={(t) =>
-                      setNutrition((prev) => ({ ...prev, carbs: parseFloat(t) || 0 }))
-                    }
-                    keyboardType="numeric"
-                  />
-                  <TextInput
-                    style={[
-                      styles.textInput,
-                      { flex: 1, backgroundColor: colors.bgSubtle, borderColor: colors.border },
-                    ]}
-                    placeholder="Fat(g)"
-                    value={String(nutrition.fat)}
-                    onChangeText={(t) =>
-                      setNutrition((prev) => ({ ...prev, fat: parseFloat(t) || 0 }))
-                    }
-                    keyboardType="numeric"
-                  />
-                  <TextInput
-                    style={[
-                      styles.textInput,
-                      { flex: 1, backgroundColor: colors.bgSubtle, borderColor: colors.border },
-                    ]}
-                    placeholder="Fib(g)"
-                    value={String(nutrition.fiber)}
-                    onChangeText={(t) =>
-                      setNutrition((prev) => ({ ...prev, fiber: parseFloat(t) || 0 }))
-                    }
-                    keyboardType="numeric"
-                  />
+                <Text
+                  style={[styles.sectionHint, { color: colors.textSecondary, marginBottom: 10 }]}
+                >
+                  Override any value calculated above. Changes are reflected instantly in the live
+                  cards.
+                </Text>
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
+                  {/* Calories */}
+                  <View style={{ flexBasis: '47%', flexGrow: 1 }}>
+                    <Text style={[styles.fieldLabel, { color: colors.textSecondary }]}>
+                      Calories (kcal)
+                    </Text>
+                    <TextInput
+                      style={[
+                        styles.textInput,
+                        { backgroundColor: colors.bgSubtle, borderColor: colors.border },
+                      ]}
+                      placeholder="e.g. 420"
+                      placeholderTextColor={colors.textMuted}
+                      value={nutrition.calories ? String(nutrition.calories) : ''}
+                      onChangeText={(t) =>
+                        setNutrition((prev) => ({ ...prev, calories: parseInt(t) || 0 }))
+                      }
+                      keyboardType="numeric"
+                    />
+                  </View>
+
+                  {/* Protein */}
+                  <View style={{ flexBasis: '47%', flexGrow: 1 }}>
+                    <Text style={[styles.fieldLabel, { color: colors.textSecondary }]}>
+                      Protein (g)
+                    </Text>
+                    <TextInput
+                      style={[
+                        styles.textInput,
+                        { backgroundColor: colors.bgSubtle, borderColor: colors.border },
+                      ]}
+                      placeholder="e.g. 18"
+                      placeholderTextColor={colors.textMuted}
+                      value={nutrition.protein ? String(nutrition.protein) : ''}
+                      onChangeText={(t) =>
+                        setNutrition((prev) => ({ ...prev, protein: parseFloat(t) || 0 }))
+                      }
+                      keyboardType="numeric"
+                    />
+                  </View>
+
+                  {/* Carbohydrates */}
+                  <View style={{ flexBasis: '47%', flexGrow: 1 }}>
+                    <Text style={[styles.fieldLabel, { color: colors.textSecondary }]}>
+                      Carbohydrates (g)
+                    </Text>
+                    <TextInput
+                      style={[
+                        styles.textInput,
+                        { backgroundColor: colors.bgSubtle, borderColor: colors.border },
+                      ]}
+                      placeholder="e.g. 35"
+                      placeholderTextColor={colors.textMuted}
+                      value={nutrition.carbs ? String(nutrition.carbs) : ''}
+                      onChangeText={(t) =>
+                        setNutrition((prev) => ({ ...prev, carbs: parseFloat(t) || 0 }))
+                      }
+                      keyboardType="numeric"
+                    />
+                  </View>
+
+                  {/* Fat */}
+                  <View style={{ flexBasis: '47%', flexGrow: 1 }}>
+                    <Text style={[styles.fieldLabel, { color: colors.textSecondary }]}>
+                      Fat (g)
+                    </Text>
+                    <TextInput
+                      style={[
+                        styles.textInput,
+                        { backgroundColor: colors.bgSubtle, borderColor: colors.border },
+                      ]}
+                      placeholder="e.g. 12"
+                      placeholderTextColor={colors.textMuted}
+                      value={nutrition.fat ? String(nutrition.fat) : ''}
+                      onChangeText={(t) =>
+                        setNutrition((prev) => ({ ...prev, fat: parseFloat(t) || 0 }))
+                      }
+                      keyboardType="numeric"
+                    />
+                  </View>
+
+                  {/* Fiber */}
+                  <View style={{ flexBasis: '47%', flexGrow: 1 }}>
+                    <Text style={[styles.fieldLabel, { color: colors.textSecondary }]}>
+                      Fiber (g)
+                    </Text>
+                    <TextInput
+                      style={[
+                        styles.textInput,
+                        { backgroundColor: colors.bgSubtle, borderColor: colors.border },
+                      ]}
+                      placeholder="e.g. 5"
+                      placeholderTextColor={colors.textMuted}
+                      value={nutrition.fiber ? String(nutrition.fiber) : ''}
+                      onChangeText={(t) =>
+                        setNutrition((prev) => ({ ...prev, fiber: parseFloat(t) || 0 }))
+                      }
+                      keyboardType="numeric"
+                    />
+                  </View>
                 </View>
               </View>
 
@@ -2032,7 +3661,25 @@ export const AddMealKitWizardModal: React.FC<AddMealKitWizardModalProps> = ({
                     { backgroundColor: colors.bgSubtle, borderColor: colors.borderLight },
                   ]}
                 >
-                  <Image source={{ uri: heroImage }} style={styles.previewHeroImg} />
+                  {heroImage ? (
+                    <Image source={{ uri: heroImage }} style={styles.previewHeroImg} />
+                  ) : (
+                    <View
+                      style={[
+                        styles.previewHeroImg,
+                        {
+                          backgroundColor: colors.bgSurface,
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                        },
+                      ]}
+                    >
+                      <Icon name="image" size={36} color={colors.textMuted} />
+                      <Text style={{ fontSize: 11, color: colors.textMuted, marginTop: 4 }}>
+                        No image selected
+                      </Text>
+                    </View>
+                  )}
                   <View style={styles.previewContent}>
                     <View
                       style={{
@@ -2045,7 +3692,7 @@ export const AddMealKitWizardModal: React.FC<AddMealKitWizardModalProps> = ({
                         {name || 'Your Recipe Title'}
                       </Text>
                       <Text style={[styles.previewPrice, { color: colors.primary }]}>
-                        ₹{price || '299'}
+                        ₹{price.replace(/[^0-9.]/g, '') || '299'}
                       </Text>
                     </View>
 
@@ -2055,39 +3702,168 @@ export const AddMealKitWizardModal: React.FC<AddMealKitWizardModalProps> = ({
                       </Text>
                     ) : null}
 
-                    <Text style={[styles.previewTagline, { color: colors.textSecondary }]}>
-                      {tagline}
-                    </Text>
+                    {tagline ? (
+                      <Text style={[styles.previewTagline, { color: colors.textSecondary }]}>
+                        {tagline}
+                      </Text>
+                    ) : null}
 
                     <View style={styles.previewPillsRow}>
-                      <Badge label={`${servings} Servings`} variant="neutral" />
-                      <Badge label={`${cookTime} mins`} variant="neutral" />
+                      <Badge label={`${servings || '2'} Servings`} variant="neutral" />
+                      <Badge label={`${cookTime || '20'} mins`} variant="neutral" />
                       {(() => {
                         const badge = getDietBadgeInfo(diet);
                         return <Badge label={badge.label} variant={badge.variant} />;
                       })()}
                     </View>
 
-                    {/* Masala Sachets Banner */}
-                    <View style={styles.previewSachetsBanner}>
-                      <Text style={{ fontSize: 12, fontWeight: '800', color: colors.primary }}>
-                        {ingredients.filter((i) => i.isMasalaSachet).length || 2} Pre-portioned
-                        Masala Sachets included
-                      </Text>
-                    </View>
+                    {/* Masala Sachets Detailed Breakdown */}
+                    {sachets.length > 0 && (
+                      <View
+                        style={{
+                          marginTop: 10,
+                          padding: 10,
+                          backgroundColor: colors.bgSurface,
+                          borderRadius: radii.md,
+                          borderWidth: 1,
+                          borderColor: colors.borderLight,
+                        }}
+                      >
+                        <Text
+                          style={{
+                            fontSize: 12,
+                            fontWeight: '800',
+                            color: colors.primary,
+                            marginBottom: 4,
+                          }}
+                        >
+                          {sachets.length} Pre-Portioned Masala Sachet
+                          {sachets.length > 1 ? 's' : ''} Included:
+                        </Text>
+                        {sachets.map((s, idx) => (
+                          <View key={s.id || idx} style={{ marginTop: 4 }}>
+                            <Text
+                              style={{
+                                fontSize: 12,
+                                fontWeight: '700',
+                                color: colors.textPrimary,
+                              }}
+                            >
+                              • {s.name}
+                            </Text>
+                            {s.spices.length > 0 ? (
+                              <Text
+                                style={{
+                                  fontSize: 11,
+                                  color: colors.textSecondary,
+                                  marginLeft: 10,
+                                }}
+                              >
+                                Mixed Masalas:{' '}
+                                {s.spices.map((sp) => `${sp.name} (${sp.quantity})`).join(', ')}
+                              </Text>
+                            ) : (
+                              <Text
+                                style={{
+                                  fontSize: 11,
+                                  color: colors.textMuted,
+                                  marginLeft: 10,
+                                  fontStyle: 'italic',
+                                }}
+                              >
+                                Chef custom blend
+                              </Text>
+                            )}
+                          </View>
+                        ))}
+                      </View>
+                    )}
 
-                    {/* Estimated Nutrition Banner */}
+                    {/* Fresh Produce Summary in Preview */}
+                    {ingredients.length > 0 && (
+                      <View style={{ marginTop: 8 }}>
+                        <Text style={{ fontSize: 11, fontWeight: '700', color: colors.textMuted }}>
+                          Fresh Base:{' '}
+                          {ingredients.map((i) => `${i.name} (${i.quantity})`).join(', ')}
+                        </Text>
+                      </View>
+                    )}
+
+                    {/* Live Real-Time Nutrition Banner */}
                     <View style={styles.previewNutritionRow}>
                       <Text
                         style={{ fontSize: 12, fontWeight: '700', color: colors.textSecondary }}
                       >
-                        AI Nutrition: {nutrition.calories} kcal • {nutrition.protein}g protein •{' '}
-                        {nutrition.carbs}g carbs
+                        {nutrition.calories > 0
+                          ? `Live Real-Time Nutrition: ${nutrition.calories} kcal • ${nutrition.protein}g protein • ${nutrition.carbs}g carbs • ${nutrition.fat}g fat`
+                          : 'Nutrition: 0 kcal (Add produce or spices to calculate in real time)'}
                       </Text>
+                    </View>
+
+                    {/* Kit Price Direct Adjustment */}
+                    <View
+                      style={{
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        marginTop: 10,
+                        paddingTop: 8,
+                        borderTopWidth: 1,
+                        borderTopColor: colors.borderLight,
+                      }}
+                    >
+                      <View>
+                        <Text
+                          style={{ fontSize: 12, fontWeight: '700', color: colors.textPrimary }}
+                        >
+                          Selling Price (₹)
+                        </Text>
+                        <Text style={{ fontSize: 10, color: colors.textMuted }}>Default: ₹299</Text>
+                      </View>
+                      <TextInput
+                        style={[
+                          styles.textInput,
+                          {
+                            backgroundColor: colors.bgSurface,
+                            borderColor: colors.border,
+                            width: 100,
+                            height: 36,
+                            paddingVertical: 4,
+                            paddingHorizontal: 10,
+                            textAlign: 'center',
+                            fontWeight: '800',
+                            fontSize: 14,
+                            color: colors.primary,
+                          },
+                        ]}
+                        placeholder="299"
+                        placeholderTextColor={colors.textMuted}
+                        value={price}
+                        onChangeText={(val) => setPrice(val.replace(/[^0-9.]/g, ''))}
+                        keyboardType="numeric"
+                      />
                     </View>
                   </View>
                 </View>
               </View>
+
+              {step5Error ? (
+                <View style={styles.errorAlertBox}>
+                  <Icon name="alert-circle" size={18} color="#ef4444" />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.errorAlertText}>{step5Error}</Text>
+                  </View>
+                  <TouchableOpacity
+                    onPress={() => {
+                      setStep5Error(null);
+                      setCurrentStep(1);
+                    }}
+                    style={styles.errorFixBtn}
+                  >
+                    <Text style={styles.errorFixBtnText}>Edit in Step 1</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : null}
 
               <View style={styles.navBtnRow}>
                 <Button
@@ -2104,9 +3880,10 @@ export const AddMealKitWizardModal: React.FC<AddMealKitWizardModalProps> = ({
                   onPress={() => setPrintModalVisible(true)}
                 />
                 <Button
-                  title="Publish Kit"
+                  title={isPublishing ? 'Publishing...' : 'Publish Kit'}
                   size="lg"
                   style={{ flex: 2 }}
+                  disabled={isPublishing}
                   onPress={handleFinalPublish}
                 />
               </View>
@@ -2211,6 +3988,12 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     marginBottom: 5,
     marginTop: 10,
+  },
+  fieldLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    marginBottom: 4,
+    marginTop: 2,
   },
   textInput: {
     paddingHorizontal: 12,
@@ -2381,6 +4164,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     marginBottom: 14,
   },
+  liveNutritionHud: {
+    padding: 12,
+    marginTop: 14,
+  },
   previewCard: {
     borderRadius: 14,
     overflow: 'hidden',
@@ -2537,5 +4324,33 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 8,
     fontWeight: '700',
+  },
+  errorAlertBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#F87171',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginTop: 12,
+  },
+  errorAlertText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#B91C1C',
+  },
+  errorFixBtn: {
+    backgroundColor: '#EF4444',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 6,
+  },
+  errorFixBtnText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '800',
   },
 });

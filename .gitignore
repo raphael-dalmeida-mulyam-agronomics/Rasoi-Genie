@@ -42,3 +42,6 @@ id_ed25519_company*
 # generated native folders
 /ios
 /android
+
+# firebase cache
+.firebase/

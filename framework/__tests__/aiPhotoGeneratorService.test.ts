@@ -40,6 +40,23 @@ describe('aiPhotoGeneratorService', () => {
     expect(result.promptUsed).toContain('Grandma Secret Recipe');
   });
 
+  it('synthesizes dish name, chef tagline, and presentation style into the generated photo prompt', async () => {
+    const result = await generateDishPhotoWithAI({
+      dishName: 'Smoked Dal Makhani',
+      tagline: 'Slow simmered black lentils in velvety butter with charcoal smoke aroma',
+      presentationStyle: 'handi',
+      cuisine: 'Punjabi',
+      diet: 'veg',
+    });
+
+    expect(result).toBeDefined();
+    expect(result.imageUrl).toContain('http');
+    expect(result.presentationStyle).toContain('Brass Handi');
+    expect(result.promptUsed).toContain('Smoked Dal Makhani');
+    expect(result.promptUsed).toContain('Slow simmered black lentils');
+    expect(result.promptUsed).toContain('traditional authentic hand-hammered Indian brass handi');
+  });
+
   describe('generateStepPhotoWithAI', () => {
     it('generates step photo and synthesizes ingredients and prior instructions into the prompt', async () => {
       const result = await generateStepPhotoWithAI({
@@ -97,6 +114,41 @@ describe('aiPhotoGeneratorService', () => {
 
       expect(result.imageUrl).toBeDefined();
       expect(result.presentationStyle).toContain('Paneer');
+    });
+
+    it('identifies accurate sauteing aromatics stage and does not use dal makhani photo', async () => {
+      const result = await generateStepPhotoWithAI({
+        dishName: 'Paneer Butter Masala',
+        stepNumber: 2,
+        stepTitle: 'Sauté Onions and Aromatics',
+        stepInstruction:
+          'Heat ghee and sauté finely chopped onions, ginger and garlic until golden brown.',
+      });
+
+      expect(result.imageUrl).toBeDefined();
+      expect(result.presentationStyle).toContain('Sautéing Aromatics');
+      expect(result.imageUrl).toContain('photo-1507048331197-7d4ac70811cf');
+      expect(result.imageUrl).not.toContain('photo-1546833999-b9f581a1996d');
+    });
+
+    it('synthesizes hindi name, spice level, ingredients and sachets into presentation photo prompt', async () => {
+      const result = await generateDishPhotoWithAI({
+        dishName: 'Paneer Butter Masala',
+        hindiName: 'पनीर बटर मसाला',
+        tagline: 'Velvety cottage cheese in rich tomato gravy',
+        cuisine: 'North Indian',
+        diet: 'veg',
+        spiceLevel: 'Spicy',
+        ingredients: ['Fresh Malai Paneer', 'Fresh Tomatoes', 'Cashew Paste'],
+        sachets: ['Sachet 1: Whole Khada Spices', 'Sachet 2: Chef Gravy Premix'],
+        presentationStyle: 'handi',
+      });
+
+      expect(result.promptUsed).toContain('Paneer Butter Masala (पनीर बटर मसाला)');
+      expect(result.promptUsed).toContain('Spicy');
+      expect(result.promptUsed).toContain('crimson rogan');
+      expect(result.promptUsed).toContain('Fresh Malai Paneer');
+      expect(result.promptUsed).toContain('Sachet 1: Whole Khada Spices');
     });
 
     it('handles minimal input with robust fallback', async () => {

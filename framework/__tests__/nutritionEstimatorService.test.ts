@@ -39,8 +39,10 @@ describe('nutritionEstimatorService', () => {
 
   it('provides safe baseline values for empty ingredients list', () => {
     const result = estimateNutritionWithAI([], 2);
-    expect(result.perServing.calories).toBe(380);
-    expect(result.perServing.protein).toBe(14);
-    expect(result.breakdownSummary).toContain('Balanced meal baseline estimation applied.');
+    expect(result.perServing.calories).toBe(0);
+    expect(result.perServing.protein).toBe(0);
+    expect(result.breakdownSummary).toContain(
+      'Add ingredients and sachet spices to compute real-time nutritional values.',
+    );
   });
 });

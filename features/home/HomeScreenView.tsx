@@ -1,40 +1,38 @@
-import React, { useState, useMemo } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  Image,
-  Dimensions,
-  Alert,
-  Modal,
-} from 'react-native';
 import { router } from 'expo-router';
-import { useAuth } from '../../framework/context/AuthContext';
-import { useTheme } from '../../framework/theme/ThemeContext';
-import { useCart } from '../../framework/context/CartContext';
-import { useWishlist } from '../../framework/context/WishlistContext';
-import { usePreferences } from '../../framework/context/PreferencesContext';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
+  ActivityIndicator,
+  Dimensions,
+  Image,
+  Modal,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
+import { useAuth } from '../../framework/context/AuthContext';
+import { useCart } from '../../framework/context/CartContext';
+import { usePreferences } from '../../framework/context/PreferencesContext';
+import { useWishlist } from '../../framework/context/WishlistContext';
+import {
+  CuisineType,
+  DietTag,
+  DishCategory,
   getMealKits,
   MealKit,
-  searchAndFilterMealKits,
-  CuisineType,
-  DishCategory,
   SpiceLevel,
-  DietTag,
+  subscribeToMealKits,
+  syncMealKitsWithSupabase,
 } from '../../framework/services/mealKitsService';
-import { Button } from '../../framework/ui/Button';
-import { Card } from '../../framework/ui/Card';
+import { useTheme } from '../../framework/theme/ThemeContext';
+import { ThemeSwitcher } from '../../framework/theme/ThemeSwitcher';
 import { Badge, getDietBadgeInfo } from '../../framework/ui/Badge';
-import { PillTag } from '../../framework/ui/PillTag';
-import { RatingStars } from '../../framework/ui/RatingStars';
-import { Icon, AppIconName } from '../../framework/ui/Icon';
+import { Button } from '../../framework/ui/Button';
+import { AppIconName, Icon } from '../../framework/ui/Icon';
+import { getKitsForCity, seedKitsForCityIfNeeded } from '../admin/cityKitsSeederService';
 import { MealDetailModal } from '../meal-detail/MealDetailModal';
 import { DietaryPreferencesModal } from '../onboarding/DietaryPreferencesModal';
-import { ReviewModal } from '../reviews/ReviewModal';
-import { ThemeSwitcher } from '../../framework/theme/ThemeSwitcher';
 
 const { width } = Dimensions.get('window');
 
@@ -85,6 +83,8 @@ const CUISINE_FILTER_OPTIONS: { id: 'All' | CuisineType; label: string; icon: Ap
   { id: 'Gujarati', label: 'Gujarati', icon: 'leaf' },
   { id: 'Indo-Chinese', label: 'Indo-Chinese', icon: 'flash' },
   { id: 'Continental', label: 'Continental', icon: 'restaurant' },
+  { id: 'European', label: 'European', icon: 'globe' },
+  { id: 'Mediterranean', label: 'Mediterranean', icon: 'sun' },
 ];
 
 const DISH_FILTER_OPTIONS: { id: 'All' | DishCategory; label: string; icon: AppIconName }[] = [
@@ -96,6 +96,8 @@ const DISH_FILTER_OPTIONS: { id: 'All' | DishCategory; label: string; icon: AppI
   { id: 'Tacos', label: 'Tacos', icon: 'flame' },
   { id: 'Burritos & Bowls', label: 'Burritos & Bowls', icon: 'leaf' },
   { id: 'Pastas', label: 'Pastas', icon: 'restaurant' },
+  { id: 'Soups & Stews', label: 'Soups & Stews', icon: 'water' },
+  { id: 'Street Food', label: 'Street Food', icon: 'restaurant' },
 ];
 
 const SORT_OPTIONS: {
@@ -142,8 +144,43 @@ export const HomeScreenView: React.FC = () => {
   const [preferencesModalVisible, setPreferencesModalVisible] = useState(false);
   const [reviewKit, setReviewKit] = useState<MealKit | null>(null);
   const [reviewModalVisible, setReviewModalVisible] = useState(false);
+  const [allKits, setAllKits] = useState<MealKit[]>(() => getMealKits());
+  const [isSeedingCity, setIsSeedingCity] = useState(false);
 
-  const allKits = useMemo(() => getMealKits(), []);
+  // Seed city-specific kits when the user's city is known and no city kits exist yet
+  const runCitySeederIfNeeded = useCallback(async (city: string) => {
+    if (!city || !city.trim()) return;
+    setIsSeedingCity(true);
+    try {
+      await seedKitsForCityIfNeeded(city);
+      // subscribeToMealKits listener will pick up the new kits automatically
+    } finally {
+      setIsSeedingCity(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    // Initial fetch from Supabase to load any newly published admin kits
+    syncMealKitsWithSupabase().then((kits) => {
+      if (kits && kits.length > 0) {
+        setAllKits(kits);
+      }
+    });
+
+    // Real-time catalog subscription
+    const unsubscribe = subscribeToMealKits(() => {
+      setAllKits(getMealKits());
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  // Seed city-specific kits whenever the user's city changes
+  useEffect(() => {
+    if (preferences.currentCity && preferences.currentCity.trim()) {
+      runCitySeederIfNeeded(preferences.currentCity);
+    }
+  }, [preferences.currentCity]);
 
   // Helper to check if a kit contains allergens configured in user preferences
   const matchesUserAllergens = (kit: MealKit): boolean => {
@@ -178,15 +215,56 @@ export const HomeScreenView: React.FC = () => {
 
   // Filtered kits based on current options and user preferences
   const filteredKits = useMemo(() => {
-    let results = searchAndFilterMealKits({
-      diet: effectiveDiet,
-      cuisine: selectedCuisine,
-      dishCategory: selectedDishCategory !== 'All' ? selectedDishCategory : undefined,
-      spiceLevel: selectedSpice,
-      dietaryTags: selectedDietTag !== 'all' ? [selectedDietTag] : undefined,
-      maxPrepTime,
-      sortBy,
-    });
+    // Filter directly on allKits (React state) so this memo is always reactive to catalog changes.
+    // Apply the same logic as searchAndFilterMealKits but operate on allKits.
+    let results = [...allKits];
+
+    // City filter — kits with cities:[] are hub-wide, else must match currentCity
+    if (preferences.currentCity && preferences.currentCity.trim()) {
+      const targetCity = preferences.currentCity.trim().toLowerCase();
+      results = results.filter(
+        (kit) =>
+          !kit.cities ||
+          kit.cities.length === 0 ||
+          kit.cities.some((c) => c.toLowerCase() === targetCity),
+      );
+    }
+
+    // Diet filter
+    if (effectiveDiet && effectiveDiet !== 'all') {
+      if (effectiveDiet === 'veg') {
+        results = results.filter((k) => k.diet === 'veg' || k.dietaryTags.includes('veg'));
+      } else if (effectiveDiet === 'nonveg') {
+        results = results.filter((k) => k.diet === 'nonveg');
+      } else {
+        results = results.filter((k) => k.dietaryTags.includes(effectiveDiet as DietTag));
+      }
+    }
+
+    // Cuisine filter
+    if (selectedCuisine && selectedCuisine !== 'All') {
+      results = results.filter((k) => k.cuisine === selectedCuisine);
+    }
+
+    // Dish category filter
+    if (selectedDishCategory && selectedDishCategory !== 'All') {
+      results = results.filter((k) => k.dishCategory === selectedDishCategory);
+    }
+
+    // Spice level filter
+    if (selectedSpice && selectedSpice !== 'All') {
+      results = results.filter((k) => k.spiceLevel === selectedSpice);
+    }
+
+    // Dietary tags filter
+    if (selectedDietTag && selectedDietTag !== 'all') {
+      results = results.filter((k) => k.dietaryTags.includes(selectedDietTag as DietTag));
+    }
+
+    // Max prep time filter
+    if (maxPrepTime) {
+      results = results.filter((k) => k.prepTimeMinutes + k.cookTimeMinutes <= maxPrepTime);
+    }
 
     if (applyUserPreferences) {
       // Exclude dishes with allergens
@@ -209,6 +287,31 @@ export const HomeScreenView: React.FC = () => {
       }
     }
 
+    // Sort
+    switch (sortBy) {
+      case 'priceLowHigh':
+        results.sort((a, b) => a.price - b.price);
+        break;
+      case 'priceHighLow':
+        results.sort((a, b) => b.price - a.price);
+        break;
+      case 'prepTime':
+        results.sort(
+          (a, b) => a.prepTimeMinutes + a.cookTimeMinutes - (b.prepTimeMinutes + b.cookTimeMinutes),
+        );
+        break;
+      case 'popularity':
+      default:
+        if (!(
+          applyUserPreferences &&
+          selectedCuisine === 'All' &&
+          preferences.preferredCuisines?.length > 0
+        )) {
+          results.sort((a, b) => b.rating * b.reviewCount - a.rating * a.reviewCount);
+        }
+        break;
+    }
+
     return results;
   }, [
     effectiveDiet,
@@ -221,6 +324,8 @@ export const HomeScreenView: React.FC = () => {
     applyUserPreferences,
     preferences.allergies,
     preferences.preferredCuisines,
+    preferences.currentCity,
+    allKits, // recompute when the catalog store refreshes
   ]);
 
   // "Trending in your region" filtered by user preferences
@@ -258,10 +363,36 @@ export const HomeScreenView: React.FC = () => {
       });
   }, [allKits, preferences.dietType, preferences.allergies, preferences.preferredCuisines]);
 
+  // "Fresh in [City]" — kits explicitly targeted at the user's current city
+  const cityKits = useMemo(() => {
+    if (!preferences.currentCity || !preferences.currentCity.trim()) return [];
+    let kits = getKitsForCity(preferences.currentCity);
+    // Only show kits that have an explicit city entry (not hub-wide fallbacks)
+    kits = kits.filter(
+      (k: MealKit) =>
+        Array.isArray(k.cities) &&
+        k.cities.some(
+          (c: string) => c.toLowerCase() === preferences.currentCity.trim().toLowerCase(),
+        ),
+    );
+    if (applyUserPreferences) {
+      kits = kits.filter((k: MealKit) => matchesUserDiet(k) && matchesUserAllergens(k));
+    }
+    return kits;
+  }, [
+    allKits,
+    preferences.currentCity,
+    applyUserPreferences,
+    preferences.dietType,
+    preferences.allergies,
+  ]);
+
   // "Global Favorites & Foreign Specials" filtered by user preferences
   const foreignKits = useMemo(() => {
     let kits = allKits.filter((k) =>
-      ['Italian', 'Mexican', 'American', 'Continental'].includes(k.cuisine),
+      ['Italian', 'Mexican', 'American', 'Continental', 'European', 'Mediterranean'].includes(
+        k.cuisine,
+      ),
     );
     if (applyUserPreferences) {
       kits = kits.filter((k) => matchesUserDiet(k) && matchesUserAllergens(k));
@@ -709,6 +840,112 @@ export const HomeScreenView: React.FC = () => {
           </View>
         </View>
 
+        {/* SECTION 3 — PROMOTED: when a dish category is active, show the grid first */}
+        {selectedDishCategory !== 'All' && (
+          <View style={styles.catalogSection}>
+            <Text style={[styles.sectionHeading, { color: colors.textPrimary }]}>
+              {selectedDishCategory}{' '}
+              {preferences.currentCity ? `in ${preferences.currentCity}` : ''}
+            </Text>
+            <Text style={[styles.sectionSubtitle, { color: colors.textSecondary }]}>
+              Includes fresh ingredients, whole spices & authentic masala sachets
+            </Text>
+
+            {filteredKits.length === 0 ? (
+              <View
+                style={[
+                  styles.emptyKitsContainer,
+                  { backgroundColor: colors.bgSurface, borderColor: colors.borderLight },
+                ]}
+              >
+                <View style={{ marginBottom: 12 }}>
+                  <Icon name="restaurant" size={40} color={colors.textMuted} />
+                </View>
+                <Text style={[styles.emptyKitsTitle, { color: colors.textPrimary }]}>
+                  No {selectedDishCategory} kits found
+                </Text>
+                <Text style={[styles.emptyKitsSubtitle, { color: colors.textSecondary }]}>
+                  Try loosening your dietary filters or clearing allergen exclusions to see more
+                  dishes.
+                </Text>
+                <TouchableOpacity
+                  style={[styles.resetPrefBtn, { backgroundColor: colors.primary }]}
+                  onPress={() => {
+                    setSelectedDishCategory('All');
+                    setApplyUserPreferences(false);
+                  }}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.resetPrefBtnText}>Show All Dishes</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <View style={styles.kitsGrid}>
+                {filteredKits.map((kit) => (
+                  <MealKitCard
+                    key={kit.id}
+                    kit={kit}
+                    onPress={() => handleOpenDetail(kit)}
+                    onQuickAdd={() => handleQuickAdd(kit)}
+                    isFavorite={isInWishlist(kit.id)}
+                    onToggleFavorite={() => toggleWishlist(kit.id)}
+                  />
+                ))}
+              </View>
+            )}
+          </View>
+        )}
+
+        {/* CITY SEEDING INDICATOR */}
+        {isSeedingCity && preferences.currentCity ? (
+          <View
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: 8,
+              paddingHorizontal: 16,
+              paddingVertical: 10,
+            }}
+          >
+            <ActivityIndicator size="small" color={colors.primary} />
+            <Text style={{ fontSize: 12, color: colors.textSecondary }}>
+              Discovering local recipes for {preferences.currentCity}…
+            </Text>
+          </View>
+        ) : null}
+
+        {/* SECTION 0: Fresh in [City] — city-specific kits */}
+        {dietFilter === 'all' && selectedCuisine === 'All' && cityKits.length > 0 && (
+          <View style={styles.catalogSection}>
+            <View style={styles.sectionHeaderRow}>
+              <View>
+                <Text style={[styles.sectionHeading, { color: colors.textPrimary }]}>
+                  Fresh in {preferences.currentCity}
+                </Text>
+                <Text style={[styles.sectionSubtitle, { color: colors.textSecondary }]}>
+                  Kits curated specifically for {preferences.currentCity} home cooks
+                </Text>
+              </View>
+            </View>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.horizontalCardRow}
+            >
+              {cityKits.map((kit: MealKit) => (
+                <MealKitHorizontalCard
+                  key={kit.id}
+                  kit={kit}
+                  onPress={() => handleOpenDetail(kit)}
+                  onQuickAdd={() => handleQuickAdd(kit)}
+                  isFavorite={isInWishlist(kit.id)}
+                  onToggleFavorite={() => toggleWishlist(kit.id)}
+                />
+              ))}
+            </ScrollView>
+          </View>
+        )}
+
         {/* SECTION 1: Trending in Your Region */}
         {dietFilter === 'all' && selectedCuisine === 'All' && (
           <View style={styles.catalogSection}>
@@ -751,7 +988,8 @@ export const HomeScreenView: React.FC = () => {
                   Global Street Eats & Foreign Specials
                 </Text>
                 <Text style={[styles.sectionSubtitle, { color: colors.textSecondary }]}>
-                  Smash burgers, fermented sourdough pizzas, Birria tacos, burrito bowls & pastas
+                  Smash burgers, fermented sourdough pizzas, Birria tacos, burrito bowls, pastas,
+                  European & Mediterranean classics
                 </Text>
               </View>
             </View>
@@ -811,60 +1049,64 @@ export const HomeScreenView: React.FC = () => {
           </View>
         )}
 
-        {/* SECTION 3: All Available Kits Grid */}
-        <View style={styles.catalogSection}>
-          <Text style={[styles.sectionHeading, { color: colors.textPrimary }]}>
-            All Gourmet Meal Prep Kits
-          </Text>
-          <Text style={[styles.sectionSubtitle, { color: colors.textSecondary }]}>
-            Includes fresh ingredients, whole spices & authentic masala sachets
-          </Text>
+        {/* SECTION 3: All Available Kits Grid — shown at bottom when no dish category filter active */}
+        {selectedDishCategory === 'All' && (
+          <View style={styles.catalogSection}>
+            <Text style={[styles.sectionHeading, { color: colors.textPrimary }]}>
+              {preferences.currentCity
+                ? `All Kits in ${preferences.currentCity}`
+                : 'All Gourmet Meal Prep Kits'}
+            </Text>
+            <Text style={[styles.sectionSubtitle, { color: colors.textSecondary }]}>
+              Includes fresh ingredients, whole spices & authentic masala sachets
+            </Text>
 
-          {filteredKits.length === 0 ? (
-            <View
-              style={[
-                styles.emptyKitsContainer,
-                { backgroundColor: colors.bgSurface, borderColor: colors.borderLight },
-              ]}
-            >
-              <View style={{ marginBottom: 12 }}>
-                <Icon name="restaurant" size={40} color={colors.textMuted} />
-              </View>
-              <Text style={[styles.emptyKitsTitle, { color: colors.textPrimary }]}>
-                No dishes match your active filters
-              </Text>
-              <Text style={[styles.emptyKitsSubtitle, { color: colors.textSecondary }]}>
-                Try loosening your dietary filters or clearing allergen exclusions to see more
-                dishes.
-              </Text>
-              <TouchableOpacity
-                style={[styles.resetPrefBtn, { backgroundColor: colors.primary }]}
-                onPress={() => {
-                  setDietFilter('all');
-                  setSelectedCuisine('All');
-                  setSelectedDishCategory('All');
-                  setApplyUserPreferences(false);
-                }}
-                activeOpacity={0.8}
+            {filteredKits.length === 0 ? (
+              <View
+                style={[
+                  styles.emptyKitsContainer,
+                  { backgroundColor: colors.bgSurface, borderColor: colors.borderLight },
+                ]}
               >
-                <Text style={styles.resetPrefBtnText}>Show All Dishes</Text>
-              </TouchableOpacity>
-            </View>
-          ) : (
-            <View style={styles.kitsGrid}>
-              {filteredKits.map((kit) => (
-                <MealKitCard
-                  key={kit.id}
-                  kit={kit}
-                  onPress={() => handleOpenDetail(kit)}
-                  onQuickAdd={() => handleQuickAdd(kit)}
-                  isFavorite={isInWishlist(kit.id)}
-                  onToggleFavorite={() => toggleWishlist(kit.id)}
-                />
-              ))}
-            </View>
-          )}
-        </View>
+                <View style={{ marginBottom: 12 }}>
+                  <Icon name="restaurant" size={40} color={colors.textMuted} />
+                </View>
+                <Text style={[styles.emptyKitsTitle, { color: colors.textPrimary }]}>
+                  No dishes match your active filters
+                </Text>
+                <Text style={[styles.emptyKitsSubtitle, { color: colors.textSecondary }]}>
+                  Try loosening your dietary filters or clearing allergen exclusions to see more
+                  dishes.
+                </Text>
+                <TouchableOpacity
+                  style={[styles.resetPrefBtn, { backgroundColor: colors.primary }]}
+                  onPress={() => {
+                    setDietFilter('all');
+                    setSelectedCuisine('All');
+                    setSelectedDishCategory('All');
+                    setApplyUserPreferences(false);
+                  }}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.resetPrefBtnText}>Show All Dishes</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <View style={styles.kitsGrid}>
+                {filteredKits.map((kit) => (
+                  <MealKitCard
+                    key={kit.id}
+                    kit={kit}
+                    onPress={() => handleOpenDetail(kit)}
+                    onQuickAdd={() => handleQuickAdd(kit)}
+                    isFavorite={isInWishlist(kit.id)}
+                    onToggleFavorite={() => toggleWishlist(kit.id)}
+                  />
+                ))}
+              </View>
+            )}
+          </View>
+        )}
       </ScrollView>
 
       {/* Floating Theme Switcher Dev Tool */}
@@ -1104,10 +1346,13 @@ const MealKitCard: React.FC<{
       <View style={styles.cardImageContainer}>
         <Image source={{ uri: kit.heroImage }} style={styles.cardImg} resizeMode="cover" />
         <View style={styles.cardBadgeRow}>
-          {(() => {
-            const badge = getDietBadgeInfo(kit.diet);
-            return <Badge label={badge.label} variant={badge.variant} size="sm" />;
-          })()}
+          <View style={{ flexDirection: 'row', gap: 4 }}>
+            {(() => {
+              const badge = getDietBadgeInfo(kit.diet);
+              return <Badge label={badge.label} variant={badge.variant} size="sm" />;
+            })()}
+            {kit.isOutOfStock ? <Badge label="OUT OF STOCK" variant="danger" size="sm" /> : null}
+          </View>
           <TouchableOpacity
             style={styles.cardFavBtn}
             onPress={onToggleFavorite}
@@ -1160,7 +1405,22 @@ const MealKitCard: React.FC<{
             ) : null}
           </View>
 
-          <Button title="+ Add" size="sm" onPress={onQuickAdd} style={{ paddingHorizontal: 16 }} />
+          {kit.isOutOfStock ? (
+            <Button
+              title="Out of Stock"
+              size="sm"
+              disabled
+              variant="secondary"
+              style={{ paddingHorizontal: 12, opacity: 0.6 }}
+            />
+          ) : (
+            <Button
+              title="+ Add"
+              size="sm"
+              onPress={onQuickAdd}
+              style={{ paddingHorizontal: 16 }}
+            />
+          )}
         </View>
       </View>
     </TouchableOpacity>
@@ -1198,6 +1458,9 @@ const MealKitHorizontalCard: React.FC<{
             const badge = getDietBadgeInfo(kit.diet);
             return <Badge label={badge.label} variant={badge.variant} size="sm" />;
           })()}
+          {kit.isOutOfStock ? (
+            <Badge label="OUT OF STOCK" variant="danger" size="sm" style={{ marginTop: 2 }} />
+          ) : null}
         </View>
       </View>
 
@@ -1211,7 +1474,17 @@ const MealKitHorizontalCard: React.FC<{
 
         <View style={styles.hCardBottomRow}>
           <Text style={[styles.hCardPrice, { color: colors.primary }]}>₹{kit.price}</Text>
-          <Button title="+ Add" size="sm" onPress={onQuickAdd} />
+          {kit.isOutOfStock ? (
+            <Button
+              title="Out of Stock"
+              size="sm"
+              disabled
+              variant="secondary"
+              style={{ opacity: 0.6 }}
+            />
+          ) : (
+            <Button title="+ Add" size="sm" onPress={onQuickAdd} />
+          )}
         </View>
       </View>
     </TouchableOpacity>
@@ -1632,16 +1905,21 @@ const styles = StyleSheet.create({
     fontWeight: '900',
   },
   kitsGrid: {
-    gap: 14,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
   },
   gridCard: {
     overflow: 'hidden',
     borderWidth: 1,
-    marginBottom: 14,
+    flexBasis: '48%',
+    flexGrow: 1,
+    maxWidth: '49%',
+    marginBottom: 4,
   },
   cardImageContainer: {
     width: '100%',
-    height: 180,
+    height: 140,
     position: 'relative',
   },
   cardImg: {
@@ -1680,28 +1958,28 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   cardDetails: {
-    padding: 14,
+    padding: 10,
   },
   cardTitleRow: {
-    marginBottom: 4,
+    marginBottom: 3,
   },
   cardTitle: {
-    fontSize: 16,
+    fontSize: 13,
     fontWeight: '800',
   },
   cardDescription: {
-    fontSize: 13,
-    lineHeight: 18,
-    marginBottom: 8,
+    fontSize: 11,
+    lineHeight: 16,
+    marginBottom: 6,
   },
   sachetsPillRow: {
-    marginBottom: 12,
+    marginBottom: 8,
   },
   sachetsPillText: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '700',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 3,
     borderRadius: 6,
     alignSelf: 'flex-start',
   },
@@ -1711,11 +1989,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   cardPrice: {
-    fontSize: 20,
+    fontSize: 15,
     fontWeight: '900',
   },
   cardOrigPrice: {
-    fontSize: 12,
+    fontSize: 11,
     textDecorationLine: 'line-through',
   },
 });

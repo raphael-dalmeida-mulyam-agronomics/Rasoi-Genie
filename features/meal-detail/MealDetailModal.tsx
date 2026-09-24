@@ -230,10 +230,18 @@ export const MealDetailModal: React.FC<MealDetailModalProps> = ({
               <RatingStars rating={kit.rating} reviewCount={kit.reviewCount} size={15} />
 
               <View style={styles.regionIndicator}>
-                <Text style={{ fontSize: 13 }}>
-                  {isAvailableInRegion
-                    ? 'In Stock (Same Day Delivery)'
-                    : 'Limited Availability in Region'}
+                <Text
+                  style={{
+                    fontSize: 13,
+                    color: kit.isOutOfStock ? '#EF4444' : undefined,
+                    fontWeight: kit.isOutOfStock ? '700' : 'normal',
+                  }}
+                >
+                  {kit.isOutOfStock
+                    ? 'Out of Stock'
+                    : isAvailableInRegion
+                      ? 'In Stock (Same Day Delivery)'
+                      : 'Limited Availability in Region'}
                 </Text>
               </View>
             </View>
@@ -791,10 +799,11 @@ export const MealDetailModal: React.FC<MealDetailModalProps> = ({
           </View>
 
           <Button
-            title="Add to Cart"
-            icon={<Icon name="cart" size={18} color="#FFFFFF" />}
-            style={{ flex: 1.4 }}
+            title={kit.isOutOfStock ? 'Out of Stock' : 'Add to Cart'}
+            icon={kit.isOutOfStock ? undefined : <Icon name="cart" size={18} color="#FFFFFF" />}
+            style={{ flex: 1.4, opacity: kit.isOutOfStock ? 0.6 : 1 }}
             size="lg"
+            disabled={kit.isOutOfStock}
             onPress={handleAddToCart}
           />
         </View>

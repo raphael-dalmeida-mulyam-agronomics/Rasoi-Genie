@@ -3,7 +3,7 @@ import {
   View,
   Text,
   StyleSheet,
-  ImageBackground,
+  Image,
   TouchableOpacity,
   FlatList,
   useWindowDimensions,
@@ -21,6 +21,7 @@ export interface CoverScreenViewProps {
 interface CoverSlide {
   id: string;
   image: any;
+  fallbackUri: string;
   headline: string;
   subtitle: string;
 }
@@ -29,22 +30,113 @@ const SLIDES: CoverSlide[] = [
   {
     id: '1',
     image: require('../../assets/images/cover_background.jpg'),
+    fallbackUri:
+      'https://images.unsplash.com/photo-1546833999-b9f581a1996d?auto=format&fit=crop&w=1200&q=80',
     headline: 'Chef recipes, delivered as\nexact-proportion kits',
     subtitle: 'Watch. Order. Cook like a chef.',
   },
   {
     id: '2',
     image: require('../../assets/images/cover_slide_biryani.jpg'),
+    fallbackUri:
+      'https://images.unsplash.com/photo-1563379091339-03b21ab4a4f8?auto=format&fit=crop&w=1200&q=80',
     headline: 'Artisanal spices & masalas,\nzero guesswork',
     subtitle: 'Pre-portioned sachets for foolproof royal flavors.',
   },
   {
     id: '3',
     image: require('../../assets/images/cover_slide_dal.jpg'),
+    fallbackUri:
+      'https://images.unsplash.com/photo-1589301760014-d929f3979dbc?auto=format&fit=crop&w=1200&q=80',
     headline: 'Cook restaurant-grade meals\nin under 20 minutes',
     subtitle: 'Farm-fresh ingredients delivered straight to your door.',
   },
 ];
+
+const getImageUri = (source: any): string => {
+  if (typeof source === 'string') return source;
+  if (source && typeof source.uri === 'string') return source.uri;
+  if (source && typeof source.default === 'string') return source.default;
+  if (source && source.default && typeof source.default.uri === 'string') return source.default.uri;
+  return '';
+};
+
+const CoverSlideItem: React.FC<{
+  item: CoverSlide;
+  screenWidth: number;
+  screenHeight: number;
+  insets: any;
+}> = ({ item, screenWidth, screenHeight, insets }) => {
+  const [imgSrc, setImgSrc] = useState<string>(() => getImageUri(item.image) || item.fallbackUri);
+
+  return (
+    <View
+      style={{
+        width: screenWidth,
+        height: screenHeight,
+        overflow: 'hidden',
+        position: 'relative',
+        backgroundColor: '#0F0906',
+      }}
+    >
+      {Platform.OS === 'web' ? (
+        // Direct HTML img with positive z-index prevents react-native-web z-index: -1 negative stacking context hiding bug on narrow widths
+        <img
+          src={imgSrc}
+          alt={item.headline}
+          style={{
+            position: 'absolute',
+            top: '-14%',
+            left: 0,
+            width: '100%',
+            height: '118%',
+            objectFit: 'cover',
+            objectPosition: 'center 20%',
+            zIndex: 1,
+            pointerEvents: 'none',
+          }}
+          onError={() => setImgSrc(item.fallbackUri)}
+        />
+      ) : (
+        <Image
+          source={typeof item.image === 'number' ? item.image : { uri: imgSrc }}
+          style={[
+            styles.heroCoverImage,
+            {
+              top: -screenHeight * 0.14,
+              height: screenHeight * 1.18,
+              width: screenWidth,
+              zIndex: 1,
+            },
+          ]}
+          resizeMode="cover"
+          onError={() => setImgSrc(item.fallbackUri)}
+        />
+      )}
+
+      {/* Very subtle bottom-only gradient for text readability without darkening the photo */}
+      <View style={[styles.bottomSoftGradient, { zIndex: 2 }]} />
+
+      {/* Slide Content */}
+      <View
+        style={[
+          styles.contentContainer,
+          {
+            position: 'absolute',
+            bottom: 0,
+            left: 0,
+            right: 0,
+            zIndex: 3,
+            paddingBottom: Math.max(insets.bottom, 24) + 100, // Space for Get Started button
+          },
+        ]}
+      >
+        <Text style={styles.headline}>{item.headline}</Text>
+        <Text style={styles.subtitle}>{item.subtitle}</Text>
+      </View>
+    </View>
+  );
+};
 
 export const CoverScreenView: React.FC<CoverScreenViewProps> = ({ onGetStarted }) => {
   const insets = useSafeAreaInsets();
@@ -109,25 +201,12 @@ export const CoverScreenView: React.FC<CoverScreenViewProps> = ({ onGetStarted }
           index,
         })}
         renderItem={({ item }) => (
-          <View style={{ width: screenWidth, height: screenHeight }}>
-            <ImageBackground source={item.image} style={styles.backgroundImage} resizeMode="cover">
-              {/* Very subtle bottom-only gradient for text readability without darkening the photo */}
-              <View style={styles.bottomSoftGradient} />
-
-              {/* Slide Content */}
-              <View
-                style={[
-                  styles.contentContainer,
-                  {
-                    paddingBottom: Math.max(insets.bottom, 24) + 100, // Space for Get Started button
-                  },
-                ]}
-              >
-                <Text style={styles.headline}>{item.headline}</Text>
-                <Text style={styles.subtitle}>{item.subtitle}</Text>
-              </View>
-            </ImageBackground>
-          </View>
+          <CoverSlideItem
+            item={item}
+            screenWidth={screenWidth}
+            screenHeight={screenHeight}
+            insets={insets}
+          />
         )}
       />
 
@@ -183,6 +262,11 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#0F0906',
   },
+  heroCoverImage: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+  },
   backgroundImage: {
     flex: 1,
     width: '100%',
@@ -195,11 +279,11 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    height: '38%',
+    height: '40%',
     // @ts-ignore Web gradient support
     backgroundImage:
       Platform.OS === 'web'
-        ? 'linear-gradient(to top, rgba(12, 6, 3, 0.85) 0%, rgba(12, 6, 3, 0.45) 50%, rgba(12, 6, 3, 0) 100%)'
+        ? 'linear-gradient(to top, rgba(12, 6, 3, 0.9) 0%, rgba(12, 6, 3, 0.5) 50%, rgba(12, 6, 3, 0) 100%)'
         : undefined,
   },
   contentContainer: {
