@@ -22,7 +22,10 @@ export async function seedSupabaseDatabase(forceReseed = false): Promise<SeedRes
       .from('meal_kits')
       .select('id');
 
-    const shouldSeedKits = forceReseed || !existingKits || existingKits.length === 0;
+    const existingIds = new Set((existingKits || []).map((k: any) => k.id));
+    const hasMissingInitialKits = INITIAL_MEAL_KITS.some((k) => !existingIds.has(k.id));
+    const shouldSeedKits =
+      forceReseed || !existingKits || existingKits.length === 0 || hasMissingInitialKits;
 
     if (shouldSeedKits) {
       const rowsToInsert = INITIAL_MEAL_KITS.map((kit: MealKit) => ({
@@ -34,6 +37,7 @@ export async function seedSupabaseDatabase(forceReseed = false): Promise<SeedRes
         original_price: kit.originalPrice || kit.price,
         cuisine: kit.cuisine,
         region: kit.availableRegions?.[0] || 'North',
+        origin_city: kit.originCity || null,
         category: kit.dishCategory || 'Curries & Gravies',
         diet_type: kit.diet,
         spice_level: kit.spiceLevel,
@@ -61,6 +65,7 @@ export async function seedSupabaseDatabase(forceReseed = false): Promise<SeedRes
 
       if (insertKitsError) {
         console.warn('[Supabase Seed] Error upserting meal kits:', insertKitsError.message);
+        kitsCount = existingKits ? existingKits.length : 0;
       } else {
         kitsCount = rowsToInsert.length;
       }

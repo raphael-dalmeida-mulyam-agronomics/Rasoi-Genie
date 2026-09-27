@@ -35,13 +35,10 @@ import {
   RecipeCardFrontView,
   RecipeCardPrintModal,
 } from './RecipeCardPrintModal';
+import { showInAppAlert } from '../../framework/context/InAppDialogContext';
 
 export const showWebSafeAlert = (title: string, message?: string) => {
-  if (Platform.OS === 'web' && typeof window !== 'undefined') {
-    window.alert(`${title}${message ? '\n\n' + message : ''}`);
-  } else {
-    Alert.alert(title, message);
-  }
+  showInAppAlert(title, message);
 };
 
 export interface AddMealKitWizardModalProps {

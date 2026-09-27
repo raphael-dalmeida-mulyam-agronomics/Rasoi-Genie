@@ -18,8 +18,9 @@ export type BadgeVariant =
   | 'neutral'
   | 'outline';
 
-export function getDietBadgeInfo(diet: string): { label: string; variant: BadgeVariant } {
-  const d = diet.toLowerCase();
+export function getDietBadgeInfo(diet?: string): { label: string; variant: BadgeVariant } {
+  const safeDiet = typeof diet === 'string' ? diet : 'veg';
+  const d = safeDiet.toLowerCase();
   switch (d) {
     case 'veg':
       return { label: 'Pure Veg', variant: 'veg' };
@@ -34,7 +35,7 @@ export function getDietBadgeInfo(diet: string): { label: string; variant: BadgeV
     case 'gluten-free':
       return { label: 'Gluten-Free', variant: 'gluten-free' };
     default:
-      return { label: diet.toUpperCase(), variant: 'accent' };
+      return { label: safeDiet.toUpperCase(), variant: 'accent' };
   }
 }
 
