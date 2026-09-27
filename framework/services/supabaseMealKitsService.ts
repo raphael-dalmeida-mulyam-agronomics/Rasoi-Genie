@@ -51,6 +51,7 @@ export async function fetchPublishedMealKitsFromSupabase(): Promise<MealKit[]> {
             ? row.available_regions
             : ['North', 'South', 'West', 'East'],
         cities: Array.isArray(row.cities) ? row.cities : [],
+        originCity: row.origin_city || existing?.originCity,
         isOutOfStock: row.stock_status === 'out_of_stock' || Boolean(existing?.isOutOfStock),
         stockByRegion: existing?.stockByRegion || {
           North: 50,
@@ -125,6 +126,7 @@ export async function saveMealKitToSupabase(
       region: kit.availableRegions?.[0] || 'North',
       available_regions: kit.availableRegions || ['North', 'South', 'West', 'East'],
       cities: kit.cities || [],
+      origin_city: kit.originCity || null,
       category: kit.dishCategory || 'Curries & Gravies',
       diet_type: kit.diet || 'veg',
       spice_level: kit.spiceLevel || 'Medium',

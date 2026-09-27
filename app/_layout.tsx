@@ -16,6 +16,7 @@ import { ThemeProvider as RasoiThemeProvider } from '../framework/theme/ThemeCon
 import { PreferencesProvider } from '../framework/context/PreferencesContext';
 import { WishlistProvider } from '../framework/context/WishlistContext';
 import { CartProvider } from '../framework/context/CartContext';
+import { InAppDialogProvider } from '../framework/context/InAppDialogContext';
 
 export {
   // Catch any errors thrown by the Layout component.
@@ -63,12 +64,14 @@ function RootLayoutNav() {
         <PreferencesProvider>
           <WishlistProvider>
             <CartProvider>
-              <NavigationThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-                <Stack>
-                  <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-                  <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
-                </Stack>
-              </NavigationThemeProvider>
+              <InAppDialogProvider>
+                <NavigationThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+                  <Stack>
+                    <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+                    <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
+                  </Stack>
+                </NavigationThemeProvider>
+              </InAppDialogProvider>
             </CartProvider>
           </WishlistProvider>
         </PreferencesProvider>

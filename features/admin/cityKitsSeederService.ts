@@ -88,9 +88,101 @@ interface KitTemplate {
   recipeSteps: { title: string; instruction: string; timerSeconds?: number; tip?: string }[];
   allergens: string[];
   isTrending?: boolean;
+  originCity?: string;
 }
 
 const CITY_KIT_TEMPLATES: KitTemplate[] = [
+  // ── Pune / Maharashtrian Regional Specialties ──────────────────────────────
+  {
+    baseName: 'Authentic Puneri Misal Pav Kit',
+    tagline: 'Fiery sprouted matki usal in deep red Pune kat rassa with crisp farsan & ladi pav',
+    cuisine: 'Maharashtrian',
+    dishCategory: 'Street Food',
+    diet: 'veg',
+    dietaryTags: ['veg'],
+    spiceLevel: 'Fiery',
+    servings: 2,
+    prepTimeMinutes: 8,
+    cookTimeMinutes: 15,
+    price: 199,
+    heroImage:
+      'https://images.unsplash.com/photo-1601050690597-df0568f70950?auto=format&fit=crop&w=1000&q=80',
+    ingredients: [
+      { name: 'Sprouted Organic Matki', quantity: '200g' },
+      { name: 'Fresh Pune Bakery Ladi Pav', quantity: '4 pcs' },
+      { name: 'Crispy Puneri Farsan', quantity: '90g' },
+      { name: 'Chopped Onions & Coriander', quantity: '80g' },
+      { name: 'Puneri Goda Masala Sachet', quantity: '15g', isMasalaSachet: true },
+      { name: 'Teja Kat Tarri Paste Sachet', quantity: '35g', isMasalaSachet: true },
+    ],
+    recipeSteps: [
+      {
+        title: 'Boil Sprouted Matki',
+        instruction: 'Boil matki in 1.5 cups water with turmeric and salt for 5 minutes.',
+        timerSeconds: 300,
+      },
+      {
+        title: 'Simmer Kat Tarri Gravy',
+        instruction:
+          'Heat oil, sauté goda masala sachet and kat paste sachet with 2 cups water until red oil floats on top.',
+        timerSeconds: 360,
+      },
+      {
+        title: 'Assemble & Serve with Pav',
+        instruction:
+          'Layer matki usal in bowls, pour boiling fiery kat, top with crunchy farsan, diced onions, and lemon with buttered pav.',
+        timerSeconds: 120,
+      },
+    ],
+    allergens: ['Gluten / Wheat'],
+    isTrending: true,
+    originCity: 'Pune',
+  },
+  {
+    baseName: 'Puneri Pithla Bhakri & Thecha Kit',
+    tagline: 'Spiced comforting besan pithla with jowar bhakri & green chilli garlic thecha',
+    cuisine: 'Maharashtrian',
+    dishCategory: 'Curries & Gravies',
+    diet: 'veg',
+    dietaryTags: ['veg', 'gluten-free'],
+    spiceLevel: 'Spicy',
+    servings: 2,
+    prepTimeMinutes: 10,
+    cookTimeMinutes: 18,
+    price: 219,
+    heroImage:
+      'https://images.unsplash.com/photo-1626777552726-4a6b54c97e46?auto=format&fit=crop&w=1000&q=80',
+    ingredients: [
+      { name: 'Chana Besan (Gram Flour)', quantity: '120g' },
+      { name: 'Jowar Bhakri Flour', quantity: '200g' },
+      { name: 'Green Chillies & Garlic Pods', quantity: '50g' },
+      { name: 'Pithla Tempering Sachet', quantity: '12g', isMasalaSachet: true },
+      { name: 'Thecha Kharda Sachet', quantity: '18g', isMasalaSachet: true },
+    ],
+    recipeSteps: [
+      {
+        title: 'Whisk Besan',
+        instruction: 'Whisk besan with 1.5 cups water until smooth and lump-free.',
+        timerSeconds: 120,
+      },
+      {
+        title: 'Simmer Velvety Pithla',
+        instruction:
+          'Heat oil, crackle tempering sachet and chillies. Pour besan batter and stir continuously for 6 mins until glossy.',
+        timerSeconds: 360,
+      },
+      {
+        title: 'Pound Thecha & Roast Bhakris',
+        instruction:
+          'Blister garlic and chillies, crush with thecha sachet. Pat out and roast jowar bhakris.',
+        timerSeconds: 360,
+      },
+    ],
+    allergens: [],
+    isTrending: true,
+    originCity: 'Pune',
+  },
+
   // ── North Indian ────────────────────────────────────────────────────────────
   {
     baseName: 'Dal Makhani Kit',
@@ -576,6 +668,9 @@ function buildKitForCity(template: KitTemplate, city: string, index: number): Me
     isTrending: template.isTrending ?? false,
     availableRegions: [hub],
     cities: [capitalCity],
+    originCity:
+      template.originCity ||
+      (template.baseName.toLowerCase().includes(city.toLowerCase()) ? capitalCity : undefined),
     stockByRegion: stockByRegion as Record<'North' | 'South' | 'West' | 'East', number>,
     rating: 4.5 + Math.round(Math.random() * 4) / 10,
     reviewCount: 0,

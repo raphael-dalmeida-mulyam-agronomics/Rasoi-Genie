@@ -10,6 +10,7 @@ import {
   Alert,
   Platform,
 } from 'react-native';
+import { showInAppAlert, showInAppConfirm } from '../../framework/context/InAppDialogContext';
 import { useAuth } from '../../framework/context/AuthContext';
 import { useTheme } from '../../framework/theme/ThemeContext';
 import {
@@ -324,17 +325,9 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
       await refreshPendingApprovalCount();
       setCancelOrderModalVisible(false);
       setOrderToCancel(null);
-      if (Platform.OS === 'web') {
-        window.alert(`Order ${targetId} has been successfully cancelled.`);
-      } else {
-        Alert.alert('Order Cancelled', `Order ${targetId} has been successfully cancelled.`);
-      }
+      showInAppAlert('Order Cancelled', `Order ${targetId} has been successfully cancelled.`);
     } catch (err: any) {
-      if (Platform.OS === 'web') {
-        window.alert(err?.message || 'Could not cancel order.');
-      } else {
-        Alert.alert('Error', err?.message || 'Could not cancel order.');
-      }
+      showInAppAlert('Error', err?.message || 'Could not cancel order.');
     } finally {
       setUpdatingOrderId(null);
     }
@@ -342,32 +335,28 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
 
   const [isClearingOrders, setIsClearingOrders] = useState(false);
 
-  const handleClearAllOrders = async () => {
-    const confirmMessage =
-      'Are you sure you want to delete ALL customer orders? This will permanently wipe orders from the system, admin dashboard, and user accounts.';
-    let confirmed = false;
-    if (Platform.OS === 'web') {
-      confirmed = window.confirm(confirmMessage);
-    } else {
-      confirmed = true;
-    }
-    if (!confirmed) return;
-
-    setIsClearingOrders(true);
-    try {
-      await clearAllOrdersFromSupabase();
-      setOrders([]);
-      setPendingApprovalCount(0);
-      if (Platform.OS === 'web') {
-        window.alert('All orders have been successfully deleted.');
-      } else {
-        Alert.alert('Orders Deleted', 'All customer orders have been deleted.');
-      }
-    } catch (err: any) {
-      Alert.alert('Error', err?.message || 'Could not delete orders.');
-    } finally {
-      setIsClearingOrders(false);
-    }
+  const handleClearAllOrders = () => {
+    showInAppConfirm({
+      title: 'Delete All Orders?',
+      message:
+        'Are you sure you want to delete ALL customer orders? This will permanently wipe orders from the system, admin dashboard, and user accounts.',
+      confirmText: 'Delete All',
+      cancelText: 'Cancel',
+      isDestructive: true,
+      onConfirm: async () => {
+        setIsClearingOrders(true);
+        try {
+          await clearAllOrdersFromSupabase();
+          setOrders([]);
+          setPendingApprovalCount(0);
+          showInAppAlert('Orders Deleted', 'All customer orders have been deleted.');
+        } catch (err: any) {
+          showInAppAlert('Error', err?.message || 'Could not delete orders.');
+        } finally {
+          setIsClearingOrders(false);
+        }
+      },
+    });
   };
 
   const handleStatusChange = async (orderId: string, newStatus: OrderStatus) => {

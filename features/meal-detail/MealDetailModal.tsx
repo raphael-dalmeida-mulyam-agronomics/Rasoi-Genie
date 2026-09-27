@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -8,7 +8,8 @@ import {
   TouchableOpacity,
   Modal,
   Dimensions,
-  Alert,
+  Animated,
+  Easing,
 } from 'react-native';
 import { MealKit } from '../../framework/services/mealKitsService';
 import { useTheme } from '../../framework/theme/ThemeContext';
@@ -52,6 +53,39 @@ export const MealDetailModal: React.FC<MealDetailModalProps> = ({
   // Customization: Serving size and Spice level
   const [selectedServings, setSelectedServings] = useState<number>(kit?.servings || 2);
   const [selectedSpiceLevel, setSelectedSpiceLevel] = useState<string>(kit?.spiceLevel || 'Medium');
+
+  // Animation values for smooth entrance and drop-down exit
+  const windowHeight = Dimensions.get('window').height;
+  const slideAnim = useRef(new Animated.Value(windowHeight)).current;
+  const [modalVisible, setModalVisible] = useState(visible);
+
+  useEffect(() => {
+    if (visible) {
+      setModalVisible(true);
+      slideAnim.setValue(windowHeight);
+      Animated.timing(slideAnim, {
+        toValue: 0,
+        duration: 320,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }).start();
+    } else {
+      setModalVisible(false);
+    }
+  }, [visible, windowHeight]);
+
+  const handleDropDownAndClose = (callback?: () => void) => {
+    Animated.timing(slideAnim, {
+      toValue: windowHeight,
+      duration: 350,
+      easing: Easing.in(Easing.cubic),
+      useNativeDriver: true,
+    }).start(() => {
+      setModalVisible(false);
+      onClose();
+      if (callback) callback();
+    });
+  };
 
   // Sync state if kit changes
   useEffect(() => {
@@ -111,703 +145,732 @@ export const MealDetailModal: React.FC<MealDetailModalProps> = ({
   };
 
   const handleAddToCart = () => {
+    if (!kit) return;
     addItem(kit, quantity, selectedServings, selectedSpiceLevel);
-    Alert.alert('Added to Cart', `${quantity}x ${kit.name} added to your basket. Ready to cook?`, [
-      { text: 'Keep Exploring', style: 'cancel' },
-      { text: 'View Basket', onPress: onClose },
-    ]);
+    // Smooth drop-down animation to reveal the home screen again
+    handleDropDownAndClose();
   };
 
   const reviews = getReviewsByKit(kit.id);
 
+  const backdropOpacity = slideAnim.interpolate({
+    inputRange: [0, windowHeight],
+    outputRange: [1, 0],
+    extrapolate: 'clamp',
+  });
+
   return (
     <Modal
-      visible={visible}
-      animationType="slide"
-      presentationStyle="pageSheet"
-      onRequestClose={onClose}
+      visible={modalVisible}
+      transparent={true}
+      animationType="none"
+      onRequestClose={() => handleDropDownAndClose()}
     >
-      <View style={[styles.container, { backgroundColor: colors.bgPrimary }]}>
-        {/* Sticky App Bar Header */}
-        <View
+      <Animated.View
+        style={[
+          styles.modalBackdrop,
+          {
+            opacity: backdropOpacity,
+          },
+        ]}
+      >
+        <Animated.View
           style={[
-            styles.appBar,
-            { backgroundColor: colors.bgSurface, borderBottomColor: colors.borderLight },
+            styles.container,
+            {
+              backgroundColor: colors.bgPrimary,
+              transform: [{ translateY: slideAnim }],
+            },
           ]}
         >
-          <TouchableOpacity
-            style={[styles.circleButton, { backgroundColor: colors.bgSubtle }]}
-            onPress={onClose}
-          >
-            <Icon name="close" size={20} color={colors.textPrimary} />
-          </TouchableOpacity>
-
-          <Text style={[styles.appBarTitle, { color: colors.textPrimary }]} numberOfLines={1}>
-            {kit.name}
-          </Text>
-
-          <TouchableOpacity
+          {/* Sticky App Bar Header */}
+          <View
             style={[
-              styles.circleButton,
-              { backgroundColor: isFavorite ? colors.primaryLight : colors.bgSubtle },
+              styles.appBar,
+              { backgroundColor: colors.bgSurface, borderBottomColor: colors.borderLight },
             ]}
-            onPress={() => toggleWishlist(kit.id)}
           >
-            <Icon
-              name={isFavorite ? 'heart' : 'heart-outline'}
-              size={20}
-              color={isFavorite ? colors.primary : colors.textPrimary}
-            />
-          </TouchableOpacity>
-        </View>
+            <TouchableOpacity
+              style={[styles.circleButton, { backgroundColor: colors.bgSubtle }]}
+              onPress={() => handleDropDownAndClose()}
+            >
+              <Icon name="close" size={20} color={colors.textPrimary} />
+            </TouchableOpacity>
 
-        <ScrollView
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={styles.scrollContent}
-        >
-          {/* Hero Gallery */}
-          <View style={styles.imageContainer}>
-            <Image
-              source={{ uri: kit.galleryImages[selectedImageIndex] || kit.heroImage }}
-              style={styles.heroImage}
-              resizeMode="cover"
-            />
-            {/* Diet Pill */}
-            <View style={styles.floatingBadge}>
-              {(() => {
-                const badge = getDietBadgeInfo(kit.diet);
-                return <Badge label={badge.label} variant={badge.variant} />;
-              })()}
-            </View>
+            <Text style={[styles.appBarTitle, { color: colors.textPrimary }]} numberOfLines={1}>
+              {kit.name}
+            </Text>
 
-            {/* Thumbnail Row */}
-            {kit.galleryImages.length > 1 && (
-              <View style={styles.thumbRow}>
-                {kit.galleryImages.map((img, idx) => (
-                  <TouchableOpacity
-                    key={idx}
-                    onPress={() => setSelectedImageIndex(idx)}
-                    style={[
-                      styles.thumbTouch,
-                      {
-                        borderColor: selectedImageIndex === idx ? colors.primary : '#FFFFFF',
-                        borderRadius: radii.sm,
-                      },
-                    ]}
-                  >
-                    <Image source={{ uri: img }} style={styles.thumbImg} />
-                  </TouchableOpacity>
-                ))}
-              </View>
-            )}
+            <TouchableOpacity
+              style={[
+                styles.circleButton,
+                { backgroundColor: isFavorite ? colors.primaryLight : colors.bgSubtle },
+              ]}
+              onPress={() => toggleWishlist(kit.id)}
+            >
+              <Icon
+                name={isFavorite ? 'heart' : 'heart-outline'}
+                size={20}
+                color={isFavorite ? colors.primary : colors.textPrimary}
+              />
+            </TouchableOpacity>
           </View>
 
-          {/* Title & Headline Info */}
-          <View style={[styles.contentSection, { backgroundColor: colors.bgSurface }]}>
-            <View style={styles.titleRow}>
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.kitName, { color: colors.textPrimary }]}>{kit.name}</Text>
-                {kit.hindiName ? (
-                  <Text style={[styles.hindiSubtitle, { color: colors.primary }]}>
-                    {kit.hindiName}
-                  </Text>
-                ) : null}
-              </View>
-              <View style={styles.priceContainer}>
-                <Text style={[styles.price, { color: colors.primary }]}>₹{kit.price}</Text>
-                {kit.originalPrice ? (
-                  <Text style={[styles.originalPrice, { color: colors.textMuted }]}>
-                    ₹{kit.originalPrice}
-                  </Text>
-                ) : null}
-              </View>
-            </View>
-
-            <Text style={[styles.tagline, { color: colors.textSecondary }]}>{kit.tagline}</Text>
-
-            {/* Rating & Region Availability */}
-            <View style={styles.metaRow}>
-              <RatingStars rating={kit.rating} reviewCount={kit.reviewCount} size={15} />
-
-              <View style={styles.regionIndicator}>
-                <Text
-                  style={{
-                    fontSize: 13,
-                    color: kit.isOutOfStock ? '#EF4444' : undefined,
-                    fontWeight: kit.isOutOfStock ? '700' : 'normal',
-                  }}
-                >
-                  {kit.isOutOfStock
-                    ? 'Out of Stock'
-                    : isAvailableInRegion
-                      ? 'In Stock (Same Day Delivery)'
-                      : 'Limited Availability in Region'}
-                </Text>
-              </View>
-            </View>
-
-            {/* Spec Chips Bar */}
-            <View
-              style={[styles.specBar, { backgroundColor: colors.bgSubtle, borderRadius: radii.lg }]}
-            >
-              <View style={styles.specItem}>
-                <Text style={[styles.specLabel, { color: colors.textMuted }]}>PREP & COOK</Text>
-                <Text style={[styles.specVal, { color: colors.textPrimary }]}>
-                  {kit.prepTimeMinutes + kit.cookTimeMinutes} mins
-                </Text>
+          <ScrollView
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={styles.scrollContent}
+          >
+            {/* Hero Gallery */}
+            <View style={styles.imageContainer}>
+              <Image
+                source={{ uri: kit.galleryImages[selectedImageIndex] || kit.heroImage }}
+                style={styles.heroImage}
+                resizeMode="cover"
+              />
+              {/* Diet Pill */}
+              <View style={styles.floatingBadge}>
+                {(() => {
+                  const badge = getDietBadgeInfo(kit.diet);
+                  return <Badge label={badge.label} variant={badge.variant} />;
+                })()}
               </View>
 
-              <View style={styles.specDivider} />
-
-              <View style={styles.specItem}>
-                <Text style={[styles.specLabel, { color: colors.textMuted }]}>SPICE</Text>
-                <Text style={[styles.specVal, { color: colors.textPrimary }]}>
-                  {kit.spiceLevel}
-                </Text>
-              </View>
-
-              <View style={styles.specDivider} />
-
-              <View style={styles.specItem}>
-                <Text style={[styles.specLabel, { color: colors.textMuted }]}>SKILL</Text>
-                <Text style={[styles.specVal, { color: colors.textPrimary }]}>
-                  {kit.difficulty}
-                </Text>
-              </View>
-
-              <View style={styles.specDivider} />
-
-              <View style={styles.specItem}>
-                <Text style={[styles.specLabel, { color: colors.textMuted }]}>PORTION</Text>
-                <Text style={[styles.specVal, { color: colors.textPrimary }]}>
-                  {selectedServings} Servings
-                </Text>
-              </View>
-            </View>
-
-            {/* Interactive Customization: Serving Size & Spice Level */}
-            <View
-              style={[
-                styles.customizationBox,
-                {
-                  backgroundColor: colors.bgSubtle,
-                  borderColor: colors.borderLight,
-                  borderRadius: radii.lg,
-                },
-              ]}
-            >
-              <View style={styles.customHeaderRow}>
-                <Text style={[styles.customHeading, { color: colors.textPrimary }]}>
-                  Customize Portion & Taste
-                </Text>
-                <Badge label={`₹${effectiveUnitPrice}/kit`} variant="accent" />
-              </View>
-
-              {/* Serving Size Options */}
-              <Text style={[styles.customSectionLabel, { color: colors.textSecondary }]}>
-                SERVING SIZE:
-              </Text>
-              <View style={styles.pillsRow}>
-                {[
-                  { count: 2, label: '2 Servings', desc: 'Couple' },
-                  { count: 4, label: '4 Servings', desc: 'Family' },
-                  { count: 6, label: '6 Servings', desc: 'Party' },
-                ].map((s) => {
-                  const isSelected = selectedServings === s.count;
-                  return (
+              {/* Thumbnail Row */}
+              {kit.galleryImages.length > 1 && (
+                <View style={styles.thumbRow}>
+                  {kit.galleryImages.map((img, idx) => (
                     <TouchableOpacity
-                      key={s.count}
-                      activeOpacity={0.7}
-                      onPress={() => setSelectedServings(s.count)}
+                      key={idx}
+                      onPress={() => setSelectedImageIndex(idx)}
                       style={[
-                        styles.portionPill,
+                        styles.thumbTouch,
                         {
-                          backgroundColor: isSelected ? colors.primary : colors.bgSurface,
-                          borderColor: isSelected ? colors.primary : colors.borderLight,
-                          borderRadius: radii.md,
+                          borderColor: selectedImageIndex === idx ? colors.primary : '#FFFFFF',
+                          borderRadius: radii.sm,
                         },
                       ]}
                     >
-                      <Text
-                        style={[
-                          styles.portionPillText,
-                          { color: isSelected ? '#FFFFFF' : colors.textPrimary },
-                        ]}
-                      >
-                        {s.label}
-                      </Text>
-                      <Text
-                        style={[
-                          styles.portionPillDesc,
-                          { color: isSelected ? 'rgba(255,255,255,0.85)' : colors.textMuted },
-                        ]}
-                      >
-                        {s.desc}
-                      </Text>
+                      <Image source={{ uri: img }} style={styles.thumbImg} />
                     </TouchableOpacity>
-                  );
-                })}
+                  ))}
+                </View>
+              )}
+            </View>
+
+            {/* Title & Headline Info */}
+            <View style={[styles.contentSection, { backgroundColor: colors.bgSurface }]}>
+              <View style={styles.titleRow}>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.kitName, { color: colors.textPrimary }]}>{kit.name}</Text>
+                  {kit.hindiName ? (
+                    <Text style={[styles.hindiSubtitle, { color: colors.primary }]}>
+                      {kit.hindiName}
+                    </Text>
+                  ) : null}
+                </View>
+                <View style={styles.priceContainer}>
+                  <Text style={[styles.price, { color: colors.primary }]}>₹{kit.price}</Text>
+                  {kit.originalPrice ? (
+                    <Text style={[styles.originalPrice, { color: colors.textMuted }]}>
+                      ₹{kit.originalPrice}
+                    </Text>
+                  ) : null}
+                </View>
               </View>
 
-              {/* Spice Level Options */}
-              <View style={{ marginTop: 12 }}>
-                <View
-                  style={{
-                    flexDirection: 'row',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    marginBottom: 6,
-                  }}
-                >
+              <Text style={[styles.tagline, { color: colors.textSecondary }]}>{kit.tagline}</Text>
+
+              {/* Rating & Region Availability */}
+              <View style={styles.metaRow}>
+                <RatingStars rating={kit.rating} reviewCount={kit.reviewCount} size={15} />
+
+                <View style={styles.regionIndicator}>
                   <Text
-                    style={[
-                      styles.customSectionLabel,
-                      { color: colors.textSecondary, marginBottom: 0 },
-                    ]}
+                    style={{
+                      fontSize: 13,
+                      color: kit.isOutOfStock ? '#EF4444' : undefined,
+                      fontWeight: kit.isOutOfStock ? '700' : 'normal',
+                    }}
                   >
-                    SPICE LEVEL:
-                  </Text>
-                  <Text style={{ fontSize: 11, fontWeight: '700', color: colors.primary }}>
-                    {selectedSpiceLevel === 'Mild' && 'Mild (Kid-friendly)'}
-                    {selectedSpiceLevel === 'Medium' && 'Medium (Classic Balance)'}
-                    {selectedSpiceLevel === 'Spicy' && 'Spicy (Desi Tadka)'}
-                    {selectedSpiceLevel === 'Fiery' && 'Fiery (Extra Hot)'}
+                    {kit.isOutOfStock
+                      ? 'Out of Stock'
+                      : isAvailableInRegion
+                        ? 'In Stock (Same Day Delivery)'
+                        : 'Limited Availability in Region'}
                   </Text>
                 </View>
+              </View>
+
+              {/* Spec Chips Bar */}
+              <View
+                style={[
+                  styles.specBar,
+                  { backgroundColor: colors.bgSubtle, borderRadius: radii.lg },
+                ]}
+              >
+                <View style={styles.specItem}>
+                  <Text style={[styles.specLabel, { color: colors.textMuted }]}>PREP & COOK</Text>
+                  <Text style={[styles.specVal, { color: colors.textPrimary }]}>
+                    {kit.prepTimeMinutes + kit.cookTimeMinutes} mins
+                  </Text>
+                </View>
+
+                <View style={styles.specDivider} />
+
+                <View style={styles.specItem}>
+                  <Text style={[styles.specLabel, { color: colors.textMuted }]}>SPICE</Text>
+                  <Text style={[styles.specVal, { color: colors.textPrimary }]}>
+                    {kit.spiceLevel}
+                  </Text>
+                </View>
+
+                <View style={styles.specDivider} />
+
+                <View style={styles.specItem}>
+                  <Text style={[styles.specLabel, { color: colors.textMuted }]}>SKILL</Text>
+                  <Text style={[styles.specVal, { color: colors.textPrimary }]}>
+                    {kit.difficulty}
+                  </Text>
+                </View>
+
+                <View style={styles.specDivider} />
+
+                <View style={styles.specItem}>
+                  <Text style={[styles.specLabel, { color: colors.textMuted }]}>PORTION</Text>
+                  <Text style={[styles.specVal, { color: colors.textPrimary }]}>
+                    {selectedServings} Servings
+                  </Text>
+                </View>
+              </View>
+
+              {/* Interactive Customization: Serving Size & Spice Level */}
+              <View
+                style={[
+                  styles.customizationBox,
+                  {
+                    backgroundColor: colors.bgSubtle,
+                    borderColor: colors.borderLight,
+                    borderRadius: radii.lg,
+                  },
+                ]}
+              >
+                <View style={styles.customHeaderRow}>
+                  <Text style={[styles.customHeading, { color: colors.textPrimary }]}>
+                    Customize Portion & Taste
+                  </Text>
+                  <Badge label={`₹${effectiveUnitPrice}/kit`} variant="accent" />
+                </View>
+
+                {/* Serving Size Options */}
+                <Text style={[styles.customSectionLabel, { color: colors.textSecondary }]}>
+                  SERVING SIZE:
+                </Text>
                 <View style={styles.pillsRow}>
                   {[
-                    { level: 'Mild', label: 'Mild' },
-                    { level: 'Medium', label: 'Medium' },
-                    { level: 'Spicy', label: 'Spicy' },
-                    { level: 'Fiery', label: 'Fiery' },
-                  ].map((sp) => {
-                    const isSelected = selectedSpiceLevel === sp.level;
+                    { count: 2, label: '2 Servings', desc: 'Couple' },
+                    { count: 4, label: '4 Servings', desc: 'Family' },
+                    { count: 6, label: '6 Servings', desc: 'Party' },
+                  ].map((s) => {
+                    const isSelected = selectedServings === s.count;
                     return (
                       <TouchableOpacity
-                        key={sp.level}
+                        key={s.count}
                         activeOpacity={0.7}
-                        onPress={() => setSelectedSpiceLevel(sp.level)}
+                        onPress={() => setSelectedServings(s.count)}
                         style={[
-                          styles.spicePill,
+                          styles.portionPill,
                           {
                             backgroundColor: isSelected ? colors.primary : colors.bgSurface,
                             borderColor: isSelected ? colors.primary : colors.borderLight,
-                            borderRadius: radii.pill,
+                            borderRadius: radii.md,
                           },
                         ]}
                       >
                         <Text
                           style={[
-                            styles.spicePillText,
+                            styles.portionPillText,
                             { color: isSelected ? '#FFFFFF' : colors.textPrimary },
                           ]}
                         >
-                          {sp.label}
+                          {s.label}
+                        </Text>
+                        <Text
+                          style={[
+                            styles.portionPillDesc,
+                            { color: isSelected ? 'rgba(255,255,255,0.85)' : colors.textMuted },
+                          ]}
+                        >
+                          {s.desc}
                         </Text>
                       </TouchableOpacity>
                     );
                   })}
                 </View>
-              </View>
-            </View>
-          </View>
 
-          {/* Tab Navigation */}
-          <View style={styles.tabBarSection}>
-            <SegmentedControl<TabType>
-              options={[
-                { value: 'overview', label: 'Overview' },
-                { value: 'recipe', label: 'Recipe Guide' },
-                { value: 'ingredients', label: 'Masala Box' },
-                { value: 'nutrition', label: 'Nutrition' },
-                { value: 'reviews', label: 'Reviews', badgeCount: reviews.length },
-              ]}
-              selectedValue={activeTab}
-              onSelect={setActiveTab}
-            />
-          </View>
-
-          {/* TAB 1: OVERVIEW */}
-          {activeTab === 'overview' && (
-            <View
-              style={[
-                styles.cardBlock,
-                { backgroundColor: colors.bgSurface, borderRadius: radii.xl },
-              ]}
-            >
-              <Text style={[styles.blockHeading, { color: colors.textPrimary }]}>
-                About This Meal Kit
-              </Text>
-              <Text style={[styles.bodyText, { color: colors.textSecondary }]}>
-                {kit.description}
-              </Text>
-
-              <View style={styles.sachetCallout}>
-                <Text style={[styles.sachetCalloutHeading, { color: colors.primary }]}>
-                  Pre-Portioned Masala Sachets Included:
-                </Text>
-                {kit.masalaSachets.map((sachet, idx) => (
-                  <View key={idx} style={styles.sachetBullet}>
-                    <Text style={[styles.sachetBulletDot, { color: colors.primary }]}>-</Text>
-                    <Text style={[styles.sachetBulletText, { color: colors.textPrimary }]}>
-                      {sachet}
-                    </Text>
-                  </View>
-                ))}
-              </View>
-
-              {kit.allergens.length > 0 && (
-                <View
-                  style={[
-                    styles.allergenBox,
-                    { backgroundColor: '#FEF3C7', borderRadius: radii.md },
-                  ]}
-                >
-                  <Text style={styles.allergenTitle}>Allergen Information:</Text>
-                  <Text style={styles.allergenText}>{kit.allergens.join(', ')}</Text>
-                </View>
-              )}
-            </View>
-          )}
-
-          {/* TAB 2: STEP-BY-STEP RECIPE GUIDE */}
-          {activeTab === 'recipe' && (
-            <View
-              style={[
-                styles.cardBlock,
-                { backgroundColor: colors.bgSurface, borderRadius: radii.xl },
-              ]}
-            >
-              <Text style={[styles.blockHeading, { color: colors.textPrimary }]}>
-                Interactive Step-by-Step Cooking Guide
-              </Text>
-              <Text style={[styles.subHeading, { color: colors.textSecondary }]}>
-                Follow each step. Tap the built-in timer to monitor your stovetop cooking!
-              </Text>
-
-              {kit.recipeSteps.map((step) => {
-                const remainingSeconds =
-                  (activeTimers[step.stepNumber] !== undefined
-                    ? activeTimers[step.stepNumber]
-                    : step.timerSeconds) ?? 0;
-                const isRunning = !!runningTimers[step.stepNumber];
-
-                const formatTimer = (secs: number) => {
-                  const m = Math.floor(secs / 60);
-                  const s = secs % 60;
-                  return `${m}:${s < 10 ? '0' : ''}${s}`;
-                };
-
-                return (
+                {/* Spice Level Options */}
+                <View style={{ marginTop: 12 }}>
                   <View
-                    key={step.stepNumber}
-                    style={[
-                      styles.stepCard,
-                      {
-                        backgroundColor: colors.bgSubtle,
-                        borderRadius: radii.lg,
-                        borderColor: colors.borderLight,
-                      },
-                    ]}
+                    style={{
+                      flexDirection: 'row',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      marginBottom: 6,
+                    }}
                   >
-                    <View style={styles.stepHeader}>
-                      <View
-                        style={[
-                          styles.stepBadge,
-                          { backgroundColor: colors.primary, borderRadius: radii.pill },
-                        ]}
-                      >
-                        <Text style={[styles.stepBadgeText, { color: colors.textInverse }]}>
-                          Step {step.stepNumber}
-                        </Text>
-                      </View>
-                      <Text style={[styles.stepTitle, { color: colors.textPrimary }]}>
-                        {step.title}
-                      </Text>
-                    </View>
-
-                    <Text style={[styles.stepInstruction, { color: colors.textSecondary }]}>
-                      {step.instruction}
-                    </Text>
-
-                    {step.tip ? (
-                      <View
-                        style={[
-                          styles.tipRow,
-                          { backgroundColor: colors.bgSurface, borderRadius: radii.sm },
-                        ]}
-                      >
-                        <Icon
-                          name="bulb"
-                          size={16}
-                          color={colors.accent}
-                          style={{ marginRight: 8, marginTop: 2 }}
-                        />
-                        <Text style={[styles.tipText, { color: colors.textSecondary }]}>
-                          <Text style={{ fontWeight: '700' }}>Chef Tip: </Text>
-                          {step.tip}
-                        </Text>
-                      </View>
-                    ) : null}
-
-                    {step.timerSeconds ? (
-                      <TouchableOpacity
-                        style={[
-                          styles.timerButton,
-                          {
-                            backgroundColor: isRunning ? colors.primary : colors.bgSurface,
-                            borderColor: colors.primary,
-                            borderRadius: radii.pill,
-                          },
-                        ]}
-                        onPress={() => handleStartTimer(step.stepNumber, step.timerSeconds!)}
-                      >
-                        <Icon
-                          name="time"
-                          size={16}
-                          color={isRunning ? colors.textInverse : colors.primary}
-                          style={{ marginRight: 6 }}
-                        />
-                        <Text
-                          style={[
-                            styles.timerButtonText,
-                            { color: isRunning ? colors.textInverse : colors.primary },
-                          ]}
-                        >
-                          {isRunning ? 'Pause Timer: ' : 'Start Timer: '}
-                          {formatTimer(remainingSeconds)}
-                        </Text>
-                      </TouchableOpacity>
-                    ) : null}
-                  </View>
-                );
-              })}
-            </View>
-          )}
-
-          {/* TAB 3: INGREDIENTS */}
-          {activeTab === 'ingredients' && (
-            <View
-              style={[
-                styles.cardBlock,
-                { backgroundColor: colors.bgSurface, borderRadius: radii.xl },
-              ]}
-            >
-              <Text style={[styles.blockHeading, { color: colors.textPrimary }]}>
-                Pre-Portioned Ingredients Checklist
-              </Text>
-              <Text style={[styles.subHeading, { color: colors.textSecondary }]}>
-                Everything comes pre-cleaned and weighed to exact proportions for {kit.servings}{' '}
-                people.
-              </Text>
-
-              {kit.ingredients.map((ing, idx) => (
-                <View
-                  key={idx}
-                  style={[
-                    styles.ingredientRow,
-                    {
-                      borderBottomColor: colors.borderLight,
-                      backgroundColor: ing.isMasalaSachet
-                        ? colors.primaryLight + '50'
-                        : 'transparent',
-                      padding: 10,
-                      borderRadius: radii.sm,
-                    },
-                  ]}
-                >
-                  <View style={{ flex: 1 }}>
                     <Text
                       style={[
-                        styles.ingredientName,
+                        styles.customSectionLabel,
+                        { color: colors.textSecondary, marginBottom: 0 },
+                      ]}
+                    >
+                      SPICE LEVEL:
+                    </Text>
+                    <Text style={{ fontSize: 11, fontWeight: '700', color: colors.primary }}>
+                      {selectedSpiceLevel === 'Mild' && 'Mild (Kid-friendly)'}
+                      {selectedSpiceLevel === 'Medium' && 'Medium (Classic Balance)'}
+                      {selectedSpiceLevel === 'Spicy' && 'Spicy (Desi Tadka)'}
+                      {selectedSpiceLevel === 'Fiery' && 'Fiery (Extra Hot)'}
+                    </Text>
+                  </View>
+                  <View style={styles.pillsRow}>
+                    {[
+                      { level: 'Mild', label: 'Mild' },
+                      { level: 'Medium', label: 'Medium' },
+                      { level: 'Spicy', label: 'Spicy' },
+                      { level: 'Fiery', label: 'Fiery' },
+                    ].map((sp) => {
+                      const isSelected = selectedSpiceLevel === sp.level;
+                      return (
+                        <TouchableOpacity
+                          key={sp.level}
+                          activeOpacity={0.7}
+                          onPress={() => setSelectedSpiceLevel(sp.level)}
+                          style={[
+                            styles.spicePill,
+                            {
+                              backgroundColor: isSelected ? colors.primary : colors.bgSurface,
+                              borderColor: isSelected ? colors.primary : colors.borderLight,
+                              borderRadius: radii.pill,
+                            },
+                          ]}
+                        >
+                          <Text
+                            style={[
+                              styles.spicePillText,
+                              { color: isSelected ? '#FFFFFF' : colors.textPrimary },
+                            ]}
+                          >
+                            {sp.label}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                </View>
+              </View>
+            </View>
+
+            {/* Tab Navigation */}
+            <View style={styles.tabBarSection}>
+              <SegmentedControl<TabType>
+                options={[
+                  { value: 'overview', label: 'Overview' },
+                  { value: 'recipe', label: 'Recipe Guide' },
+                  { value: 'ingredients', label: 'Masala Box' },
+                  { value: 'nutrition', label: 'Nutrition' },
+                  { value: 'reviews', label: 'Reviews', badgeCount: reviews.length },
+                ]}
+                selectedValue={activeTab}
+                onSelect={setActiveTab}
+              />
+            </View>
+
+            {/* TAB 1: OVERVIEW */}
+            {activeTab === 'overview' && (
+              <View
+                style={[
+                  styles.cardBlock,
+                  { backgroundColor: colors.bgSurface, borderRadius: radii.xl },
+                ]}
+              >
+                <Text style={[styles.blockHeading, { color: colors.textPrimary }]}>
+                  About This Meal Kit
+                </Text>
+                <Text style={[styles.bodyText, { color: colors.textSecondary }]}>
+                  {kit.description}
+                </Text>
+
+                <View style={styles.sachetCallout}>
+                  <Text style={[styles.sachetCalloutHeading, { color: colors.primary }]}>
+                    Pre-Portioned Masala Sachets Included:
+                  </Text>
+                  {kit.masalaSachets.map((sachet, idx) => (
+                    <View key={idx} style={styles.sachetBullet}>
+                      <Text style={[styles.sachetBulletDot, { color: colors.primary }]}>-</Text>
+                      <Text style={[styles.sachetBulletText, { color: colors.textPrimary }]}>
+                        {sachet}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+
+                {kit.allergens.length > 0 && (
+                  <View
+                    style={[
+                      styles.allergenBox,
+                      { backgroundColor: '#FEF3C7', borderRadius: radii.md },
+                    ]}
+                  >
+                    <Text style={styles.allergenTitle}>Allergen Information:</Text>
+                    <Text style={styles.allergenText}>{kit.allergens.join(', ')}</Text>
+                  </View>
+                )}
+              </View>
+            )}
+
+            {/* TAB 2: STEP-BY-STEP RECIPE GUIDE */}
+            {activeTab === 'recipe' && (
+              <View
+                style={[
+                  styles.cardBlock,
+                  { backgroundColor: colors.bgSurface, borderRadius: radii.xl },
+                ]}
+              >
+                <Text style={[styles.blockHeading, { color: colors.textPrimary }]}>
+                  Interactive Step-by-Step Cooking Guide
+                </Text>
+                <Text style={[styles.subHeading, { color: colors.textSecondary }]}>
+                  Follow each step. Tap the built-in timer to monitor your stovetop cooking!
+                </Text>
+
+                {kit.recipeSteps.map((step) => {
+                  const remainingSeconds =
+                    (activeTimers[step.stepNumber] !== undefined
+                      ? activeTimers[step.stepNumber]
+                      : step.timerSeconds) ?? 0;
+                  const isRunning = !!runningTimers[step.stepNumber];
+
+                  const formatTimer = (secs: number) => {
+                    const m = Math.floor(secs / 60);
+                    const s = secs % 60;
+                    return `${m}:${s < 10 ? '0' : ''}${s}`;
+                  };
+
+                  return (
+                    <View
+                      key={step.stepNumber}
+                      style={[
+                        styles.stepCard,
                         {
-                          color: ing.isMasalaSachet ? colors.primary : colors.textPrimary,
-                          fontWeight: ing.isMasalaSachet ? '800' : '600',
+                          backgroundColor: colors.bgSubtle,
+                          borderRadius: radii.lg,
+                          borderColor: colors.borderLight,
                         },
                       ]}
                     >
-                      {ing.name}
+                      <View style={styles.stepHeader}>
+                        <View
+                          style={[
+                            styles.stepBadge,
+                            { backgroundColor: colors.primary, borderRadius: radii.pill },
+                          ]}
+                        >
+                          <Text style={[styles.stepBadgeText, { color: colors.textInverse }]}>
+                            Step {step.stepNumber}
+                          </Text>
+                        </View>
+                        <Text style={[styles.stepTitle, { color: colors.textPrimary }]}>
+                          {step.title}
+                        </Text>
+                      </View>
+
+                      <Text style={[styles.stepInstruction, { color: colors.textSecondary }]}>
+                        {step.instruction}
+                      </Text>
+
+                      {step.tip ? (
+                        <View
+                          style={[
+                            styles.tipRow,
+                            { backgroundColor: colors.bgSurface, borderRadius: radii.sm },
+                          ]}
+                        >
+                          <Icon
+                            name="bulb"
+                            size={16}
+                            color={colors.accent}
+                            style={{ marginRight: 8, marginTop: 2 }}
+                          />
+                          <Text style={[styles.tipText, { color: colors.textSecondary }]}>
+                            <Text style={{ fontWeight: '700' }}>Chef Tip: </Text>
+                            {step.tip}
+                          </Text>
+                        </View>
+                      ) : null}
+
+                      {step.timerSeconds ? (
+                        <TouchableOpacity
+                          style={[
+                            styles.timerButton,
+                            {
+                              backgroundColor: isRunning ? colors.primary : colors.bgSurface,
+                              borderColor: colors.primary,
+                              borderRadius: radii.pill,
+                            },
+                          ]}
+                          onPress={() => handleStartTimer(step.stepNumber, step.timerSeconds!)}
+                        >
+                          <Icon
+                            name="time"
+                            size={16}
+                            color={isRunning ? colors.textInverse : colors.primary}
+                            style={{ marginRight: 6 }}
+                          />
+                          <Text
+                            style={[
+                              styles.timerButtonText,
+                              { color: isRunning ? colors.textInverse : colors.primary },
+                            ]}
+                          >
+                            {isRunning ? 'Pause Timer: ' : 'Start Timer: '}
+                            {formatTimer(remainingSeconds)}
+                          </Text>
+                        </TouchableOpacity>
+                      ) : null}
+                    </View>
+                  );
+                })}
+              </View>
+            )}
+
+            {/* TAB 3: INGREDIENTS */}
+            {activeTab === 'ingredients' && (
+              <View
+                style={[
+                  styles.cardBlock,
+                  { backgroundColor: colors.bgSurface, borderRadius: radii.xl },
+                ]}
+              >
+                <Text style={[styles.blockHeading, { color: colors.textPrimary }]}>
+                  Pre-Portioned Ingredients Checklist
+                </Text>
+                <Text style={[styles.subHeading, { color: colors.textSecondary }]}>
+                  Everything comes pre-cleaned and weighed to exact proportions for {kit.servings}{' '}
+                  people.
+                </Text>
+
+                {kit.ingredients.map((ing, idx) => (
+                  <View
+                    key={idx}
+                    style={[
+                      styles.ingredientRow,
+                      {
+                        borderBottomColor: colors.borderLight,
+                        backgroundColor: ing.isMasalaSachet
+                          ? colors.primaryLight + '50'
+                          : 'transparent',
+                        padding: 10,
+                        borderRadius: radii.sm,
+                      },
+                    ]}
+                  >
+                    <View style={{ flex: 1 }}>
+                      <Text
+                        style={[
+                          styles.ingredientName,
+                          {
+                            color: ing.isMasalaSachet ? colors.primary : colors.textPrimary,
+                            fontWeight: ing.isMasalaSachet ? '800' : '600',
+                          },
+                        ]}
+                      >
+                        {ing.name}
+                      </Text>
+                    </View>
+                    <Badge
+                      label={scaleQuantity(ing.quantity, servingRatio)}
+                      variant={ing.isMasalaSachet ? 'primary' : 'neutral'}
+                    />
+                  </View>
+                ))}
+              </View>
+            )}
+
+            {/* TAB 4: NUTRITION */}
+            {activeTab === 'nutrition' && (
+              <View
+                style={[
+                  styles.cardBlock,
+                  { backgroundColor: colors.bgSurface, borderRadius: radii.xl },
+                ]}
+              >
+                <Text style={[styles.blockHeading, { color: colors.textPrimary }]}>
+                  Nutrition Facts (Per Serving)
+                </Text>
+
+                <View style={styles.macroGrid}>
+                  <View
+                    style={[
+                      styles.macroCard,
+                      { backgroundColor: colors.bgSubtle, borderRadius: radii.lg },
+                    ]}
+                  >
+                    <Text style={[styles.macroVal, { color: colors.primary }]}>
+                      {kit.nutrition.calories}
+                    </Text>
+                    <Text style={[styles.macroUnit, { color: colors.textMuted }]}>kcal</Text>
+                    <Text style={[styles.macroLabel, { color: colors.textSecondary }]}>
+                      Calories
                     </Text>
                   </View>
-                  <Badge
-                    label={scaleQuantity(ing.quantity, servingRatio)}
-                    variant={ing.isMasalaSachet ? 'primary' : 'neutral'}
-                  />
-                </View>
-              ))}
-            </View>
-          )}
 
-          {/* TAB 4: NUTRITION */}
-          {activeTab === 'nutrition' && (
-            <View
-              style={[
-                styles.cardBlock,
-                { backgroundColor: colors.bgSurface, borderRadius: radii.xl },
-              ]}
-            >
-              <Text style={[styles.blockHeading, { color: colors.textPrimary }]}>
-                Nutrition Facts (Per Serving)
-              </Text>
-
-              <View style={styles.macroGrid}>
-                <View
-                  style={[
-                    styles.macroCard,
-                    { backgroundColor: colors.bgSubtle, borderRadius: radii.lg },
-                  ]}
-                >
-                  <Text style={[styles.macroVal, { color: colors.primary }]}>
-                    {kit.nutrition.calories}
-                  </Text>
-                  <Text style={[styles.macroUnit, { color: colors.textMuted }]}>kcal</Text>
-                  <Text style={[styles.macroLabel, { color: colors.textSecondary }]}>Calories</Text>
-                </View>
-
-                <View
-                  style={[
-                    styles.macroCard,
-                    { backgroundColor: colors.bgSubtle, borderRadius: radii.lg },
-                  ]}
-                >
-                  <Text style={[styles.macroVal, { color: colors.textPrimary }]}>
-                    {kit.nutrition.protein}g
-                  </Text>
-                  <Text style={[styles.macroUnit, { color: colors.textMuted }]}>grams</Text>
-                  <Text style={[styles.macroLabel, { color: colors.textSecondary }]}>Protein</Text>
-                </View>
-
-                <View
-                  style={[
-                    styles.macroCard,
-                    { backgroundColor: colors.bgSubtle, borderRadius: radii.lg },
-                  ]}
-                >
-                  <Text style={[styles.macroVal, { color: colors.textPrimary }]}>
-                    {kit.nutrition.carbs}g
-                  </Text>
-                  <Text style={[styles.macroUnit, { color: colors.textMuted }]}>grams</Text>
-                  <Text style={[styles.macroLabel, { color: colors.textSecondary }]}>
-                    Carbohydrates
-                  </Text>
-                </View>
-
-                <View
-                  style={[
-                    styles.macroCard,
-                    { backgroundColor: colors.bgSubtle, borderRadius: radii.lg },
-                  ]}
-                >
-                  <Text style={[styles.macroVal, { color: colors.textPrimary }]}>
-                    {kit.nutrition.fat}g
-                  </Text>
-                  <Text style={[styles.macroUnit, { color: colors.textMuted }]}>grams</Text>
-                  <Text style={[styles.macroLabel, { color: colors.textSecondary }]}>Fats</Text>
-                </View>
-              </View>
-
-              <View style={[styles.dietTagsRow, { marginTop: 16 }]}>
-                <Text style={[styles.specLabel, { color: colors.textMuted, marginBottom: 8 }]}>
-                  DIETARY TAGS:
-                </Text>
-                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
-                  {kit.dietaryTags.map((tag) => (
-                    <Badge key={tag} label={tag.toUpperCase()} variant="accent" />
-                  ))}
-                </View>
-              </View>
-            </View>
-          )}
-
-          {/* TAB 5: REVIEWS */}
-          {activeTab === 'reviews' && (
-            <View
-              style={[
-                styles.cardBlock,
-                { backgroundColor: colors.bgSurface, borderRadius: radii.xl },
-              ]}
-            >
-              <View style={styles.reviewHeaderRow}>
-                <View>
-                  <Text style={[styles.blockHeading, { color: colors.textPrimary }]}>
-                    Verified Buyer Reviews
-                  </Text>
-                  <RatingStars rating={kit.rating} reviewCount={kit.reviewCount} size={16} />
-                </View>
-                <Button
-                  title="Write Review"
-                  variant="outline"
-                  size="sm"
-                  onPress={() => onOpenReviewsModal?.(kit)}
-                />
-              </View>
-
-              {reviews.map((rev) => (
-                <View
-                  key={rev.id}
-                  style={[styles.reviewItem, { borderBottomColor: colors.borderLight }]}
-                >
-                  <View style={styles.reviewerMeta}>
-                    <View style={styles.avatarCircle}>
-                      <Text style={styles.avatarLetter}>{rev.userName.charAt(0)}</Text>
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={[styles.reviewerName, { color: colors.textPrimary }]}>
-                        {rev.userName}
-                      </Text>
-                      <Text style={[styles.reviewerCity, { color: colors.textMuted }]}>
-                        {rev.userCity} • {rev.date}
-                      </Text>
-                    </View>
-                    <RatingStars rating={rev.rating} size={13} />
+                  <View
+                    style={[
+                      styles.macroCard,
+                      { backgroundColor: colors.bgSubtle, borderRadius: radii.lg },
+                    ]}
+                  >
+                    <Text style={[styles.macroVal, { color: colors.textPrimary }]}>
+                      {kit.nutrition.protein}g
+                    </Text>
+                    <Text style={[styles.macroUnit, { color: colors.textMuted }]}>grams</Text>
+                    <Text style={[styles.macroLabel, { color: colors.textSecondary }]}>
+                      Protein
+                    </Text>
                   </View>
 
-                  <Text style={[styles.reviewComment, { color: colors.textSecondary }]}>
-                    {rev.comment}
-                  </Text>
+                  <View
+                    style={[
+                      styles.macroCard,
+                      { backgroundColor: colors.bgSubtle, borderRadius: radii.lg },
+                    ]}
+                  >
+                    <Text style={[styles.macroVal, { color: colors.textPrimary }]}>
+                      {kit.nutrition.carbs}g
+                    </Text>
+                    <Text style={[styles.macroUnit, { color: colors.textMuted }]}>grams</Text>
+                    <Text style={[styles.macroLabel, { color: colors.textSecondary }]}>
+                      Carbohydrates
+                    </Text>
+                  </View>
 
-                  {rev.photoUrl && (
-                    <Image source={{ uri: rev.photoUrl }} style={styles.reviewPhoto} />
-                  )}
+                  <View
+                    style={[
+                      styles.macroCard,
+                      { backgroundColor: colors.bgSubtle, borderRadius: radii.lg },
+                    ]}
+                  >
+                    <Text style={[styles.macroVal, { color: colors.textPrimary }]}>
+                      {kit.nutrition.fat}g
+                    </Text>
+                    <Text style={[styles.macroUnit, { color: colors.textMuted }]}>grams</Text>
+                    <Text style={[styles.macroLabel, { color: colors.textSecondary }]}>Fats</Text>
+                  </View>
                 </View>
-              ))}
+
+                <View style={[styles.dietTagsRow, { marginTop: 16 }]}>
+                  <Text style={[styles.specLabel, { color: colors.textMuted, marginBottom: 8 }]}>
+                    DIETARY TAGS:
+                  </Text>
+                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+                    {kit.dietaryTags.map((tag) => (
+                      <Badge key={tag} label={tag.toUpperCase()} variant="accent" />
+                    ))}
+                  </View>
+                </View>
+              </View>
+            )}
+
+            {/* TAB 5: REVIEWS */}
+            {activeTab === 'reviews' && (
+              <View
+                style={[
+                  styles.cardBlock,
+                  { backgroundColor: colors.bgSurface, borderRadius: radii.xl },
+                ]}
+              >
+                <View style={styles.reviewHeaderRow}>
+                  <View>
+                    <Text style={[styles.blockHeading, { color: colors.textPrimary }]}>
+                      Verified Buyer Reviews
+                    </Text>
+                    <RatingStars rating={kit.rating} reviewCount={kit.reviewCount} size={16} />
+                  </View>
+                  <Button
+                    title="Write Review"
+                    variant="outline"
+                    size="sm"
+                    onPress={() => onOpenReviewsModal?.(kit)}
+                  />
+                </View>
+
+                {reviews.map((rev) => (
+                  <View
+                    key={rev.id}
+                    style={[styles.reviewItem, { borderBottomColor: colors.borderLight }]}
+                  >
+                    <View style={styles.reviewerMeta}>
+                      <View style={styles.avatarCircle}>
+                        <Text style={styles.avatarLetter}>{rev.userName.charAt(0)}</Text>
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={[styles.reviewerName, { color: colors.textPrimary }]}>
+                          {rev.userName}
+                        </Text>
+                        <Text style={[styles.reviewerCity, { color: colors.textMuted }]}>
+                          {rev.userCity} • {rev.date}
+                        </Text>
+                      </View>
+                      <RatingStars rating={rev.rating} size={13} />
+                    </View>
+
+                    <Text style={[styles.reviewComment, { color: colors.textSecondary }]}>
+                      {rev.comment}
+                    </Text>
+
+                    {rev.photoUrl && (
+                      <Image source={{ uri: rev.photoUrl }} style={styles.reviewPhoto} />
+                    )}
+                  </View>
+                ))}
+              </View>
+            )}
+          </ScrollView>
+
+          {/* Bottom Checkout CTA Bar */}
+          <View
+            style={[
+              styles.bottomBar,
+              {
+                backgroundColor: colors.bgSurface,
+                borderTopColor: colors.borderLight,
+                ...shadows.medium,
+              },
+            ]}
+          >
+            <View style={styles.bottomQtyCol}>
+              <Text style={[styles.qtyLabel, { color: colors.textMuted }]}>QUANTITY</Text>
+              <QuantityStepper value={quantity} onChange={setQuantity} min={1} max={10} />
             </View>
-          )}
-        </ScrollView>
 
-        {/* Bottom Checkout CTA Bar */}
-        <View
-          style={[
-            styles.bottomBar,
-            {
-              backgroundColor: colors.bgSurface,
-              borderTopColor: colors.borderLight,
-              ...shadows.medium,
-            },
-          ]}
-        >
-          <View style={styles.bottomQtyCol}>
-            <Text style={[styles.qtyLabel, { color: colors.textMuted }]}>QUANTITY</Text>
-            <QuantityStepper value={quantity} onChange={setQuantity} min={1} max={10} />
+            <View style={styles.bottomTotalCol}>
+              <Text style={[styles.qtyLabel, { color: colors.textMuted }]}>TOTAL</Text>
+              <Text style={[styles.bottomTotal, { color: colors.primary }]}>
+                ₹{effectiveUnitPrice * quantity}
+              </Text>
+            </View>
+
+            <Button
+              title={kit.isOutOfStock ? 'Out of Stock' : 'Add to Cart'}
+              icon={kit.isOutOfStock ? undefined : <Icon name="cart" size={18} color="#FFFFFF" />}
+              style={{ flex: 1.4, opacity: kit.isOutOfStock ? 0.6 : 1 }}
+              size="lg"
+              disabled={kit.isOutOfStock}
+              onPress={handleAddToCart}
+            />
           </View>
-
-          <View style={styles.bottomTotalCol}>
-            <Text style={[styles.qtyLabel, { color: colors.textMuted }]}>TOTAL</Text>
-            <Text style={[styles.bottomTotal, { color: colors.primary }]}>
-              ₹{effectiveUnitPrice * quantity}
-            </Text>
-          </View>
-
-          <Button
-            title={kit.isOutOfStock ? 'Out of Stock' : 'Add to Cart'}
-            icon={kit.isOutOfStock ? undefined : <Icon name="cart" size={18} color="#FFFFFF" />}
-            style={{ flex: 1.4, opacity: kit.isOutOfStock ? 0.6 : 1 }}
-            size="lg"
-            disabled={kit.isOutOfStock}
-            onPress={handleAddToCart}
-          />
-        </View>
-      </View>
+        </Animated.View>
+      </Animated.View>
     </Modal>
   );
 };
@@ -815,8 +878,14 @@ export const MealDetailModal: React.FC<MealDetailModalProps> = ({
 const { width } = Dimensions.get('window');
 
 const styles = StyleSheet.create({
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.45)',
+  },
   container: {
     flex: 1,
+    width: '100%',
+    height: '100%',
   },
   appBar: {
     flexDirection: 'row',

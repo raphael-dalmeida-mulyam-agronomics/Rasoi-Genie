@@ -30,7 +30,12 @@ import { ThemeSwitcher } from '../../framework/theme/ThemeSwitcher';
 import { Badge, getDietBadgeInfo } from '../../framework/ui/Badge';
 import { Button } from '../../framework/ui/Button';
 import { AppIconName, Icon } from '../../framework/ui/Icon';
-import { getKitsForCity, seedKitsForCityIfNeeded } from '../admin/cityKitsSeederService';
+import { seedKitsForCityIfNeeded } from '../admin/cityKitsSeederService';
+import {
+  rankMealKitsForCityTrending,
+  isRegionalSpecialtyOfCity,
+  ensureCitySpecialtiesSeeded,
+} from '../../framework/services/dishOriginService';
 import { MealDetailModal } from '../meal-detail/MealDetailModal';
 import { DietaryPreferencesModal } from '../onboarding/DietaryPreferencesModal';
 
@@ -152,6 +157,7 @@ export const HomeScreenView: React.FC = () => {
     if (!city || !city.trim()) return;
     setIsSeedingCity(true);
     try {
+      await ensureCitySpecialtiesSeeded(city);
       await seedKitsForCityIfNeeded(city);
       // subscribeToMealKits listener will pick up the new kits automatically
     } finally {
@@ -216,8 +222,7 @@ export const HomeScreenView: React.FC = () => {
   // Filtered kits based on current options and user preferences
   const filteredKits = useMemo(() => {
     // Filter directly on allKits (React state) so this memo is always reactive to catalog changes.
-    // Apply the same logic as searchAndFilterMealKits but operate on allKits.
-    let results = [...allKits];
+    let results = (allKits || []).filter((k): k is MealKit => Boolean(k && k.id));
 
     // City filter — kits with cities:[] are hub-wide, else must match currentCity
     if (preferences.currentCity && preferences.currentCity.trim()) {
@@ -226,18 +231,23 @@ export const HomeScreenView: React.FC = () => {
         (kit) =>
           !kit.cities ||
           kit.cities.length === 0 ||
-          kit.cities.some((c) => c.toLowerCase() === targetCity),
+          kit.cities.some((c) => c && c.toLowerCase() === targetCity),
       );
     }
 
     // Diet filter
     if (effectiveDiet && effectiveDiet !== 'all') {
       if (effectiveDiet === 'veg') {
-        results = results.filter((k) => k.diet === 'veg' || k.dietaryTags.includes('veg'));
+        results = results.filter(
+          (k) =>
+            k.diet === 'veg' || (Array.isArray(k.dietaryTags) && k.dietaryTags.includes('veg')),
+        );
       } else if (effectiveDiet === 'nonveg') {
         results = results.filter((k) => k.diet === 'nonveg');
       } else {
-        results = results.filter((k) => k.dietaryTags.includes(effectiveDiet as DietTag));
+        results = results.filter(
+          (k) => Array.isArray(k.dietaryTags) && k.dietaryTags.includes(effectiveDiet as DietTag),
+        );
       }
     }
 
@@ -258,12 +268,16 @@ export const HomeScreenView: React.FC = () => {
 
     // Dietary tags filter
     if (selectedDietTag && selectedDietTag !== 'all') {
-      results = results.filter((k) => k.dietaryTags.includes(selectedDietTag as DietTag));
+      results = results.filter(
+        (k) => Array.isArray(k.dietaryTags) && k.dietaryTags.includes(selectedDietTag as DietTag),
+      );
     }
 
     // Max prep time filter
     if (maxPrepTime) {
-      results = results.filter((k) => k.prepTimeMinutes + k.cookTimeMinutes <= maxPrepTime);
+      results = results.filter(
+        (k) => (k.prepTimeMinutes || 0) + (k.cookTimeMinutes || 0) <= maxPrepTime,
+      );
     }
 
     if (applyUserPreferences) {
@@ -282,7 +296,7 @@ export const HomeScreenView: React.FC = () => {
           const aPref = preferredSet.has(a.cuisine) ? 1 : 0;
           const bPref = preferredSet.has(b.cuisine) ? 1 : 0;
           if (bPref !== aPref) return bPref - aPref;
-          return b.rating - a.rating;
+          return (b.rating || 0) - (a.rating || 0);
         });
       }
     }
@@ -290,14 +304,17 @@ export const HomeScreenView: React.FC = () => {
     // Sort
     switch (sortBy) {
       case 'priceLowHigh':
-        results.sort((a, b) => a.price - b.price);
+        results.sort((a, b) => (a.price || 0) - (b.price || 0));
         break;
       case 'priceHighLow':
-        results.sort((a, b) => b.price - a.price);
+        results.sort((a, b) => (b.price || 0) - (a.price || 0));
         break;
       case 'prepTime':
         results.sort(
-          (a, b) => a.prepTimeMinutes + a.cookTimeMinutes - (b.prepTimeMinutes + b.cookTimeMinutes),
+          (a, b) =>
+            (a.prepTimeMinutes || 0) +
+            (a.cookTimeMinutes || 0) -
+            ((b.prepTimeMinutes || 0) + (b.cookTimeMinutes || 0)),
         );
         break;
       case 'popularity':
@@ -307,7 +324,10 @@ export const HomeScreenView: React.FC = () => {
           selectedCuisine === 'All' &&
           preferences.preferredCuisines?.length > 0
         )) {
-          results.sort((a, b) => b.rating * b.reviewCount - a.rating * a.reviewCount);
+          results.sort(
+            (a, b) =>
+              (b.rating || 0) * (b.reviewCount || 0) - (a.rating || 0) * (a.reviewCount || 0),
+          );
         }
         break;
     }
@@ -328,17 +348,20 @@ export const HomeScreenView: React.FC = () => {
     allKits, // recompute when the catalog store refreshes
   ]);
 
-  // "Trending in your region" filtered by user preferences
+  // "Trending in your region" ranked by regional specialties first, then other trending kits
   const trendingKits = useMemo(() => {
-    let kits = allKits.filter(
-      (k) => k.isTrending || k.availableRegions.includes(preferences.regionHub),
+    const ranked = rankMealKitsForCityTrending(
+      allKits,
+      preferences.currentCity,
+      preferences.regionHub,
     );
     if (applyUserPreferences) {
-      kits = kits.filter((k) => matchesUserDiet(k) && matchesUserAllergens(k));
+      return ranked.filter((k) => matchesUserDiet(k) && matchesUserAllergens(k));
     }
-    return kits;
+    return ranked;
   }, [
     allKits,
+    preferences.currentCity,
     preferences.regionHub,
     applyUserPreferences,
     preferences.dietType,
@@ -362,30 +385,6 @@ export const HomeScreenView: React.FC = () => {
         return b.rating - a.rating;
       });
   }, [allKits, preferences.dietType, preferences.allergies, preferences.preferredCuisines]);
-
-  // "Fresh in [City]" — kits explicitly targeted at the user's current city
-  const cityKits = useMemo(() => {
-    if (!preferences.currentCity || !preferences.currentCity.trim()) return [];
-    let kits = getKitsForCity(preferences.currentCity);
-    // Only show kits that have an explicit city entry (not hub-wide fallbacks)
-    kits = kits.filter(
-      (k: MealKit) =>
-        Array.isArray(k.cities) &&
-        k.cities.some(
-          (c: string) => c.toLowerCase() === preferences.currentCity.trim().toLowerCase(),
-        ),
-    );
-    if (applyUserPreferences) {
-      kits = kits.filter((k: MealKit) => matchesUserDiet(k) && matchesUserAllergens(k));
-    }
-    return kits;
-  }, [
-    allKits,
-    preferences.currentCity,
-    applyUserPreferences,
-    preferences.dietType,
-    preferences.allergies,
-  ]);
 
   // "Global Favorites & Foreign Specials" filtered by user preferences
   const foreignKits = useMemo(() => {
@@ -881,14 +880,14 @@ export const HomeScreenView: React.FC = () => {
               </View>
             ) : (
               <View style={styles.kitsGrid}>
-                {filteredKits.map((kit) => (
+                {filteredKits.filter(Boolean).map((kit) => (
                   <MealKitCard
                     key={kit.id}
                     kit={kit}
                     onPress={() => handleOpenDetail(kit)}
                     onQuickAdd={() => handleQuickAdd(kit)}
-                    isFavorite={isInWishlist(kit.id)}
-                    onToggleFavorite={() => toggleWishlist(kit.id)}
+                    isFavorite={kit?.id ? isInWishlist(kit.id) : false}
+                    onToggleFavorite={() => kit?.id && toggleWishlist(kit.id)}
                   />
                 ))}
               </View>
@@ -914,38 +913,6 @@ export const HomeScreenView: React.FC = () => {
           </View>
         ) : null}
 
-        {/* SECTION 0: Fresh in [City] — city-specific kits */}
-        {dietFilter === 'all' && selectedCuisine === 'All' && cityKits.length > 0 && (
-          <View style={styles.catalogSection}>
-            <View style={styles.sectionHeaderRow}>
-              <View>
-                <Text style={[styles.sectionHeading, { color: colors.textPrimary }]}>
-                  Fresh in {preferences.currentCity}
-                </Text>
-                <Text style={[styles.sectionSubtitle, { color: colors.textSecondary }]}>
-                  Kits curated specifically for {preferences.currentCity} home cooks
-                </Text>
-              </View>
-            </View>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.horizontalCardRow}
-            >
-              {cityKits.map((kit: MealKit) => (
-                <MealKitHorizontalCard
-                  key={kit.id}
-                  kit={kit}
-                  onPress={() => handleOpenDetail(kit)}
-                  onQuickAdd={() => handleQuickAdd(kit)}
-                  isFavorite={isInWishlist(kit.id)}
-                  onToggleFavorite={() => toggleWishlist(kit.id)}
-                />
-              ))}
-            </ScrollView>
-          </View>
-        )}
-
         {/* SECTION 1: Trending in Your Region */}
         {dietFilter === 'all' && selectedCuisine === 'All' && (
           <View style={styles.catalogSection}>
@@ -955,7 +922,7 @@ export const HomeScreenView: React.FC = () => {
                   Trending in {preferences.currentCity}
                 </Text>
                 <Text style={[styles.sectionSubtitle, { color: colors.textSecondary }]}>
-                  Most ordered pre-portioned kits in your area today
+                  {preferences.currentCity} regional specialties & popular kits in your area today
                 </Text>
               </View>
             </View>
@@ -965,14 +932,15 @@ export const HomeScreenView: React.FC = () => {
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={styles.horizontalCardRow}
             >
-              {trendingKits.map((kit) => (
+              {trendingKits.filter(Boolean).map((kit) => (
                 <MealKitHorizontalCard
                   key={kit.id}
                   kit={kit}
+                  currentCity={preferences.currentCity}
                   onPress={() => handleOpenDetail(kit)}
                   onQuickAdd={() => handleQuickAdd(kit)}
-                  isFavorite={isInWishlist(kit.id)}
-                  onToggleFavorite={() => toggleWishlist(kit.id)}
+                  isFavorite={kit?.id ? isInWishlist(kit.id) : false}
+                  onToggleFavorite={() => kit?.id && toggleWishlist(kit.id)}
                 />
               ))}
             </ScrollView>
@@ -999,14 +967,14 @@ export const HomeScreenView: React.FC = () => {
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={styles.horizontalCardRow}
             >
-              {foreignKits.map((kit) => (
+              {foreignKits.filter(Boolean).map((kit) => (
                 <MealKitHorizontalCard
                   key={kit.id}
                   kit={kit}
                   onPress={() => handleOpenDetail(kit)}
                   onQuickAdd={() => handleQuickAdd(kit)}
-                  isFavorite={isInWishlist(kit.id)}
-                  onToggleFavorite={() => toggleWishlist(kit.id)}
+                  isFavorite={kit?.id ? isInWishlist(kit.id) : false}
+                  onToggleFavorite={() => kit?.id && toggleWishlist(kit.id)}
                 />
               ))}
             </ScrollView>
@@ -1093,14 +1061,14 @@ export const HomeScreenView: React.FC = () => {
               </View>
             ) : (
               <View style={styles.kitsGrid}>
-                {filteredKits.map((kit) => (
+                {filteredKits.filter(Boolean).map((kit) => (
                   <MealKitCard
                     key={kit.id}
                     kit={kit}
                     onPress={() => handleOpenDetail(kit)}
                     onQuickAdd={() => handleQuickAdd(kit)}
-                    isFavorite={isInWishlist(kit.id)}
-                    onToggleFavorite={() => toggleWishlist(kit.id)}
+                    isFavorite={kit?.id ? isInWishlist(kit.id) : false}
+                    onToggleFavorite={() => kit?.id && toggleWishlist(kit.id)}
                   />
                 ))}
               </View>
@@ -1329,6 +1297,13 @@ const MealKitCard: React.FC<{
 }> = ({ kit, onPress, onQuickAdd, isFavorite, onToggleFavorite }) => {
   const { colors, radii, shadows } = useTheme();
 
+  if (!kit) return null;
+
+  const prepTime = (kit.prepTimeMinutes || 0) + (kit.cookTimeMinutes || 0);
+  const servings = kit.servings || 2;
+  const sachetsCount = Array.isArray(kit.masalaSachets) ? kit.masalaSachets.length : 0;
+  const dietBadge = getDietBadgeInfo(kit.diet);
+
   return (
     <TouchableOpacity
       style={[
@@ -1344,13 +1319,14 @@ const MealKitCard: React.FC<{
       activeOpacity={0.9}
     >
       <View style={styles.cardImageContainer}>
-        <Image source={{ uri: kit.heroImage }} style={styles.cardImg} resizeMode="cover" />
+        {kit.heroImage ? (
+          <Image source={{ uri: kit.heroImage }} style={styles.cardImg} resizeMode="cover" />
+        ) : (
+          <View style={[styles.cardImg, { backgroundColor: colors.bgSubtle }]} />
+        )}
         <View style={styles.cardBadgeRow}>
           <View style={{ flexDirection: 'row', gap: 4 }}>
-            {(() => {
-              const badge = getDietBadgeInfo(kit.diet);
-              return <Badge label={badge.label} variant={badge.variant} size="sm" />;
-            })()}
+            <Badge label={dietBadge.label} variant={dietBadge.variant} size="sm" />
             {kit.isOutOfStock ? <Badge label="OUT OF STOCK" variant="danger" size="sm" /> : null}
           </View>
           <TouchableOpacity
@@ -1368,7 +1344,7 @@ const MealKitCard: React.FC<{
 
         <View style={styles.cardBottomOverlay}>
           <Text style={styles.cardPrepTime}>
-            {kit.prepTimeMinutes + kit.cookTimeMinutes} mins • {kit.servings} Servings
+            {prepTime} mins • {servings} Servings
           </Text>
         </View>
       </View>
@@ -1376,12 +1352,12 @@ const MealKitCard: React.FC<{
       <View style={styles.cardDetails}>
         <View style={styles.cardTitleRow}>
           <Text style={[styles.cardTitle, { color: colors.textPrimary }]} numberOfLines={1}>
-            {kit.name}
+            {kit.name || 'Unnamed Kit'}
           </Text>
         </View>
 
         <Text style={[styles.cardDescription, { color: colors.textSecondary }]} numberOfLines={2}>
-          {kit.description}
+          {kit.description || kit.tagline || ''}
         </Text>
 
         <View style={styles.sachetsPillRow}>
@@ -1391,13 +1367,13 @@ const MealKitCard: React.FC<{
               { color: colors.primary, backgroundColor: colors.primaryLight },
             ]}
           >
-            {kit.masalaSachets.length} Fresh Spice Sachets Included
+            {sachetsCount} Fresh Spice Sachets Included
           </Text>
         </View>
 
         <View style={styles.cardFooter}>
           <View>
-            <Text style={[styles.cardPrice, { color: colors.primary }]}>₹{kit.price}</Text>
+            <Text style={[styles.cardPrice, { color: colors.primary }]}>₹{kit.price ?? 0}</Text>
             {kit.originalPrice ? (
               <Text style={[styles.cardOrigPrice, { color: colors.textMuted }]}>
                 ₹{kit.originalPrice}
@@ -1430,12 +1406,18 @@ const MealKitCard: React.FC<{
 // Reusable Meal Kit Horizontal Carousel Card
 const MealKitHorizontalCard: React.FC<{
   kit: MealKit;
+  currentCity?: string;
   onPress: () => void;
   onQuickAdd: () => void;
   isFavorite: boolean;
   onToggleFavorite: () => void;
-}> = ({ kit, onPress, onQuickAdd, isFavorite, onToggleFavorite }) => {
+}> = ({ kit, currentCity, onPress, onQuickAdd, isFavorite, onToggleFavorite }) => {
   const { colors, radii, shadows } = useTheme();
+
+  if (!kit) return null;
+
+  const isSpecialty = currentCity ? isRegionalSpecialtyOfCity(kit, currentCity) : false;
+  const dietBadge = getDietBadgeInfo(kit.diet);
 
   return (
     <TouchableOpacity
@@ -1444,7 +1426,8 @@ const MealKitHorizontalCard: React.FC<{
         {
           backgroundColor: colors.bgSurface,
           borderRadius: radii.xl,
-          borderColor: colors.borderLight,
+          borderColor: isSpecialty ? colors.primary : colors.borderLight,
+          borderWidth: isSpecialty ? 1.5 : 1,
           ...shadows.card,
         },
       ]}
@@ -1452,12 +1435,21 @@ const MealKitHorizontalCard: React.FC<{
       activeOpacity={0.9}
     >
       <View style={styles.hCardImgContainer}>
-        <Image source={{ uri: kit.heroImage }} style={styles.hCardImg} />
+        {kit.heroImage ? (
+          <Image source={{ uri: kit.heroImage }} style={styles.hCardImg} />
+        ) : (
+          <View style={[styles.hCardImg, { backgroundColor: colors.bgSubtle }]} />
+        )}
         <View style={styles.hCardBadge}>
-          {(() => {
-            const badge = getDietBadgeInfo(kit.diet);
-            return <Badge label={badge.label} variant={badge.variant} size="sm" />;
-          })()}
+          <Badge label={dietBadge.label} variant={dietBadge.variant} size="sm" />
+          {isSpecialty ? (
+            <Badge
+              label={`📍 ${kit.originCity || currentCity} Special`}
+              variant="accent"
+              size="sm"
+              style={{ marginTop: 2 }}
+            />
+          ) : null}
           {kit.isOutOfStock ? (
             <Badge label="OUT OF STOCK" variant="danger" size="sm" style={{ marginTop: 2 }} />
           ) : null}
@@ -1466,14 +1458,14 @@ const MealKitHorizontalCard: React.FC<{
 
       <View style={styles.hCardContent}>
         <Text style={[styles.hCardTitle, { color: colors.textPrimary }]} numberOfLines={1}>
-          {kit.name}
+          {kit.name || 'Unnamed Kit'}
         </Text>
         <Text style={[styles.hCardSub, { color: colors.textSecondary }]} numberOfLines={1}>
-          {kit.tagline}
+          {kit.tagline || ''}
         </Text>
 
         <View style={styles.hCardBottomRow}>
-          <Text style={[styles.hCardPrice, { color: colors.primary }]}>₹{kit.price}</Text>
+          <Text style={[styles.hCardPrice, { color: colors.primary }]}>₹{kit.price ?? 0}</Text>
           {kit.isOutOfStock ? (
             <Button
               title="Out of Stock"

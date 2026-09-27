@@ -7,6 +7,7 @@ export type CuisineType =
   | 'Mughlai'
   | 'Coastal'
   | 'Gujarati'
+  | 'Maharashtrian'
   | 'Indo-Chinese'
   | 'Italian'
   | 'Mexican'
@@ -101,6 +102,7 @@ export interface MealKit {
   isChefSpecial?: boolean;
   availableRegions: RegionHub[];
   cities: string[]; // city-level targeting, e.g. ['Bengaluru', 'Mumbai']. Empty = all cities in the hub.
+  originCity?: string; // Origin / regional specialty city, e.g. 'Pune', 'Mumbai', 'Hyderabad'
   isOutOfStock?: boolean;
   stockByRegion: Record<RegionHub, number>;
   rating: number;
@@ -1592,6 +1594,1714 @@ export const INITIAL_MEAL_KITS: MealKit[] = [
       Maharashtra: 1220,
       Karnataka: 980,
       'Delhi NCR': 890,
+    },
+  },
+  {
+    id: 'kit-209',
+    name: 'Fiesta Roasted Fajita & Black Bean Burrito Bowl Kit',
+    hindiName: 'फिएस्टा फजीता वेज बरीटो बाउल',
+    slug: 'fiesta-roasted-fajita-black-bean-burrito-bowl',
+    tagline:
+      'Charred sweet peppers, smoky chipotle black beans, cilantro-lime brown rice, avocado crema & fire-roasted salsa',
+    description:
+      'A fiesta in a bowl! Fluffy cilantro-lime infused brown rice topped with fire-roasted fajita bell peppers, simmered Cuban black beans, charred sweet corn, tangy Pico de Gallo, and our signature cooling avocado-lime crema drizzle.',
+    heroImage:
+      'https://images.unsplash.com/photo-1543339308-43e59d6b73a6?auto=format&fit=crop&w=1000&q=80',
+    galleryImages: [
+      'https://images.unsplash.com/photo-1543339308-43e59d6b73a6?auto=format&fit=crop&w=1000&q=80',
+      'https://images.unsplash.com/photo-1512621776951-a57141f2eefd?auto=format&fit=crop&w=1000&q=80',
+    ],
+    price: 279,
+    originalPrice: 329,
+    servings: 2,
+    prepTimeMinutes: 10,
+    cookTimeMinutes: 15,
+    diet: 'veg',
+    cuisine: 'Mexican',
+    dishCategory: 'Burritos & Bowls',
+    spiceLevel: 'Medium',
+    difficulty: 'Easy',
+    dietaryTags: ['veg', 'vegan', 'gluten-free'],
+    isTrending: true,
+    availableRegions: ['North', 'South', 'West', 'East'],
+    cities: [],
+    stockByRegion: { North: 40, South: 45, West: 50, East: 30 },
+    rating: 4.8,
+    reviewCount: 148,
+    nutrition: {
+      calories: 440,
+      protein: 15,
+      carbs: 68,
+      fat: 12,
+      fiber: 14,
+    },
+    allergens: [],
+    ingredients: [
+      { name: 'Cilantro-Lime Parboiled Brown Rice', quantity: '200g' },
+      { name: 'Seasoned Cuban Black Beans', quantity: '200g' },
+      { name: 'Sliced Tri-Color Fajita Bell Peppers & Red Onion', quantity: '180g' },
+      { name: 'Fire-Roasted Tomato Salsa Pouch', quantity: '80g' },
+      { name: 'Avocado-Lime Crema Drizzle Pouch', quantity: '50g' },
+      {
+        name: 'Sachet 1: Smoky Fajita Char Seasoning',
+        quantity: '12g',
+        isMasalaSachet: true,
+      },
+      { name: 'Crispy Tortilla Strips', quantity: '30g' },
+    ],
+    masalaSachets: ['Smoky Fajita Char Seasoning'],
+    sachets: [
+      {
+        id: 'sachet-209-1',
+        name: 'Smoky Fajita Char Seasoning',
+        weight: '12g',
+        spices: [
+          { name: 'Smoked Paprika & Mexican Oregano', quantity: '5g' },
+          { name: 'Toasted Cumin & Garlic Powder', quantity: '4g' },
+          { name: 'Chipotle Chilli & Sea Salt', quantity: '3g' },
+        ],
+      },
+    ],
+    recipeSteps: [
+      {
+        stepNumber: 1,
+        title: 'Steam Cilantro-Lime Rice',
+        instruction:
+          'Warm pre-seasoned cilantro-lime brown rice in a saucepan with 3 tbsp water on low heat for 3 minutes until steaming and fluffy.',
+        timerSeconds: 180,
+      },
+      {
+        stepNumber: 2,
+        title: 'Sizzle Fajita Veggies on High Heat',
+        instruction:
+          'Heat 1 tbsp oil in a skillet on high. Toss sliced tri-color peppers and onions with Sachet 1 for 4 minutes until charred at the edges but crisp-tender.',
+        timerSeconds: 240,
+        tip: 'High heat creates authentic smoky Mexican cantina flavors.',
+      },
+      {
+        stepNumber: 3,
+        title: 'Warm Smoky Black Beans',
+        instruction: 'Warm the seasoned black beans with fire-roasted tomato salsa for 2 minutes.',
+        timerSeconds: 120,
+      },
+      {
+        stepNumber: 4,
+        title: 'Assemble Fiesta Bowls',
+        instruction:
+          'Divide rice between two wide bowls. Arrange charred fajita veggies and warm black beans in sections. Drizzle avocado-lime crema and top with crunchy tortilla strips.',
+        timerSeconds: 60,
+      },
+    ],
+    reviews: [
+      {
+        id: 'rev-209',
+        userName: 'Rahul Nair',
+        userCity: 'Bengaluru',
+        rating: 5,
+        comment:
+          'Fresh, colorful, and super satisfying! The avocado crema ties the whole bowl together.',
+        date: '4 days ago',
+        verifiedBuyer: true,
+        helpfulCount: 24,
+      },
+    ],
+    salesByRegion: {
+      Karnataka: 820,
+      Maharashtra: 710,
+      'Delhi NCR': 590,
+    },
+  },
+  {
+    id: 'kit-210',
+    name: 'Creamy Truffle & Wild Mushroom Pappardelle Kit',
+    hindiName: 'क्रीमी ट्रफल और मशरूम पास्ता',
+    slug: 'creamy-truffle-wild-mushroom-pappardelle',
+    tagline:
+      'Handcrafted wide ribbon pasta tossed in black truffle cream, sautéed porcini mushrooms & aged Pecorino Romano',
+    description:
+      'An opulent Italian classic. Velvety wide ribbon pappardelle nests tossed in a rich, buttery sauce infused with black summer truffle oil, wild porcini and cremini mushrooms, finished with freshly grated aged Pecorino Romano cheese.',
+    heroImage:
+      'https://images.unsplash.com/photo-1556761223-4c4282c73f77?auto=format&fit=crop&w=1000&q=80',
+    galleryImages: [
+      'https://images.unsplash.com/photo-1556761223-4c4282c73f77?auto=format&fit=crop&w=1000&q=80',
+      'https://images.unsplash.com/photo-1621996346565-e3d5d6281699?auto=format&fit=crop&w=1000&q=80',
+    ],
+    price: 339,
+    originalPrice: 389,
+    servings: 2,
+    prepTimeMinutes: 8,
+    cookTimeMinutes: 15,
+    diet: 'veg',
+    cuisine: 'Italian',
+    dishCategory: 'Pastas',
+    spiceLevel: 'Mild',
+    difficulty: 'Easy',
+    dietaryTags: ['veg'],
+    isTrending: true,
+    availableRegions: ['North', 'South', 'West', 'East'],
+    cities: [],
+    stockByRegion: { North: 35, South: 40, West: 45, East: 25 },
+    rating: 4.9,
+    reviewCount: 172,
+    nutrition: {
+      calories: 480,
+      protein: 17,
+      carbs: 62,
+      fat: 19,
+      fiber: 5,
+    },
+    allergens: ['Wheat / Gluten (Durum Wheat)', 'Dairy (Cream, Butter & Pecorino)'],
+    ingredients: [
+      { name: 'Fresh Handmade Durum Pappardelle Nests', quantity: '240g' },
+      { name: 'Assorted Porcini & Cremini Mushrooms', quantity: '180g' },
+      { name: 'Italian Dairy Cooking Cream Pouch', quantity: '120ml' },
+      { name: 'Pure White Truffle Infused Olive Oil', quantity: '15ml' },
+      { name: 'Aged Italian Pecorino Romano Block', quantity: '35g' },
+      {
+        name: 'Sachet 1: Tuscan Rosemary, Garlic & Cracked Pepper Dust',
+        quantity: '8g',
+        isMasalaSachet: true,
+      },
+    ],
+    masalaSachets: ['Tuscan Rosemary, Garlic & Cracked Pepper Dust'],
+    sachets: [
+      {
+        id: 'sachet-210-1',
+        name: 'Tuscan Rosemary, Garlic & Cracked Pepper Dust',
+        weight: '8g',
+        spices: [
+          { name: 'Crushed Rosemary & Thyme', quantity: '3g' },
+          { name: 'Roasted Garlic Powder', quantity: '2.5g' },
+          { name: 'Coarse Tellicherry Black Pepper', quantity: '2.5g' },
+        ],
+      },
+    ],
+    recipeSteps: [
+      {
+        stepNumber: 1,
+        title: 'Boil Fresh Pappardelle Ribbons',
+        instruction:
+          'Drop fresh pappardelle into a pot of rolling salted water. Boil for 3.5 minutes until al dente. Reserve 1/3 cup pasta water, then drain.',
+        timerSeconds: 210,
+        tip: 'Never rinse cooked fresh pasta; the surface starch helps the truffle sauce cling to the ribbons.',
+      },
+      {
+        stepNumber: 2,
+        title: 'Caramelize Wild Mushrooms',
+        instruction:
+          'Melt butter in a wide skillet, add sliced mushrooms and Sachet 1. Sauté over medium-high heat for 4 minutes until golden and deeply caramelized.',
+        timerSeconds: 240,
+      },
+      {
+        stepNumber: 3,
+        title: 'Simmer Silky Truffle Cream',
+        instruction:
+          'Pour in cooking cream and reserved pasta water. Simmer for 2 minutes, then take off heat and stir in the fragrant truffle oil.',
+        timerSeconds: 120,
+      },
+      {
+        stepNumber: 4,
+        title: 'Coat Pappardelle & Grate Pecorino',
+        instruction:
+          'Toss drained pappardelle ribbons in the pan until thoroughly coated. Plate into pasta bowls and shower with freshly grated Pecorino Romano.',
+        timerSeconds: 60,
+      },
+    ],
+    reviews: [
+      {
+        id: 'rev-210',
+        userName: 'Alia Merchant',
+        userCity: 'Mumbai',
+        rating: 5,
+        comment:
+          'The truffle aroma when opening the pan is sublime! Feels like dining in Florence.',
+        date: '2 days ago',
+        verifiedBuyer: true,
+        helpfulCount: 37,
+      },
+    ],
+    salesByRegion: {
+      Maharashtra: 950,
+      Karnataka: 840,
+      'Delhi NCR': 710,
+    },
+  },
+  {
+    id: 'kit-301',
+    name: 'Mediterranean Chickpea & Spinach Stew Kit',
+    hindiName: 'मेडिटेरेनियन चना और पालक स्टू',
+    slug: 'mediterranean-chickpea-spinach-stew',
+    tagline:
+      'Rustic Spanish-style potaje with tender chickpeas, baby spinach, roasted garlic & smoked paprika broth',
+    description:
+      'Warm up with this comforting Mediterranean chickpea and spinach stew inspired by Andalusian potaje. Packed with wholesome plant protein, simmered in a velvety San Marzano tomato broth infused with cold-pressed olive oil, toasted cumin, and Spanish smoked pimentón.',
+    heroImage:
+      'https://images.unsplash.com/photo-1547592180-85f173990554?auto=format&fit=crop&w=1000&q=80',
+    galleryImages: [
+      'https://images.unsplash.com/photo-1547592180-85f173990554?auto=format&fit=crop&w=1000&q=80',
+      'https://images.unsplash.com/photo-1585937421612-70a008356fbe?auto=format&fit=crop&w=1000&q=80',
+    ],
+    price: 269,
+    originalPrice: 319,
+    servings: 2,
+    prepTimeMinutes: 8,
+    cookTimeMinutes: 20,
+    diet: 'veg',
+    cuisine: 'Mediterranean',
+    dishCategory: 'Soups & Stews',
+    spiceLevel: 'Mild',
+    difficulty: 'Easy',
+    dietaryTags: ['veg', 'vegan', 'gluten-free'],
+    isTrending: true,
+    availableRegions: ['North', 'South', 'West', 'East'],
+    cities: [],
+    stockByRegion: { North: 35, South: 40, West: 45, East: 25 },
+    rating: 4.8,
+    reviewCount: 156,
+    nutrition: {
+      calories: 340,
+      protein: 14,
+      carbs: 48,
+      fat: 10,
+      fiber: 11,
+    },
+    allergens: [],
+    ingredients: [
+      { name: 'Pre-cooked Tender Chickpeas', quantity: '250g' },
+      { name: 'Fresh Baby Spinach Leaves', quantity: '120g' },
+      { name: 'Italian San Marzano Tomato Passata', quantity: '180g' },
+      { name: 'Peeled Garlic Cloves', quantity: '5 pieces' },
+      { name: 'Cold-Pressed Spanish Olive Oil', quantity: '25ml' },
+      {
+        name: 'Sachet 1: Smoked Paprika & Cumin Infusion',
+        quantity: '12g',
+        isMasalaSachet: true,
+      },
+      {
+        name: 'Sachet 2: Toasted Garlic Herb Salt',
+        quantity: '6g',
+        isMasalaSachet: true,
+      },
+    ],
+    masalaSachets: ['Smoked Paprika & Cumin Infusion', 'Toasted Garlic Herb Salt'],
+    sachets: [
+      {
+        id: 'sachet-301-1',
+        name: 'Smoked Paprika & Cumin Infusion',
+        weight: '12g',
+        spices: [
+          { name: 'Spanish Smoked Pimentón', quantity: '6g' },
+          { name: 'Roasted Cumin Powder', quantity: '4g' },
+          { name: 'Cracked Black Pepper', quantity: '2g' },
+        ],
+      },
+      {
+        id: 'sachet-301-2',
+        name: 'Toasted Garlic Herb Salt',
+        weight: '6g',
+        spices: [
+          { name: 'Roasted Garlic Granules', quantity: '3g' },
+          { name: 'Dried Oregano', quantity: '1.5g' },
+          { name: 'Himalayan Pink Salt', quantity: '1.5g' },
+        ],
+      },
+    ],
+    recipeSteps: [
+      {
+        stepNumber: 1,
+        title: 'Infuse Olive Oil with Garlic',
+        instruction:
+          'Warm olive oil in a heavy saucepan over medium-low heat. Add thinly sliced garlic and sauté gently for 1 minute until fragrant and lightly golden.',
+        timerSeconds: 60,
+        tip: 'Keep the flame gentle so the garlic infuses without browning or turning bitter.',
+      },
+      {
+        stepNumber: 2,
+        title: 'Build the Smoky Tomato Broth',
+        instruction:
+          'Pour in the San Marzano passata and empty Sachet 1 (Smoked Paprika & Cumin Infusion). Stir and simmer for 4 minutes until the sauce deepens to a rich ruby hue.',
+        timerSeconds: 240,
+      },
+      {
+        stepNumber: 3,
+        title: 'Simmer Chickpeas in Broth',
+        instruction:
+          'Add the tender chickpeas and 150ml warm water. Bring to a gentle simmer, cover, and cook for 12 minutes to allow the chickpeas to absorb the smoky aromatic spices.',
+        timerSeconds: 720,
+      },
+      {
+        stepNumber: 4,
+        title: 'Wilt Spinach & Season',
+        instruction:
+          'Fold in the fresh baby spinach leaves and season with Sachet 2. Cook for 2 minutes until just wilted. Ladle into warm bowls and drizzle with finishing olive oil.',
+        timerSeconds: 120,
+      },
+    ],
+    reviews: [
+      {
+        id: 'rev-301',
+        userName: 'Kavita Sundaram',
+        userCity: 'Bengaluru',
+        rating: 5,
+        comment:
+          'Incredible smoky depth and so nourishing! Perfect cozy dinner after a long workday.',
+        date: '3 days ago',
+        verifiedBuyer: true,
+        helpfulCount: 22,
+      },
+    ],
+    salesByRegion: {
+      Karnataka: 680,
+      Maharashtra: 520,
+      'Delhi NCR': 410,
+    },
+  },
+  {
+    id: 'kit-302',
+    name: 'Classic French Provencal Ratatouille Stew Kit',
+    hindiName: 'क्लासिक फ्रेंच रतातूई स्टू',
+    slug: 'classic-french-provencal-ratatouille-stew',
+    tagline:
+      'Sun-ripened zucchini, aubergine & sweet bell peppers slow-braised with herbes de Provence & extra virgin olive oil',
+    description:
+      'A fragrant, hearty vegetable stew from the sun-drenched hills of Provence. Tender layers of golden zucchini, sweet bell peppers, and silky aubergine braised slowly in crushed plum tomatoes with garlic, thyme, and fragrant rosemary.',
+    heroImage:
+      'https://images.unsplash.com/photo-1565299507177-b0ac66763828?auto=format&fit=crop&w=1000&q=80',
+    galleryImages: [
+      'https://images.unsplash.com/photo-1565299507177-b0ac66763828?auto=format&fit=crop&w=1000&q=80',
+      'https://images.unsplash.com/photo-1547592180-85f173990554?auto=format&fit=crop&w=1000&q=80',
+    ],
+    price: 299,
+    originalPrice: 349,
+    servings: 2,
+    prepTimeMinutes: 10,
+    cookTimeMinutes: 25,
+    diet: 'veg',
+    cuisine: 'European',
+    dishCategory: 'Soups & Stews',
+    spiceLevel: 'Mild',
+    difficulty: 'Easy',
+    dietaryTags: ['veg', 'vegan', 'gluten-free'],
+    isTrending: false,
+    availableRegions: ['North', 'South', 'West', 'East'],
+    cities: [],
+    stockByRegion: { North: 30, South: 35, West: 40, East: 20 },
+    rating: 4.7,
+    reviewCount: 112,
+    nutrition: {
+      calories: 290,
+      protein: 7,
+      carbs: 32,
+      fat: 15,
+      fiber: 9,
+    },
+    allergens: [],
+    ingredients: [
+      { name: 'Fresh Green Zucchini Rounds', quantity: '150g' },
+      { name: 'Tender Purple Aubergine (Brinjal) Cubes', quantity: '150g' },
+      { name: 'Diced Yellow & Red Bell Peppers', quantity: '120g' },
+      { name: 'Crushed Provencal Plum Tomatoes', quantity: '200g' },
+      { name: 'Diced White Onions', quantity: '80g' },
+      { name: 'Extra Virgin Olive Oil Pouch', quantity: '30ml' },
+      {
+        name: 'Sachet 1: Herbes de Provence & Sea Salt Blend',
+        quantity: '10g',
+        isMasalaSachet: true,
+      },
+    ],
+    masalaSachets: ['Herbes de Provence & Sea Salt Blend'],
+    sachets: [
+      {
+        id: 'sachet-302-1',
+        name: 'Herbes de Provence & Sea Salt Blend',
+        weight: '10g',
+        spices: [
+          { name: 'Dried Thyme & Rosemary', quantity: '4g' },
+          { name: 'French Marjoram & Oregano', quantity: '3g' },
+          { name: 'Flaky Brittany Sea Salt', quantity: '3g' },
+        ],
+      },
+    ],
+    recipeSteps: [
+      {
+        stepNumber: 1,
+        title: 'Sauté Onions & Sweet Peppers',
+        instruction:
+          'Warm 2 tbsp olive oil in a wide skillet. Sauté diced onions and bell peppers for 4 minutes until tender and glossy.',
+        timerSeconds: 240,
+      },
+      {
+        stepNumber: 2,
+        title: 'Sear Zucchini & Aubergine',
+        instruction:
+          'Add cubed aubergine and zucchini rounds. Stir on medium heat for 5 minutes until lightly browned on edges.',
+        timerSeconds: 300,
+        tip: 'Do not crowd the vegetables so each piece caramelizes beautifully.',
+      },
+      {
+        stepNumber: 3,
+        title: 'Simmer with Crushed Tomatoes',
+        instruction:
+          'Pour in crushed plum tomatoes and empty Sachet 1 (Herbes de Provence). Reduce heat to low, cover, and gently simmer for 15 minutes.',
+        timerSeconds: 900,
+      },
+      {
+        stepNumber: 4,
+        title: 'Rest & Serve with Crusty Bread',
+        instruction:
+          'Uncover, let rest for 2 minutes to allow flavours to meld, and finish with a swirl of extra virgin olive oil.',
+        timerSeconds: 120,
+      },
+    ],
+    reviews: [
+      {
+        id: 'rev-302',
+        userName: 'Arjun Sen',
+        userCity: 'Kolkata',
+        rating: 5,
+        comment: 'Authentic French taste! The aroma of herbes de Provence filled the kitchen.',
+        date: '1 week ago',
+        verifiedBuyer: true,
+        helpfulCount: 18,
+      },
+    ],
+    salesByRegion: {
+      West: 490,
+      South: 430,
+      North: 380,
+    },
+  },
+  {
+    id: 'kit-303',
+    name: 'Spiced Tomato & Red Lentil Shorba Kit',
+    hindiName: 'टमाटर और मसूर दाल शोरबा',
+    slug: 'spiced-tomato-red-lentil-shorba',
+    tagline:
+      'Silky roasted tomato and red masoor lentil soup tempered with cumin, fresh coriander, ginger & lime',
+    description:
+      'A soothing, aromatic Indian shorba uniting fire-roasted tomatoes with protein-rich pink masoor dal. Tempered with a sizzled tadka of cumin, curry leaves, and grated fresh ginger, finished with a zesty squeeze of fresh lime.',
+    heroImage:
+      'https://images.unsplash.com/photo-1547592180-85f173990554?auto=format&fit=crop&w=1000&q=80',
+    galleryImages: [
+      'https://images.unsplash.com/photo-1547592180-85f173990554?auto=format&fit=crop&w=1000&q=80',
+    ],
+    price: 219,
+    originalPrice: 259,
+    servings: 2,
+    prepTimeMinutes: 5,
+    cookTimeMinutes: 18,
+    diet: 'veg',
+    cuisine: 'North Indian',
+    dishCategory: 'Soups & Stews',
+    spiceLevel: 'Mild',
+    difficulty: 'Easy',
+    dietaryTags: ['veg', 'vegan', 'gluten-free'],
+    isTrending: false,
+    availableRegions: ['North', 'South', 'West', 'East'],
+    cities: [],
+    stockByRegion: { North: 50, South: 40, West: 45, East: 35 },
+    rating: 4.9,
+    reviewCount: 184,
+    nutrition: {
+      calories: 230,
+      protein: 12,
+      carbs: 36,
+      fat: 4,
+      fiber: 8,
+    },
+    allergens: [],
+    ingredients: [
+      { name: 'Red Masoor Dal (Split Red Lentils)', quantity: '120g' },
+      { name: 'Fire-Roasted Tomato Puree', quantity: '180g' },
+      { name: 'Fresh Ginger-Garlic Paste', quantity: '15g' },
+      { name: 'Fresh Green Coriander Leaves', quantity: '20g' },
+      { name: 'Cold-Pressed Mustard Oil Pouch', quantity: '15ml' },
+      {
+        name: 'Sachet 1: Roasted Cumin & Black Salt Tadka',
+        quantity: '10g',
+        isMasalaSachet: true,
+      },
+      { name: 'Fresh Key Lime', quantity: '1 piece' },
+    ],
+    masalaSachets: ['Roasted Cumin & Black Salt Tadka'],
+    sachets: [
+      {
+        id: 'sachet-303-1',
+        name: 'Roasted Cumin & Black Salt Tadka',
+        weight: '10g',
+        spices: [
+          { name: 'Bhuna Jeera (Roasted Cumin)', quantity: '5g' },
+          { name: 'Kala Namak (Black Salt)', quantity: '2.5g' },
+          { name: 'Garam Masala Dust', quantity: '2.5g' },
+        ],
+      },
+    ],
+    recipeSteps: [
+      {
+        stepNumber: 1,
+        title: 'Boil Lentils & Tomato Puree',
+        instruction:
+          'Rinse red masoor dal. In a soup pot, add dal, roasted tomato puree, and 3 cups water. Bring to a rolling boil.',
+        timerSeconds: 180,
+      },
+      {
+        stepNumber: 2,
+        title: 'Simmer until Velvety',
+        instruction:
+          'Lower heat, stir in ginger-garlic paste, and simmer for 12 minutes until lentils are soft and soup turns velvety.',
+        timerSeconds: 720,
+        tip: 'Whisk lightly or blend for 10 seconds for a silky restaurant consistency.',
+      },
+      {
+        stepNumber: 3,
+        title: 'Prepare Aromatic Tadka',
+        instruction:
+          'In a small tadka pan, heat oil, add Sachet 1, let spices crackle for 20 seconds, and pour sizzling tadka into the soup.',
+        timerSeconds: 30,
+      },
+      {
+        stepNumber: 4,
+        title: 'Garnish & Serve Warm',
+        instruction:
+          'Garnish with freshly chopped coriander and a squeeze of fresh lime juice. Serve piping hot with toasted bread or papad.',
+        timerSeconds: 60,
+      },
+    ],
+    reviews: [
+      {
+        id: 'rev-303',
+        userName: 'Deepa Verma',
+        userCity: 'Lucknow',
+        rating: 5,
+        comment:
+          'Pure comfort in a bowl! Tastes just like homestyle shorba with a restaurant twist.',
+        date: '4 days ago',
+        verifiedBuyer: true,
+        helpfulCount: 26,
+      },
+    ],
+    salesByRegion: {
+      North: 810,
+      'Delhi NCR': 650,
+      West: 420,
+    },
+  },
+  {
+    id: 'kit-304',
+    name: 'Chettinad Pepper Chicken Curry Kit',
+    hindiName: 'चेट्टिनाड पेप्पर चिकन करी',
+    slug: 'chettinad-pepper-chicken-curry',
+    tagline:
+      'Fiery Karaikudi-style chicken curry with stone-ground black pepper, roasted fennel & fresh curry leaf tadka',
+    description:
+      'Experience the bold, legendary spices of Karaikudi. Succulent tender chicken pieces simmered in a dark, aromatic gravy made with freshly roasted black peppercorns, star anise, shallots, and toasted coconut.',
+    heroImage:
+      'https://images.unsplash.com/photo-1603894584373-5ac82b2ae398?auto=format&fit=crop&w=1000&q=80',
+    galleryImages: [
+      'https://images.unsplash.com/photo-1603894584373-5ac82b2ae398?auto=format&fit=crop&w=1000&q=80',
+    ],
+    price: 349,
+    originalPrice: 399,
+    servings: 2,
+    prepTimeMinutes: 10,
+    cookTimeMinutes: 20,
+    diet: 'nonveg',
+    cuisine: 'South Indian',
+    dishCategory: 'Curries & Gravies',
+    spiceLevel: 'Spicy',
+    difficulty: 'Medium',
+    dietaryTags: ['nonveg', 'gluten-free'],
+    isTrending: true,
+    availableRegions: ['North', 'South', 'West', 'East'],
+    cities: [],
+    stockByRegion: { North: 35, South: 55, West: 40, East: 25 },
+    rating: 4.9,
+    reviewCount: 240,
+    nutrition: {
+      calories: 430,
+      protein: 32,
+      carbs: 12,
+      fat: 28,
+      fiber: 5,
+    },
+    allergens: ['Tree Nuts (Coconut)'],
+    ingredients: [
+      { name: 'Fresh Farm Chicken Curry Cuts', quantity: '400g' },
+      { name: 'Peeled Sambar Shallots', quantity: '100g' },
+      { name: 'Cold-Pressed Sesame (Gingelly) Oil Pouch', quantity: '25ml' },
+      { name: 'Fresh Curry Leaves Sprig', quantity: '15 leaves' },
+      { name: 'Coconut & Poppy Seed Paste', quantity: '60g' },
+      {
+        name: 'Sachet 1: Stone-Ground Karaikudi Masala',
+        quantity: '25g',
+        isMasalaSachet: true,
+      },
+      {
+        name: 'Sachet 2: Tellicherry Black Pepper & Fennel Tadka',
+        quantity: '10g',
+        isMasalaSachet: true,
+      },
+    ],
+    masalaSachets: ['Stone-Ground Karaikudi Masala', 'Tellicherry Black Pepper & Fennel Tadka'],
+    sachets: [
+      {
+        id: 'sachet-304-1',
+        name: 'Stone-Ground Karaikudi Masala',
+        weight: '25g',
+        spices: [
+          { name: 'Roasted Coriander Seeds', quantity: '10g' },
+          { name: 'Kashmiri & Guntur Red Chillies', quantity: '8g' },
+          { name: 'Star Anise & Kalpasi (Stone Flower)', quantity: '4g' },
+          { name: 'Cinnamon & Cloves', quantity: '3g' },
+        ],
+      },
+      {
+        id: 'sachet-304-2',
+        name: 'Tellicherry Black Pepper & Fennel Tadka',
+        weight: '10g',
+        spices: [
+          { name: 'Coarsely Crushed Black Pepper', quantity: '6g' },
+          { name: 'Fennel Seeds (Saunf)', quantity: '4g' },
+        ],
+      },
+    ],
+    recipeSteps: [
+      {
+        stepNumber: 1,
+        title: 'Sauté Shallots in Gingelly Oil',
+        instruction:
+          'Heat sesame oil in a kadai. Add sliced shallots and fresh curry leaves, frying until shallots turn caramelized and sweet.',
+        timerSeconds: 240,
+      },
+      {
+        stepNumber: 2,
+        title: 'Roast Chicken with Chettinad Spices',
+        instruction:
+          'Add chicken cuts and empty Sachet 1. Sauté briskly on high flame for 5 minutes until chicken is sealed in fragrant spice crust.',
+        timerSeconds: 300,
+        tip: 'High heat searing locks all the natural juices inside the chicken cuts.',
+      },
+      {
+        stepNumber: 3,
+        title: 'Simmer with Coconut Paste',
+        instruction:
+          'Add coconut paste and 150ml water. Cover and simmer on medium flame for 10 minutes until chicken is tender.',
+        timerSeconds: 600,
+      },
+      {
+        stepNumber: 4,
+        title: 'Finish with Tellicherry Black Pepper Tadka',
+        instruction:
+          'Stir in Sachet 2 (Crushed Tellicherry Pepper & Fennel), simmer for 2 minutes to unleash that signature South Indian pepper heat.',
+        timerSeconds: 120,
+      },
+    ],
+    reviews: [
+      {
+        id: 'rev-304',
+        userName: 'Manoj Subramaniam',
+        userCity: 'Chennai',
+        rating: 5,
+        comment:
+          'Authentic Chettinad flavor! The stone flower and Tellicherry pepper balance is spot on.',
+        date: 'Yesterday',
+        verifiedBuyer: true,
+        helpfulCount: 41,
+      },
+    ],
+    salesByRegion: {
+      South: 1450,
+      West: 980,
+      North: 620,
+    },
+  },
+  {
+    id: 'kit-305',
+    name: 'Crispy Veg Manchurian & Hakka Noodles Kit',
+    hindiName: 'वेज मंचूरियन और हक्का नूडल्स',
+    slug: 'crispy-veg-manchurian-hakka-noodles',
+    tagline:
+      'Golden crispy vegetable dumplings in tangy dark garlic soya sauce paired with wok-tossed Hakka noodles',
+    description:
+      'Indias favorite street-food fusion! Crisp hand-rolled veggie dumplings tossed in a sizzling ginger-garlic and dark soya Manchurian gravy, served with springy eggless Hakka noodles and toasted sesame.',
+    heroImage:
+      'https://images.unsplash.com/photo-1626777552726-4a6b54c97e46?auto=format&fit=crop&w=1000&q=80',
+    galleryImages: [
+      'https://images.unsplash.com/photo-1626777552726-4a6b54c97e46?auto=format&fit=crop&w=1000&q=80',
+    ],
+    price: 289,
+    originalPrice: 339,
+    servings: 2,
+    prepTimeMinutes: 12,
+    cookTimeMinutes: 18,
+    diet: 'veg',
+    cuisine: 'Indo-Chinese',
+    dishCategory: 'Street Food',
+    spiceLevel: 'Medium',
+    difficulty: 'Easy',
+    dietaryTags: ['veg', 'vegan'],
+    isTrending: true,
+    availableRegions: ['North', 'South', 'West', 'East'],
+    cities: [],
+    stockByRegion: { North: 45, South: 40, West: 50, East: 40 },
+    rating: 4.8,
+    reviewCount: 167,
+    nutrition: {
+      calories: 470,
+      protein: 13,
+      carbs: 72,
+      fat: 15,
+      fiber: 6,
+    },
+    allergens: ['Gluten / Wheat', 'Soy'],
+    ingredients: [
+      { name: 'Veg Manchurian Dumpling Base Mix', quantity: '220g' },
+      { name: 'Eggless Hakka Noodles Pack', quantity: '180g' },
+      { name: 'Fresh Spring Onions & Capsicum', quantity: '80g' },
+      { name: 'Minced Ginger, Garlic & Green Chilli', quantity: '25g' },
+      {
+        name: 'Sachet 1: Tangy Manchurian Dark Sauce Pouch',
+        quantity: '60ml',
+        isMasalaSachet: true,
+      },
+      {
+        name: 'Sachet 2: Indo-Chinese Wok Spice Seasoning',
+        quantity: '10g',
+        isMasalaSachet: true,
+      },
+    ],
+    masalaSachets: ['Tangy Manchurian Dark Sauce Pouch', 'Indo-Chinese Wok Spice Seasoning'],
+    sachets: [
+      {
+        id: 'sachet-305-1',
+        name: 'Tangy Manchurian Dark Sauce Pouch',
+        weight: '60ml',
+        spices: [
+          { name: 'Dark Soya Sauce', quantity: '25ml' },
+          { name: 'Chilli Garlic Paste', quantity: '20ml' },
+          { name: 'Vinegar & Sugar Blend', quantity: '15ml' },
+        ],
+      },
+      {
+        id: 'sachet-305-2',
+        name: 'Indo-Chinese Wok Spice Seasoning',
+        weight: '10g',
+        spices: [
+          { name: 'White Pepper Powder', quantity: '4g' },
+          { name: 'Toasted Sesame Seeds', quantity: '3g' },
+          { name: 'Celery & Onion Salt', quantity: '3g' },
+        ],
+      },
+    ],
+    recipeSteps: [
+      {
+        stepNumber: 1,
+        title: 'Boil Hakka Noodles',
+        instruction:
+          'Drop noodles into boiling salted water for 4 minutes. Drain, rinse under cold tap water, and toss with 1 tsp oil.',
+        timerSeconds: 240,
+      },
+      {
+        stepNumber: 2,
+        title: 'Roll & Crisp Manchurian Balls',
+        instruction:
+          'Shape seasoned veggie mix into 8 bite-sized balls. Shallow fry in 3 tbsp oil for 5 minutes until crispy and golden brown.',
+        timerSeconds: 300,
+        tip: 'Ensure the oil is hot before adding balls to avoid excess oil absorption.',
+      },
+      {
+        stepNumber: 3,
+        title: 'Wok-Toss the Sizzling Sauce',
+        instruction:
+          'In the wok, flash-fry ginger, garlic, and spring onions for 1 minute. Pour in Manchurian Sauce Sachet with 50ml water and bring to a glaze.',
+        timerSeconds: 90,
+      },
+      {
+        stepNumber: 4,
+        title: 'Combine & Serve with Noodles',
+        instruction:
+          'Toss crispy Manchurian balls into the simmering sauce. Dust Hakka noodles with Sachet 2 seasoning and serve side-by-side.',
+        timerSeconds: 60,
+      },
+    ],
+    reviews: [
+      {
+        id: 'rev-305',
+        userName: 'Pooja Agarwal',
+        userCity: 'Kolkata',
+        rating: 5,
+        comment: 'Better than roadside Chinese van! Crunchy Manchurian balls in rich glossy sauce.',
+        date: '5 days ago',
+        verifiedBuyer: true,
+        helpfulCount: 31,
+      },
+    ],
+    salesByRegion: {
+      East: 890,
+      West: 760,
+      North: 690,
+    },
+  },
+  {
+    id: 'kit-306',
+    name: 'Royal Awadhi Shahi Biryani Kit',
+    hindiName: 'शाही अवधी दम बिरयानी',
+    slug: 'royal-awadhi-shahi-biryani',
+    tagline:
+      'Aromatic long-grain basmati layered with royal saffron, caramelised onions, fresh paneer & rose essence',
+    description:
+      'A royal Nawabi feast prepared with the slow-dum technique. Aged basmati rice scented with Kashmiri saffron and royal zafran, layered over marinated malai paneer, fried golden onions, and crushed cardamom.',
+    heroImage:
+      'https://images.unsplash.com/photo-1563379091339-03b21ab4a4f8?auto=format&fit=crop&w=1000&q=80',
+    galleryImages: [
+      'https://images.unsplash.com/photo-1563379091339-03b21ab4a4f8?auto=format&fit=crop&w=1000&q=80',
+    ],
+    price: 329,
+    originalPrice: 379,
+    servings: 2,
+    prepTimeMinutes: 15,
+    cookTimeMinutes: 25,
+    diet: 'veg',
+    cuisine: 'Mughlai',
+    dishCategory: 'Biryani & Rice',
+    spiceLevel: 'Medium',
+    difficulty: 'Chef Special',
+    dietaryTags: ['veg', 'jain'],
+    isTrending: true,
+    availableRegions: ['North', 'South', 'West', 'East'],
+    cities: [],
+    stockByRegion: { North: 45, South: 35, West: 40, East: 30 },
+    rating: 4.9,
+    reviewCount: 215,
+    nutrition: {
+      calories: 510,
+      protein: 18,
+      carbs: 68,
+      fat: 18,
+      fiber: 5,
+    },
+    allergens: ['Dairy (Paneer & Ghee)', 'Tree Nuts (Cashew & Almond)'],
+    ingredients: [
+      { name: 'Aged Royal Daawat Basmati Rice', quantity: '250g' },
+      { name: 'Fresh Malai Paneer Cubes', quantity: '200g' },
+      { name: 'Birista (Crispy Fried Onions)', quantity: '40g' },
+      { name: 'Pure Desi Ghee Pouch', quantity: '30g' },
+      { name: 'Kashmiri Saffron & Kewra Water Infusion', quantity: '15ml' },
+      {
+        name: 'Sachet 1: Awadhi Khada Potli Masala',
+        quantity: '15g',
+        isMasalaSachet: true,
+      },
+      {
+        name: 'Sachet 2: Royal Zafrani Shahi Spice Blend',
+        quantity: '20g',
+        isMasalaSachet: true,
+      },
+    ],
+    masalaSachets: ['Awadhi Khada Potli Masala', 'Royal Zafrani Shahi Spice Blend'],
+    sachets: [
+      {
+        id: 'sachet-306-1',
+        name: 'Awadhi Khada Potli Masala',
+        weight: '15g',
+        spices: [
+          { name: 'Green Cardamom (Elaichi)', quantity: '4g' },
+          { name: 'Black Cardamom & Cinnamon', quantity: '4g' },
+          { name: 'Mace (Javitri) & Nutmeg', quantity: '3g' },
+          { name: 'Cloves & Shahi Jeera', quantity: '4g' },
+        ],
+      },
+      {
+        id: 'sachet-306-2',
+        name: 'Royal Zafrani Shahi Spice Blend',
+        weight: '20g',
+        spices: [
+          { name: 'Kashmiri Saffron Strands', quantity: '1g' },
+          { name: 'Toasted Cashew Paste Powder', quantity: '10g' },
+          { name: 'Garam Masala Dust', quantity: '5g' },
+          { name: 'Rose Petal Powder', quantity: '4g' },
+        ],
+      },
+    ],
+    recipeSteps: [
+      {
+        stepNumber: 1,
+        title: 'Parboil Basmati with Khada Masala',
+        instruction:
+          'Boil aged basmati in salted water with Sachet 1 (potli spices) for 6 minutes until 70% cooked. Drain and set aside.',
+        timerSeconds: 360,
+        tip: 'Do not overcook the rice in this stage; it finishes steaming during dum.',
+      },
+      {
+        stepNumber: 2,
+        title: 'Sear Malai Paneer in Shahi Masala',
+        instruction:
+          'In handi, melt desi ghee, add paneer cubes and Sachet 2. Sauté for 3 minutes until paneer is coated in fragrant shahi gravy.',
+        timerSeconds: 180,
+      },
+      {
+        stepNumber: 3,
+        title: 'Layer Basmati, Birista & Saffron',
+        instruction:
+          'Layer the parboiled rice over the paneer. Top with golden birista, drizzle Saffron-Kewra infusion, and dot with remaining ghee.',
+        timerSeconds: 120,
+      },
+      {
+        stepNumber: 4,
+        title: 'Dum Cook on Sealed Flame',
+        instruction:
+          'Cover handi tightly with lid. Cook on low flame (dum) for 15 minutes. Rest 5 minutes, gently fluff with a fork and serve.',
+        timerSeconds: 900,
+      },
+    ],
+    reviews: [
+      {
+        id: 'rev-306',
+        userName: 'Sameer Rizvi',
+        userCity: 'Lucknow',
+        rating: 5,
+        comment:
+          'Reminds me of traditional Aminabad dum biryani! The aroma of saffron and mace is divine.',
+        date: '3 days ago',
+        verifiedBuyer: true,
+        helpfulCount: 35,
+      },
+    ],
+    salesByRegion: {
+      North: 1120,
+      West: 650,
+      South: 450,
+    },
+  },
+  {
+    id: 'kit-307',
+    name: 'Traditional Gujarati Dal Dhokli Stew Kit',
+    hindiName: 'पारंपरिक गुजराती दाल ढोकली',
+    slug: 'traditional-gujarati-dal-dhokli-stew',
+    tagline:
+      'Sweet and tangy spiced toor dal stew with tender hand-cut spiced whole wheat pasta dumplings',
+    description:
+      'The soul of Gujarati comfort cuisine. Nutritious pigeon pea dal cooked with jaggery, kokum, and roasted peanuts, into which spiced whole-wheat dumplings are simmered to chewy perfection with ghee-tempered mustard seeds.',
+    heroImage:
+      'https://images.unsplash.com/photo-1546833999-b9f581a1996d?auto=format&fit=crop&w=1000&q=80',
+    galleryImages: [
+      'https://images.unsplash.com/photo-1546833999-b9f581a1996d?auto=format&fit=crop&w=1000&q=80',
+    ],
+    price: 249,
+    originalPrice: 289,
+    servings: 2,
+    prepTimeMinutes: 10,
+    cookTimeMinutes: 20,
+    diet: 'veg',
+    cuisine: 'Gujarati',
+    dishCategory: 'Soups & Stews',
+    spiceLevel: 'Medium',
+    difficulty: 'Easy',
+    dietaryTags: ['veg', 'jain'],
+    isTrending: false,
+    availableRegions: ['North', 'South', 'West', 'East'],
+    cities: [],
+    stockByRegion: { North: 35, South: 25, West: 60, East: 20 },
+    rating: 4.8,
+    reviewCount: 142,
+    nutrition: {
+      calories: 380,
+      protein: 14,
+      carbs: 62,
+      fat: 9,
+      fiber: 7,
+    },
+    allergens: ['Gluten / Wheat', 'Peanuts', 'Dairy (Ghee)'],
+    ingredients: [
+      { name: 'Spiced Whole Wheat Dhokli Dough Cuts', quantity: '180g' },
+      { name: 'Cooked Spiced Toor Dal Base', quantity: '250g' },
+      { name: 'Raw Roasted Gujarat Peanuts', quantity: '30g' },
+      { name: 'Natural Organic Jaggery & Kokum Pouch', quantity: '35g' },
+      { name: 'Pure Desi Cow Ghee', quantity: '20g' },
+      {
+        name: 'Sachet 1: Kathiyawadi Rai-Hing Tadka Masala',
+        quantity: '10g',
+        isMasalaSachet: true,
+      },
+    ],
+    masalaSachets: ['Kathiyawadi Rai-Hing Tadka Masala'],
+    sachets: [
+      {
+        id: 'sachet-307-1',
+        name: 'Kathiyawadi Rai-Hing Tadka Masala',
+        weight: '10g',
+        spices: [
+          { name: 'Black Mustard Seeds (Rai)', quantity: '3g' },
+          { name: 'Asafoetida (Hing)', quantity: '1.5g' },
+          { name: 'Cumin & Fenugreek Seeds', quantity: '2.5g' },
+          { name: 'Dried Red Kashmiri Chillies', quantity: '3g' },
+        ],
+      },
+    ],
+    recipeSteps: [
+      {
+        stepNumber: 1,
+        title: 'Simmer Toor Dal Base',
+        instruction:
+          'In a deep pot, add toor dal base with 350ml water, roasted peanuts, and Jaggery-Kokum pouch. Bring to a rolling boil.',
+        timerSeconds: 180,
+      },
+      {
+        stepNumber: 2,
+        title: 'Drop Fresh Spiced Dhokli Pieces',
+        instruction:
+          'Drop individual spiced whole wheat dhokli diamond cuts into the boiling dal one by one so they do not stick.',
+        timerSeconds: 120,
+        tip: 'Keep the dal boiling vigorously when dropping dhoklis to ensure they set immediately.',
+      },
+      {
+        stepNumber: 3,
+        title: 'Simmer to Tender Perfection',
+        instruction:
+          'Simmer on medium flame for 12 minutes until the dhokli dumplings are tender, silky, and float to the top.',
+        timerSeconds: 720,
+      },
+      {
+        stepNumber: 4,
+        title: 'Sizzle Desi Ghee Tadka',
+        instruction:
+          'Melt cow ghee in a tadka spoon, crackle Sachet 1 (mustard, hing, chillies), and pour over the hot dal dhokli. Serve hot.',
+        timerSeconds: 60,
+      },
+    ],
+    reviews: [
+      {
+        id: 'rev-307',
+        userName: 'Nirav Patel',
+        userCity: 'Ahmedabad',
+        rating: 5,
+        comment:
+          'Authentic sweet, sour, and spicy Gujarati taste! Just like mom makes on Sunday afternoons.',
+        date: '6 days ago',
+        verifiedBuyer: true,
+        helpfulCount: 28,
+      },
+    ],
+    salesByRegion: {
+      West: 1380,
+      North: 810,
+      South: 320,
+    },
+  },
+  {
+    id: 'kit-308',
+    name: 'Creamy Wild Mushroom & Corn Chowder Kit',
+    hindiName: 'मशरूम और कॉर्न चाउडर सूप',
+    slug: 'creamy-wild-mushroom-corn-chowder',
+    tagline:
+      'Velvety golden sweet corn and sautéed button mushroom chowder with thyme, cracked black pepper & garlic croutons',
+    description:
+      'A rich, comforting Continental chowder loaded with sweet golden corn kernels and pan-seared earthy mushrooms. Simmered in herb-infused cream and served with crispy herb-garlic croutons.',
+    heroImage:
+      'https://images.unsplash.com/photo-1547592180-85f173990554?auto=format&fit=crop&w=1000&q=80',
+    galleryImages: [
+      'https://images.unsplash.com/photo-1547592180-85f173990554?auto=format&fit=crop&w=1000&q=80',
+    ],
+    price: 259,
+    originalPrice: 299,
+    servings: 2,
+    prepTimeMinutes: 8,
+    cookTimeMinutes: 18,
+    diet: 'veg',
+    cuisine: 'Continental',
+    dishCategory: 'Soups & Stews',
+    spiceLevel: 'Mild',
+    difficulty: 'Easy',
+    dietaryTags: ['veg'],
+    isTrending: false,
+    availableRegions: ['North', 'South', 'West', 'East'],
+    cities: [],
+    stockByRegion: { North: 40, South: 35, West: 45, East: 25 },
+    rating: 4.8,
+    reviewCount: 129,
+    nutrition: {
+      calories: 360,
+      protein: 9,
+      carbs: 42,
+      fat: 18,
+      fiber: 5,
+    },
+    allergens: ['Dairy (Butter & Cream)', 'Gluten / Wheat (Croutons)'],
+    ingredients: [
+      { name: 'Fresh Button & Shiitake Mushrooms', quantity: '180g' },
+      { name: 'Sweet Golden Corn Kernels', quantity: '150g' },
+      { name: 'Rich Dairy Cooking Cream Pouch', quantity: '100ml' },
+      { name: 'Salted Butter Block', quantity: '25g' },
+      { name: 'Garlic Herb Croutons', quantity: '40g' },
+      {
+        name: 'Sachet 1: French Thyme & White Pepper Chowder Dust',
+        quantity: '8g',
+        isMasalaSachet: true,
+      },
+    ],
+    masalaSachets: ['French Thyme & White Pepper Chowder Dust'],
+    sachets: [
+      {
+        id: 'sachet-308-1',
+        name: 'French Thyme & White Pepper Chowder Dust',
+        weight: '8g',
+        spices: [
+          { name: 'Dried French Thyme', quantity: '3g' },
+          { name: 'Ground White Pepper', quantity: '2.5g' },
+          { name: 'Sea Salt & Onion Powder', quantity: '2.5g' },
+        ],
+      },
+    ],
+    recipeSteps: [
+      {
+        stepNumber: 1,
+        title: 'Sauté Sliced Mushrooms in Butter',
+        instruction:
+          'Melt butter in a soup pot over medium heat. Add sliced mushrooms and sauté for 4 minutes until golden brown and aromatic.',
+        timerSeconds: 240,
+      },
+      {
+        stepNumber: 2,
+        title: 'Add Sweet Corn & Broth',
+        instruction:
+          'Add sweet corn kernels, 250ml water, and Sachet 1. Bring to a gentle boil and simmer for 8 minutes.',
+        timerSeconds: 480,
+      },
+      {
+        stepNumber: 3,
+        title: 'Enrich with Cooking Cream',
+        instruction:
+          'Stir in the rich cooking cream on low heat. Simmer gently for 4 minutes until the chowder thickens to a velvety coat.',
+        timerSeconds: 240,
+        tip: 'Do not let the chowder boil rapidly after adding cream to keep it silky smooth.',
+      },
+      {
+        stepNumber: 4,
+        title: 'Top with Garlic Croutons & Serve',
+        instruction:
+          'Ladle into heated soup bowls, scatter crisp garlic croutons on top, and finish with a sprinkle of cracked black pepper.',
+        timerSeconds: 60,
+      },
+    ],
+    reviews: [
+      {
+        id: 'rev-308',
+        userName: 'Tanya Dsouza',
+        userCity: 'Mumbai',
+        rating: 5,
+        comment:
+          'So creamy and comforting on a rainy evening! The croutons stayed crunchy and delicious.',
+        date: '1 week ago',
+        verifiedBuyer: true,
+        helpfulCount: 20,
+      },
+    ],
+    salesByRegion: {
+      West: 640,
+      South: 520,
+      North: 480,
+    },
+  },
+  {
+    id: 'kit-201',
+    name: 'Authentic Puneri Misal Pav Kit',
+    hindiName: 'पुणेरी मिसळ पाव',
+    slug: 'authentic-puneri-misal-pav',
+    tagline:
+      'Fiery sprouted matki usal in deep red Pune kat (tarri) rassa with crisp farsan & fresh ladi pav',
+    description:
+      'The crown jewel of Pune street cuisine! Sprouted organic matki (moth beans) slow-simmered in an aromatic, fiery-red Puneri "kat" rassa made with roasted coconut and authentic goda masala. Layered with crunchy Kolhapuri farsan, chopped red onions, and lemon, served with buttered ladi pav.',
+    heroImage:
+      'https://images.unsplash.com/photo-1601050690597-df0568f70950?auto=format&fit=crop&w=1000&q=80',
+    galleryImages: [
+      'https://images.unsplash.com/photo-1601050690597-df0568f70950?auto=format&fit=crop&w=1000&q=80',
+      'https://images.unsplash.com/photo-1626777552726-4a6b54c97e46?auto=format&fit=crop&w=1000&q=80',
+    ],
+    price: 199,
+    originalPrice: 249,
+    servings: 2,
+    prepTimeMinutes: 8,
+    cookTimeMinutes: 15,
+    diet: 'veg',
+    cuisine: 'Maharashtrian',
+    dishCategory: 'Street Food',
+    spiceLevel: 'Fiery',
+    difficulty: 'Easy',
+    dietaryTags: ['veg'],
+    isTrending: true,
+    availableRegions: ['West', 'South', 'North', 'East'],
+    cities: ['Pune'],
+    originCity: 'Pune',
+    stockByRegion: { West: 120, South: 45, North: 30, East: 20 },
+    rating: 4.95,
+    reviewCount: 382,
+    nutrition: {
+      calories: 470,
+      protein: 16,
+      carbs: 64,
+      fat: 17,
+      fiber: 9,
+    },
+    allergens: ['Gluten / Wheat (Ladi Pav & Farsan)'],
+    ingredients: [
+      { name: 'Sprouted Organic Matki (Moth Beans)', quantity: '200g' },
+      { name: 'Fresh Pune Bakery Ladi Pav', quantity: '4 pcs' },
+      { name: 'Special Puneri Crispy Farsan', quantity: '90g' },
+      { name: 'Diced Red Onions & Fresh Coriander', quantity: '80g' },
+      { name: 'Fresh Juicy Lemon', quantity: '1 pc' },
+      {
+        name: 'Sachet 1: Puneri Goda Masala & Hing Tadka',
+        quantity: '15g',
+        isMasalaSachet: true,
+      },
+      {
+        name: 'Sachet 2: Teja Kat Tarri Gravy Paste',
+        quantity: '35g',
+        isMasalaSachet: true,
+      },
+    ],
+    masalaSachets: ['Puneri Goda Masala & Hing Tadka', 'Teja Kat Tarri Gravy Paste'],
+    sachets: [
+      {
+        id: 'sachet-201-1',
+        name: 'Puneri Goda Masala & Hing Tadka',
+        weight: '15g',
+        spices: [
+          { name: 'Traditional Maharashtrian Goda Masala', quantity: '8g' },
+          { name: 'Roasted Cumin & Coriander Powder', quantity: '4g' },
+          { name: 'Asafoetida (Hing) & Turmeric', quantity: '3g' },
+        ],
+      },
+      {
+        id: 'sachet-201-2',
+        name: 'Teja Kat Tarri Gravy Paste',
+        weight: '35g',
+        spices: [
+          { name: 'Roasted Coconut & Charred Onion Paste', quantity: '18g' },
+          { name: 'Byadgi & Lavangi Red Chilli Essence', quantity: '10g' },
+          { name: 'Ginger Garlic & Spiced Oil Base', quantity: '7g' },
+        ],
+      },
+    ],
+    recipeSteps: [
+      {
+        stepNumber: 1,
+        title: 'Boil Sprouted Matki Usal',
+        instruction:
+          'Boil sprouted matki in 1.5 cups water with a pinch of salt and turmeric for 5 minutes until tender yet retaining a light bite.',
+        timerSeconds: 300,
+      },
+      {
+        stepNumber: 2,
+        title: 'Cook Fragrant Kat Tarri Gravy',
+        instruction:
+          'Heat 2 tbsp oil in a deep kadai. Stir in Sachet 1 until aromatic (30 sec), then blend in Sachet 2 paste. Add 2 cups water and simmer for 6 minutes until the fiery red oil layer (tarri/kat) rises to the surface.',
+        timerSeconds: 360,
+        tip: 'Pune misal is celebrated for its spicy, aromatic, thin tarri rassa.',
+      },
+      {
+        stepNumber: 3,
+        title: 'Toast Pav & Assemble Misal Bowls',
+        instruction:
+          'Lightly toast the ladi pav in butter on a tava. In serving bowls, spoon a hearty base of boiled matki usal, ladle boiling-hot kat rassa over it, then crown with generous crispy farsan, diced onions, and fresh coriander.',
+        timerSeconds: 180,
+      },
+      {
+        stepNumber: 4,
+        title: 'Squeeze Lemon & Relish Hot',
+        instruction:
+          'Squeeze fresh lemon over the bowl and dunk the hot buttered pav into the spicy kat broth immediately for peak crunch and savoriness.',
+        timerSeconds: 60,
+      },
+    ],
+    reviews: [
+      {
+        id: 'rev-201-1',
+        userName: 'Sanket Kulkarni',
+        userCity: 'Pune',
+        rating: 5,
+        comment:
+          'Hands down the most authentic Puneri misal taste! The kat has that exact fiery kick and roasted coconut-goda aroma from FC Road.',
+        date: '2 days ago',
+        verifiedBuyer: true,
+        helpfulCount: 46,
+      },
+    ],
+    salesByRegion: {
+      West: 1420,
+      South: 310,
+      North: 180,
+    },
+  },
+  {
+    id: 'kit-202',
+    name: 'Puneri Pithla Bhakri & Thecha Kit',
+    hindiName: 'झुणका-पिठलं भाकरी आणि खर्डा',
+    slug: 'puneri-pithla-bhakri-thecha',
+    tagline:
+      'Velvety spiced gram flour pithla with stone-ground jowar bhakri & fiery green chilli garlic thecha',
+    description:
+      'The rustic soul of Maharashtra! Comforting, velvety gram flour (besan) seasoned with mustard seeds, curry leaves, garlic, and fresh green chillies. Served alongside wholesome stone-ground jowar bhakri flour and freshly pounded spicy green chilli garlic kharda (thecha).',
+    heroImage:
+      'https://images.unsplash.com/photo-1626777552726-4a6b54c97e46?auto=format&fit=crop&w=1000&q=80',
+    galleryImages: [
+      'https://images.unsplash.com/photo-1626777552726-4a6b54c97e46?auto=format&fit=crop&w=1000&q=80',
+    ],
+    price: 219,
+    originalPrice: 269,
+    servings: 2,
+    prepTimeMinutes: 10,
+    cookTimeMinutes: 18,
+    diet: 'veg',
+    cuisine: 'Maharashtrian',
+    dishCategory: 'Curries & Gravies',
+    spiceLevel: 'Spicy',
+    difficulty: 'Easy',
+    dietaryTags: ['veg', 'gluten-free'],
+    isTrending: true,
+    availableRegions: ['West', 'South', 'North', 'East'],
+    cities: ['Pune'],
+    originCity: 'Pune',
+    stockByRegion: { West: 95, South: 30, North: 20, East: 15 },
+    rating: 4.88,
+    reviewCount: 224,
+    nutrition: {
+      calories: 420,
+      protein: 15,
+      carbs: 58,
+      fat: 14,
+      fiber: 8,
+    },
+    allergens: [],
+    ingredients: [
+      { name: 'Premium Roasted Chana Besan (Gram Flour)', quantity: '120g' },
+      { name: 'Stone-Ground Jowar (Sorghum) Bhakri Flour', quantity: '200g' },
+      { name: 'Fresh Green Chillies & Garlic Pods', quantity: '50g' },
+      { name: 'Curry Leaves & Mustard Tadka Mix', quantity: '15g' },
+      {
+        name: 'Sachet 1: Puneri Pithla Tempering Spice Blend',
+        quantity: '12g',
+        isMasalaSachet: true,
+      },
+      {
+        name: 'Sachet 2: Authentic Maharashtrian Thecha Masala',
+        quantity: '18g',
+        isMasalaSachet: true,
+      },
+    ],
+    masalaSachets: ['Puneri Pithla Tempering Spice Blend', 'Authentic Maharashtrian Thecha Masala'],
+    sachets: [
+      {
+        id: 'sachet-202-1',
+        name: 'Puneri Pithla Tempering Spice Blend',
+        weight: '12g',
+        spices: [
+          { name: 'Mustard Seeds & Cumin', quantity: '5g' },
+          { name: 'Turmeric & Rock Salt', quantity: '4g' },
+          { name: 'Compound Hing', quantity: '3g' },
+        ],
+      },
+      {
+        id: 'sachet-202-2',
+        name: 'Authentic Maharashtrian Thecha Masala',
+        weight: '18g',
+        spices: [
+          { name: 'Coarse Roasted Cumin', quantity: '6g' },
+          { name: 'Rock Salt & Garlic Flakes', quantity: '7g' },
+          { name: 'Roasted Peanut Dust', quantity: '5g' },
+        ],
+      },
+    ],
+    recipeSteps: [
+      {
+        stepNumber: 1,
+        title: 'Whisk Besan Batter',
+        instruction:
+          'In a bowl, whisk the besan with 1.5 cups water and turmeric until completely smooth and lump-free.',
+        timerSeconds: 120,
+      },
+      {
+        stepNumber: 2,
+        title: 'Cook Velvety Pithla',
+        instruction:
+          'Heat 2 tbsp oil, crackle mustard seeds, curry leaves, and green chillies. Pour in the besan batter, stirring continuously on medium flame for 6 minutes until thick, glossy, and fragrant.',
+        timerSeconds: 360,
+      },
+      {
+        stepNumber: 3,
+        title: 'Prepare Pounded Garlic Thecha',
+        instruction:
+          'Heat 1 tbsp oil in a small pan, roast green chillies and garlic until blistered. Coarsely crush with Sachet 2 using a mortar or back of a spoon with a splash of lemon.',
+        timerSeconds: 180,
+      },
+      {
+        stepNumber: 4,
+        title: 'Pan-Cook Jowar Bhakris',
+        instruction:
+          'Knead the jowar flour with warm water into soft dough. Pat out round bhakris on a dry tava, splash water on the surface, flip and roast until puffed and charred.',
+        timerSeconds: 360,
+      },
+    ],
+    reviews: [
+      {
+        id: 'rev-202-1',
+        userName: 'Tanvi Joshi',
+        userCity: 'Pune',
+        rating: 5,
+        comment:
+          'Pithla was silky smooth and the thecha has the true rustic kick. Nostalgic Sinhagad fort vibes right at home!',
+        date: '3 days ago',
+        verifiedBuyer: true,
+        helpfulCount: 31,
+      },
+    ],
+    salesByRegion: {
+      West: 980,
+      South: 190,
+      North: 110,
+    },
+  },
+  {
+    id: 'kit-203',
+    name: 'Puneri Bhajani Thalipeeth Kit',
+    hindiName: 'पुणेरी खमंग भाजणी थालीपीठ',
+    slug: 'puneri-bhajani-thalipeeth',
+    tagline:
+      'Traditional roasted multigrain spiced flatbreads with fresh white butter & peanut thecha',
+    description:
+      'Handcrafted from authentic 5-grain roasted Bhajani flour (jowar, bajra, chana dal, rice, coriander seeds & cumin). Mixed with finely diced red onions, cilantro, and roasted sesame seeds, cooked crisp with a dollop of white homemade makkhan and peanut garlic chutney.',
+    heroImage:
+      'https://images.unsplash.com/photo-1589301760014-d929f3979dbc?auto=format&fit=crop&w=1000&q=80',
+    galleryImages: [
+      'https://images.unsplash.com/photo-1589301760014-d929f3979dbc?auto=format&fit=crop&w=1000&q=80',
+    ],
+    price: 209,
+    originalPrice: 249,
+    servings: 2,
+    prepTimeMinutes: 10,
+    cookTimeMinutes: 15,
+    diet: 'veg',
+    cuisine: 'Maharashtrian',
+    dishCategory: 'Street Food',
+    spiceLevel: 'Medium',
+    difficulty: 'Easy',
+    dietaryTags: ['veg'],
+    isTrending: true,
+    availableRegions: ['West', 'South', 'North', 'East'],
+    cities: ['Pune'],
+    originCity: 'Pune',
+    stockByRegion: { West: 85, South: 25, North: 20, East: 15 },
+    rating: 4.9,
+    reviewCount: 198,
+    nutrition: {
+      calories: 390,
+      protein: 13,
+      carbs: 52,
+      fat: 15,
+      fiber: 7,
+    },
+    allergens: ['Dairy (White Butter)'],
+    ingredients: [
+      { name: 'Traditional 5-Grain Roasted Bhajani Flour', quantity: '220g' },
+      { name: 'Finely Chopped Red Onions', quantity: '80g' },
+      { name: 'Roasted White Sesame Seeds (Til)', quantity: '15g' },
+      { name: 'Fresh White Butter (Loni)', quantity: '40g' },
+      {
+        name: 'Sachet 1: Puneri Thalipeeth Seasoning Sachet',
+        quantity: '15g',
+        isMasalaSachet: true,
+      },
+      {
+        name: 'Sachet 2: Shengdana (Peanut) Garlic Chutney',
+        quantity: '25g',
+        isMasalaSachet: true,
+      },
+    ],
+    masalaSachets: ['Puneri Thalipeeth Seasoning Sachet', 'Shengdana (Peanut) Garlic Chutney'],
+    sachets: [
+      {
+        id: 'sachet-203-1',
+        name: 'Puneri Thalipeeth Seasoning Sachet',
+        weight: '15g',
+        spices: [
+          { name: 'Roasted Cumin & Ajwain (Carom)', quantity: '6g' },
+          { name: 'Red Chilli Powder & Turmeric', quantity: '5g' },
+          { name: 'Kala Namak & Sea Salt', quantity: '4g' },
+        ],
+      },
+      {
+        id: 'sachet-203-2',
+        name: 'Shengdana (Peanut) Garlic Chutney',
+        weight: '25g',
+        spices: [
+          { name: 'Coarse Roasted Peanuts', quantity: '14g' },
+          { name: 'Dry Garlic & Byadgi Chilli', quantity: '8g' },
+          { name: 'Salt & Cumin', quantity: '3g' },
+        ],
+      },
+    ],
+    recipeSteps: [
+      {
+        stepNumber: 1,
+        title: 'Knead Bhajani Dough',
+        instruction:
+          'In a bowl, combine Bhajani flour, chopped onions, sesame seeds, and Sachet 1. Add warm water gradually to knead into a pliable, soft dough.',
+        timerSeconds: 180,
+      },
+      {
+        stepNumber: 2,
+        title: 'Pat Out Thalipeeth on Wet Cloth',
+        instruction:
+          'Place a damp muslin cloth or butter paper on your counter. Take a ball of dough and pat it evenly thin with wet fingers, making 3 small holes in the center.',
+        timerSeconds: 180,
+      },
+      {
+        stepNumber: 3,
+        title: 'Roast with Ghee Until Crisp',
+        instruction:
+          'Flip the thalipeeth gently onto a medium-hot greased tava. Drizzle ghee into the holes and around the edges. Cover and cook on medium flame for 3 minutes per side until golden and crispy.',
+        timerSeconds: 360,
+      },
+      {
+        stepNumber: 4,
+        title: 'Serve with Fresh Loni & Peanut Chutney',
+        instruction:
+          'Plate steaming hot with a generous scoop of fresh white loni butter and Shengdana garlic chutney from Sachet 2.',
+        timerSeconds: 60,
+      },
+    ],
+    reviews: [
+      {
+        id: 'rev-203-1',
+        userName: 'Aditya Deshmukh',
+        userCity: 'Pune',
+        rating: 5,
+        comment:
+          'Crispy edges, soft center, and the bhajani aroma is completely authentic. Best evening snack kit.',
+        date: '5 days ago',
+        verifiedBuyer: true,
+        helpfulCount: 22,
+      },
+    ],
+    salesByRegion: {
+      West: 820,
+      South: 160,
+      North: 95,
+    },
+  },
+  {
+    id: 'kit-204',
+    name: 'Puneri Sabudana Khichdi Kit',
+    hindiName: 'पुणेरी साबुदाणा खिचडी',
+    slug: 'puneri-sabudana-khichdi',
+    tagline:
+      'Non-sticky sago pearls tossed with roasted crushed peanuts, green chillies & pure desi ghee',
+    description:
+      'The iconic Pune breakfast favorite. Pre-soaked premium non-sticky sago pearls roasted in pure cow ghee with coarse roasted peanuts, cumin, diced potatoes, and spicy green chillies. Served with chilled spiced curd and sweet cucumber koshimbir.',
+    heroImage:
+      'https://images.unsplash.com/photo-1589301760014-d929f3979dbc?auto=format&fit=crop&w=1000&q=80',
+    galleryImages: [
+      'https://images.unsplash.com/photo-1589301760014-d929f3979dbc?auto=format&fit=crop&w=1000&q=80',
+    ],
+    price: 189,
+    originalPrice: 229,
+    servings: 2,
+    prepTimeMinutes: 5,
+    cookTimeMinutes: 12,
+    diet: 'veg',
+    cuisine: 'Maharashtrian',
+    dishCategory: 'Street Food',
+    spiceLevel: 'Medium',
+    difficulty: 'Easy',
+    dietaryTags: ['veg', 'gluten-free'],
+    isTrending: true,
+    availableRegions: ['West', 'South', 'North', 'East'],
+    cities: ['Pune'],
+    originCity: 'Pune',
+    stockByRegion: { West: 90, South: 30, North: 25, East: 15 },
+    rating: 4.92,
+    reviewCount: 276,
+    nutrition: {
+      calories: 410,
+      protein: 8,
+      carbs: 68,
+      fat: 13,
+      fiber: 4,
+    },
+    allergens: ['Peanuts'],
+    ingredients: [
+      { name: 'Pre-Soaked Non-Sticky Sago Pearls (Sabudana)', quantity: '250g' },
+      { name: 'Slow-Roasted Crushed Peanuts (Shengdana Kut)', quantity: '60g' },
+      { name: 'Boiled Diced Baby Potatoes', quantity: '80g' },
+      { name: 'Pure Cow Desi Ghee', quantity: '30g' },
+      { name: 'Fresh Green Chillies & Curry Leaves', quantity: '20g' },
+      {
+        name: 'Sachet 1: Puneri Khichdi Jeera & Sendha Namak Blend',
+        quantity: '10g',
+        isMasalaSachet: true,
+      },
+    ],
+    masalaSachets: ['Puneri Khichdi Jeera & Sendha Namak Blend'],
+    sachets: [
+      {
+        id: 'sachet-204-1',
+        name: 'Puneri Khichdi Jeera & Sendha Namak Blend',
+        weight: '10g',
+        spices: [
+          { name: 'Whole Jeera (Cumin)', quantity: '4g' },
+          { name: 'Rock Salt (Sendha Namak)', quantity: '4g' },
+          { name: 'Raw Cane Sugar Powder', quantity: '2g' },
+        ],
+      },
+    ],
+    recipeSteps: [
+      {
+        stepNumber: 1,
+        title: 'Coat Sabudana with Peanuts & Seasoning',
+        instruction:
+          'In a large mixing bowl, gently toss the drained sabudana pearls with the crushed roasted peanuts, rock salt, and sugar from Sachet 1 until each pearl is coated.',
+        timerSeconds: 120,
+      },
+      {
+        stepNumber: 2,
+        title: 'Temper Aromatics in Desi Ghee',
+        instruction:
+          'Melt desi ghee in a heavy non-stick kadai over medium heat. Crackle cumin, sliced green chillies, and curry leaves for 30 seconds, then toss in diced potatoes.',
+        timerSeconds: 90,
+      },
+      {
+        stepNumber: 3,
+        title: 'Gentle Steam Roast Khichdi',
+        instruction:
+          'Lower heat, add the coated sabudana mixture. Cover with a tight lid and steam for 4 minutes until the pearls turn translucent and soft. Avoid excessive stirring to keep grains separate.',
+        timerSeconds: 240,
+        tip: 'Pune-style khichdi is always non-sticky and fluffy.',
+      },
+      {
+        stepNumber: 4,
+        title: 'Garnish with Coriander & Lemon',
+        instruction:
+          'Turn off flame, squeeze fresh lemon juice, fold in chopped cilantro, and serve immediately alongside chilled curd.',
+        timerSeconds: 60,
+      },
+    ],
+    reviews: [
+      {
+        id: 'rev-204-1',
+        userName: 'Pradnya Shinde',
+        userCity: 'Pune',
+        rating: 5,
+        comment:
+          'Perfect pearl separation! Ghee aroma and generous peanut crunch make it just like the authentic Pune Appa Balwant Chowk style.',
+        date: '1 week ago',
+        verifiedBuyer: true,
+        helpfulCount: 28,
+      },
+    ],
+    salesByRegion: {
+      West: 1120,
+      South: 240,
+      North: 150,
     },
   },
 ];

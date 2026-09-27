@@ -46,6 +46,7 @@ CREATE TABLE IF NOT EXISTS public.meal_kits (
   description TEXT,
   spice_level TEXT,
   in_stock BOOLEAN DEFAULT true,
+  origin_city TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
