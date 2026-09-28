@@ -7,6 +7,7 @@ import {
   TextInput,
   TouchableOpacity,
   Image,
+  Modal,
   Alert,
 } from 'react-native';
 import { useTheme } from '../../framework/theme/ThemeContext';
@@ -21,25 +22,57 @@ import {
 } from '../../framework/services/mealKitsService';
 import { Badge, getDietBadgeInfo } from '../../framework/ui/Badge';
 import { Button } from '../../framework/ui/Button';
-import { PillTag } from '../../framework/ui/PillTag';
-import { Icon } from '../../framework/ui/Icon';
+import { AppIconName, Icon } from '../../framework/ui/Icon';
 import { MealDetailModal } from '../meal-detail/MealDetailModal';
 
-const TRENDING_SEARCHES = [
-  'Smash Burger',
-  'Sourdough Pizza',
-  'Birria Tacos',
-  'Burrito Bowl',
-  'Fettuccine Pasta',
-  'Dum Biryani',
-  'Paneer Butter Masala',
-  'Pepperoni & Hot Honey',
-  'Dal Makhani',
-  'Truffle Aioli',
-  'Ghee Roast Prawns',
-  'Keto Cauliflower',
-  'Jain Friendly',
+const DIET_OPTIONS: { id: 'all' | DietTag; label: string; icon: AppIconName }[] = [
+  { id: 'all', label: 'All Diets', icon: 'restaurant' },
+  { id: 'veg', label: 'Pure Veg', icon: 'leaf' },
+  { id: 'nonveg', label: 'Non-Veg', icon: 'nutrition' },
+  { id: 'vegan', label: 'Vegan', icon: 'leaf' },
+  { id: 'keto', label: 'Keto Low-Carb', icon: 'flame' },
+  { id: 'jain', label: 'Jain Friendly', icon: 'leaf' },
+  { id: 'gluten-free', label: 'Gluten-Free', icon: 'checkmark-circle' },
 ];
+
+const CUISINE_OPTIONS: { id: 'All' | CuisineType; label: string; icon: AppIconName }[] = [
+  { id: 'All', label: 'All Cuisines', icon: 'globe' },
+  { id: 'North Indian', label: 'North Indian', icon: 'restaurant' },
+  { id: 'South Indian', label: 'South Indian', icon: 'cafe' },
+  { id: 'Punjabi', label: 'Punjabi', icon: 'flame' },
+  { id: 'Hyderabadi', label: 'Hyderabadi', icon: 'sparkles' },
+  { id: 'Coastal', label: 'Coastal', icon: 'water' },
+  { id: 'Italian', label: 'Italian', icon: 'pizza' },
+  { id: 'Mexican', label: 'Mexican', icon: 'flame' },
+  { id: 'American', label: 'American', icon: 'fast-food' },
+  { id: 'Mughlai', label: 'Mughlai', icon: 'star' },
+  { id: 'Gujarati', label: 'Gujarati', icon: 'leaf' },
+  { id: 'Indo-Chinese', label: 'Indo-Chinese', icon: 'flash' },
+  { id: 'Continental', label: 'Continental', icon: 'restaurant' },
+  { id: 'European', label: 'European', icon: 'globe' },
+  { id: 'Mediterranean', label: 'Mediterranean', icon: 'sun' },
+];
+
+const SPICE_OPTIONS: { id: 'All' | SpiceLevel; label: string; icon: AppIconName }[] = [
+  { id: 'All', label: 'All Spices', icon: 'options' },
+  { id: 'Mild', label: 'Mild (Kid Friendly)', icon: 'leaf' },
+  { id: 'Medium', label: 'Medium Spice', icon: 'flame' },
+  { id: 'Spicy', label: 'Spicy Masala', icon: 'flame' },
+  { id: 'Fiery', label: 'Fiery Hot', icon: 'flame' },
+];
+
+const SORT_OPTIONS: {
+  id: 'popularity' | 'priceLowHigh' | 'priceHighLow' | 'prepTime';
+  label: string;
+  icon: AppIconName;
+}[] = [
+  { id: 'popularity', label: 'Most Popular', icon: 'flame' },
+  { id: 'priceLowHigh', label: 'Price: Low to High', icon: 'arrow-down' },
+  { id: 'priceHighLow', label: 'Price: High to Low', icon: 'arrow-up' },
+  { id: 'prepTime', label: 'Fastest Prep Time', icon: 'time' },
+];
+
+type ActiveDropdownType = 'diet' | 'cuisine' | 'spice' | 'sort' | null;
 
 export const SearchView: React.FC = () => {
   const { colors, radii, shadows } = useTheme();
@@ -47,17 +80,17 @@ export const SearchView: React.FC = () => {
   const { isInWishlist, toggleWishlist } = useWishlist();
 
   const [searchQuery, setSearchQuery] = useState('');
-  const [recentSearches, setRecentSearches] = useState<string[]>([
-    'Paneer Makhani',
-    'Basmati Rice',
-    'Low Carb',
-  ]);
 
-  // Filters
+  // Dropdown filter states
   const [dietFilter, setDietFilter] = useState<'all' | DietTag>('all');
   const [selectedCuisine, setSelectedCuisine] = useState<CuisineType | 'All'>('All');
   const [selectedSpice, setSelectedSpice] = useState<SpiceLevel | 'All'>('All');
-  const [selectedDietTag, setSelectedDietTag] = useState<DietTag | 'all'>('all');
+  const [sortBy, setSortBy] = useState<'popularity' | 'priceLowHigh' | 'priceHighLow' | 'prepTime'>(
+    'popularity',
+  );
+
+  // Active dropdown modal
+  const [activeDropdown, setActiveDropdown] = useState<ActiveDropdownType>(null);
 
   // Modal
   const [selectedKit, setSelectedKit] = useState<MealKit | null>(null);
@@ -69,25 +102,250 @@ export const SearchView: React.FC = () => {
       diet: dietFilter,
       cuisine: selectedCuisine,
       spiceLevel: selectedSpice,
-      dietaryTags: selectedDietTag !== 'all' ? [selectedDietTag] : undefined,
-      sortBy: 'popularity',
+      sortBy,
     });
-  }, [searchQuery, dietFilter, selectedCuisine, selectedSpice, selectedDietTag]);
+  }, [searchQuery, dietFilter, selectedCuisine, selectedSpice, sortBy]);
 
-  const handleSelectQuery = (q: string) => {
-    setSearchQuery(q);
-    if (!recentSearches.includes(q)) {
-      setRecentSearches((prev) => [q, ...prev.slice(0, 5)]);
-    }
-  };
+  const hasActiveFilters =
+    dietFilter !== 'all' ||
+    selectedCuisine !== 'All' ||
+    selectedSpice !== 'All' ||
+    sortBy !== 'popularity' ||
+    searchQuery.trim().length > 0;
 
-  const handleClearRecent = () => {
-    setRecentSearches([]);
+  const handleResetFilters = () => {
+    setSearchQuery('');
+    setDietFilter('all');
+    setSelectedCuisine('All');
+    setSelectedSpice('All');
+    setSortBy('popularity');
+    setActiveDropdown(null);
   };
 
   const handleQuickAdd = (kit: MealKit) => {
     addItem(kit, 1);
     Alert.alert('Added to Cart', `1x ${kit.name} added to your basket.`);
+  };
+
+  const renderDropdownOptions = () => {
+    switch (activeDropdown) {
+      case 'diet':
+        return DIET_OPTIONS.map((opt) => {
+          const isSelected = dietFilter === opt.id;
+          return (
+            <TouchableOpacity
+              key={opt.id}
+              style={[
+                styles.dropdownOptionRow,
+                {
+                  backgroundColor: isSelected ? colors.primary + '18' : 'transparent',
+                  borderColor: isSelected ? colors.primary : colors.borderLight,
+                },
+              ]}
+              onPress={() => {
+                setDietFilter(opt.id);
+                setActiveDropdown(null);
+              }}
+              activeOpacity={0.7}
+            >
+              <View style={{ marginRight: 12 }}>
+                <Icon
+                  name={opt.icon}
+                  size={18}
+                  color={isSelected ? colors.primary : colors.textSecondary}
+                />
+              </View>
+              <Text
+                style={[
+                  styles.dropdownOptionText,
+                  {
+                    color: isSelected ? colors.primary : colors.textPrimary,
+                    fontWeight: isSelected ? '800' : '600',
+                  },
+                ]}
+              >
+                {opt.label}
+              </Text>
+              {isSelected && (
+                <View style={{ marginLeft: 'auto' }}>
+                  <Icon name="check" size={16} color={colors.primary} />
+                </View>
+              )}
+            </TouchableOpacity>
+          );
+        });
+
+      case 'cuisine':
+        return CUISINE_OPTIONS.map((opt) => {
+          const isSelected = selectedCuisine === opt.id;
+          return (
+            <TouchableOpacity
+              key={opt.id}
+              style={[
+                styles.dropdownOptionRow,
+                {
+                  backgroundColor: isSelected ? colors.primary + '18' : 'transparent',
+                  borderColor: isSelected ? colors.primary : colors.borderLight,
+                },
+              ]}
+              onPress={() => {
+                setSelectedCuisine(opt.id);
+                setActiveDropdown(null);
+              }}
+              activeOpacity={0.7}
+            >
+              <View style={{ marginRight: 12 }}>
+                <Icon
+                  name={opt.icon}
+                  size={18}
+                  color={isSelected ? colors.primary : colors.textSecondary}
+                />
+              </View>
+              <Text
+                style={[
+                  styles.dropdownOptionText,
+                  {
+                    color: isSelected ? colors.primary : colors.textPrimary,
+                    fontWeight: isSelected ? '800' : '600',
+                  },
+                ]}
+              >
+                {opt.label}
+              </Text>
+              {isSelected && (
+                <View style={{ marginLeft: 'auto' }}>
+                  <Icon name="check" size={16} color={colors.primary} />
+                </View>
+              )}
+            </TouchableOpacity>
+          );
+        });
+
+      case 'spice':
+        return SPICE_OPTIONS.map((opt) => {
+          const isSelected = selectedSpice === opt.id;
+          return (
+            <TouchableOpacity
+              key={opt.id}
+              style={[
+                styles.dropdownOptionRow,
+                {
+                  backgroundColor: isSelected ? colors.primary + '18' : 'transparent',
+                  borderColor: isSelected ? colors.primary : colors.borderLight,
+                },
+              ]}
+              onPress={() => {
+                setSelectedSpice(opt.id);
+                setActiveDropdown(null);
+              }}
+              activeOpacity={0.7}
+            >
+              <View style={{ marginRight: 12 }}>
+                <Icon
+                  name={opt.icon}
+                  size={18}
+                  color={isSelected ? colors.primary : colors.textSecondary}
+                />
+              </View>
+              <Text
+                style={[
+                  styles.dropdownOptionText,
+                  {
+                    color: isSelected ? colors.primary : colors.textPrimary,
+                    fontWeight: isSelected ? '800' : '600',
+                  },
+                ]}
+              >
+                {opt.label}
+              </Text>
+              {isSelected && (
+                <View style={{ marginLeft: 'auto' }}>
+                  <Icon name="check" size={16} color={colors.primary} />
+                </View>
+              )}
+            </TouchableOpacity>
+          );
+        });
+
+      case 'sort':
+        return SORT_OPTIONS.map((opt) => {
+          const isSelected = sortBy === opt.id;
+          return (
+            <TouchableOpacity
+              key={opt.id}
+              style={[
+                styles.dropdownOptionRow,
+                {
+                  backgroundColor: isSelected ? colors.primary + '18' : 'transparent',
+                  borderColor: isSelected ? colors.primary : colors.borderLight,
+                },
+              ]}
+              onPress={() => {
+                setSortBy(opt.id);
+                setActiveDropdown(null);
+              }}
+              activeOpacity={0.7}
+            >
+              <View style={{ marginRight: 12 }}>
+                <Icon
+                  name={opt.icon}
+                  size={18}
+                  color={isSelected ? colors.primary : colors.textSecondary}
+                />
+              </View>
+              <Text
+                style={[
+                  styles.dropdownOptionText,
+                  {
+                    color: isSelected ? colors.primary : colors.textPrimary,
+                    fontWeight: isSelected ? '800' : '600',
+                  },
+                ]}
+              >
+                {opt.label}
+              </Text>
+              {isSelected && (
+                <View style={{ marginLeft: 'auto' }}>
+                  <Icon name="check" size={16} color={colors.primary} />
+                </View>
+              )}
+            </TouchableOpacity>
+          );
+        });
+
+      default:
+        return null;
+    }
+  };
+
+  const getDropdownModalTitle = () => {
+    switch (activeDropdown) {
+      case 'diet':
+        return 'Filter by Diet';
+      case 'cuisine':
+        return 'Filter by Cuisine';
+      case 'spice':
+        return 'Filter by Spice Level';
+      case 'sort':
+        return 'Sort Meal Kits';
+      default:
+        return '';
+    }
+  };
+
+  const getDropdownModalIcon = (): AppIconName => {
+    switch (activeDropdown) {
+      case 'diet':
+        return 'restaurant';
+      case 'cuisine':
+        return 'globe';
+      case 'spice':
+        return 'flame';
+      case 'sort':
+        return 'options';
+      default:
+        return 'filter';
+    }
   };
 
   return (
@@ -99,6 +357,7 @@ export const SearchView: React.FC = () => {
           { backgroundColor: colors.bgSurface, borderBottomColor: colors.borderLight },
         ]}
       >
+        {/* Search Input Bar */}
         <View
           style={[
             styles.searchBar,
@@ -132,165 +391,190 @@ export const SearchView: React.FC = () => {
           )}
         </View>
 
-        {/* Filter Pills Bar */}
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterRow}>
-          <PillTag
-            label="All Diets"
-            selected={dietFilter === 'all'}
-            onPress={() => setDietFilter('all')}
-            size="sm"
-          />
-          <PillTag
-            label="Veg"
-            selected={dietFilter === 'veg'}
-            onPress={() => setDietFilter(dietFilter === 'veg' ? 'all' : 'veg')}
-            size="sm"
-          />
-          <PillTag
-            label="Non-Veg"
-            selected={dietFilter === 'nonveg'}
-            onPress={() => setDietFilter(dietFilter === 'nonveg' ? 'all' : 'nonveg')}
-            size="sm"
-          />
-          <PillTag
-            label="Vegan"
-            selected={dietFilter === 'vegan'}
-            onPress={() => setDietFilter(dietFilter === 'vegan' ? 'all' : 'vegan')}
-            size="sm"
-          />
-          <PillTag
-            label="Keto"
-            selected={dietFilter === 'keto'}
-            onPress={() => setDietFilter(dietFilter === 'keto' ? 'all' : 'keto')}
-            size="sm"
-          />
-          <PillTag
-            label="Jain"
-            selected={dietFilter === 'jain'}
-            onPress={() => setDietFilter(dietFilter === 'jain' ? 'all' : 'jain')}
-            size="sm"
-          />
-          <PillTag
-            label="Gluten-Free"
-            selected={dietFilter === 'gluten-free'}
-            onPress={() => setDietFilter(dietFilter === 'gluten-free' ? 'all' : 'gluten-free')}
-            size="sm"
-          />
-          <PillTag
-            label="Italian"
-            selected={selectedCuisine === 'Italian'}
-            onPress={() => setSelectedCuisine(selectedCuisine === 'Italian' ? 'All' : 'Italian')}
-            size="sm"
-          />
-          <PillTag
-            label="Mexican"
-            selected={selectedCuisine === 'Mexican'}
-            onPress={() => setSelectedCuisine(selectedCuisine === 'Mexican' ? 'All' : 'Mexican')}
-            size="sm"
-          />
-          <PillTag
-            label="American"
-            selected={selectedCuisine === 'American'}
-            onPress={() => setSelectedCuisine(selectedCuisine === 'American' ? 'All' : 'American')}
-            size="sm"
-          />
-          <PillTag
-            label="North Indian"
-            selected={selectedCuisine === 'North Indian'}
-            onPress={() =>
-              setSelectedCuisine(selectedCuisine === 'North Indian' ? 'All' : 'North Indian')
-            }
-            size="sm"
-          />
-          <PillTag
-            label="Hyderabadi"
-            selected={selectedCuisine === 'Hyderabadi'}
-            onPress={() =>
-              setSelectedCuisine(selectedCuisine === 'Hyderabadi' ? 'All' : 'Hyderabadi')
-            }
-            size="sm"
-          />
-          <PillTag
-            label="Coastal"
-            selected={selectedCuisine === 'Coastal'}
-            onPress={() => setSelectedCuisine(selectedCuisine === 'Coastal' ? 'All' : 'Coastal')}
-            size="sm"
-          />
+        {/* Dropdown Filters Bar */}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.dropdownBarContainer}
+        >
+          {/* Diet Dropdown */}
+          <TouchableOpacity
+            style={[
+              styles.dropdownTrigger,
+              {
+                backgroundColor: dietFilter !== 'all' ? colors.primary + '18' : colors.bgSubtle,
+                borderColor: dietFilter !== 'all' ? colors.primary : colors.border,
+                borderRadius: radii.pill,
+              },
+            ]}
+            onPress={() => setActiveDropdown('diet')}
+            activeOpacity={0.75}
+          >
+            <Icon
+              name="restaurant"
+              size={13}
+              color={dietFilter !== 'all' ? colors.primary : colors.textSecondary}
+            />
+            <Text
+              style={[
+                styles.dropdownTriggerText,
+                { color: dietFilter !== 'all' ? colors.primary : colors.textPrimary },
+              ]}
+              numberOfLines={1}
+            >
+              {dietFilter === 'all'
+                ? 'Diets'
+                : DIET_OPTIONS.find((d) => d.id === dietFilter)?.label || 'Diet'}
+            </Text>
+            <Icon
+              name="chevron-down"
+              size={12}
+              color={dietFilter !== 'all' ? colors.primary : colors.textMuted}
+            />
+          </TouchableOpacity>
+
+          {/* Cuisine Dropdown */}
+          <TouchableOpacity
+            style={[
+              styles.dropdownTrigger,
+              {
+                backgroundColor:
+                  selectedCuisine !== 'All' ? colors.primary + '18' : colors.bgSubtle,
+                borderColor: selectedCuisine !== 'All' ? colors.primary : colors.border,
+                borderRadius: radii.pill,
+              },
+            ]}
+            onPress={() => setActiveDropdown('cuisine')}
+            activeOpacity={0.75}
+          >
+            <Icon
+              name="globe"
+              size={13}
+              color={selectedCuisine !== 'All' ? colors.primary : colors.textSecondary}
+            />
+            <Text
+              style={[
+                styles.dropdownTriggerText,
+                { color: selectedCuisine !== 'All' ? colors.primary : colors.textPrimary },
+              ]}
+              numberOfLines={1}
+            >
+              {selectedCuisine === 'All' ? 'Cuisines' : selectedCuisine}
+            </Text>
+            <Icon
+              name="chevron-down"
+              size={12}
+              color={selectedCuisine !== 'All' ? colors.primary : colors.textMuted}
+            />
+          </TouchableOpacity>
+
+          {/* Spice Level Dropdown */}
+          <TouchableOpacity
+            style={[
+              styles.dropdownTrigger,
+              {
+                backgroundColor: selectedSpice !== 'All' ? colors.primary + '18' : colors.bgSubtle,
+                borderColor: selectedSpice !== 'All' ? colors.primary : colors.border,
+                borderRadius: radii.pill,
+              },
+            ]}
+            onPress={() => setActiveDropdown('spice')}
+            activeOpacity={0.75}
+          >
+            <Icon
+              name="flame"
+              size={13}
+              color={selectedSpice !== 'All' ? colors.primary : colors.textSecondary}
+            />
+            <Text
+              style={[
+                styles.dropdownTriggerText,
+                { color: selectedSpice !== 'All' ? colors.primary : colors.textPrimary },
+              ]}
+              numberOfLines={1}
+            >
+              {selectedSpice === 'All' ? 'Spice Level' : selectedSpice}
+            </Text>
+            <Icon
+              name="chevron-down"
+              size={12}
+              color={selectedSpice !== 'All' ? colors.primary : colors.textMuted}
+            />
+          </TouchableOpacity>
+
+          {/* Sort Dropdown */}
+          <TouchableOpacity
+            style={[
+              styles.dropdownTrigger,
+              {
+                backgroundColor: sortBy !== 'popularity' ? colors.primary + '18' : colors.bgSubtle,
+                borderColor: sortBy !== 'popularity' ? colors.primary : colors.border,
+                borderRadius: radii.pill,
+              },
+            ]}
+            onPress={() => setActiveDropdown('sort')}
+            activeOpacity={0.75}
+          >
+            <Icon
+              name={SORT_OPTIONS.find((s) => s.id === sortBy)?.icon || 'flame'}
+              size={13}
+              color={sortBy !== 'popularity' ? colors.primary : colors.textSecondary}
+            />
+            <Text
+              style={[
+                styles.dropdownTriggerText,
+                { color: sortBy !== 'popularity' ? colors.primary : colors.textPrimary },
+              ]}
+              numberOfLines={1}
+            >
+              {SORT_OPTIONS.find((s) => s.id === sortBy)?.label || 'Sort'}
+            </Text>
+            <Icon
+              name="chevron-down"
+              size={12}
+              color={sortBy !== 'popularity' ? colors.primary : colors.textMuted}
+            />
+          </TouchableOpacity>
+
+          {/* Reset Filters Button */}
+          {hasActiveFilters && (
+            <TouchableOpacity
+              style={[
+                styles.resetTrigger,
+                {
+                  backgroundColor: colors.danger + '14',
+                  borderColor: colors.danger + '40',
+                  borderRadius: radii.pill,
+                },
+              ]}
+              onPress={handleResetFilters}
+              activeOpacity={0.75}
+            >
+              <Icon name="close" size={12} color={colors.danger} />
+              <Text style={[styles.resetTriggerText, { color: colors.danger }]}>Clear</Text>
+            </TouchableOpacity>
+          )}
         </ScrollView>
       </View>
 
+      {/* Main Results Scroll */}
       <ScrollView contentContainerStyle={styles.scrollBody} showsVerticalScrollIndicator={false}>
-        {/* Trending & Recent Searches (Shown when query is empty) */}
-        {searchQuery.trim().length === 0 && (
-          <View style={styles.discoverySection}>
-            {recentSearches.length > 0 && (
-              <View style={styles.block}>
-                <View style={styles.blockHeader}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                    <Icon name="time" size={16} color={colors.primary} />
-                    <Text
-                      style={[styles.blockTitle, { color: colors.textPrimary, marginBottom: 0 }]}
-                    >
-                      Recent Searches
-                    </Text>
-                  </View>
-                  <TouchableOpacity onPress={handleClearRecent}>
-                    <Text style={[styles.clearLink, { color: colors.textMuted }]}>Clear All</Text>
-                  </TouchableOpacity>
-                </View>
-
-                <View style={styles.tagWrap}>
-                  {recentSearches.map((rec, idx) => (
-                    <TouchableOpacity
-                      key={idx}
-                      style={[
-                        styles.tagChip,
-                        { backgroundColor: colors.bgSurface, borderColor: colors.borderLight },
-                      ]}
-                      onPress={() => handleSelectQuery(rec)}
-                    >
-                      <Text style={[styles.tagChipText, { color: colors.textPrimary }]}>{rec}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              </View>
-            )}
-
-            <View style={styles.block}>
-              <View
-                style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 12 }}
-              >
-                <Icon name="flame" size={16} color={colors.primary} />
-                <Text style={[styles.blockTitle, { color: colors.textPrimary, marginBottom: 0 }]}>
-                  Trending Searches
-                </Text>
-              </View>
-              <View style={styles.tagWrap}>
-                {TRENDING_SEARCHES.map((item, idx) => (
-                  <TouchableOpacity
-                    key={idx}
-                    style={[
-                      styles.tagChip,
-                      { backgroundColor: colors.bgSurface, borderColor: colors.borderLight },
-                    ]}
-                    onPress={() => handleSelectQuery(item)}
-                  >
-                    <Text style={[styles.tagChipText, { color: colors.textPrimary }]}>{item}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            </View>
-          </View>
-        )}
-
-        {/* Search Results List */}
-        <View style={styles.resultsContainer}>
-          <Text style={[styles.resultsHeader, { color: colors.textMuted }]}>
+        {/* Results Count Header */}
+        <View style={styles.resultsHeaderRow}>
+          <Text style={[styles.resultsHeader, { color: colors.textSecondary }]}>
             {searchQuery
-              ? `Search Results for "${searchQuery}" (${results.length})`
+              ? `Results for "${searchQuery}" (${results.length})`
               : `All Meal Kits (${results.length})`}
           </Text>
+          {hasActiveFilters && (
+            <TouchableOpacity onPress={handleResetFilters}>
+              <Text style={[styles.resetLink, { color: colors.primary }]}>Reset All</Text>
+            </TouchableOpacity>
+          )}
+        </View>
 
+        {/* Results List */}
+        <View style={styles.resultsContainer}>
           {results.length === 0 ? (
             <View
               style={[
@@ -305,18 +589,13 @@ export const SearchView: React.FC = () => {
                 No Meal Kits Found
               </Text>
               <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>
-                Try searching for ingredients like "Paneer", "Ghee", "Cashew", or clear filters.
+                Try adjusting your search term or clearing dropdown filters to see available dishes.
               </Text>
               <Button
-                title="Clear Filters"
+                title="Reset Filters"
                 variant="outline"
                 style={{ marginTop: 14 }}
-                onPress={() => {
-                  setSearchQuery('');
-                  setDietFilter('all');
-                  setSelectedCuisine('All');
-                  setSelectedDietTag('all');
-                }}
+                onPress={handleResetFilters}
               />
             </View>
           ) : (
@@ -338,7 +617,11 @@ export const SearchView: React.FC = () => {
                 }}
                 activeOpacity={0.88}
               >
-                <Image source={{ uri: kit.heroImage }} style={styles.resultImg} />
+                <Image
+                  source={{ uri: kit.heroImage }}
+                  style={styles.resultImg}
+                  resizeMode="cover"
+                />
                 <View style={styles.resultDetails}>
                   <View style={styles.resultTopRow}>
                     {(() => {
@@ -350,9 +633,11 @@ export const SearchView: React.FC = () => {
                       hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                     >
                       <Icon
-                        name={isInWishlist(kit.id) ? 'heart' : 'heart-outline'}
+                        name={isInWishlist && isInWishlist(kit.id) ? 'heart' : 'heart-outline'}
                         size={18}
-                        color={isInWishlist(kit.id) ? colors.primary : colors.textMuted}
+                        color={
+                          isInWishlist && isInWishlist(kit.id) ? colors.primary : colors.textMuted
+                        }
                       />
                     </TouchableOpacity>
                   </View>
@@ -374,7 +659,8 @@ export const SearchView: React.FC = () => {
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
                       <Icon name="time" size={13} color={colors.textMuted} />
                       <Text style={[styles.resultMeta, { color: colors.textMuted }]}>
-                        {kit.prepTimeMinutes + kit.cookTimeMinutes}m • {kit.servings} Servings
+                        {(kit.prepTimeMinutes || 0) + (kit.cookTimeMinutes || 0)}m •{' '}
+                        {kit.servings || 2} Servings
                       </Text>
                     </View>
                   </View>
@@ -397,6 +683,61 @@ export const SearchView: React.FC = () => {
         </View>
       </ScrollView>
 
+      {/* Dropdown Options Modal Overlay */}
+      <Modal
+        visible={activeDropdown !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setActiveDropdown(null)}
+      >
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setActiveDropdown(null)}
+        >
+          <View
+            style={[
+              styles.dropdownModalCard,
+              {
+                backgroundColor: colors.bgSurface,
+                borderColor: colors.borderLight,
+                ...shadows.card,
+              },
+            ]}
+            onStartShouldSetResponder={() => true}
+          >
+            <View style={styles.modalHeaderRow}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <Icon name={getDropdownModalIcon()} size={18} color={colors.primary} />
+                <Text style={[styles.modalTitle, { color: colors.textPrimary }]}>
+                  {getDropdownModalTitle()}
+                </Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => setActiveDropdown(null)}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Icon name="close" size={18} color={colors.textMuted} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={{ maxHeight: 380 }} showsVerticalScrollIndicator={false}>
+              {renderDropdownOptions()}
+            </ScrollView>
+
+            <TouchableOpacity
+              onPress={() => setActiveDropdown(null)}
+              style={[styles.dropdownModalCloseBtn, { borderColor: colors.borderLight }]}
+              activeOpacity={0.8}
+            >
+              <Text style={[styles.dropdownModalCloseText, { color: colors.textPrimary }]}>
+                Done
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
       {/* Detail Modal */}
       <MealDetailModal
         kit={selectedKit}
@@ -414,20 +755,16 @@ const styles = StyleSheet.create({
   header: {
     paddingHorizontal: 16,
     paddingTop: 45,
-    paddingBottom: 10,
+    paddingBottom: 12,
     borderBottomWidth: 1,
   },
   searchBar: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 14,
-    height: 48,
+    height: 46,
     borderWidth: 1.5,
     marginBottom: 10,
-  },
-  searchIcon: {
-    fontSize: 16,
-    marginRight: 8,
   },
   searchInput: {
     flex: 1,
@@ -437,60 +774,56 @@ const styles = StyleSheet.create({
   clearBtn: {
     padding: 6,
   },
-  clearText: {
-    fontSize: 16,
+  dropdownBarContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 2,
+  },
+  dropdownTrigger: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderWidth: 1,
+  },
+  dropdownTriggerText: {
+    fontSize: 12,
     fontWeight: '700',
   },
-  filterRow: {
-    paddingBottom: 4,
+  resetTrigger: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderWidth: 1,
+  },
+  resetTriggerText: {
+    fontSize: 12,
+    fontWeight: '700',
   },
   scrollBody: {
     padding: 16,
     paddingBottom: 100,
   },
-  discoverySection: {
-    marginBottom: 20,
-  },
-  block: {
-    marginBottom: 16,
-  },
-  blockHeader: {
+  resultsHeaderRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: 12,
   },
-  blockTitle: {
-    fontSize: 14,
-    fontWeight: '800',
-  },
-  clearLink: {
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  tagWrap: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  tagChip: {
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 999,
-    borderWidth: 1,
-  },
-  tagChipText: {
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  resultsContainer: {},
   resultsHeader: {
     fontSize: 13,
-    fontWeight: '700',
-    marginBottom: 12,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
+    fontWeight: '800',
+    letterSpacing: 0.3,
   },
+  resetLink: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  resultsContainer: {},
   resultCard: {
     flexDirection: 'row',
     overflow: 'hidden',
@@ -542,10 +875,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: 20,
   },
-  emptyIcon: {
-    fontSize: 36,
-    marginBottom: 10,
-  },
   emptyTitle: {
     fontSize: 17,
     fontWeight: '800',
@@ -555,5 +884,52 @@ const styles = StyleSheet.create({
     fontSize: 13,
     textAlign: 'center',
     lineHeight: 18,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.65)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  dropdownModalCard: {
+    width: '100%',
+    maxWidth: 420,
+    borderRadius: 20,
+    borderWidth: 1,
+    padding: 20,
+  },
+  modalHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  modalTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+  },
+  dropdownOptionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    marginBottom: 8,
+  },
+  dropdownOptionText: {
+    fontSize: 14,
+  },
+  dropdownModalCloseBtn: {
+    marginTop: 12,
+    paddingVertical: 11,
+    borderRadius: 12,
+    borderWidth: 1,
+    alignItems: 'center',
+  },
+  dropdownModalCloseText: {
+    fontSize: 14,
+    fontWeight: '700',
   },
 });

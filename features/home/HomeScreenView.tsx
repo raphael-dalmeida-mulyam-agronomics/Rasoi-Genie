@@ -116,6 +116,215 @@ const SORT_OPTIONS: {
   { id: 'prepTime', label: 'Fastest Prep Time', icon: 'flash' },
 ];
 
+// Reusable Meal Kit Vertical Grid Card
+function MealKitCard({
+  kit,
+  onPress,
+  onQuickAdd,
+  isFavorite,
+  onToggleFavorite,
+}: {
+  kit: MealKit;
+  onPress: () => void;
+  onQuickAdd: () => void;
+  isFavorite: boolean;
+  onToggleFavorite: () => void;
+}) {
+  const { colors, radii, shadows } = useTheme();
+
+  if (!kit || !kit.id) return null;
+
+  const prepTime = (kit.prepTimeMinutes || 0) + (kit.cookTimeMinutes || 0);
+  const servings = kit.servings || 2;
+  const sachetsCount = Array.isArray(kit.masalaSachets) ? kit.masalaSachets.length : 0;
+  const dietBadge = getDietBadgeInfo(kit.diet);
+
+  return (
+    <TouchableOpacity
+      style={[
+        styles.gridCard,
+        {
+          backgroundColor: colors.bgSurface,
+          borderRadius: radii.xl,
+          borderColor: colors.borderLight,
+          ...shadows.card,
+        },
+      ]}
+      onPress={onPress}
+      activeOpacity={0.9}
+    >
+      <View style={styles.cardImageContainer}>
+        {kit.heroImage ? (
+          <Image source={{ uri: kit.heroImage }} style={styles.cardImg} resizeMode="cover" />
+        ) : (
+          <View style={[styles.cardImg, { backgroundColor: colors.bgSubtle }]} />
+        )}
+        <View style={styles.cardBadgeRow}>
+          <View style={{ flexDirection: 'row', gap: 4 }}>
+            <Badge label={dietBadge.label} variant={dietBadge.variant} size="sm" />
+            {kit.isOutOfStock ? <Badge label="OUT OF STOCK" variant="danger" size="sm" /> : null}
+          </View>
+          <TouchableOpacity
+            style={styles.cardFavBtn}
+            onPress={onToggleFavorite}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Icon
+              name={isFavorite ? 'heart' : 'heart-outline'}
+              size={18}
+              color={isFavorite ? '#EF4444' : '#64748B'}
+            />
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.cardBottomOverlay}>
+          <Text style={styles.cardPrepTime}>
+            {prepTime} mins • {servings} Servings
+          </Text>
+        </View>
+      </View>
+
+      <View style={styles.cardDetails}>
+        <View style={styles.cardTitleRow}>
+          <Text style={[styles.cardTitle, { color: colors.textPrimary }]} numberOfLines={1}>
+            {kit.name || 'Unnamed Kit'}
+          </Text>
+        </View>
+
+        <Text style={[styles.cardDescription, { color: colors.textSecondary }]} numberOfLines={2}>
+          {kit.description || kit.tagline || ''}
+        </Text>
+
+        <View style={styles.sachetsPillRow}>
+          <Text
+            style={[
+              styles.sachetsPillText,
+              { color: colors.primary, backgroundColor: colors.primaryLight },
+            ]}
+          >
+            {sachetsCount} Fresh Spice Sachets Included
+          </Text>
+        </View>
+
+        <View style={styles.cardFooter}>
+          <View>
+            <Text style={[styles.cardPrice, { color: colors.primary }]}>₹{kit.price ?? 0}</Text>
+            {kit.originalPrice ? (
+              <Text style={[styles.cardOrigPrice, { color: colors.textMuted }]}>
+                ₹{kit.originalPrice}
+              </Text>
+            ) : null}
+          </View>
+
+          {kit.isOutOfStock ? (
+            <Button
+              title="Out of Stock"
+              size="sm"
+              disabled
+              variant="secondary"
+              style={{ paddingHorizontal: 12, opacity: 0.6 }}
+            />
+          ) : (
+            <Button
+              title="+ Add"
+              size="sm"
+              onPress={onQuickAdd}
+              style={{ paddingHorizontal: 16 }}
+            />
+          )}
+        </View>
+      </View>
+    </TouchableOpacity>
+  );
+}
+
+// Reusable Meal Kit Horizontal Carousel Card
+function MealKitHorizontalCard({
+  kit,
+  currentCity,
+  onPress,
+  onQuickAdd,
+  isFavorite,
+  onToggleFavorite,
+}: {
+  kit: MealKit;
+  currentCity?: string;
+  onPress: () => void;
+  onQuickAdd: () => void;
+  isFavorite: boolean;
+  onToggleFavorite: () => void;
+}) {
+  const { colors, radii, shadows } = useTheme();
+
+  if (!kit || !kit.id) return null;
+
+  const isSpecialty = currentCity ? isRegionalSpecialtyOfCity(kit, currentCity) : false;
+  const dietBadge = getDietBadgeInfo(kit.diet);
+
+  return (
+    <TouchableOpacity
+      style={[
+        styles.horizontalCard,
+        {
+          backgroundColor: colors.bgSurface,
+          borderRadius: radii.xl,
+          borderColor: isSpecialty ? colors.primary : colors.borderLight,
+          borderWidth: isSpecialty ? 1.5 : 1,
+          ...shadows.card,
+        },
+      ]}
+      onPress={onPress}
+      activeOpacity={0.9}
+    >
+      <View style={styles.hCardImgContainer}>
+        {kit.heroImage ? (
+          <Image source={{ uri: kit.heroImage }} style={styles.hCardImg} />
+        ) : (
+          <View style={[styles.hCardImg, { backgroundColor: colors.bgSubtle }]} />
+        )}
+        <View style={styles.hCardBadge}>
+          <Badge label={dietBadge.label} variant={dietBadge.variant} size="sm" />
+          {isSpecialty ? (
+            <Badge
+              label={`📍 ${kit.originCity || currentCity} Special`}
+              variant="accent"
+              size="sm"
+              style={{ marginTop: 2 }}
+            />
+          ) : null}
+          {kit.isOutOfStock ? (
+            <Badge label="OUT OF STOCK" variant="danger" size="sm" style={{ marginTop: 2 }} />
+          ) : null}
+        </View>
+      </View>
+
+      <View style={styles.hCardContent}>
+        <Text style={[styles.hCardTitle, { color: colors.textPrimary }]} numberOfLines={1}>
+          {kit.name || 'Unnamed Kit'}
+        </Text>
+        <Text style={[styles.hCardSub, { color: colors.textSecondary }]} numberOfLines={1}>
+          {kit.tagline || ''}
+        </Text>
+
+        <View style={styles.hCardBottomRow}>
+          <Text style={[styles.hCardPrice, { color: colors.primary }]}>₹{kit.price ?? 0}</Text>
+          {kit.isOutOfStock ? (
+            <Button
+              title="Out of Stock"
+              size="sm"
+              disabled
+              variant="secondary"
+              style={{ opacity: 0.6 }}
+            />
+          ) : (
+            <Button title="+ Add" size="sm" onPress={onQuickAdd} />
+          )}
+        </View>
+      </View>
+    </TouchableOpacity>
+  );
+}
+
 export const HomeScreenView: React.FC = () => {
   const { user } = useAuth();
   const { colors, radii, shadows, isDark, toggleColorMode } = useTheme();
@@ -332,6 +541,14 @@ export const HomeScreenView: React.FC = () => {
         break;
     }
 
+    // Deduplicate by ID to guarantee unique keys across catalog/seeder updates
+    const seenIds = new Set<string>();
+    results = results.filter((k) => {
+      if (seenIds.has(k.id)) return false;
+      seenIds.add(k.id);
+      return true;
+    });
+
     return results;
   }, [
     effectiveDiet,
@@ -355,10 +572,16 @@ export const HomeScreenView: React.FC = () => {
       preferences.currentCity,
       preferences.regionHub,
     );
+    const seen = new Set<string>();
+    const unique = ranked.filter((k) => {
+      if (!k?.id || seen.has(k.id)) return false;
+      seen.add(k.id);
+      return true;
+    });
     if (applyUserPreferences) {
-      return ranked.filter((k) => matchesUserDiet(k) && matchesUserAllergens(k));
+      return unique.filter((k) => matchesUserDiet(k) && matchesUserAllergens(k));
     }
-    return ranked;
+    return unique;
   }, [
     allKits,
     preferences.currentCity,
@@ -370,7 +593,14 @@ export const HomeScreenView: React.FC = () => {
 
   // "Recommended for you" based on user preferences
   const recommendedKits = useMemo(() => {
+    const seen = new Set<string>();
     return allKits
+      .filter((k): k is MealKit => Boolean(k && k.id))
+      .filter((k) => {
+        if (seen.has(k.id)) return false;
+        seen.add(k.id);
+        return true;
+      })
       .filter((k) => {
         if (!matchesUserDiet(k)) return false;
         if (!matchesUserAllergens(k)) return false;
@@ -388,11 +618,19 @@ export const HomeScreenView: React.FC = () => {
 
   // "Global Favorites & Foreign Specials" filtered by user preferences
   const foreignKits = useMemo(() => {
-    let kits = allKits.filter((k) =>
-      ['Italian', 'Mexican', 'American', 'Continental', 'European', 'Mediterranean'].includes(
-        k.cuisine,
-      ),
-    );
+    const seen = new Set<string>();
+    let kits = allKits
+      .filter((k): k is MealKit => Boolean(k && k.id))
+      .filter((k) => {
+        if (seen.has(k.id)) return false;
+        seen.add(k.id);
+        return true;
+      })
+      .filter((k) =>
+        ['Italian', 'Mexican', 'American', 'Continental', 'European', 'Mediterranean'].includes(
+          k.cuisine,
+        ),
+      );
     if (applyUserPreferences) {
       kits = kits.filter((k) => matchesUserDiet(k) && matchesUserAllergens(k));
     }
@@ -880,16 +1118,18 @@ export const HomeScreenView: React.FC = () => {
               </View>
             ) : (
               <View style={styles.kitsGrid}>
-                {filteredKits.filter(Boolean).map((kit) => (
-                  <MealKitCard
-                    key={kit.id}
-                    kit={kit}
-                    onPress={() => handleOpenDetail(kit)}
-                    onQuickAdd={() => handleQuickAdd(kit)}
-                    isFavorite={kit?.id ? isInWishlist(kit.id) : false}
-                    onToggleFavorite={() => kit?.id && toggleWishlist(kit.id)}
-                  />
-                ))}
+                {filteredKits
+                  .filter((k): k is MealKit => Boolean(k && k.id))
+                  .map((kit) => (
+                    <MealKitCard
+                      key={kit.id}
+                      kit={kit}
+                      onPress={() => handleOpenDetail(kit)}
+                      onQuickAdd={() => handleQuickAdd(kit)}
+                      isFavorite={kit?.id ? (isInWishlist?.(kit.id) ?? false) : false}
+                      onToggleFavorite={() => kit?.id && toggleWishlist?.(kit.id)}
+                    />
+                  ))}
               </View>
             )}
           </View>
@@ -932,17 +1172,19 @@ export const HomeScreenView: React.FC = () => {
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={styles.horizontalCardRow}
             >
-              {trendingKits.filter(Boolean).map((kit) => (
-                <MealKitHorizontalCard
-                  key={kit.id}
-                  kit={kit}
-                  currentCity={preferences.currentCity}
-                  onPress={() => handleOpenDetail(kit)}
-                  onQuickAdd={() => handleQuickAdd(kit)}
-                  isFavorite={kit?.id ? isInWishlist(kit.id) : false}
-                  onToggleFavorite={() => kit?.id && toggleWishlist(kit.id)}
-                />
-              ))}
+              {trendingKits
+                .filter((k): k is MealKit => Boolean(k && k.id))
+                .map((kit) => (
+                  <MealKitHorizontalCard
+                    key={kit.id}
+                    kit={kit}
+                    currentCity={preferences.currentCity}
+                    onPress={() => handleOpenDetail(kit)}
+                    onQuickAdd={() => handleQuickAdd(kit)}
+                    isFavorite={kit?.id ? (isInWishlist?.(kit.id) ?? false) : false}
+                    onToggleFavorite={() => kit?.id && toggleWishlist?.(kit.id)}
+                  />
+                ))}
             </ScrollView>
           </View>
         )}
@@ -967,16 +1209,18 @@ export const HomeScreenView: React.FC = () => {
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={styles.horizontalCardRow}
             >
-              {foreignKits.filter(Boolean).map((kit) => (
-                <MealKitHorizontalCard
-                  key={kit.id}
-                  kit={kit}
-                  onPress={() => handleOpenDetail(kit)}
-                  onQuickAdd={() => handleQuickAdd(kit)}
-                  isFavorite={kit?.id ? isInWishlist(kit.id) : false}
-                  onToggleFavorite={() => kit?.id && toggleWishlist(kit.id)}
-                />
-              ))}
+              {foreignKits
+                .filter((k): k is MealKit => Boolean(k && k.id))
+                .map((kit) => (
+                  <MealKitHorizontalCard
+                    key={kit.id}
+                    kit={kit}
+                    onPress={() => handleOpenDetail(kit)}
+                    onQuickAdd={() => handleQuickAdd(kit)}
+                    isFavorite={kit?.id ? (isInWishlist?.(kit.id) ?? false) : false}
+                    onToggleFavorite={() => kit?.id && toggleWishlist?.(kit.id)}
+                  />
+                ))}
             </ScrollView>
           </View>
         )}
@@ -1003,16 +1247,18 @@ export const HomeScreenView: React.FC = () => {
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={styles.horizontalCardRow}
             >
-              {recommendedKits.map((kit) => (
-                <MealKitHorizontalCard
-                  key={kit.id}
-                  kit={kit}
-                  onPress={() => handleOpenDetail(kit)}
-                  onQuickAdd={() => handleQuickAdd(kit)}
-                  isFavorite={isInWishlist(kit.id)}
-                  onToggleFavorite={() => toggleWishlist(kit.id)}
-                />
-              ))}
+              {recommendedKits
+                .filter((k): k is MealKit => Boolean(k && k.id))
+                .map((kit) => (
+                  <MealKitHorizontalCard
+                    key={kit.id}
+                    kit={kit}
+                    onPress={() => handleOpenDetail(kit)}
+                    onQuickAdd={() => handleQuickAdd(kit)}
+                    isFavorite={kit?.id ? (isInWishlist?.(kit.id) ?? false) : false}
+                    onToggleFavorite={() => kit?.id && toggleWishlist?.(kit.id)}
+                  />
+                ))}
             </ScrollView>
           </View>
         )}
@@ -1061,16 +1307,18 @@ export const HomeScreenView: React.FC = () => {
               </View>
             ) : (
               <View style={styles.kitsGrid}>
-                {filteredKits.filter(Boolean).map((kit) => (
-                  <MealKitCard
-                    key={kit.id}
-                    kit={kit}
-                    onPress={() => handleOpenDetail(kit)}
-                    onQuickAdd={() => handleQuickAdd(kit)}
-                    isFavorite={kit?.id ? isInWishlist(kit.id) : false}
-                    onToggleFavorite={() => kit?.id && toggleWishlist(kit.id)}
-                  />
-                ))}
+                {filteredKits
+                  .filter((k): k is MealKit => Boolean(k && k.id))
+                  .map((kit) => (
+                    <MealKitCard
+                      key={kit.id}
+                      kit={kit}
+                      onPress={() => handleOpenDetail(kit)}
+                      onQuickAdd={() => handleQuickAdd(kit)}
+                      isFavorite={kit?.id ? (isInWishlist?.(kit.id) ?? false) : false}
+                      onToggleFavorite={() => kit?.id && toggleWishlist?.(kit.id)}
+                    />
+                  ))}
               </View>
             )}
           </View>
@@ -1284,202 +1532,6 @@ export const HomeScreenView: React.FC = () => {
         </View>
       </Modal>
     </View>
-  );
-};
-
-// Reusable Meal Kit Vertical Grid Card
-const MealKitCard: React.FC<{
-  kit: MealKit;
-  onPress: () => void;
-  onQuickAdd: () => void;
-  isFavorite: boolean;
-  onToggleFavorite: () => void;
-}> = ({ kit, onPress, onQuickAdd, isFavorite, onToggleFavorite }) => {
-  const { colors, radii, shadows } = useTheme();
-
-  if (!kit) return null;
-
-  const prepTime = (kit.prepTimeMinutes || 0) + (kit.cookTimeMinutes || 0);
-  const servings = kit.servings || 2;
-  const sachetsCount = Array.isArray(kit.masalaSachets) ? kit.masalaSachets.length : 0;
-  const dietBadge = getDietBadgeInfo(kit.diet);
-
-  return (
-    <TouchableOpacity
-      style={[
-        styles.gridCard,
-        {
-          backgroundColor: colors.bgSurface,
-          borderRadius: radii.xl,
-          borderColor: colors.borderLight,
-          ...shadows.card,
-        },
-      ]}
-      onPress={onPress}
-      activeOpacity={0.9}
-    >
-      <View style={styles.cardImageContainer}>
-        {kit.heroImage ? (
-          <Image source={{ uri: kit.heroImage }} style={styles.cardImg} resizeMode="cover" />
-        ) : (
-          <View style={[styles.cardImg, { backgroundColor: colors.bgSubtle }]} />
-        )}
-        <View style={styles.cardBadgeRow}>
-          <View style={{ flexDirection: 'row', gap: 4 }}>
-            <Badge label={dietBadge.label} variant={dietBadge.variant} size="sm" />
-            {kit.isOutOfStock ? <Badge label="OUT OF STOCK" variant="danger" size="sm" /> : null}
-          </View>
-          <TouchableOpacity
-            style={styles.cardFavBtn}
-            onPress={onToggleFavorite}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-          >
-            <Icon
-              name={isFavorite ? 'heart' : 'heart-outline'}
-              size={18}
-              color={isFavorite ? '#EF4444' : '#64748B'}
-            />
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.cardBottomOverlay}>
-          <Text style={styles.cardPrepTime}>
-            {prepTime} mins • {servings} Servings
-          </Text>
-        </View>
-      </View>
-
-      <View style={styles.cardDetails}>
-        <View style={styles.cardTitleRow}>
-          <Text style={[styles.cardTitle, { color: colors.textPrimary }]} numberOfLines={1}>
-            {kit.name || 'Unnamed Kit'}
-          </Text>
-        </View>
-
-        <Text style={[styles.cardDescription, { color: colors.textSecondary }]} numberOfLines={2}>
-          {kit.description || kit.tagline || ''}
-        </Text>
-
-        <View style={styles.sachetsPillRow}>
-          <Text
-            style={[
-              styles.sachetsPillText,
-              { color: colors.primary, backgroundColor: colors.primaryLight },
-            ]}
-          >
-            {sachetsCount} Fresh Spice Sachets Included
-          </Text>
-        </View>
-
-        <View style={styles.cardFooter}>
-          <View>
-            <Text style={[styles.cardPrice, { color: colors.primary }]}>₹{kit.price ?? 0}</Text>
-            {kit.originalPrice ? (
-              <Text style={[styles.cardOrigPrice, { color: colors.textMuted }]}>
-                ₹{kit.originalPrice}
-              </Text>
-            ) : null}
-          </View>
-
-          {kit.isOutOfStock ? (
-            <Button
-              title="Out of Stock"
-              size="sm"
-              disabled
-              variant="secondary"
-              style={{ paddingHorizontal: 12, opacity: 0.6 }}
-            />
-          ) : (
-            <Button
-              title="+ Add"
-              size="sm"
-              onPress={onQuickAdd}
-              style={{ paddingHorizontal: 16 }}
-            />
-          )}
-        </View>
-      </View>
-    </TouchableOpacity>
-  );
-};
-
-// Reusable Meal Kit Horizontal Carousel Card
-const MealKitHorizontalCard: React.FC<{
-  kit: MealKit;
-  currentCity?: string;
-  onPress: () => void;
-  onQuickAdd: () => void;
-  isFavorite: boolean;
-  onToggleFavorite: () => void;
-}> = ({ kit, currentCity, onPress, onQuickAdd, isFavorite, onToggleFavorite }) => {
-  const { colors, radii, shadows } = useTheme();
-
-  if (!kit) return null;
-
-  const isSpecialty = currentCity ? isRegionalSpecialtyOfCity(kit, currentCity) : false;
-  const dietBadge = getDietBadgeInfo(kit.diet);
-
-  return (
-    <TouchableOpacity
-      style={[
-        styles.horizontalCard,
-        {
-          backgroundColor: colors.bgSurface,
-          borderRadius: radii.xl,
-          borderColor: isSpecialty ? colors.primary : colors.borderLight,
-          borderWidth: isSpecialty ? 1.5 : 1,
-          ...shadows.card,
-        },
-      ]}
-      onPress={onPress}
-      activeOpacity={0.9}
-    >
-      <View style={styles.hCardImgContainer}>
-        {kit.heroImage ? (
-          <Image source={{ uri: kit.heroImage }} style={styles.hCardImg} />
-        ) : (
-          <View style={[styles.hCardImg, { backgroundColor: colors.bgSubtle }]} />
-        )}
-        <View style={styles.hCardBadge}>
-          <Badge label={dietBadge.label} variant={dietBadge.variant} size="sm" />
-          {isSpecialty ? (
-            <Badge
-              label={`📍 ${kit.originCity || currentCity} Special`}
-              variant="accent"
-              size="sm"
-              style={{ marginTop: 2 }}
-            />
-          ) : null}
-          {kit.isOutOfStock ? (
-            <Badge label="OUT OF STOCK" variant="danger" size="sm" style={{ marginTop: 2 }} />
-          ) : null}
-        </View>
-      </View>
-
-      <View style={styles.hCardContent}>
-        <Text style={[styles.hCardTitle, { color: colors.textPrimary }]} numberOfLines={1}>
-          {kit.name || 'Unnamed Kit'}
-        </Text>
-        <Text style={[styles.hCardSub, { color: colors.textSecondary }]} numberOfLines={1}>
-          {kit.tagline || ''}
-        </Text>
-
-        <View style={styles.hCardBottomRow}>
-          <Text style={[styles.hCardPrice, { color: colors.primary }]}>₹{kit.price ?? 0}</Text>
-          {kit.isOutOfStock ? (
-            <Button
-              title="Out of Stock"
-              size="sm"
-              disabled
-              variant="secondary"
-              style={{ opacity: 0.6 }}
-            />
-          ) : (
-            <Button title="+ Add" size="sm" onPress={onQuickAdd} />
-          )}
-        </View>
-      </View>
-    </TouchableOpacity>
   );
 };
 
