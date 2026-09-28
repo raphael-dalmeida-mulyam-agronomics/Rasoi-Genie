@@ -2803,7 +2803,7 @@ export const INITIAL_MEAL_KITS: MealKit[] = [
     },
   },
   {
-    id: 'kit-201',
+    id: 'kit-309',
     name: 'Authentic Puneri Misal Pav Kit',
     hindiName: 'पुणेरी मिसळ पाव',
     slug: 'authentic-puneri-misal-pav',
@@ -2863,7 +2863,7 @@ export const INITIAL_MEAL_KITS: MealKit[] = [
     masalaSachets: ['Puneri Goda Masala & Hing Tadka', 'Teja Kat Tarri Gravy Paste'],
     sachets: [
       {
-        id: 'sachet-201-1',
+        id: 'sachet-309-1',
         name: 'Puneri Goda Masala & Hing Tadka',
         weight: '15g',
         spices: [
@@ -2873,7 +2873,7 @@ export const INITIAL_MEAL_KITS: MealKit[] = [
         ],
       },
       {
-        id: 'sachet-201-2',
+        id: 'sachet-309-2',
         name: 'Teja Kat Tarri Gravy Paste',
         weight: '35g',
         spices: [
@@ -2916,7 +2916,7 @@ export const INITIAL_MEAL_KITS: MealKit[] = [
     ],
     reviews: [
       {
-        id: 'rev-201-1',
+        id: 'rev-309-1',
         userName: 'Sanket Kulkarni',
         userCity: 'Pune',
         rating: 5,
@@ -2934,7 +2934,7 @@ export const INITIAL_MEAL_KITS: MealKit[] = [
     },
   },
   {
-    id: 'kit-202',
+    id: 'kit-310',
     name: 'Puneri Pithla Bhakri & Thecha Kit',
     hindiName: 'झुणका-पिठलं भाकरी आणि खर्डा',
     slug: 'puneri-pithla-bhakri-thecha',
@@ -2992,7 +2992,7 @@ export const INITIAL_MEAL_KITS: MealKit[] = [
     masalaSachets: ['Puneri Pithla Tempering Spice Blend', 'Authentic Maharashtrian Thecha Masala'],
     sachets: [
       {
-        id: 'sachet-202-1',
+        id: 'sachet-310-1',
         name: 'Puneri Pithla Tempering Spice Blend',
         weight: '12g',
         spices: [
@@ -3002,7 +3002,7 @@ export const INITIAL_MEAL_KITS: MealKit[] = [
         ],
       },
       {
-        id: 'sachet-202-2',
+        id: 'sachet-310-2',
         name: 'Authentic Maharashtrian Thecha Masala',
         weight: '18g',
         spices: [
@@ -3044,7 +3044,7 @@ export const INITIAL_MEAL_KITS: MealKit[] = [
     ],
     reviews: [
       {
-        id: 'rev-202-1',
+        id: 'rev-310-1',
         userName: 'Tanvi Joshi',
         userCity: 'Pune',
         rating: 5,
@@ -3062,7 +3062,7 @@ export const INITIAL_MEAL_KITS: MealKit[] = [
     },
   },
   {
-    id: 'kit-203',
+    id: 'kit-311',
     name: 'Puneri Bhajani Thalipeeth Kit',
     hindiName: 'पुणेरी खमंग भाजणी थालीपीठ',
     slug: 'puneri-bhajani-thalipeeth',
@@ -3120,7 +3120,7 @@ export const INITIAL_MEAL_KITS: MealKit[] = [
     masalaSachets: ['Puneri Thalipeeth Seasoning Sachet', 'Shengdana (Peanut) Garlic Chutney'],
     sachets: [
       {
-        id: 'sachet-203-1',
+        id: 'sachet-311-1',
         name: 'Puneri Thalipeeth Seasoning Sachet',
         weight: '15g',
         spices: [
@@ -3130,7 +3130,7 @@ export const INITIAL_MEAL_KITS: MealKit[] = [
         ],
       },
       {
-        id: 'sachet-203-2',
+        id: 'sachet-311-2',
         name: 'Shengdana (Peanut) Garlic Chutney',
         weight: '25g',
         spices: [
@@ -3172,7 +3172,7 @@ export const INITIAL_MEAL_KITS: MealKit[] = [
     ],
     reviews: [
       {
-        id: 'rev-203-1',
+        id: 'rev-311-1',
         userName: 'Aditya Deshmukh',
         userCity: 'Pune',
         rating: 5,
@@ -3190,7 +3190,7 @@ export const INITIAL_MEAL_KITS: MealKit[] = [
     },
   },
   {
-    id: 'kit-204',
+    id: 'kit-312',
     name: 'Puneri Sabudana Khichdi Kit',
     hindiName: 'पुणेरी साबुदाणा खिचडी',
     slug: 'puneri-sabudana-khichdi',
@@ -3244,7 +3244,7 @@ export const INITIAL_MEAL_KITS: MealKit[] = [
     masalaSachets: ['Puneri Khichdi Jeera & Sendha Namak Blend'],
     sachets: [
       {
-        id: 'sachet-204-1',
+        id: 'sachet-312-1',
         name: 'Puneri Khichdi Jeera & Sendha Namak Blend',
         weight: '10g',
         spices: [
@@ -3287,7 +3287,7 @@ export const INITIAL_MEAL_KITS: MealKit[] = [
     ],
     reviews: [
       {
-        id: 'rev-204-1',
+        id: 'rev-312-1',
         userName: 'Pradnya Shinde',
         userCity: 'Pune',
         rating: 5,
