@@ -450,7 +450,8 @@ export function triggerRecipeCardPrint(
               <div class="brand-subtitle">Chef Portion Fresh Kitchen Companion</div>
             </div>
             <div style="text-align: right;">
-              <span class="tag-pill">${kit.cuisine} • ${kit.diet.toUpperCase()}</span>
+              <span class="tag-pill">${kit.cuisine} • ${kit.diet === 'veg' ? 'VEG' : kit.diet === 'nonveg' ? 'NON-VEG' : kit.diet.toUpperCase()} • ${kit.dishCategory || 'Curries & Gravies'}</span>
+              <div style="font-size: 10px; font-weight: 700; color: #b45309; margin-top: 4px;">Allergens: ${kit.allergens && kit.allergens.length > 0 ? kit.allergens.join(', ') : 'None Reported'}</div>
             </div>
           </div>
 
@@ -467,7 +468,7 @@ export function triggerRecipeCardPrint(
               </div>
 
               <div class="dish-meta-bar">
-                <span>⏱️ Cook: ${kit.cookTimeMinutes}m</span>
+                <span>Cook: ${kit.cookTimeMinutes}m</span>
                 <span>Prep: ${kit.prepTimeMinutes}m</span>
                 <span>${kit.servings} Servings</span>
                 <span>${kit.spiceLevel}</span>
@@ -577,7 +578,11 @@ export const RecipeCardFrontView: React.FC<{
           <Text style={styles.cardHeaderBrand}>RASOI GENIE MEAL KIT</Text>
           <Text style={styles.cardHeaderSub}>Chef Portion Fresh Kitchen Companion</Text>
         </View>
-        <Badge label={`${kit.cuisine} • ${kit.diet.toUpperCase()}`} variant="accent" size="sm" />
+        <Badge
+          label={`${kit.cuisine} • ${kit.diet === 'veg' ? 'VEG' : kit.diet === 'nonveg' ? 'NON-VEG' : kit.diet.toUpperCase()} • ${kit.dishCategory || 'Curries & Gravies'}`}
+          variant="accent"
+          size="sm"
+        />
       </View>
 
       <View style={styles.cardBodyRow}>
@@ -605,7 +610,7 @@ export const RecipeCardFrontView: React.FC<{
             ]}
           >
             <Text style={[styles.metricText, { color: colors.textPrimary }]}>
-              ⏱️ <Text style={{ fontWeight: '800' }}>{kit.cookTimeMinutes}m</Text> Cook
+              <Text style={{ fontWeight: '800' }}>{kit.cookTimeMinutes}m</Text> Cook
             </Text>
             <Text style={[styles.metricText, { color: colors.textPrimary }]}>
               <Text style={{ fontWeight: '800' }}>{kit.prepTimeMinutes}m</Text> Prep
@@ -614,6 +619,15 @@ export const RecipeCardFrontView: React.FC<{
               <Text style={{ fontWeight: '800' }}>{kit.servings}</Text> Servings
             </Text>
             <Text style={[styles.metricText, { color: colors.textPrimary }]}>{kit.spiceLevel}</Text>
+          </View>
+
+          {/* Allergens Advisory */}
+          <View style={{ marginTop: 6, marginBottom: 2 }}>
+            <Badge
+              label={`Allergens: ${kit.allergens && kit.allergens.length > 0 ? kit.allergens.join(', ') : 'None Reported'}`}
+              variant={kit.allergens && kit.allergens.length > 0 ? 'warning' : 'success'}
+              size="sm"
+            />
           </View>
 
           {/* Nutritional Highlights */}

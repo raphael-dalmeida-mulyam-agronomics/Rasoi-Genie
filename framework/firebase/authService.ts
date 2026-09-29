@@ -12,7 +12,7 @@ export interface UserProfile {
   uid: string;
   phoneNumber?: string | null;
   email?: string | null;
-  role: 'customer' | 'admin';
+  role: 'customer' | 'admin' | 'chef';
   displayName?: string | null;
   photoURL?: string | null;
   createdAt: string;

@@ -33,11 +33,14 @@ const ALL_CUISINES: { id: CuisineType; name: string }[] = [
   { id: 'Mughlai', name: 'Mughlai' },
   { id: 'Coastal', name: 'Coastal & Malabar' },
   { id: 'Gujarati', name: 'Gujarati' },
+  { id: 'Maharashtrian', name: 'Maharashtrian' },
   { id: 'Indo-Chinese', name: 'Indo-Chinese' },
   { id: 'Italian', name: 'Italian' },
   { id: 'Mexican', name: 'Mexican' },
   { id: 'Continental', name: 'Continental' },
   { id: 'American', name: 'American' },
+  { id: 'European', name: 'European' },
+  { id: 'Mediterranean', name: 'Mediterranean' },
 ];
 
 const DIET_OPTIONS: { id: DietTag | 'all'; label: string; icon: AppIconName; desc: string }[] = [
@@ -153,7 +156,7 @@ export const OnboardingWizardView: React.FC = () => {
   const [spiceTolerance, setSpiceTolerance] = useState<SpiceLevel>('Medium');
 
   // Step 2: Diets & Allergies
-  const [dietType, setDietType] = useState<DietTag | 'all'>('veg');
+  const [dietTypes, setDietTypes] = useState<DietTag[]>(['veg']);
   const [allergies, setAllergies] = useState<string[]>([]);
 
   // Step 3: Address & Hub
@@ -223,7 +226,7 @@ export const OnboardingWizardView: React.FC = () => {
     try {
       await completeOnboarding({
         cuisines: selectedCuisines,
-        dietType,
+        dietTypes,
         allergies,
         spiceTolerance,
         address: {
@@ -398,15 +401,21 @@ export const OnboardingWizardView: React.FC = () => {
         {currentStep === 2 && (
           <View style={styles.stepContent}>
             <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
-              Primary Diet Type
+              Diet Preferences (Select all that apply)
             </Text>
             <View style={styles.listWrap}>
               {DIET_OPTIONS.map((diet) => {
-                const isSelected = dietType === diet.id;
+                const isSelected = dietTypes.includes(diet.id);
                 return (
                   <TouchableOpacity
                     key={diet.id}
-                    onPress={() => setDietType(diet.id)}
+                    onPress={() =>
+                      setDietTypes((prev) =>
+                        prev.includes(diet.id)
+                          ? prev.filter((a) => a !== diet.id)
+                          : [...prev, diet.id],
+                      )
+                    }
                     style={[
                       styles.selectableCard,
                       {
@@ -747,12 +756,12 @@ export const OnboardingWizardView: React.FC = () => {
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 }}>
                 <Icon name="check-circle" size={18} color={colors.primary} />
                 <Text style={[styles.summaryTitle, { color: colors.primary, marginBottom: 0 }]}>
-                  You’re all set for the RasoiGenie experience!
+                  You're all set for the RasoiGenie experience!
                 </Text>
               </View>
               <Text style={[styles.summaryText, { color: colors.textSecondary }]}>
-                Cuisines: {selectedCuisines.join(', ')} • Diet: {dietType.toUpperCase()} • Hub:{' '}
-                {regionHub}
+                Cuisines: {selectedCuisines.join(', ')} • Diets:{' '}
+                {dietTypes.map((d) => d.toUpperCase()).join(', ')} • Hub: {regionHub}
               </Text>
             </View>
           </View>

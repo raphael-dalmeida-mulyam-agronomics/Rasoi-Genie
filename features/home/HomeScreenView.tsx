@@ -16,6 +16,11 @@ import { useCart } from '../../framework/context/CartContext';
 import { usePreferences } from '../../framework/context/PreferencesContext';
 import { useWishlist } from '../../framework/context/WishlistContext';
 import {
+  ensureCitySpecialtiesSeeded,
+  isRegionalSpecialtyOfCity,
+  rankMealKitsForCityTrending,
+} from '../../framework/services/dishOriginService';
+import {
   CuisineType,
   DietTag,
   DishCategory,
@@ -25,17 +30,13 @@ import {
   subscribeToMealKits,
   syncMealKitsWithSupabase,
 } from '../../framework/services/mealKitsService';
+import { subscribeToMealKitsRealtime } from '../../framework/services/supabaseMealKitsService';
 import { useTheme } from '../../framework/theme/ThemeContext';
 import { ThemeSwitcher } from '../../framework/theme/ThemeSwitcher';
 import { Badge, getDietBadgeInfo } from '../../framework/ui/Badge';
 import { Button } from '../../framework/ui/Button';
 import { AppIconName, Icon } from '../../framework/ui/Icon';
 import { seedKitsForCityIfNeeded } from '../admin/cityKitsSeederService';
-import {
-  rankMealKitsForCityTrending,
-  isRegionalSpecialtyOfCity,
-  ensureCitySpecialtiesSeeded,
-} from '../../framework/services/dishOriginService';
 import { MealDetailModal } from '../meal-detail/MealDetailModal';
 import { DietaryPreferencesModal } from '../onboarding/DietaryPreferencesModal';
 
@@ -86,6 +87,7 @@ const CUISINE_FILTER_OPTIONS: { id: 'All' | CuisineType; label: string; icon: Ap
   { id: 'American', label: 'American', icon: 'fast-food' },
   { id: 'Mughlai', label: 'Mughlai', icon: 'star' },
   { id: 'Gujarati', label: 'Gujarati', icon: 'leaf' },
+  { id: 'Maharashtrian', label: 'Maharashtrian', icon: 'restaurant' },
   { id: 'Indo-Chinese', label: 'Indo-Chinese', icon: 'flash' },
   { id: 'Continental', label: 'Continental', icon: 'restaurant' },
   { id: 'European', label: 'European', icon: 'globe' },
@@ -160,8 +162,9 @@ function MealKitCard({
           <View style={[styles.cardImg, { backgroundColor: colors.bgSubtle }]} />
         )}
         <View style={styles.cardBadgeRow}>
-          <View style={{ flexDirection: 'row', gap: 4 }}>
+          <View style={{ flexDirection: 'row', gap: 4, flexWrap: 'wrap' }}>
             <Badge label={dietBadge.label} variant={dietBadge.variant} size="sm" />
+            {kit.isTrending ? <Badge label="TRENDING" variant="warning" size="sm" /> : null}
             {kit.isOutOfStock ? <Badge label="OUT OF STOCK" variant="danger" size="sm" /> : null}
           </View>
           <TouchableOpacity
@@ -284,9 +287,12 @@ function MealKitHorizontalCard({
         )}
         <View style={styles.hCardBadge}>
           <Badge label={dietBadge.label} variant={dietBadge.variant} size="sm" />
+          {kit.isTrending ? (
+            <Badge label="TRENDING" variant="warning" size="sm" style={{ marginTop: 2 }} />
+          ) : null}
           {isSpecialty ? (
             <Badge
-              label={`📍 ${kit.originCity || currentCity} Special`}
+              label={`${kit.originCity || currentCity} Special`}
               variant="accent"
               size="sm"
               style={{ marginTop: 2 }}
@@ -333,7 +339,7 @@ export const HomeScreenView: React.FC = () => {
   const { preferences } = usePreferences();
 
   // Selected filters
-  const [dietFilter, setDietFilter] = useState<'all' | DietTag>('all');
+  const [dietFilterTags, setDietFilterTags] = useState<Set<DietTag>>(new Set());
   const [selectedCuisine, setSelectedCuisine] = useState<CuisineType | 'All'>('All');
   const [selectedDishCategory, setSelectedDishCategory] = useState<DishCategory | 'All'>('All');
   const [selectedSpice, setSelectedSpice] = useState<SpiceLevel | 'All'>('All');
@@ -348,9 +354,6 @@ export const HomeScreenView: React.FC = () => {
     null,
   );
   const [isSortDropdownOpen, setIsSortDropdownOpen] = useState(false);
-
-  // Preference-based filtering toggle (defaults to true)
-  const [applyUserPreferences, setApplyUserPreferences] = useState(true);
 
   // Modals
   const [selectedKit, setSelectedKit] = useState<MealKit | null>(null);
@@ -382,12 +385,20 @@ export const HomeScreenView: React.FC = () => {
       }
     });
 
-    // Real-time catalog subscription
-    const unsubscribe = subscribeToMealKits(() => {
+    // Real-time catalog subscription (local in-memory broadcasts)
+    const unsubscribeLocal = subscribeToMealKits(() => {
       setAllKits(getMealKits());
     });
 
-    return () => unsubscribe();
+    // Real-time database subscription (cloud broadcasts for trending & catalog updates)
+    const unsubscribeRealtime = subscribeToMealKitsRealtime(() => {
+      setAllKits(getMealKits());
+    });
+
+    return () => {
+      unsubscribeLocal();
+      unsubscribeRealtime();
+    };
   }, []);
 
   // Seed city-specific kits whenever the user's city changes
@@ -407,28 +418,24 @@ export const HomeScreenView: React.FC = () => {
     });
   };
 
-  // Helper to check if a kit matches user's preferred diet type
+  // Helper to check if a kit matches user's preferred diet types
   const matchesUserDiet = (kit: MealKit): boolean => {
-    if (!preferences.dietType || preferences.dietType === 'all') return true;
-    if (preferences.dietType === 'veg') return kit.diet === 'veg';
-    if (preferences.dietType === 'nonveg') return kit.diet === 'nonveg';
-    if (preferences.dietType === 'vegan') return kit.dietaryTags.includes('vegan');
-    if (preferences.dietType === 'jain') return kit.dietaryTags.includes('jain');
-    if (preferences.dietType === 'keto') return kit.dietaryTags.includes('keto');
-    if (preferences.dietType === 'gluten-free') return kit.dietaryTags.includes('gluten-free');
-    return true;
+    const userDiets = preferences.dietTypes || [];
+    if (userDiets.length === 0) return true;
+    return userDiets.some((diet) => {
+      if (diet === 'veg')
+        return (
+          kit.diet === 'veg' || (Array.isArray(kit.dietaryTags) && kit.dietaryTags.includes('veg'))
+        );
+      if (diet === 'nonveg') return kit.diet === 'nonveg';
+      return Array.isArray(kit.dietaryTags) && kit.dietaryTags.includes(diet);
+    });
   };
 
-  // Effective diet: if user manually picked a diet filter, use it; otherwise use user profile diet if preference filtering is active
-  const effectiveDiet = useMemo<'all' | DietTag>(() => {
-    if (dietFilter !== 'all') return dietFilter;
-    if (applyUserPreferences && preferences.dietType && preferences.dietType !== 'all') {
-      return preferences.dietType;
-    }
-    return 'all';
-  }, [dietFilter, applyUserPreferences, preferences.dietType]);
+  // Effective diet: used only as a fallback label; actual filtering uses dietFilterTags set
+  const effectiveDiet = dietFilterTags.size === 1 ? [...dietFilterTags][0] : 'all';
 
-  // Filtered kits based on current options and user preferences
+  // Filtered kits based on current options
   const filteredKits = useMemo(() => {
     // Filter directly on allKits (React state) so this memo is always reactive to catalog changes.
     let results = (allKits || []).filter((k): k is MealKit => Boolean(k && k.id));
@@ -444,20 +451,18 @@ export const HomeScreenView: React.FC = () => {
       );
     }
 
-    // Diet filter
-    if (effectiveDiet && effectiveDiet !== 'all') {
-      if (effectiveDiet === 'veg') {
-        results = results.filter(
-          (k) =>
-            k.diet === 'veg' || (Array.isArray(k.dietaryTags) && k.dietaryTags.includes('veg')),
-        );
-      } else if (effectiveDiet === 'nonveg') {
-        results = results.filter((k) => k.diet === 'nonveg');
-      } else {
-        results = results.filter(
-          (k) => Array.isArray(k.dietaryTags) && k.dietaryTags.includes(effectiveDiet as DietTag),
-        );
-      }
+    // Diet filter — match kits that satisfy ANY of the selected diet tags
+    if (dietFilterTags.size > 0) {
+      results = results.filter((k) =>
+        [...dietFilterTags].some((tag) => {
+          if (tag === 'veg')
+            return (
+              k.diet === 'veg' || (Array.isArray(k.dietaryTags) && k.dietaryTags.includes('veg'))
+            );
+          if (tag === 'nonveg') return k.diet === 'nonveg';
+          return Array.isArray(k.dietaryTags) && k.dietaryTags.includes(tag);
+        }),
+      );
     }
 
     // Cuisine filter
@@ -489,27 +494,6 @@ export const HomeScreenView: React.FC = () => {
       );
     }
 
-    if (applyUserPreferences) {
-      // Exclude dishes with allergens
-      results = results.filter(matchesUserAllergens);
-
-      // Prioritize preferred cuisines if sorting by popularity and no specific cuisine is chosen
-      if (
-        selectedCuisine === 'All' &&
-        preferences.preferredCuisines &&
-        preferences.preferredCuisines.length > 0 &&
-        sortBy === 'popularity'
-      ) {
-        const preferredSet = new Set(preferences.preferredCuisines);
-        results = [...results].sort((a, b) => {
-          const aPref = preferredSet.has(a.cuisine) ? 1 : 0;
-          const bPref = preferredSet.has(b.cuisine) ? 1 : 0;
-          if (bPref !== aPref) return bPref - aPref;
-          return (b.rating || 0) - (a.rating || 0);
-        });
-      }
-    }
-
     // Sort
     switch (sortBy) {
       case 'priceLowHigh':
@@ -528,16 +512,9 @@ export const HomeScreenView: React.FC = () => {
         break;
       case 'popularity':
       default:
-        if (!(
-          applyUserPreferences &&
-          selectedCuisine === 'All' &&
-          preferences.preferredCuisines?.length > 0
-        )) {
-          results.sort(
-            (a, b) =>
-              (b.rating || 0) * (b.reviewCount || 0) - (a.rating || 0) * (a.reviewCount || 0),
-          );
-        }
+        results.sort(
+          (a, b) => (b.rating || 0) * (b.reviewCount || 0) - (a.rating || 0) * (a.reviewCount || 0),
+        );
         break;
     }
 
@@ -551,21 +528,18 @@ export const HomeScreenView: React.FC = () => {
 
     return results;
   }, [
-    effectiveDiet,
+    dietFilterTags,
     selectedCuisine,
     selectedDishCategory,
     selectedSpice,
     selectedDietTag,
     maxPrepTime,
     sortBy,
-    applyUserPreferences,
-    preferences.allergies,
-    preferences.preferredCuisines,
     preferences.currentCity,
-    allKits, // recompute when the catalog store refreshes
+    allKits,
   ]);
 
-  // "Trending in your region" ranked by regional specialties first, then other trending kits
+  // "Trending in your region" ranked by admin trending dishes & regional specialties
   const trendingKits = useMemo(() => {
     const ranked = rankMealKitsForCityTrending(
       allKits,
@@ -573,53 +547,51 @@ export const HomeScreenView: React.FC = () => {
       preferences.regionHub,
     );
     const seen = new Set<string>();
-    const unique = ranked.filter((k) => {
+    return ranked.filter((k) => {
       if (!k?.id || seen.has(k.id)) return false;
       seen.add(k.id);
       return true;
     });
-    if (applyUserPreferences) {
-      return unique.filter((k) => matchesUserDiet(k) && matchesUserAllergens(k));
-    }
-    return unique;
-  }, [
-    allKits,
-    preferences.currentCity,
-    preferences.regionHub,
-    applyUserPreferences,
-    preferences.dietType,
-    preferences.allergies,
-  ]);
+  }, [allKits, preferences.currentCity, preferences.regionHub]);
 
-  // "Recommended for you" based on user preferences
+  // "Recommended for you" strictly shows user foods from their preferred categories & signup profile
   const recommendedKits = useMemo(() => {
     const seen = new Set<string>();
-    return allKits
-      .filter((k): k is MealKit => Boolean(k && k.id))
-      .filter((k) => {
-        if (seen.has(k.id)) return false;
-        seen.add(k.id);
-        return true;
-      })
-      .filter((k) => {
-        if (!matchesUserDiet(k)) return false;
-        if (!matchesUserAllergens(k)) return false;
-        return true;
-      })
-      .sort((a, b) => {
-        if (preferences.preferredCuisines && preferences.preferredCuisines.length > 0) {
-          const aPref = preferences.preferredCuisines.includes(a.cuisine) ? 1 : 0;
-          const bPref = preferences.preferredCuisines.includes(b.cuisine) ? 1 : 0;
-          if (bPref !== aPref) return bPref - aPref;
-        }
-        return b.rating - a.rating;
-      });
-  }, [allKits, preferences.dietType, preferences.allergies, preferences.preferredCuisines]);
+    const userPreferredCuisines = preferences?.preferredCuisines || [];
 
-  // "Global Favorites & Foreign Specials" filtered by user preferences
+    // If user has not configured preferred cuisines, return empty so prompt guides them to select
+    if (!userPreferredCuisines || userPreferredCuisines.length === 0) {
+      return [];
+    }
+
+    const preferredSet = new Set(userPreferredCuisines.map((c) => c.toLowerCase().trim()));
+
+    return (
+      allKits
+        .filter((k): k is MealKit => Boolean(k && k.id))
+        .filter((k) => {
+          if (seen.has(k.id)) return false;
+          seen.add(k.id);
+          return true;
+        })
+        // 1. Must match user's diet preference from profile
+        .filter((k) => matchesUserDiet(k))
+        // 2. Must not contain user's allergies
+        .filter((k) => matchesUserAllergens(k))
+        // 3. Strictly show ONLY foods from user's preferred categories / cuisines
+        .filter((k) => {
+          if (!k.cuisine) return false;
+          return preferredSet.has(k.cuisine.toLowerCase().trim());
+        })
+        // 4. Sort by rating & popularity
+        .sort((a, b) => (b.rating || 0) - (a.rating || 0))
+    );
+  }, [allKits, preferences?.dietType, preferences?.allergies, preferences?.preferredCuisines]);
+
+  // "Global Favorites & Foreign Specials"
   const foreignKits = useMemo(() => {
     const seen = new Set<string>();
-    let kits = allKits
+    return allKits
       .filter((k): k is MealKit => Boolean(k && k.id))
       .filter((k) => {
         if (seen.has(k.id)) return false;
@@ -631,11 +603,7 @@ export const HomeScreenView: React.FC = () => {
           k.cuisine,
         ),
       );
-    if (applyUserPreferences) {
-      kits = kits.filter((k) => matchesUserDiet(k) && matchesUserAllergens(k));
-    }
-    return kits;
-  }, [allKits, applyUserPreferences, preferences.dietType, preferences.allergies]);
+  }, [allKits]);
 
   const handleOpenDetail = (kit: MealKit) => {
     setSelectedKit(kit);
@@ -686,7 +654,9 @@ export const HomeScreenView: React.FC = () => {
             onPress={() => setPreferencesModalVisible(true)}
           >
             <Text style={[styles.prefChipText, { color: colors.primary }]}>
-              {preferences.dietType.toUpperCase()}
+              {preferences.dietTypes && preferences.dietTypes.length > 0
+                ? preferences.dietTypes.join(', ').toUpperCase()
+                : 'ALL DIETS'}
             </Text>
           </TouchableOpacity>
 
@@ -786,101 +756,14 @@ export const HomeScreenView: React.FC = () => {
           ))}
         </ScrollView>
 
-        {/* Preference Tailoring Indicator Banner */}
-        <View
-          style={[
-            styles.prefBanner,
-            {
-              backgroundColor: applyUserPreferences ? colors.primary + '14' : colors.bgSurface,
-              borderColor: applyUserPreferences ? colors.primary + '60' : colors.borderLight,
-            },
-          ]}
-        >
-          <View style={styles.prefBannerLeft}>
-            <Icon
-              name={applyUserPreferences ? 'sparkles' : 'globe'}
-              size={18}
-              color={colors.primary}
-            />
-            <View style={{ flex: 1 }}>
-              <Text style={[styles.prefBannerTitle, { color: colors.textPrimary }]}>
-                {applyUserPreferences
-                  ? `Curated for: ${preferences.dietType === 'all' ? 'All Diets' : preferences.dietType.toUpperCase()}`
-                  : 'Showing All Available Dishes'}
-              </Text>
-              <Text
-                style={[styles.prefBannerSubtitle, { color: colors.textSecondary }]}
-                numberOfLines={1}
-              >
-                {applyUserPreferences
-                  ? [
-                      preferences.allergies.length > 0
-                        ? `No ${preferences.allergies.join(', ')}`
-                        : null,
-                      preferences.preferredCuisines.length > 0
-                        ? `${preferences.preferredCuisines.join(', ')}`
-                        : null,
-                    ]
-                      .filter(Boolean)
-                      .join(' • ') || 'Personalized to your taste profile'
-                  : 'User dietary filters currently paused'}
-              </Text>
-            </View>
-          </View>
-
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-            <TouchableOpacity
-              style={[
-                styles.prefToggleBtn,
-                {
-                  backgroundColor: applyUserPreferences ? colors.primary : colors.bgSubtle,
-                  borderColor: applyUserPreferences ? colors.primary : colors.borderLight,
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  gap: 4,
-                },
-              ]}
-              onPress={() => setApplyUserPreferences(!applyUserPreferences)}
-              activeOpacity={0.7}
-            >
-              {applyUserPreferences && <Icon name="check-circle" size={12} color="#FFFFFF" />}
-              <Text
-                style={[
-                  styles.prefToggleBtnText,
-                  { color: applyUserPreferences ? '#FFFFFF' : colors.textPrimary },
-                ]}
-              >
-                {applyUserPreferences ? 'Preferences On' : 'Filter by Me'}
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[
-                styles.prefSettingsBtn,
-                { backgroundColor: colors.bgSubtle, borderColor: colors.borderLight },
-              ]}
-              onPress={() => setPreferencesModalVisible(true)}
-              activeOpacity={0.7}
-            >
-              <Icon name="settings" size={14} color={colors.textPrimary} />
-            </TouchableOpacity>
-          </View>
-        </View>
-
         {/* Minimalist 3-Filter Buttons Bar */}
         <View style={styles.minimalistFilterBar}>
           <TouchableOpacity
             style={[
               styles.minimalistFilterBtn,
               {
-                backgroundColor:
-                  dietFilter !== 'all' || (applyUserPreferences && preferences.dietType !== 'all')
-                    ? colors.primary + '18'
-                    : colors.bgSurface,
-                borderColor:
-                  dietFilter !== 'all' || (applyUserPreferences && preferences.dietType !== 'all')
-                    ? colors.primary
-                    : colors.borderLight,
+                backgroundColor: dietFilterTags.size > 0 ? colors.primary + '18' : colors.bgSurface,
+                borderColor: dietFilterTags.size > 0 ? colors.primary : colors.borderLight,
               },
             ]}
             onPress={() => setActiveFilterModal('diet')}
@@ -890,30 +773,22 @@ export const HomeScreenView: React.FC = () => {
               <Icon
                 name="restaurant"
                 size={14}
-                color={
-                  dietFilter !== 'all' || (applyUserPreferences && preferences.dietType !== 'all')
-                    ? colors.primary
-                    : colors.textSecondary
-                }
+                color={dietFilterTags.size > 0 ? colors.primary : colors.textSecondary}
               />
               <Text
                 style={[
                   styles.minimalistFilterBtnText,
                   {
-                    color:
-                      dietFilter !== 'all' ||
-                      (applyUserPreferences && preferences.dietType !== 'all')
-                        ? colors.primary
-                        : colors.textPrimary,
+                    color: dietFilterTags.size > 0 ? colors.primary : colors.textPrimary,
                   },
                 ]}
                 numberOfLines={1}
               >
-                {dietFilter === 'all'
-                  ? applyUserPreferences && preferences.dietType !== 'all'
-                    ? preferences.dietType.toUpperCase()
-                    : 'Diets'
-                  : dietFilter.toUpperCase()}
+                {dietFilterTags.size === 0
+                  ? 'Diets'
+                  : dietFilterTags.size === 1
+                    ? [...dietFilterTags][0]!.toUpperCase()
+                    : `${dietFilterTags.size} Diets`}
               </Text>
               <Icon name="chevron-down" size={12} color={colors.textMuted} />
             </View>
@@ -1109,7 +984,6 @@ export const HomeScreenView: React.FC = () => {
                   style={[styles.resetPrefBtn, { backgroundColor: colors.primary }]}
                   onPress={() => {
                     setSelectedDishCategory('All');
-                    setApplyUserPreferences(false);
                   }}
                   activeOpacity={0.8}
                 >
@@ -1154,7 +1028,7 @@ export const HomeScreenView: React.FC = () => {
         ) : null}
 
         {/* SECTION 1: Trending in Your Region */}
-        {dietFilter === 'all' && selectedCuisine === 'All' && (
+        {dietFilterTags.size === 0 && selectedCuisine === 'All' && (
           <View style={styles.catalogSection}>
             <View style={styles.sectionHeaderRow}>
               <View>
@@ -1190,7 +1064,7 @@ export const HomeScreenView: React.FC = () => {
         )}
 
         {/* SECTION 1.5: Global Favorites & Foreign Specials (Burgers, Pizzas, Tacos, Burritos, Pastas) */}
-        {dietFilter === 'all' && selectedCuisine === 'All' && foreignKits.length > 0 && (
+        {dietFilterTags.size === 0 && selectedCuisine === 'All' && foreignKits.length > 0 && (
           <View style={styles.catalogSection}>
             <View style={styles.sectionHeaderRow}>
               <View>
@@ -1225,16 +1099,18 @@ export const HomeScreenView: React.FC = () => {
           </View>
         )}
 
-        {/* SECTION 2: Recommended for You */}
-        {dietFilter === 'all' && selectedCuisine === 'All' && (
+        {/* SECTION 2: Recommended for You (Strictly from user's preferred categories & signup profile) */}
+        {dietFilterTags.size === 0 && selectedCuisine === 'All' && (
           <View style={styles.catalogSection}>
             <View style={styles.sectionHeaderRow}>
-              <View>
+              <View style={{ flex: 1 }}>
                 <Text style={[styles.sectionHeading, { color: colors.textPrimary }]}>
                   Recommended for You
                 </Text>
                 <Text style={[styles.sectionSubtitle, { color: colors.textSecondary }]}>
-                  Curated according to your {preferences.dietType.toUpperCase()} profile
+                  {preferences.dietTypes && preferences.dietTypes.length > 0
+                    ? `Curated for your ${preferences.dietTypes.join(', ').toUpperCase()} profile`
+                    : 'Curated for your profile'}
                 </Text>
               </View>
               <TouchableOpacity onPress={() => setPreferencesModalVisible(true)}>
@@ -1242,24 +1118,71 @@ export const HomeScreenView: React.FC = () => {
               </TouchableOpacity>
             </View>
 
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.horizontalCardRow}
-            >
-              {recommendedKits
-                .filter((k): k is MealKit => Boolean(k && k.id))
-                .map((kit) => (
-                  <MealKitHorizontalCard
-                    key={kit.id}
-                    kit={kit}
-                    onPress={() => handleOpenDetail(kit)}
-                    onQuickAdd={() => handleQuickAdd(kit)}
-                    isFavorite={kit?.id ? (isInWishlist?.(kit.id) ?? false) : false}
-                    onToggleFavorite={() => kit?.id && toggleWishlist?.(kit.id)}
-                  />
-                ))}
-            </ScrollView>
+            {recommendedKits.length === 0 ? (
+              <View
+                style={{
+                  padding: 20,
+                  backgroundColor: colors.bgSurface,
+                  borderRadius: radii.lg,
+                  borderColor: colors.borderLight,
+                  borderWidth: 1,
+                  alignItems: 'center',
+                  marginHorizontal: 16,
+                  marginTop: 8,
+                }}
+              >
+                <Icon name="restaurant" size={28} color={colors.textMuted} />
+                <Text
+                  style={{
+                    fontSize: 14,
+                    fontWeight: '700',
+                    color: colors.textPrimary,
+                    marginTop: 8,
+                  }}
+                >
+                  No Dishes in Preferred Categories
+                </Text>
+                <Text
+                  style={{
+                    fontSize: 12,
+                    color: colors.textSecondary,
+                    textAlign: 'center',
+                    marginTop: 4,
+                    marginBottom: 12,
+                  }}
+                >
+                  {preferences.preferredCuisines && preferences.preferredCuisines.length > 0
+                    ? `No meal kits found matching your preferred cuisines in the ${preferences.dietType.toUpperCase()} category.`
+                    : 'Set your favorite cuisines in your profile to discover personalized chef recommendations.'}
+                </Text>
+                <Button
+                  title="Update Taste Preferences"
+                  variant="primary"
+                  size="sm"
+                  onPress={() => setPreferencesModalVisible(true)}
+                />
+              </View>
+            ) : (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.horizontalCardRow}
+              >
+                {recommendedKits
+                  .filter((k): k is MealKit => Boolean(k && k.id))
+                  .map((kit) => (
+                    <MealKitHorizontalCard
+                      key={kit.id}
+                      kit={kit}
+                      currentCity={preferences.currentCity}
+                      onPress={() => handleOpenDetail(kit)}
+                      onQuickAdd={() => handleQuickAdd(kit)}
+                      isFavorite={kit?.id ? (isInWishlist?.(kit.id) ?? false) : false}
+                      onToggleFavorite={() => kit?.id && toggleWishlist?.(kit.id)}
+                    />
+                  ))}
+              </ScrollView>
+            )}
           </View>
         )}
 
@@ -1295,10 +1218,9 @@ export const HomeScreenView: React.FC = () => {
                 <TouchableOpacity
                   style={[styles.resetPrefBtn, { backgroundColor: colors.primary }]}
                   onPress={() => {
-                    setDietFilter('all');
+                    setDietFilterTags(new Set());
                     setSelectedCuisine('All');
                     setSelectedDishCategory('All');
-                    setApplyUserPreferences(false);
                   }}
                   activeOpacity={0.8}
                 >
@@ -1368,7 +1290,7 @@ export const HomeScreenView: React.FC = () => {
               </Text>
               <TouchableOpacity
                 onPress={() => {
-                  if (activeFilterModal === 'diet') setDietFilter('all');
+                  if (activeFilterModal === 'diet') setDietFilterTags(new Set());
                   if (activeFilterModal === 'cuisine') setSelectedCuisine('All');
                   if (activeFilterModal === 'dish') setSelectedDishCategory('All');
                   setActiveFilterModal(null);
@@ -1383,7 +1305,10 @@ export const HomeScreenView: React.FC = () => {
             <ScrollView style={{ maxHeight: 380 }} showsVerticalScrollIndicator={false}>
               {activeFilterModal === 'diet' &&
                 DIET_FILTER_OPTIONS.map((opt) => {
-                  const isSelected = dietFilter === opt.id;
+                  const isAllOption = opt.id === 'all';
+                  const isSelected = isAllOption
+                    ? dietFilterTags.size === 0
+                    : dietFilterTags.has(opt.id as DietTag);
                   return (
                     <TouchableOpacity
                       key={opt.id}
@@ -1395,8 +1320,20 @@ export const HomeScreenView: React.FC = () => {
                         },
                       ]}
                       onPress={() => {
-                        setDietFilter(opt.id);
-                        setActiveFilterModal(null);
+                        if (isAllOption) {
+                          setDietFilterTags(new Set());
+                        } else {
+                          setDietFilterTags((prev) => {
+                            const next = new Set(prev);
+                            if (next.has(opt.id as DietTag)) {
+                              next.delete(opt.id as DietTag);
+                            } else {
+                              next.add(opt.id as DietTag);
+                            }
+                            return next;
+                          });
+                        }
+                        // Don't auto-close — let user pick multiple, close via Done button
                       }}
                       activeOpacity={0.7}
                     >
@@ -1426,6 +1363,27 @@ export const HomeScreenView: React.FC = () => {
                     </TouchableOpacity>
                   );
                 })}
+
+              {activeFilterModal === 'diet' && (
+                <TouchableOpacity
+                  style={[
+                    styles.filterModalRow,
+                    {
+                      backgroundColor: colors.primary,
+                      borderColor: colors.primary,
+                      justifyContent: 'center',
+                      marginTop: 4,
+                    },
+                  ]}
+                  onPress={() => setActiveFilterModal(null)}
+                  activeOpacity={0.85}
+                >
+                  <Text style={{ color: '#fff', fontWeight: '800', fontSize: 14 }}>
+                    Done — Apply{' '}
+                    {dietFilterTags.size > 0 ? `(${dietFilterTags.size} selected)` : '(All Diets)'}
+                  </Text>
+                </TouchableOpacity>
+              )}
 
               {activeFilterModal === 'cuisine' &&
                 CUISINE_FILTER_OPTIONS.map((opt) => {

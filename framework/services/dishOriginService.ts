@@ -173,11 +173,23 @@ export function rankMealKitsForCityTrending(
       k.isTrending || (Array.isArray(k.availableRegions) && k.availableRegions.includes(targetHub)),
   );
 
+  const adminTrending: MealKit[] = [];
   const regionalSpecialties: MealKit[] = [];
   const otherTrending: MealKit[] = [];
   const seenIds = new Set<string>();
 
-  // 1. Collect regional specialties of this specific city
+  // 1. Admin-marked trending dishes appear at the very top
+  candidateKits.forEach((kit) => {
+    if (kit.isTrending) {
+      if (!seenIds.has(kit.id)) {
+        seenIds.add(kit.id);
+        adminTrending.push(kit);
+      }
+    }
+  });
+  adminTrending.sort((a, b) => (b.rating || 0) - (a.rating || 0));
+
+  // 2. Collect regional specialties of this specific city
   candidateKits.forEach((kit) => {
     if (isRegionalSpecialtyOfCity(kit, city)) {
       if (!seenIds.has(kit.id)) {
@@ -186,26 +198,18 @@ export function rankMealKitsForCityTrending(
       }
     }
   });
-
-  // Sort regional specialties by rating (highest first)
   regionalSpecialties.sort((a, b) => (b.rating || 0) - (a.rating || 0));
 
-  // 2. Collect other trending / regional kits
+  // 3. Collect other regional kits
   candidateKits.forEach((kit) => {
     if (!seenIds.has(kit.id)) {
       seenIds.add(kit.id);
       otherTrending.push(kit);
     }
   });
+  otherTrending.sort((a, b) => (b.rating || 0) - (a.rating || 0));
 
-  // Prioritize trending kits among the rest
-  otherTrending.sort((a, b) => {
-    if (a.isTrending && !b.isTrending) return -1;
-    if (!a.isTrending && b.isTrending) return 1;
-    return (b.rating || 0) - (a.rating || 0);
-  });
-
-  return [...regionalSpecialties, ...otherTrending];
+  return [...adminTrending, ...regionalSpecialties, ...otherTrending];
 }
 
 /**

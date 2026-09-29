@@ -47,6 +47,7 @@ const CUISINE_OPTIONS: { id: 'All' | CuisineType; label: string; icon: AppIconNa
   { id: 'American', label: 'American', icon: 'fast-food' },
   { id: 'Mughlai', label: 'Mughlai', icon: 'star' },
   { id: 'Gujarati', label: 'Gujarati', icon: 'leaf' },
+  { id: 'Maharashtrian', label: 'Maharashtrian', icon: 'restaurant' },
   { id: 'Indo-Chinese', label: 'Indo-Chinese', icon: 'flash' },
   { id: 'Continental', label: 'Continental', icon: 'restaurant' },
   { id: 'European', label: 'European', icon: 'globe' },

@@ -1,13 +1,13 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useEffect, useState } from 'react';
 import { CuisineType, DietTag, RegionHub, SpiceLevel } from '../services/mealKitsService';
-import { useAuth } from './AuthContext';
-import { PaymentMethod } from './CartContext';
 import {
-  saveUserProfileToSupabase,
-  getUserProfileFromSupabase,
   clearAllLegacyUserData,
+  getUserProfileFromSupabase,
+  saveUserProfileToSupabase,
   UserProfileData,
 } from '../services/supabaseUserService';
+import { useAuth } from './AuthContext';
+import { PaymentMethod } from './CartContext';
 
 export interface AddressItem {
   id: string;
@@ -22,7 +22,7 @@ export interface AddressItem {
 }
 
 export interface UserDietaryPreferences {
-  dietType: DietTag | 'all';
+  dietTypes: DietTag[]; // multi-select; empty array = no filter (all diets shown)
   allergies: string[];
   spiceTolerance: SpiceLevel;
   preferredCuisines: CuisineType[];
@@ -41,7 +41,7 @@ export interface NotificationSettings {
 
 export interface OnboardingData {
   cuisines: CuisineType[];
-  dietType: DietTag | 'all';
+  dietTypes: DietTag[];
   allergies: string[];
   spiceTolerance: SpiceLevel;
   address: Omit<AddressItem, 'id'>;
@@ -69,7 +69,7 @@ export interface PreferencesContextValue {
 }
 
 export const DEFAULT_PREFERENCES: UserDietaryPreferences = {
-  dietType: 'veg',
+  dietTypes: ['veg'],
   allergies: [],
   spiceTolerance: 'Medium',
   preferredCuisines: ['North Indian', 'South Indian', 'Punjabi'],
@@ -248,7 +248,7 @@ export const PreferencesProvider: React.FC<{ children: React.ReactNode }> = ({ c
     };
 
     const newPreferences: UserDietaryPreferences = {
-      dietType: data.dietType,
+      dietTypes: data.dietTypes,
       allergies: data.allergies,
       spiceTolerance: data.spiceTolerance,
       preferredCuisines: data.cuisines,
