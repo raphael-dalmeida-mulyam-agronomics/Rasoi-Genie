@@ -106,6 +106,11 @@ export interface MealKit {
   availableStorageCentres?: string[]; // Smaller fulfillment regions / storage centres, e.g. ['pune-city', 'pune-pcmc']
   isOutOfStock?: boolean;
   stockByRegion: Record<RegionHub, number>;
+  // Shelf life & Freshness fields
+  shelfLifeDays?: number; // Shelf life in days (e.g. 3, 4, 5, 7)
+  shelfLife?: string; // Human readable description, e.g. "4 days (Keep refrigerated at 2°C - 5°C)"
+  storageCondition?: string; // e.g. "Refrigerated at 2°C - 5°C" or "Cool & Dry"
+  batchExpiryDate?: string; // Specific batch expiration date YYYY-MM-DD or ISO string
   rating: number;
   reviewCount: number;
   nutrition: NutritionFacts;
@@ -193,6 +198,10 @@ export function compileMealKitTags(kit: Partial<MealKit>): string[] {
         tags.push(dt.toUpperCase());
       }
     }
+  }
+
+  if (kit.shelfLifeDays) {
+    tags.push(`Shelf Life: ${kit.shelfLifeDays} Days`);
   }
 
   if (kit.isTrending) {
@@ -3448,10 +3457,74 @@ const BASE_INITIAL_MEAL_KITS: MealKit[] = [
   },
 ];
 
-export const INITIAL_MEAL_KITS: MealKit[] = BASE_INITIAL_MEAL_KITS.map((kit) => ({
-  ...kit,
-  tags: kit.tags && kit.tags.length > 0 ? kit.tags : compileMealKitTags(kit),
-}));
+export function getMealKitDefaultShelfLife(kit: Partial<MealKit>): {
+  shelfLifeDays: number;
+  shelfLife: string;
+  storageCondition: string;
+} {
+  let shelfLifeDays = 4;
+  let storageCondition = 'Refrigerated at 2°C - 5°C';
+
+  if (
+    kit.allergens?.some((a) => {
+      const lower = a.toLowerCase();
+      return (
+        lower.includes('fish') ||
+        lower.includes('prawn') ||
+        lower.includes('shellfish') ||
+        lower.includes('seafood')
+      );
+    })
+  ) {
+    shelfLifeDays = 2; // Fresh seafood
+    storageCondition = 'Refrigerated at 0°C - 2°C';
+  } else if (kit.diet === 'nonveg') {
+    shelfLifeDays = 3; // Fresh meat & poultry
+    storageCondition = 'Refrigerated at 2°C - 4°C';
+  } else if (
+    kit.allergens?.some((a) => {
+      const lower = a.toLowerCase();
+      return lower.includes('paneer') || lower.includes('dairy');
+    })
+  ) {
+    shelfLifeDays = 3; // Fresh paneer & artisanal dairy
+    storageCondition = 'Refrigerated at 2°C - 5°C';
+  } else if (
+    kit.dishCategory === 'Burgers & Sliders' ||
+    kit.dishCategory === 'Tacos' ||
+    kit.dishCategory === 'Pizzas'
+  ) {
+    shelfLifeDays = 5;
+    storageCondition = 'Chilled Vacuum Pack (4°C)';
+  } else if (kit.dishCategory === 'Pastas' || kit.dishCategory === 'Street Food') {
+    shelfLifeDays = 6;
+    storageCondition = 'Cool Dry Place & Chilled Sauces';
+  }
+
+  return {
+    shelfLifeDays,
+    shelfLife: `${shelfLifeDays} days (${storageCondition})`,
+    storageCondition,
+  };
+}
+
+export const INITIAL_MEAL_KITS: MealKit[] = BASE_INITIAL_MEAL_KITS.map((kit) => {
+  const defaults = getMealKitDefaultShelfLife(kit);
+  const shelfLifeDays = kit.shelfLifeDays || defaults.shelfLifeDays;
+  const storageCondition = kit.storageCondition || defaults.storageCondition;
+  const shelfLife = kit.shelfLife || `${shelfLifeDays} days (${storageCondition})`;
+
+  return {
+    ...kit,
+    shelfLifeDays,
+    shelfLife,
+    storageCondition,
+    tags:
+      kit.tags && kit.tags.length > 0
+        ? kit.tags
+        : compileMealKitTags({ ...kit, shelfLifeDays }),
+  };
+});
 
 // In-memory catalog state with helper queries
 let catalogStore: MealKit[] = [...INITIAL_MEAL_KITS];
@@ -3666,12 +3739,183 @@ export function deleteMealKit(id: string): void {
 export function updateMealKitStock(id: string, region: RegionHub, stock: number): void {
   catalogStore = catalogStore.map((kit) => {
     if (kit.id === id) {
+      const updatedStockByRegion = {
+        ...kit.stockByRegion,
+        [region]: stock,
+      };
+      // Check if all regional stock is zero
+      const totalStock = Object.values(updatedStockByRegion).reduce(
+        (acc, val) => acc + (Number(val) || 0),
+        0,
+      );
       return {
         ...kit,
-        stockByRegion: {
-          ...kit.stockByRegion,
-          [region]: stock,
-        },
+        stockByRegion: updatedStockByRegion,
+        isOutOfStock: totalStock === 0 ? true : kit.isOutOfStock,
+      };
+    }
+    return kit;
+  });
+  notifyMealKitsChanged();
+}
+
+/**
+ * Deducts inventory stock for a meal kit in a specific region hub.
+ * If region stock or total stock drops to 0, automatically marks the item as out of stock.
+ */
+export function deductMealKitStock(
+  id: string,
+  region: RegionHub,
+  quantity: number,
+): { updatedKit?: MealKit; remainingStock: number; wentOutOfStock: boolean } {
+  let wentOutOfStock = false;
+  let remainingStock = 0;
+  let updatedKit: MealKit | undefined;
+
+  catalogStore = catalogStore.map((kit) => {
+    if (kit.id === id) {
+      const currentStock = kit.stockByRegion?.[region] ?? 0;
+      remainingStock = Math.max(0, currentStock - quantity);
+      const isNowZero = remainingStock === 0;
+
+      const updatedStockByRegion = {
+        ...kit.stockByRegion,
+        [region]: remainingStock,
+      };
+
+      const totalRemainingAcrossRegions = Object.values(updatedStockByRegion).reduce(
+        (a, b) => a + (Number(b) || 0),
+        0,
+      );
+
+      const shouldMarkOutOfStock = isNowZero || totalRemainingAcrossRegions === 0;
+      if (shouldMarkOutOfStock && !kit.isOutOfStock) {
+        wentOutOfStock = true;
+      }
+
+      updatedKit = {
+        ...kit,
+        stockByRegion: updatedStockByRegion,
+        isOutOfStock: shouldMarkOutOfStock ? true : kit.isOutOfStock,
+      };
+      return updatedKit;
+    }
+    return kit;
+  });
+
+  notifyMealKitsChanged();
+  return { updatedKit, remainingStock, wentOutOfStock };
+}
+
+/**
+ * Restores/reverts inventory stock for a meal kit in a specific region hub.
+ * Used when an admin cancels an order.
+ * If the item was marked out of stock and now has positive stock restored, it can be marked back in stock.
+ */
+export function restoreMealKitStock(
+  id: string,
+  region: RegionHub,
+  quantity: number,
+): { updatedKit?: MealKit; restoredStock: number; backInStock: boolean } {
+  let backInStock = false;
+  let restoredStock = 0;
+  let updatedKit: MealKit | undefined;
+
+  catalogStore = catalogStore.map((kit) => {
+    if (kit.id === id) {
+      const currentStock = kit.stockByRegion?.[region] ?? 0;
+      restoredStock = currentStock + quantity;
+
+      const updatedStockByRegion = {
+        ...kit.stockByRegion,
+        [region]: restoredStock,
+      };
+
+      if (kit.isOutOfStock && restoredStock > 0) {
+        backInStock = true;
+      }
+
+      updatedKit = {
+        ...kit,
+        stockByRegion: updatedStockByRegion,
+        isOutOfStock: backInStock ? false : kit.isOutOfStock,
+      };
+      return updatedKit;
+    }
+    return kit;
+  });
+
+  notifyMealKitsChanged();
+  return { updatedKit, restoredStock, backInStock };
+}
+
+export interface FreshnessInfo {
+  shelfLifeDays: number;
+  storageCondition: string;
+  batchExpiryDate: string;
+  daysRemaining: number;
+  status: 'fresh' | 'near_expiry' | 'expired';
+  statusLabel: string;
+}
+
+/**
+ * Calculates current freshness metrics and expiration information for a meal kit.
+ */
+export function calculateMealKitFreshness(
+  kit: Partial<MealKit>,
+  batchDate?: string | Date,
+): FreshnessInfo {
+  const defaults = getMealKitDefaultShelfLife(kit);
+  const shelfLifeDays = kit.shelfLifeDays ?? defaults.shelfLifeDays;
+  const storageCondition = kit.storageCondition ?? defaults.storageCondition;
+
+  const baseDate = batchDate ? new Date(batchDate) : new Date();
+  const expiry = new Date(baseDate.getTime() + shelfLifeDays * 24 * 60 * 60 * 1000);
+  const now = new Date();
+
+  const diffMs = expiry.getTime() - now.getTime();
+  const daysRemaining = Math.max(0, Math.ceil(diffMs / (1000 * 60 * 60 * 24)));
+
+  let status: 'fresh' | 'near_expiry' | 'expired' = 'fresh';
+  let statusLabel = `Fresh (${daysRemaining}d shelf life)`;
+
+  if (diffMs <= 0 || daysRemaining === 0) {
+    status = 'expired';
+    statusLabel = 'Expired';
+  } else if (daysRemaining <= 1) {
+    status = 'near_expiry';
+    statusLabel = 'Near Expiry (1d left)';
+  } else if (daysRemaining <= 2) {
+    status = 'near_expiry';
+    statusLabel = `Expiring Soon (${daysRemaining}d)`;
+  }
+
+  return {
+    shelfLifeDays,
+    storageCondition,
+    batchExpiryDate: expiry.toISOString().split('T')[0] || '',
+    daysRemaining,
+    status,
+    statusLabel,
+  };
+}
+
+/**
+ * Updates the shelf life and storage conditions of a meal kit in the catalog.
+ */
+export function updateMealKitShelfLife(
+  id: string,
+  shelfLifeDays: number,
+  storageCondition?: string,
+): void {
+  catalogStore = catalogStore.map((kit) => {
+    if (kit.id === id) {
+      const condition = storageCondition || kit.storageCondition || 'Refrigerated at 2°C - 5°C';
+      return {
+        ...kit,
+        shelfLifeDays,
+        shelfLife: `${shelfLifeDays} days (${condition})`,
+        storageCondition: condition,
       };
     }
     return kit;

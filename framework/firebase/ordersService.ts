@@ -25,6 +25,7 @@ export type OrderStatus =
 
 export interface OrderItem {
   id: string;
+  kitId?: string;
   name: string;
   quantity: number;
   price: number;
@@ -67,6 +68,10 @@ export interface Order {
   refundAmount?: number;
   cancellationReason?: string;
   adminNotes?: string;
+  inventoryDeducted?: boolean;
+  inventoryReverted?: boolean;
+  fulfillmentRegion?: 'North' | 'South' | 'West' | 'East' | string;
+  deductedItems?: { kitId: string; quantity: number; region: string }[];
   isDismissed?: boolean;
   isApproved?: boolean;
   approvedBy?: string;
@@ -563,6 +568,30 @@ export async function updateOrderStatus(
       order.cancellationReason =
         cancellationReason || order.cancellationReason || 'Cancelled by Admin';
       order.adminNotes = cancellationReason || order.adminNotes || 'Cancelled by Admin';
+
+      // Revert inventory if order was deducted and not yet reverted
+      if (!order.inventoryReverted && order.items && order.items.length > 0) {
+        try {
+          const { restoreMealKitStock } = require('../services/mealKitsService');
+          const { resolveStorageCentre } = require('../services/adminRbacService');
+          const { toggleMealKitOutOfStockStatus } = require('../services/supabaseMealKitsService');
+
+          const region = (order.fulfillmentRegion ||
+            resolveStorageCentre(order.deliveryAddress || '').zone) || 'West';
+
+          order.items.forEach((it) => {
+            const kitId = it.kitId || it.id?.replace(/^ORD-[^-]+-/, '') || it.id;
+            const res = restoreMealKitStock(kitId, region, it.quantity);
+            if (res.backInStock) {
+              toggleMealKitOutOfStockStatus(kitId, false).catch(() => {});
+            }
+          });
+          order.inventoryReverted = true;
+          order.inventoryDeducted = false;
+        } catch (revErr) {
+          console.warn('[ordersService] Error reverting order inventory:', revErr);
+        }
+      }
 
       const alreadyHasCancelEvent = order.trackingEvents.some((e) => e.status === 'Cancelled');
       if (!alreadyHasCancelEvent) {

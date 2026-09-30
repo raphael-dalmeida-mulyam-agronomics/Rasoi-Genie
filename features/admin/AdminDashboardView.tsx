@@ -40,6 +40,8 @@ import {
   DishCategory,
   compileMealKitTags,
   parseCategorizedTags,
+  calculateMealKitFreshness,
+  updateMealKitShelfLife,
 } from '../../framework/services/mealKitsService';
 import {
   INDIAN_STATES_ANALYTICS,
@@ -113,11 +115,17 @@ import {
   toggleMealKitPublishStatus,
   toggleMealKitOutOfStockStatus,
   deleteMealKitFromSupabase,
+  updateMealKitShelfLifeInSupabase,
 } from '../../framework/services/supabaseMealKitsService';
 import {
   subscribeToPendingApprovalCount,
   playOrderAlertSound,
+  subscribeToOutOfStockAlerts,
+  dismissOutOfStockAlert,
+  notifyRegionalAdminsOutOfStock,
+  OutOfStockAlertPayload,
 } from '../../framework/services/notificationService';
+import { InventoryManagementView } from './InventoryManagementView';
 import { AdminNavigationMenu, AdminTab } from './AdminNavigationMenu';
 
 const STATUS_FILTERS: (OrderStatus | 'All')[] = [
@@ -244,6 +252,10 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
   const [selectedState, setSelectedState] = useState('Maharashtra');
   const [crossTabDiet, setCrossTabDiet] = useState<'all' | DietTag>('all');
 
+  // Inventory & Shelf Life State
+  const [outOfStockAlerts, setOutOfStockAlerts] = useState<OutOfStockAlertPayload[]>([]);
+  const [inventoryFilter, setInventoryFilter] = useState<'all' | 'low' | 'out' | 'short_shelf'>('all');
+
   // Coupons State
   const [coupons, setCoupons] = useState<Coupon[]>(getCoupons());
   const [couponModalVisible, setCouponModalVisible] = useState(false);
@@ -343,6 +355,10 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
       setKits(updatedKits);
     });
 
+    const unsubscribeOos = subscribeToOutOfStockAlerts((alerts) => {
+      setOutOfStockAlerts(alerts);
+    });
+
     const handleStorageChange = () => {
       reloadSupabaseOrders();
       refreshPendingApprovalCount();
@@ -366,6 +382,7 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
       unsubscribeCount();
       unsubscribeFb();
       unsubscribeKits();
+      unsubscribeOos();
     };
   }, [isMulyamAdmin]);
 
@@ -422,7 +439,10 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
       await refreshPendingApprovalCount();
       setCancelOrderModalVisible(false);
       setOrderToCancel(null);
-      showInAppAlert('Order Cancelled', `Order ${targetId} has been successfully cancelled.`);
+      showInAppAlert(
+        'Order Cancelled',
+        `Order ${targetId} cancelled. Inventory stock has been automatically reverted to pre-order levels.`,
+      );
     } catch (err: any) {
       showInAppAlert('Error', err?.message || 'Could not cancel order.');
     } finally {
@@ -491,8 +511,58 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
     const current = kit.stockByRegion[region] || 0;
     const next = Math.max(0, current + delta);
     updateMealKitStock(kitId, region, next);
+
+    if (next === 0) {
+      // Automatically set item to out of stock and inform all regional admins
+      updateMealKit(kitId, { isOutOfStock: true });
+      toggleMealKitOutOfStockStatus(kitId, true).catch(() => {});
+      notifyRegionalAdminsOutOfStock({
+        kitId,
+        kitName: kit.name,
+        region,
+        remainingStock: 0,
+      });
+    } else if (kit.isOutOfStock && next > 0) {
+      updateMealKit(kitId, { isOutOfStock: false });
+      toggleMealKitOutOfStockStatus(kitId, false).catch(() => {});
+      dismissOutOfStockAlert(kitId, region);
+    }
     setKits(getMealKits());
   };
+
+  const handleAdjustShelfLife = (kitId: string, deltaDays: number) => {
+    const kit = kits.find((k) => k.id === kitId);
+    if (!kit) return;
+    const currentDays = kit.shelfLifeDays || 4;
+    const nextDays = Math.max(1, currentDays + deltaDays);
+    updateMealKitShelfLife(kitId, nextDays, kit.storageCondition);
+    updateMealKitShelfLifeInSupabase(kitId, nextDays, kit.storageCondition).catch(() => {});
+    setKits(getMealKits());
+  };
+
+  const outOfStockCount = useMemo(() => {
+    return kits.filter((k) => {
+      const total = Object.values(k.stockByRegion || {}).reduce((a, b) => a + (Number(b) || 0), 0);
+      return k.isOutOfStock || total === 0;
+    }).length;
+  }, [kits]);
+
+  const displayedInventoryKits = useMemo(() => {
+    return kits.filter((kit) => {
+      const totalStock = Object.values(kit.stockByRegion || {}).reduce(
+        (a, b) => a + (Number(b) || 0),
+        0,
+      );
+      const isOut = kit.isOutOfStock || totalStock === 0;
+      const isLow = Object.values(kit.stockByRegion || {}).some((s) => s > 0 && s < 20);
+      const isShortShelf = (kit.shelfLifeDays || 4) <= 3;
+
+      if (inventoryFilter === 'low') return isLow;
+      if (inventoryFilter === 'out') return isOut;
+      if (inventoryFilter === 'short_shelf') return isShortShelf;
+      return true;
+    });
+  }, [kits, inventoryFilter]);
 
   const handleToggleOutOfStock = async (kit: MealKit) => {
     const nextStatus = !kit.isOutOfStock;
@@ -2369,77 +2439,314 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
             <View style={styles.moduleHeaderRow}>
               <View>
                 <Text style={[styles.moduleTitle, { color: colors.textPrimary }]}>
-                  Regional Inventory
+                  Regional Inventory & Shelf Life
                 </Text>
                 <Text style={[styles.moduleSubtitle, { color: colors.textSecondary }]}>
-                  Stock levels per fulfillment center (Low-stock warning &lt; 20)
+                  Real-time stock per hub, automated out-of-stock scoping & fresh batch shelf life
                 </Text>
               </View>
             </View>
 
-            {kits.map((kit) => (
+            {/* REGIONAL ADMIN OUT-OF-STOCK ALERT BANNER */}
+            {outOfStockCount > 0 && (
               <View
-                key={kit.id}
-                style={[
-                  styles.stockCard,
-                  {
-                    backgroundColor: colors.bgSurface,
-                    borderRadius: radii.xl,
-                    borderColor: colors.borderLight,
-                    ...shadows.card,
-                  },
-                ]}
+                style={{
+                  backgroundColor: '#FEF2F2',
+                  borderColor: '#EF4444',
+                  borderWidth: 1.5,
+                  borderRadius: radii.lg,
+                  padding: 14,
+                  marginBottom: 16,
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  ...shadows.sm,
+                }}
               >
-                <Text style={[styles.stockKitName, { color: colors.textPrimary }]}>{kit.name}</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 }}>
+                  <View
+                    style={{
+                      width: 36,
+                      height: 36,
+                      borderRadius: 18,
+                      backgroundColor: '#FEE2E2',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                  >
+                    <Icon name="alert-circle" size={22} color="#DC2626" />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontSize: 13, fontWeight: '800', color: '#991B1B' }}>
+                      REGIONAL ADMIN ALERT: {outOfStockCount} ITEM(S) OUT OF STOCK
+                    </Text>
+                    <Text style={{ fontSize: 12, color: '#B91C1C', marginTop: 2 }}>
+                      Items with 0 units are automatically marked Out of Stock across customer menus.
+                    </Text>
+                  </View>
+                </View>
+                <TouchableOpacity
+                  onPress={() => setInventoryFilter('out')}
+                  style={{
+                    backgroundColor: '#DC2626',
+                    paddingHorizontal: 12,
+                    paddingVertical: 6,
+                    borderRadius: radii.md,
+                    marginLeft: 8,
+                  }}
+                >
+                  <Text style={{ color: '#FFFFFF', fontSize: 11, fontWeight: '700' }}>
+                    View Items
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            )}
 
-                <View style={styles.hubsStockGrid}>
-                  {(['North', 'South', 'West', 'East'] as RegionHub[]).map((hub) => {
-                    const count = kit.stockByRegion[hub] || 0;
-                    const isLow = count < 20;
+            {/* INVENTORY FILTERS */}
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 14 }}>
+              {[
+                { id: 'all', label: `All Items (${kits.length})` },
+                { id: 'low', label: 'Low Stock (< 20)' },
+                { id: 'out', label: `Out of Stock (${outOfStockCount})` },
+                { id: 'short_shelf', label: 'Short Shelf Life (≤ 3d)' },
+              ].map((f) => (
+                <TouchableOpacity
+                  key={f.id}
+                  onPress={() => setInventoryFilter(f.id as any)}
+                  style={{
+                    paddingHorizontal: 12,
+                    paddingVertical: 6,
+                    borderRadius: radii.pill,
+                    backgroundColor:
+                      inventoryFilter === f.id ? colors.primary : colors.bgSurface,
+                    borderWidth: 1,
+                    borderColor:
+                      inventoryFilter === f.id ? colors.primary : colors.borderLight,
+                  }}
+                >
+                  <Text
+                    style={{
+                      fontSize: 12,
+                      fontWeight: '700',
+                      color: inventoryFilter === f.id ? '#FFFFFF' : colors.textSecondary,
+                    }}
+                  >
+                    {f.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
 
-                    return (
-                      <View
-                        key={hub}
-                        style={[
-                          styles.hubStockItem,
-                          { backgroundColor: colors.bgSubtle, borderRadius: radii.md },
-                        ]}
-                      >
-                        <Text style={[styles.hubLabel, { color: colors.textMuted }]}>
-                          {hub} Region
+            {displayedInventoryKits.map((kit) => {
+              const freshness = calculateMealKitFreshness(kit);
+              const totalStock = Object.values(kit.stockByRegion || {}).reduce(
+                (a, b) => a + (Number(b) || 0),
+                0,
+              );
+              const isItemOut = kit.isOutOfStock || totalStock === 0;
+
+              return (
+                <View
+                  key={kit.id}
+                  style={[
+                    styles.stockCard,
+                    {
+                      backgroundColor: colors.bgSurface,
+                      borderRadius: radii.xl,
+                      borderColor: isItemOut ? '#FCA5A5' : colors.borderLight,
+                      borderWidth: isItemOut ? 1.5 : 1,
+                      marginBottom: 14,
+                      padding: 16,
+                      ...shadows.card,
+                    },
+                  ]}
+                >
+                  {/* CARD HEADER */}
+                  <View
+                    style={{
+                      flexDirection: 'row',
+                      justifyContent: 'space-between',
+                      alignItems: 'flex-start',
+                      marginBottom: 10,
+                    }}
+                  >
+                    <View style={{ flex: 1, paddingRight: 8 }}>
+                      <Text style={[styles.stockKitName, { color: colors.textPrimary, fontSize: 16 }]}>
+                        {kit.name}
+                      </Text>
+                      {kit.hindiName ? (
+                        <Text style={{ fontSize: 12, color: colors.textMuted, marginTop: 2 }}>
+                          {kit.hindiName}
                         </Text>
-                        <Text
+                      ) : null}
+                    </View>
+                    <View style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+                      {isItemOut ? (
+                        <Badge label="OUT OF STOCK" variant="danger" size="sm" />
+                      ) : (
+                        <Badge label="IN STOCK" variant="success" size="sm" />
+                      )}
+                      <Badge
+                        label={freshness.status === 'near_expiry' ? 'EXPIRING SOON' : 'FRESH'}
+                        variant={freshness.status === 'near_expiry' ? 'warning' : 'info'}
+                        size="sm"
+                      />
+                    </View>
+                  </View>
+
+                  {/* SHELF LIFE & STORAGE CONDITION BAR */}
+                  <View
+                    style={{
+                      backgroundColor: colors.bgSubtle,
+                      borderRadius: radii.md,
+                      padding: 10,
+                      marginBottom: 12,
+                      flexDirection: 'row',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      flexWrap: 'wrap',
+                      gap: 8,
+                    }}
+                  >
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                      <Icon name="time" size={14} color={colors.primary} />
+                      <Text style={{ fontSize: 12, fontWeight: '700', color: colors.textPrimary }}>
+                        Shelf Life: {kit.shelfLifeDays || 4} Days
+                      </Text>
+                      <Text style={{ fontSize: 11, color: colors.textSecondary }}>
+                        • {kit.storageCondition || 'Refrigerated 2-5°C'}
+                      </Text>
+                    </View>
+
+                    {/* INTERACTIVE SHELF LIFE STEPPER */}
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                      <Text style={{ fontSize: 11, fontWeight: '600', color: colors.textMuted }}>
+                        Adjust:
+                      </Text>
+                      <TouchableOpacity
+                        onPress={() => handleAdjustShelfLife(kit.id, -1)}
+                        style={{
+                          width: 26,
+                          height: 26,
+                          borderRadius: 13,
+                          backgroundColor: colors.bgSurface,
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          borderWidth: 1,
+                          borderColor: colors.borderLight,
+                        }}
+                      >
+                        <Text style={{ fontSize: 13, fontWeight: '800', color: colors.textPrimary }}>
+                          -
+                        </Text>
+                      </TouchableOpacity>
+                      <Text style={{ fontSize: 12, fontWeight: '800', color: colors.textPrimary }}>
+                        {kit.shelfLifeDays || 4}d
+                      </Text>
+                      <TouchableOpacity
+                        onPress={() => handleAdjustShelfLife(kit.id, +1)}
+                        style={{
+                          width: 26,
+                          height: 26,
+                          borderRadius: 13,
+                          backgroundColor: colors.bgSurface,
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          borderWidth: 1,
+                          borderColor: colors.borderLight,
+                        }}
+                      >
+                        <Text style={{ fontSize: 13, fontWeight: '800', color: colors.textPrimary }}>
+                          +
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+
+                  {/* HUBS STOCK GRID */}
+                  <View style={styles.hubsStockGrid}>
+                    {(['North', 'South', 'West', 'East'] as RegionHub[]).map((hub) => {
+                      const count = kit.stockByRegion[hub] || 0;
+                      const isLow = count > 0 && count < 20;
+                      const isZero = count === 0;
+
+                      return (
+                        <View
+                          key={hub}
                           style={[
-                            styles.hubCount,
-                            { color: isLow ? colors.danger : colors.textPrimary },
+                            styles.hubStockItem,
+                            {
+                              backgroundColor: isZero ? '#FEF2F2' : colors.bgSubtle,
+                              borderColor: isZero ? '#FCA5A5' : 'transparent',
+                              borderWidth: isZero ? 1 : 0,
+                              borderRadius: radii.md,
+                            },
                           ]}
                         >
-                          {count} kits
-                        </Text>
-                        {isLow && <Badge label="LOW STOCK" variant="danger" size="sm" />}
+                          <Text style={[styles.hubLabel, { color: colors.textMuted }]}>
+                            {hub} Hub
+                          </Text>
+                          <Text
+                            style={[
+                              styles.hubCount,
+                              {
+                                color: isZero
+                                  ? colors.danger
+                                  : isLow
+                                    ? '#D97706'
+                                    : colors.textPrimary,
+                              },
+                            ]}
+                          >
+                            {count} kits
+                          </Text>
+                          {isZero ? (
+                            <Badge label="0 - OUT OF STOCK" variant="danger" size="sm" />
+                          ) : isLow ? (
+                            <Badge label="LOW STOCK" variant="warning" size="sm" />
+                          ) : (
+                            <Badge label="OPTIMAL" variant="success" size="sm" />
+                          )}
 
-                        <View style={styles.stockAdjButtons}>
-                          <TouchableOpacity
-                            onPress={() => handleStockAdjust(kit.id, hub, -5)}
-                            style={styles.stockAdjBtn}
-                          >
-                            <Text style={styles.stockAdjBtnText}>-5</Text>
-                          </TouchableOpacity>
-                          <TouchableOpacity
-                            onPress={() => handleStockAdjust(kit.id, hub, +10)}
-                            style={styles.stockAdjBtn}
-                          >
-                            <Text style={styles.stockAdjBtnText}>+10</Text>
-                          </TouchableOpacity>
+                          <View style={styles.stockAdjButtons}>
+                            <TouchableOpacity
+                              onPress={() => handleStockAdjust(kit.id, hub, -5)}
+                              style={styles.stockAdjBtn}
+                            >
+                              <Text style={styles.stockAdjBtnText}>-5</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                              onPress={() => handleStockAdjust(kit.id, hub, +10)}
+                              style={styles.stockAdjBtn}
+                            >
+                              <Text style={styles.stockAdjBtnText}>+10</Text>
+                            </TouchableOpacity>
+                            {isZero && (
+                              <TouchableOpacity
+                                onPress={() => handleStockAdjust(kit.id, hub, +25)}
+                                style={[
+                                  styles.stockAdjBtn,
+                                  { backgroundColor: colors.primary, borderColor: colors.primary },
+                                ]}
+                              >
+                                <Text style={[styles.stockAdjBtnText, { color: '#FFFFFF' }]}>
+                                  +25
+                                </Text>
+                              </TouchableOpacity>
+                            )}
+                          </View>
                         </View>
-                      </View>
-                    );
-                  })}
+                      );
+                    })}
+                  </View>
                 </View>
-              </View>
-            ))}
+              );
+            })}
           </View>
         )}
+
+        {/* MODULE 3: INVENTORY & STOCK MANAGEMENT */}
+        {activeTab === 'inventory' && <InventoryManagementView />}
 
         {/* MODULE 4: REGIONAL ANALYTICS DASHBOARD */}
         {activeTab === 'analytics' && (
