@@ -132,11 +132,13 @@ export const InventoryManagementView: React.FC = () => {
       // Search
       if (debouncedQuery) {
         const q = debouncedQuery.toLowerCase();
-        return (
-          item.name?.toLowerCase().includes(q) ||
-            (item.section || '').toLowerCase().includes(q) ||
-            (item.notes?.toLowerCase().includes(q) ?? false)
-        );
+        const name = item.name || '';
+        const n = name.toLowerCase();
+        // Exact match first, then substring
+        if (n === q || n.includes(q)) return true;
+        if ((item.section || '').toLowerCase().includes(q)) return true;
+        if (item.notes && item.notes.toLowerCase().includes(q)) return true;
+        return false;
       }
 
       return true;
@@ -322,7 +324,7 @@ export const InventoryManagementView: React.FC = () => {
       </View>
 
       {/* Status dropdown */}
-      <View style={[styles.searchBar, { backgroundColor: colors.bgSurface, borderColor: colors.borderLight, marginBottom: 8 }]}>
+      <View style={[styles.searchBar, { backgroundColor: colors.bgSurface, borderColor: 'transparent', borderWidth: 0, marginBottom: 8, outline: 'none' }]}>
         <Icon name="filter" size={16} color={colors.textMuted} />
         <Text style={{ fontSize: 13, fontWeight: '700', color: colors.textSecondary, marginLeft: 8 }}>
           Status:
@@ -353,7 +355,7 @@ export const InventoryManagementView: React.FC = () => {
       <View style={[styles.searchBar, { backgroundColor: colors.bgSurface, borderColor: colors.borderLight }]}>
         <Icon name="search" size={16} color={colors.textMuted} />
         <TextInput
-          style={[styles.searchInput, { color: colors.textPrimary }]}
+          style={[styles.searchInput, { color: colors.textPrimary, caretColor: colors.primary }]}
           placeholder="Search items..."
           placeholderTextColor={colors.textMuted}
           value={searchQuery}
