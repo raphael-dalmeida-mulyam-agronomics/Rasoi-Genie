@@ -59,7 +59,7 @@ export const InventoryManagementView: React.FC = () => {
   const { colors, radii, shadows } = useTheme();
 
   const [items, setItems] = useState<InventoryItem[]>(getInventoryItems());
-  const [filter, setFilter] = useState<'all' | InventorySection>('all');
+  const [filter, setFilter] = useState<'all' | 'raw_ingredients' | 'packaging' | 'seasonings'>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | 'fresh' | 'expiring_soon' | 'expired'>('all');
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -112,8 +112,7 @@ export const InventoryManagementView: React.FC = () => {
         );
         if (!regionMatch) return false;
       }
-      if (filter !== 'all' && item.section !== filter) return false;
-
+      if (filter !== 'all') { const s = item.section || (item.name.toLowerCase().includes('sachet') || item.name.toLowerCase().includes('masala') || item.name.toLowerCase().includes('powder') ? 'seasonings' : item.name.toLowerCase().includes('cup') || item.name.toLowerCase().includes('pack') ? 'packaging' : 'raw_ingredients'); if (s !== filter) return false; }
       // Status filter
       const shelfStatus = calculateShelfLifeStatus(item);
       if (statusFilter !== 'all' && shelfStatus.status !== statusFilter) return false;
@@ -287,38 +286,31 @@ export const InventoryManagementView: React.FC = () => {
         </View>
       </View>
 
-      {/* Section buttons (4): All / Raw Ingredients / Packaging / Seasonings & Herbs */}
-      <View style={styles.sectionButtonsRow}>
+      {/* 4 Horizontal Tabs — All / Raw Ingredients / Packaging / Seasonings & Herbs */}
+      <View style={{ flexDirection: 'row', gap: 6, marginBottom: 12 }}>
         {(
           [
-            { id: 'all', label: 'All' },
-            { id: 'raw_ingredients', label: 'Raw Ingredients' },
-            { id: 'packaging', label: 'Packaging' },
-            { id: 'seasonings', label: 'Seasonings & Herbs' },
+            { id: 'all', label: 'All', icon: 'list' as AppIconName },
+            { id: 'raw_ingredients', label: 'Raw Ingredients', icon: 'cube' as AppIconName },
+            { id: 'packaging', label: 'Packaging', icon: 'box' as AppIconName },
+            { id: 'seasonings', label: 'Seasonings & Herbs', icon: 'sparkles' as AppIconName },
           ] as const
-        ).map((btn) => (
+        ).map((tab) => (
           <TouchableOpacity
-            key={btn.id}
-            onPress={() => setFilter(btn.id as any)}
+            key={tab.id}
+            onPress={() => setFilter(tab.id as any)}
             style={[
-              styles.sectionBtn,
+              styles.tabButton,
               {
-                backgroundColor: filter === btn.id ? colors.primary : colors.bgSurface,
-                borderColor: filter === btn.id ? colors.primary : colors.borderLight,
-                borderWidth: 1,
+                backgroundColor: filter === tab.id ? colors.primary : colors.bgSurface,
+                borderColor: filter === tab.id ? colors.primary : colors.borderLight,
                 flex: 1,
               },
             ]}
           >
-            <Text
-              style={{
-                color: filter === btn.id ? '#FFFFFF' : colors.textPrimary,
-                fontWeight: '700',
-                fontSize: 11,
-                textAlign: 'center',
-              }}
-            >
-              {btn.label}
+            <Icon name={tab.icon} size={14} color={filter === tab.id ? '#FFFFFF' : colors.textSecondary} />
+            <Text style={{ color: filter === tab.id ? '#FFFFFF' : colors.textPrimary, fontWeight: '700', fontSize: 11, textAlign: 'center', marginTop: 2 }}>
+              {tab.label}
             </Text>
           </TouchableOpacity>
         ))}
