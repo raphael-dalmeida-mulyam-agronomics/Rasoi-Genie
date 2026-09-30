@@ -62,7 +62,13 @@ export const InventoryManagementView: React.FC = () => {
   const [items, setItems] = useState<InventoryItem[]>(getInventoryItems());
   const [filter, setFilter] = useState<'all' | 'raw_ingredients' | 'packaging' | 'seasonings'>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | 'fresh' | 'expiring_soon' | 'expired'>('all');
+  // Debounced search to reduce lag
   const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedQuery, setDebouncedQuery] = useState('');
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedQuery(searchQuery.trim()), 150);
+    return () => clearTimeout(t);
+  }, [searchQuery]);
 
   // Modal states
   const [addModalVisible, setAddModalVisible] = useState(false);
@@ -124,8 +130,8 @@ export const InventoryManagementView: React.FC = () => {
       if (statusFilter !== 'all' && shelfStatus.status !== statusFilter) return false;
 
       // Search
-      if (searchQuery.trim()) {
-        const q = searchQuery.trim().toLowerCase();
+      if (debouncedQuery) {
+        const q = debouncedQuery.toLowerCase();
         return (
           item.name?.toLowerCase().includes(q) ||
             (item.section || '').toLowerCase().includes(q) ||
