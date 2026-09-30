@@ -13,6 +13,7 @@ import {
   Platform,
 } from 'react-native';
 import { useAuth } from '../../framework/context/AuthContext';
+import { seedInventoryFromMealKits } from '../../framework/services/seedInventoryFromMealKits';
 import { useTheme } from '../../framework/theme/ThemeContext';
 import {
   InventoryItem,
