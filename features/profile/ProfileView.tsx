@@ -193,13 +193,23 @@ export const ProfileView: React.FC = () => {
           </View>
 
           <View style={styles.prefTagsWrap}>
-            <Badge label={`Diet: ${preferences.dietType.toUpperCase()}`} variant="primary" />
+            {preferences.dietTypes && preferences.dietTypes.length > 0 ? (
+              preferences.dietTypes.map((d) => (
+                <Badge key={d} label={`Diet: ${d.toUpperCase()}`} variant="primary" />
+              ))
+            ) : (
+              <Badge label="Diet: Not Set" variant="outline" />
+            )}
             <Badge label={`Spice: ${preferences.spiceTolerance}`} variant="warning" />
             <Badge label={`Hub: ${preferences.regionHub}`} variant="accent" />
             <Badge label={`Pay: ${preferredPaymentMethod}`} variant="info" />
-            {preferences.preferredCuisines?.slice(0, 3).map((c) => (
-              <Badge key={c} label={c} variant="neutral" />
-            ))}
+            {preferences.preferredCuisines && preferences.preferredCuisines.length > 0 ? (
+              preferences.preferredCuisines.map((c) => (
+                <Badge key={c} label={c} variant="neutral" />
+              ))
+            ) : (
+              <Badge label="No Cuisines Selected" variant="outline" />
+            )}
             {preferences.allergies.map((a) => (
               <Badge key={a} label={`No ${a}`} variant="danger" />
             ))}

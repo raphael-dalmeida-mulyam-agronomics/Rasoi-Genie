@@ -31,19 +31,51 @@ import {
   updateMealKit,
   deleteMealKit,
   updateMealKitStock,
+  toggleMealKitTrending,
   subscribeToMealKits,
   syncMealKitsWithSupabase,
   RegionHub,
   DietTag,
   CuisineType,
   DishCategory,
+  compileMealKitTags,
+  parseCategorizedTags,
 } from '../../framework/services/mealKitsService';
 import {
   INDIAN_STATES_ANALYTICS,
   MONTHLY_TRENDS,
   getCrossTabAnalytics,
   generateRegionalCSV,
+  getFilteredStateAnalytics,
 } from '../../framework/services/regionalAnalyticsService';
+import {
+  AdminProfile,
+  AdminRole,
+  fetchAllAdminProfiles,
+  assignAdminRegions,
+  deleteAdminProfile,
+  SUPER_ADMIN_EMAIL,
+  ALL_REGIONS,
+  REGIONS_LIST,
+  STORAGE_CENTRE_REGIONS,
+  StorageCentreRegion,
+  resolveStorageCentre,
+  ChefProfile,
+  fetchAllChefProfiles,
+  grantChefRole,
+  revokeChefRole,
+} from '../../framework/services/adminRbacService';
+import {
+  ChefSubmissionRecord,
+  fetchAllChefSubmissions,
+  publishChefSubmission,
+  rejectChefSubmission,
+  deleteChefSubmission,
+} from '../../framework/services/chefMealKitsService';
+import {
+  toggleMealKitTrendingStatus,
+  filterMealKitsByAdminRegions,
+} from '../../framework/services/supabaseMealKitsService';
 import {
   getCoupons,
   addCoupon,
@@ -119,6 +151,7 @@ const ADMIN_CUISINE_FILTERS: ('All' | CuisineType)[] = [
   'Mughlai',
   'Coastal',
   'Gujarati',
+  'Maharashtrian',
   'Indo-Chinese',
   'Italian',
   'Mexican',
@@ -144,7 +177,7 @@ const ADMIN_DISH_FILTERS: ('All' | DishCategory)[] = [
 export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = ({
   onNavigateToLogin,
 }) => {
-  const { user, isAdmin, logout } = useAuth();
+  const { user, isAdmin, isSuperAdmin, isRegionalAdmin, assignedRegions, logout } = useAuth();
   const { colors, radii, shadows } = useTheme();
 
   const [activeTab, setActiveTab] = useState<AdminTab>('overview');
@@ -186,6 +219,27 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
   const [deleteModalVisible, setDeleteModalVisible] = useState(false);
   const [isDeletingKit, setIsDeletingKit] = useState(false);
 
+  // Super Admin Regional Management State
+  const [adminProfiles, setAdminProfiles] = useState<AdminProfile[]>([]);
+  const [adminModalVisible, setAdminModalVisible] = useState(false);
+  const [adminFormEmail, setAdminFormEmail] = useState('');
+  const [adminFormName, setAdminFormName] = useState('');
+  const [adminFormRole, setAdminFormRole] = useState<AdminRole>('regional_admin');
+  const [adminFormRegions, setAdminFormRegions] = useState<(RegionHub | string)[]>(['pune-city']);
+  const [isSavingAdmin, setIsSavingAdmin] = useState(false);
+  const [superAdminRegionFilter, setSuperAdminRegionFilter] = useState<'All' | RegionHub | string>(
+    'All',
+  );
+
+  const formatRegionName = (regId: string) => {
+    const sc = STORAGE_CENTRE_REGIONS.find(
+      (r) =>
+        r.id.toLowerCase() === regId.toLowerCase() || r.name.toLowerCase() === regId.toLowerCase(),
+    );
+    if (sc) return `${sc.name} (${sc.city})`;
+    return `${regId} Region`;
+  };
+
   // Regional Analytics State
   const [selectedState, setSelectedState] = useState('Maharashtra');
   const [crossTabDiet, setCrossTabDiet] = useState<'all' | DietTag>('all');
@@ -200,6 +254,24 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
   // Users State
   const [users, setUsers] = useState<ManagedUser[]>(getManagedUsers());
 
+  // Chef Submissions State
+  const [chefSubmissions, setChefSubmissions] = useState<ChefSubmissionRecord[]>([]);
+  const [chefProfiles, setChefProfiles] = useState<ChefProfile[]>([]);
+  const [chefSubmissionFilter, setChefSubmissionFilter] = useState<
+    'all' | 'pending_review' | 'published' | 'rejected'
+  >('all');
+  const [selectedChefSubmission, setSelectedChefSubmission] = useState<ChefSubmissionRecord | null>(
+    null,
+  );
+  const [chefSubmissionModalVisible, setChefSubmissionModalVisible] = useState(false);
+  const [chefPublishPrice, setChefPublishPrice] = useState('');
+  const [chefPublishStorageCentres, setChefPublishStorageCentres] = useState<string[]>([]);
+  const [chefPublishCities, setChefPublishCities] = useState<string[]>([]);
+  const [chefRejectNotes, setChefRejectNotes] = useState('');
+  const [isProcessingChefSubmission, setIsProcessingChefSubmission] = useState(false);
+  const [grantChefModalVisible, setGrantChefModalVisible] = useState(false);
+  const [grantChefTargetUser, setGrantChefTargetUser] = useState<ManagedUser | null>(null);
+
   // Reviews State
   const [moderationReviews, setModerationReviews] = useState<ExtendedReview[]>(
     getAllReviewsForModeration(),
@@ -210,6 +282,28 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
     user && user.role === 'admin' && user.email && validateAdminEmail(user.email);
 
   const [pendingApprovalCount, setPendingApprovalCount] = useState<number>(0);
+
+  const reloadAdminProfiles = async () => {
+    try {
+      const list = await fetchAllAdminProfiles();
+      setAdminProfiles(list);
+    } catch (err) {
+      console.warn('[AdminDashboard] Error loading admin profiles:', err);
+    }
+  };
+
+  const reloadChefData = async () => {
+    try {
+      const [submissions, profiles] = await Promise.all([
+        fetchAllChefSubmissions(),
+        fetchAllChefProfiles(),
+      ]);
+      setChefSubmissions(submissions);
+      setChefProfiles(profiles);
+    } catch (err) {
+      console.warn('[AdminDashboard] Error loading chef data:', err);
+    }
+  };
 
   const reloadSupabaseOrders = async () => {
     try {
@@ -227,6 +321,9 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
 
     reloadSupabaseOrders();
     refreshPendingApprovalCount();
+    syncMealKitsWithSupabase();
+    reloadAdminProfiles();
+    reloadChefData();
     syncMealKitsWithSupabase();
 
     const unsubscribeRealtime = subscribeToOrdersRealtime(() => {
@@ -444,8 +541,39 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
     );
   };
 
+  const handleToggleTrending = async (kit: MealKit) => {
+    const nextVal = !kit.isTrending;
+    setKits((prev) => prev.map((k) => (k.id === kit.id ? { ...k, isTrending: nextVal } : k)));
+    toggleMealKitTrending(kit.id, nextVal);
+    await toggleMealKitTrendingStatus(kit.id, nextVal);
+    showInAppAlert(
+      nextVal ? 'Dish Marked as Trending' : 'Trending Status Removed',
+      `"${kit.name}" has been ${nextVal ? 'set as Trending' : 'removed from Trending'}.`,
+    );
+  };
+
+  // Scoped meal kits: Regional admins ONLY see dishes in their assigned regions. Super admin sees all.
+  const scopedKits = useMemo(() => {
+    return filterMealKitsByAdminRegions(kits, assignedRegions, isSuperAdmin);
+  }, [kits, assignedRegions, isSuperAdmin]);
+
   const filteredKits = useMemo(() => {
-    return kits.filter((kit) => {
+    return scopedKits.filter((kit) => {
+      // 0. Super Admin Region Hub view filter
+      if (isSuperAdmin && superAdminRegionFilter !== 'All') {
+        const matchesHub =
+          (kit.availableRegions && kit.availableRegions.includes(superAdminRegionFilter as any)) ||
+          (kit.availableStorageCentres &&
+            kit.availableStorageCentres.includes(superAdminRegionFilter)) ||
+          (kit.originCity &&
+            superAdminRegionFilter.toLowerCase().includes(kit.originCity.toLowerCase())) ||
+          (kit.cities &&
+            kit.cities.some((c: string) =>
+              superAdminRegionFilter.toLowerCase().includes(c.toLowerCase()),
+            ));
+        if (!matchesHub) return false;
+      }
+
       // 1. Text search query
       if (kitSearchQuery.trim()) {
         const q = kitSearchQuery.trim().toLowerCase();
@@ -461,6 +589,11 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
           ing.name?.toLowerCase().includes(q),
         );
         const matchesSachet = kit.masalaSachets?.some((s) => s.toLowerCase().includes(q));
+        const matchesTag = kit.tags?.some((t) => t.toLowerCase().includes(q));
+        const matchesAllergen = kit.allergens?.some((a) => a.toLowerCase().includes(q));
+        const matchesRegion =
+          kit.availableRegions?.some((r) => r.toLowerCase().includes(q)) ||
+          kit.availableStorageCentres?.some((sc) => sc.toLowerCase().includes(q));
 
         if (
           !matchesName &&
@@ -470,7 +603,10 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
           !matchesCuisine &&
           !matchesDishCategory &&
           !matchesIngredient &&
-          !matchesSachet
+          !matchesSachet &&
+          !matchesTag &&
+          !matchesAllergen &&
+          !matchesRegion
         ) {
           return false;
         }
@@ -497,12 +633,104 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
       return true;
     });
   }, [
-    kits,
+    scopedKits,
+    isSuperAdmin,
+    superAdminRegionFilter,
     kitSearchQuery,
     selectedKitDietFilter,
     selectedKitCuisineFilter,
     selectedKitDishFilter,
   ]);
+
+  // Regional Analytics Scope: Regional admins ONLY see statistics for their assigned regions. Super admin sees all.
+  const accessibleStates = useMemo(() => {
+    return getFilteredStateAnalytics(assignedRegions, isSuperAdmin);
+  }, [assignedRegions, isSuperAdmin]);
+
+  useEffect(() => {
+    if (
+      accessibleStates.length > 0 &&
+      !accessibleStates.some((s) => s.stateName === selectedState)
+    ) {
+      setSelectedState(accessibleStates[0]!.stateName);
+    }
+  }, [accessibleStates, selectedState]);
+
+  // Admin Management Handlers (Super Admin Only)
+  const handleOpenAddAdminModal = () => {
+    setAdminFormEmail('');
+    setAdminFormName('');
+    setAdminFormRole('regional_admin');
+    setAdminFormRegions(['pune-city', 'pune-pcmc']);
+    setAdminModalVisible(true);
+  };
+
+  const handleOpenEditAdminModal = (profile: AdminProfile) => {
+    setAdminFormEmail(profile.email);
+    setAdminFormName(profile.name);
+    setAdminFormRole(profile.role);
+    setAdminFormRegions(
+      profile.regions && profile.regions.length > 0
+        ? (profile.regions as (RegionHub | string)[])
+        : ['pune-city'],
+    );
+    setAdminModalVisible(true);
+  };
+
+  const handleSaveAdmin = async () => {
+    if (!adminFormEmail.trim() || !adminFormEmail.includes('@')) {
+      showInAppAlert('Invalid Email', 'Please enter a valid staff admin email address.');
+      return;
+    }
+    if (adminFormRole !== 'super_admin' && adminFormRegions.length === 0) {
+      showInAppAlert(
+        'Region Required',
+        'Please assign at least one operating region to this admin.',
+      );
+      return;
+    }
+
+    setIsSavingAdmin(true);
+    try {
+      const res = await assignAdminRegions(
+        adminFormEmail.trim(),
+        adminFormRole === 'super_admin' ? ALL_REGIONS : adminFormRegions,
+        adminFormName.trim() || undefined,
+        adminFormRole,
+      );
+
+      if (res.success) {
+        showInAppAlert(
+          'Admin Assigned',
+          `Region access permissions saved for ${adminFormEmail.trim()}.`,
+        );
+        await reloadAdminProfiles();
+        setAdminModalVisible(false);
+      } else {
+        showInAppAlert('Save Failed', res.error || 'Could not save admin permissions.');
+      }
+    } finally {
+      setIsSavingAdmin(false);
+    }
+  };
+
+  const handleDeleteAdmin = (email: string) => {
+    showInAppConfirm({
+      title: 'Revoke Admin Access',
+      message: `Are you sure you want to remove admin permissions for ${email}?`,
+      confirmText: 'Revoke',
+      isDestructive: true,
+      onConfirm: async () => {
+        const res = await deleteAdminProfile(email);
+        if (res.success) {
+          await reloadAdminProfiles();
+          showInAppAlert('Admin Revoked', `${email} has been removed from regional staff.`);
+        } else {
+          showInAppAlert('Revoke Failed', res.error || 'Could not revoke admin.');
+        }
+      },
+    });
+  };
 
   const activeKitFilterCount = useMemo(() => {
     let count = 0;
@@ -624,11 +852,38 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
           <View
             style={[
               styles.adminPill,
-              { backgroundColor: colors.primaryLight, borderColor: colors.primary + '40' },
+              {
+                backgroundColor: isSuperAdmin ? '#FEF3C7' : colors.primaryLight,
+                borderColor: isSuperAdmin ? '#F59E0B' : colors.primary + '40',
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: 6,
+                paddingHorizontal: 10,
+                paddingVertical: 5,
+              },
             ]}
           >
-            <Text style={[styles.adminPillText, { color: colors.primary }]}>
-              {user?.email?.split('@')[0] || 'Admin'}
+            <View
+              style={{
+                width: 7,
+                height: 7,
+                borderRadius: 4,
+                backgroundColor: isSuperAdmin ? '#D97706' : colors.primary,
+              }}
+            />
+            <Text
+              style={[
+                styles.adminPillText,
+                {
+                  color: isSuperAdmin ? '#B45309' : colors.primary,
+                  fontWeight: '700',
+                  fontSize: 12,
+                },
+              ]}
+            >
+              {isSuperAdmin
+                ? 'Super Admin (All Regions)'
+                : `Regional Admin (${assignedRegions && assignedRegions.length > 0 ? assignedRegions.map(formatRegionName).join(', ') : 'Pune City (Pune)'})`}
             </Text>
           </View>
 
@@ -647,8 +902,12 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
         onTabChange={setActiveTab}
         ordersCount={orders.length}
         pendingApprovalCount={pendingApprovalCount}
-        kitsCount={kits.length}
+        kitsCount={scopedKits.length}
         usersCount={users.length}
+        chefsCount={chefSubmissions.length}
+        pendingChefSubmissions={
+          chefSubmissions.filter((s) => s.submissionStatus === 'pending_review').length
+        }
         couponsCount={coupons.length}
         reviewsCount={moderationReviews.length}
       />
@@ -657,6 +916,50 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
         {/* MODULE 0: OVERVIEW HOME */}
         {activeTab === 'overview' && (
           <View>
+            {/* Small subtle status indicator replacing the large card */}
+            <View
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                marginBottom: 12,
+              }}
+            >
+              <View
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: 6,
+                  backgroundColor: isSuperAdmin ? '#FEF3C7' : colors.bgSubtle,
+                  borderColor: isSuperAdmin ? '#F59E0B60' : colors.borderLight,
+                  borderWidth: 1,
+                  borderRadius: radii.pill,
+                  paddingHorizontal: 10,
+                  paddingVertical: 4,
+                }}
+              >
+                <View
+                  style={{
+                    width: 6,
+                    height: 6,
+                    borderRadius: 3,
+                    backgroundColor: isSuperAdmin ? '#D97706' : colors.primary,
+                  }}
+                />
+                <Text
+                  style={{
+                    fontSize: 11,
+                    fontWeight: '700',
+                    color: isSuperAdmin ? '#92400E' : colors.textSecondary,
+                  }}
+                >
+                  {isSuperAdmin
+                    ? 'Super Admin Mode • Pan-India Region Access'
+                    : `Regional Admin Scope: ${assignedRegions && assignedRegions.length > 0 ? assignedRegions.map(formatRegionName).join(', ') : 'Pune City (Pune)'}`}
+                </Text>
+              </View>
+            </View>
+
             {/* Realtime Pending Approval Alert Banner */}
             {pendingApprovalCount > 0 && (
               <View
@@ -750,7 +1053,7 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
               >
                 <Text style={[styles.metricVal, { color: colors.primary }]}>4</Text>
                 <Text style={[styles.metricLabel, { color: colors.textSecondary }]}>
-                  Regional Hubs
+                  Operating Regions
                 </Text>
               </TouchableOpacity>
 
@@ -807,10 +1110,10 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
                 },
                 {
                   id: 'inventory' as AdminTab,
-                  title: 'Regional Inventory Hub',
-                  desc: 'Monitor cold-chain safety buffer stocks across South, West, North & East Hubs',
+                  title: 'Regional Inventory',
+                  desc: 'Monitor cold-chain safety buffer stocks across South, West, North & East Regions',
                   icon: 'business' as AppIconName,
-                  badge: '4 Hubs',
+                  badge: '4 Regions',
                   badgeVariant: 'neutral' as BadgeVariant,
                 },
                 {
@@ -1093,6 +1396,32 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
                         {order.deliveryAddress}
                       </Text>
                     </View>
+                    {(() => {
+                      const sc = resolveStorageCentre(order.deliveryAddress);
+                      return (
+                        <View
+                          style={{
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            gap: 5,
+                            marginTop: 4,
+                            marginBottom: 4,
+                            paddingHorizontal: 8,
+                            paddingVertical: 3,
+                            backgroundColor: colors.bgSubtle,
+                            borderRadius: radii.sm,
+                            borderLeftWidth: 2,
+                            borderLeftColor: colors.primary,
+                            alignSelf: 'flex-start',
+                          }}
+                        >
+                          <Icon name="cube" size={11} color={colors.primary} />
+                          <Text style={{ fontSize: 11, fontWeight: '700', color: colors.primary }}>
+                            Fulfillment: {sc.storageCentreName} ({sc.name})
+                          </Text>
+                        </View>
+                      );
+                    })()}
                     <Text style={[styles.adminOrderSlot, { color: colors.textMuted }]}>
                       Slot: {order.deliverySlot} • Paid: ₹{order.totalAmount} via{' '}
                       {order.paymentMethod}
@@ -1365,10 +1694,12 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
             <View style={styles.moduleHeaderRow}>
               <View>
                 <Text style={[styles.moduleTitle, { color: colors.textPrimary }]}>
-                  Meal Prep Kits ({kits.length})
+                  Meal Prep Kits ({scopedKits.length})
                 </Text>
                 <Text style={[styles.moduleSubtitle, { color: colors.textSecondary }]}>
-                  Manage recipes, ingredients, sachets & prices
+                  {isSuperAdmin
+                    ? 'All regions catalog (Super Admin view - full access)'
+                    : `Dishes scoped to your assigned region(s): ${assignedRegions && assignedRegions.length > 0 ? assignedRegions.map(formatRegionName).join(', ') : 'Pune City (Pune)'}`}
                 </Text>
               </View>
               <Button
@@ -1380,6 +1711,62 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
                 }}
               />
             </View>
+
+            {/* Super Admin Region Filter Pills */}
+            {isSuperAdmin && (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={{ marginBottom: 12 }}
+              >
+                {[
+                  { id: 'All', label: 'All Regions' },
+                  { id: 'West', label: 'West Hub' },
+                  { id: 'pune-city', label: 'Pune City' },
+                  { id: 'pune-pcmc', label: 'Pimpri Chinchwad' },
+                  { id: 'pune-west', label: 'Pune West (Hinjawadi)' },
+                  { id: 'mumbai-south', label: 'South Mumbai' },
+                  { id: 'mumbai-suburbs-west', label: 'Mumbai West' },
+                  { id: 'South', label: 'South Hub' },
+                  { id: 'blr-east', label: 'Bengaluru East (Whitefield)' },
+                  { id: 'blr-south', label: 'Bengaluru South (Koramangala)' },
+                  { id: 'hyd-west', label: 'Hyderabad West (Hitec)' },
+                  { id: 'chn-south', label: 'Chennai South (OMR)' },
+                  { id: 'North', label: 'North Hub' },
+                  { id: 'delhi-south-central', label: 'Delhi South' },
+                  { id: 'delhi-noida', label: 'Noida' },
+                  { id: 'delhi-gurugram', label: 'Gurugram' },
+                  { id: 'East', label: 'East Hub' },
+                  { id: 'kol-south-central', label: 'Kolkata South' },
+                ].map((item) => {
+                  const isSelected = superAdminRegionFilter === item.id;
+                  return (
+                    <TouchableOpacity
+                      key={item.id}
+                      onPress={() => setSuperAdminRegionFilter(item.id as any)}
+                      style={[
+                        styles.statePill,
+                        {
+                          backgroundColor: isSelected ? colors.primary : colors.bgSurface,
+                          borderColor: isSelected ? colors.primary : colors.borderLight,
+                          borderRadius: radii.pill,
+                        },
+                      ]}
+                    >
+                      <Text
+                        style={{
+                          color: isSelected ? '#fff' : colors.textPrimary,
+                          fontWeight: '700',
+                          fontSize: 12,
+                        }}
+                      >
+                        {item.label}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+            )}
 
             {/* MEAL KITS SEARCH BAR & FILTERING SYSTEM */}
             <View
@@ -1889,17 +2276,37 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
                         <Text style={[styles.kitCardTag, { color: colors.textSecondary }]}>
                           {kit.tagline}
                         </Text>
+
+                        {/* Categorized Meal Kit Tags: Diet, Cuisine, Dish Type, Region, Allergens */}
+                        <View
+                          style={{
+                            flexDirection: 'row',
+                            flexWrap: 'wrap',
+                            gap: 6,
+                            marginTop: 6,
+                            marginBottom: 6,
+                          }}
+                        >
+                          {parseCategorizedTags(
+                            kit.tags && kit.tags.length > 0 ? kit.tags : compileMealKitTags(kit),
+                          ).map((tag, idx) => (
+                            <Badge
+                              key={`${kit.id}-tag-${tag.category}-${idx}`}
+                              label={tag.label}
+                              variant={tag.variant}
+                              size="sm"
+                            />
+                          ))}
+                        </View>
+
                         <Text style={[styles.kitCardMeta, { color: colors.textMuted }]}>
-                          {kit.cuisine}
-                          {kit.dishCategory ? ` • ${kit.dishCategory}` : ''} •{' '}
-                          {kit.diet.toUpperCase()} • {kit.spiceLevel} • ₹{kit.price}
+                          {kit.spiceLevel} Spice • ₹{kit.price} • {kit.prepTimeMinutes || 15}m prep
                         </Text>
                       </View>
                       <View style={{ alignItems: 'flex-end', gap: 4 }}>
-                        {(() => {
-                          const badge = getDietBadgeInfo(kit.diet);
-                          return <Badge label={badge.label} variant={badge.variant} />;
-                        })()}
+                        {kit.isTrending ? (
+                          <Badge label="TRENDING" variant="warning" size="sm" />
+                        ) : null}
                         {kit.isOutOfStock ? (
                           <Badge label="OUT OF STOCK" variant="danger" size="sm" />
                         ) : null}
@@ -1907,6 +2314,13 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
                     </View>
 
                     <View style={styles.kitActionsRow}>
+                      <Button
+                        title={kit.isTrending ? 'Remove Trending' : 'Set Trending'}
+                        variant={kit.isTrending ? 'secondary' : 'outline'}
+                        size="sm"
+                        style={{ marginRight: 8, marginBottom: 4 }}
+                        onPress={() => handleToggleTrending(kit)}
+                      />
                       <Button
                         title="Print Recipe Card"
                         variant="primary"
@@ -1955,7 +2369,7 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
             <View style={styles.moduleHeaderRow}>
               <View>
                 <Text style={[styles.moduleTitle, { color: colors.textPrimary }]}>
-                  Regional Hub Inventory
+                  Regional Inventory
                 </Text>
                 <Text style={[styles.moduleSubtitle, { color: colors.textSecondary }]}>
                   Stock levels per fulfillment center (Low-stock warning &lt; 20)
@@ -1992,7 +2406,7 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
                         ]}
                       >
                         <Text style={[styles.hubLabel, { color: colors.textMuted }]}>
-                          {hub} Hub
+                          {hub} Region
                         </Text>
                         <Text
                           style={[
@@ -2033,13 +2447,56 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
             <View style={styles.moduleHeaderRow}>
               <View>
                 <Text style={[styles.moduleTitle, { color: colors.textPrimary }]}>
-                  India Regional Analytics
+                  {isSuperAdmin
+                    ? 'Pan-India Regional Analytics (Super Admin View)'
+                    : `Regional Analytics (${assignedRegions && assignedRegions.length > 0 ? assignedRegions.map(formatRegionName).join(', ') : 'Pune City (Pune)'})`}
                 </Text>
                 <Text style={[styles.moduleSubtitle, { color: colors.textSecondary }]}>
-                  State & city performance, dietary cross-tabs & export
+                  {isSuperAdmin
+                    ? 'Complete sales data, growth metrics & dietary split across all India operating regions'
+                    : `State & fulfillment metrics strictly restricted to your assigned jurisdiction: ${assignedRegions && assignedRegions.length > 0 ? assignedRegions.map(formatRegionName).join(', ') : 'Pune City (Pune)'}`}
                 </Text>
               </View>
               <Button title="Export CSV" size="sm" onPress={handleExportCSV} />
+            </View>
+
+            {/* RLS Status Badge Banner */}
+            <View
+              style={{
+                backgroundColor: isSuperAdmin ? '#FFFBEB' : colors.primaryLight,
+                borderColor: isSuperAdmin ? '#F59E0B' : colors.primary + '50',
+                borderWidth: 1,
+                borderRadius: radii.md,
+                padding: 10,
+                marginBottom: 12,
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+              }}
+            >
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 }}>
+                <Icon
+                  name={isSuperAdmin ? 'globe' : 'shield-checkmark'}
+                  size={16}
+                  color={isSuperAdmin ? '#B45309' : colors.primary}
+                />
+                <Text
+                  style={{
+                    fontSize: 12,
+                    color: isSuperAdmin ? '#92400E' : colors.textPrimary,
+                    fontWeight: '600',
+                  }}
+                >
+                  {isSuperAdmin
+                    ? 'Super Admin: Full visibility across North, South, West & East Regions'
+                    : `Row Level Security (RLS) Active: Showing statistics only for ${assignedRegions && assignedRegions.length > 0 ? assignedRegions.map(formatRegionName).join(', ') : 'Pune City (Pune)'}`}
+                </Text>
+              </View>
+              <Badge
+                label={isSuperAdmin ? 'ALL STATES' : 'SCOPED REGIONS'}
+                variant={isSuperAdmin ? 'warning' : 'info'}
+                size="sm"
+              />
             </View>
 
             {/* Indian State Selector */}
@@ -2048,7 +2505,7 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
               showsHorizontalScrollIndicator={false}
               style={{ marginBottom: 12 }}
             >
-              {INDIAN_STATES_ANALYTICS.map((st) => (
+              {accessibleStates.map((st) => (
                 <TouchableOpacity
                   key={st.stateCode}
                   style={[
@@ -2079,9 +2536,26 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
             {/* State Deep-Dive Card */}
             {(() => {
               const stateData =
-                INDIAN_STATES_ANALYTICS.find((s) => s.stateName === selectedState) ||
-                INDIAN_STATES_ANALYTICS[0]!;
-              if (!stateData) return null;
+                accessibleStates.find((s) => s.stateName === selectedState) || accessibleStates[0];
+              if (!stateData) {
+                return (
+                  <View
+                    style={[
+                      styles.stateDetailCard,
+                      {
+                        backgroundColor: colors.bgSurface,
+                        borderRadius: radii.xl,
+                        padding: 24,
+                        alignItems: 'center',
+                      },
+                    ]}
+                  >
+                    <Text style={{ color: colors.textSecondary }}>
+                      No state data available for your assigned regions.
+                    </Text>
+                  </View>
+                );
+              }
               return (
                 <View
                   style={[
@@ -2257,6 +2731,140 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
         {/* MODULE 5: USER MANAGEMENT */}
         {activeTab === 'users' && (
           <View>
+            {/* 1. Regional Admin Role & Many-to-Many Region Assignments */}
+            <View
+              style={[
+                {
+                  backgroundColor: colors.bgSurface,
+                  borderRadius: radii.xl,
+                  padding: 20,
+                  marginBottom: 20,
+                  borderColor: isSuperAdmin ? '#F59E0B' : colors.borderLight,
+                  borderWidth: isSuperAdmin ? 1.5 : 1,
+                  ...shadows.card,
+                },
+              ]}
+            >
+              <View
+                style={{
+                  flexDirection: 'row',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  marginBottom: 8,
+                }}
+              >
+                <View style={{ flex: 1, marginRight: 10 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    <Text style={[styles.moduleTitle, { color: colors.textPrimary, fontSize: 18 }]}>
+                      {isSuperAdmin
+                        ? `Staff Admin Management (${adminProfiles.length})`
+                        : 'Your Regional Admin Jurisdiction'}
+                    </Text>
+                  </View>
+                  <Text style={[styles.moduleSubtitle, { color: colors.textSecondary }]}>
+                    {isSuperAdmin
+                      ? 'Super Admin (raphael.dalmeida@mulyam.in) can assign staff admins to specific regions. Admins and regions have a many-to-many relationship.'
+                      : `You are authenticated with regional access to: ${assignedRegions && assignedRegions.length > 0 ? assignedRegions.map(formatRegionName).join(', ') : 'Pune City (Pune)'}. Only the Super Admin can reassign regional access.`}
+                  </Text>
+                </View>
+
+                {isSuperAdmin && (
+                  <Button
+                    title="+ Assign Regional Admin"
+                    size="sm"
+                    onPress={handleOpenAddAdminModal}
+                    style={{ backgroundColor: '#F59E0B' }}
+                  />
+                )}
+              </View>
+
+              {/* Admin Staff List */}
+              <View style={{ gap: 10, marginTop: 12 }}>
+                {adminProfiles.map((adm) => (
+                  <View
+                    key={adm.id}
+                    style={{
+                      backgroundColor: colors.bgSubtle,
+                      borderColor: colors.borderLight,
+                      borderWidth: 1,
+                      borderRadius: radii.lg,
+                      padding: 14,
+                      flexDirection: 'row',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                    }}
+                  >
+                    <View style={{ flex: 1, marginRight: 10 }}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                        <Text
+                          style={{ fontSize: 14, fontWeight: '700', color: colors.textPrimary }}
+                        >
+                          {adm.name}
+                        </Text>
+                        <Badge
+                          label={adm.role === 'super_admin' ? 'SUPER ADMIN' : 'REGIONAL ADMIN'}
+                          variant={adm.role === 'super_admin' ? 'warning' : 'info'}
+                          size="sm"
+                        />
+                      </View>
+                      <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 2 }}>
+                        {adm.email}
+                      </Text>
+
+                      {/* Many-to-Many Assigned Regions Tags */}
+                      <View
+                        style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 8 }}
+                      >
+                        {adm.role === 'super_admin' ? (
+                          <Badge
+                            label="All Operating Regions (Pan-India)"
+                            variant="neutral"
+                            size="sm"
+                          />
+                        ) : adm.regions && adm.regions.length > 0 ? (
+                          adm.regions.map((reg) => {
+                            const sc = STORAGE_CENTRE_REGIONS.find(
+                              (r) => r.id === reg || r.name.toLowerCase() === reg.toLowerCase(),
+                            );
+                            return (
+                              <Badge
+                                key={reg}
+                                label={sc ? `${sc.name} (${sc.city})` : `${reg} Region`}
+                                variant="accent"
+                                size="sm"
+                              />
+                            );
+                          })
+                        ) : (
+                          <Badge label="No Region Assigned" variant="danger" size="sm" />
+                        )}
+                      </View>
+                    </View>
+
+                    {isSuperAdmin && (
+                      <View style={{ flexDirection: 'row', gap: 6 }}>
+                        <Button
+                          title="Edit Access"
+                          size="sm"
+                          variant="outline"
+                          onPress={() => handleOpenEditAdminModal(adm)}
+                        />
+                        {adm.role !== 'super_admin' && adm.email !== SUPER_ADMIN_EMAIL && (
+                          <Button
+                            title="Revoke"
+                            size="sm"
+                            variant="danger"
+                            onPress={() => handleDeleteAdmin(adm.email)}
+                          />
+                        )}
+                      </View>
+                    )}
+                  </View>
+                ))}
+              </View>
+            </View>
+
+            {/* 2. Customer Accounts Header */}
             <View style={styles.moduleHeaderRow}>
               <View>
                 <Text style={[styles.moduleTitle, { color: colors.textPrimary }]}>
@@ -2506,6 +3114,798 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
                 </Text>
               </View>
             ))}
+          </View>
+        )}
+
+        {/* MODULE 7B: CHEF SUBMISSIONS */}
+        {activeTab === 'chefs' && (
+          <View>
+            {/* Header */}
+            <View style={styles.moduleHeaderRow}>
+              <View>
+                <Text style={[styles.moduleTitle, { color: colors.textPrimary }]}>
+                  Chef Submissions ({chefSubmissions.length})
+                </Text>
+                <Text style={[styles.moduleSubtitle, { color: colors.textSecondary }]}>
+                  Review recipes submitted by approved chefs. Set price and availability regions
+                  before publishing.
+                </Text>
+              </View>
+            </View>
+
+            {/* Approved Chefs panel */}
+            <View
+              style={[
+                {
+                  backgroundColor: colors.bgSurface,
+                  borderRadius: radii.xl,
+                  padding: 20,
+                  marginBottom: 20,
+                  borderColor: colors.borderLight,
+                  borderWidth: 1,
+                  ...shadows.card,
+                },
+              ]}
+            >
+              <View
+                style={{
+                  flexDirection: 'row',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  marginBottom: 12,
+                }}
+              >
+                <Text style={[styles.moduleTitle, { color: colors.textPrimary, fontSize: 16 }]}>
+                  Approved Chefs ({chefProfiles.length})
+                </Text>
+                <TouchableOpacity
+                  style={[
+                    {
+                      backgroundColor: colors.primaryLight,
+                      borderRadius: radii.md,
+                      paddingHorizontal: 14,
+                      paddingVertical: 8,
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      gap: 6,
+                    },
+                  ]}
+                  onPress={() => {
+                    setGrantChefTargetUser(null);
+                    setGrantChefModalVisible(true);
+                  }}
+                >
+                  <Icon name="add" size={14} color={colors.primary} />
+                  <Text style={{ fontSize: 13, fontWeight: '700', color: colors.primary }}>
+                    Grant Chef Role
+                  </Text>
+                </TouchableOpacity>
+              </View>
+              {chefProfiles.length === 0 ? (
+                <Text style={{ color: colors.textMuted, fontSize: 13 }}>
+                  No chefs approved yet. Search for a registered customer in the Users tab and grant
+                  them the chef role.
+                </Text>
+              ) : (
+                chefProfiles.map((chef) => (
+                  <View
+                    key={chef.uid}
+                    style={[
+                      {
+                        flexDirection: 'row',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        paddingVertical: 12,
+                        borderBottomWidth: 1,
+                        borderBottomColor: colors.borderLight,
+                      },
+                    ]}
+                  >
+                    <View>
+                      <Text style={{ fontSize: 14, fontWeight: '700', color: colors.textPrimary }}>
+                        {chef.displayName}
+                      </Text>
+                      <Text style={{ fontSize: 12, color: colors.textMuted }}>{chef.email}</Text>
+                      {chef.speciality && (
+                        <Text style={{ fontSize: 11, color: colors.primary, marginTop: 2 }}>
+                          {chef.speciality}
+                        </Text>
+                      )}
+                    </View>
+                    <TouchableOpacity
+                      onPress={() => {
+                        Alert.alert(
+                          'Revoke Chef Role',
+                          `Remove chef role from ${chef.displayName}? They will revert to a regular customer.`,
+                          [
+                            { text: 'Cancel', style: 'cancel' },
+                            {
+                              text: 'Revoke',
+                              style: 'destructive',
+                              onPress: async () => {
+                                await revokeChefRole(chef.uid, chef.email);
+                                reloadChefData();
+                                showInAppAlert(
+                                  'Chef Role Revoked',
+                                  `${chef.displayName} is now a regular customer.`,
+                                );
+                              },
+                            },
+                          ],
+                        );
+                      }}
+                      style={[
+                        {
+                          borderWidth: 1,
+                          borderColor: colors.danger,
+                          borderRadius: radii.md,
+                          paddingHorizontal: 12,
+                          paddingVertical: 6,
+                        },
+                      ]}
+                    >
+                      <Text style={{ fontSize: 12, fontWeight: '700', color: colors.danger }}>
+                        Revoke
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                ))
+              )}
+            </View>
+
+            {/* Filter tabs */}
+            <View style={{ flexDirection: 'row', gap: 8, marginBottom: 16 }}>
+              {(['all', 'pending_review', 'published', 'rejected'] as const).map((f) => (
+                <TouchableOpacity
+                  key={f}
+                  onPress={() => setChefSubmissionFilter(f)}
+                  style={[
+                    {
+                      paddingHorizontal: 14,
+                      paddingVertical: 7,
+                      borderRadius: radii.pill,
+                      backgroundColor:
+                        chefSubmissionFilter === f ? colors.primary : colors.bgSubtle,
+                      borderWidth: 1,
+                      borderColor: chefSubmissionFilter === f ? colors.primary : colors.border,
+                    },
+                  ]}
+                >
+                  <Text
+                    style={{
+                      fontSize: 12,
+                      fontWeight: '700',
+                      color: chefSubmissionFilter === f ? '#fff' : colors.textSecondary,
+                    }}
+                  >
+                    {f === 'all'
+                      ? 'All'
+                      : f === 'pending_review'
+                        ? 'Pending Review'
+                        : f === 'published'
+                          ? 'Published'
+                          : 'Rejected'}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            {/* Submission cards */}
+            {(chefSubmissionFilter === 'all'
+              ? chefSubmissions
+              : chefSubmissions.filter((s) => s.submissionStatus === chefSubmissionFilter)
+            ).length === 0 ? (
+              <View
+                style={[
+                  {
+                    backgroundColor: colors.bgSurface,
+                    borderRadius: radii.xl,
+                    padding: 40,
+                    alignItems: 'center',
+                    borderColor: colors.borderLight,
+                    borderWidth: 1,
+                  },
+                ]}
+              >
+                <Icon name="chef" size={36} color={colors.textMuted} />
+                <Text style={{ color: colors.textMuted, marginTop: 12, fontSize: 14 }}>
+                  {chefSubmissionFilter === 'all'
+                    ? 'No chef submissions yet.'
+                    : `No ${chefSubmissionFilter.replace('_', ' ')} submissions.`}
+                </Text>
+              </View>
+            ) : (
+              (chefSubmissionFilter === 'all'
+                ? chefSubmissions
+                : chefSubmissions.filter((s) => s.submissionStatus === chefSubmissionFilter)
+              ).map((sub) => (
+                <View
+                  key={sub.id}
+                  style={[
+                    {
+                      backgroundColor: colors.bgSurface,
+                      borderRadius: radii.xl,
+                      padding: 18,
+                      marginBottom: 14,
+                      borderColor:
+                        sub.submissionStatus === 'pending_review'
+                          ? '#F59E0B'
+                          : sub.submissionStatus === 'published'
+                            ? '#22C55E'
+                            : sub.submissionStatus === 'rejected'
+                              ? colors.danger
+                              : colors.borderLight,
+                      borderWidth: sub.submissionStatus === 'pending_review' ? 1.5 : 1,
+                      ...shadows.card,
+                    },
+                  ]}
+                >
+                  {/* Title row */}
+                  <View
+                    style={{
+                      flexDirection: 'row',
+                      justifyContent: 'space-between',
+                      alignItems: 'flex-start',
+                      marginBottom: 8,
+                    }}
+                  >
+                    <View style={{ flex: 1 }}>
+                      <Text
+                        style={{
+                          fontSize: 16,
+                          fontWeight: '800',
+                          color: colors.textPrimary,
+                          marginBottom: 2,
+                        }}
+                      >
+                        {sub.name}
+                      </Text>
+                      <Text style={{ fontSize: 12, color: colors.textSecondary }}>
+                        by {sub.chefName} • {sub.cuisine} • {sub.diet.toUpperCase()}
+                      </Text>
+                    </View>
+                    <View
+                      style={[
+                        {
+                          paddingHorizontal: 9,
+                          paddingVertical: 3,
+                          borderRadius: 20,
+                          backgroundColor:
+                            sub.submissionStatus === 'pending_review'
+                              ? '#FEF3C7'
+                              : sub.submissionStatus === 'published'
+                                ? '#DCFCE7'
+                                : sub.submissionStatus === 'rejected'
+                                  ? '#FEE2E2'
+                                  : colors.bgSubtle,
+                        },
+                      ]}
+                    >
+                      <Text
+                        style={{
+                          fontSize: 10,
+                          fontWeight: '800',
+                          color:
+                            sub.submissionStatus === 'pending_review'
+                              ? '#92400E'
+                              : sub.submissionStatus === 'published'
+                                ? '#15803D'
+                                : sub.submissionStatus === 'rejected'
+                                  ? '#B91C1C'
+                                  : colors.textSecondary,
+                        }}
+                      >
+                        {sub.submissionStatus === 'pending_review'
+                          ? 'Pending Review'
+                          : sub.submissionStatus === 'published'
+                            ? 'Published'
+                            : sub.submissionStatus === 'rejected'
+                              ? 'Rejected'
+                              : 'Draft'}
+                      </Text>
+                    </View>
+                  </View>
+
+                  {/* Description */}
+                  <Text
+                    style={{ fontSize: 13, color: colors.textSecondary, marginBottom: 10 }}
+                    numberOfLines={2}
+                  >
+                    {sub.description}
+                  </Text>
+
+                  {/* Stats */}
+                  <View style={{ flexDirection: 'row', gap: 16, marginBottom: 12 }}>
+                    {[
+                      { label: 'Servings', value: sub.servings },
+                      { label: 'Prep', value: `${sub.prepTimeMinutes}m` },
+                      { label: 'Cook', value: `${sub.cookTimeMinutes}m` },
+                      { label: 'Ingredients', value: sub.ingredients.length },
+                      { label: 'Steps', value: sub.recipeSteps.length },
+                    ].map(({ label, value }) => (
+                      <View key={label}>
+                        <Text style={{ fontSize: 11, color: colors.textMuted }}>{label}</Text>
+                        <Text
+                          style={{ fontSize: 13, fontWeight: '700', color: colors.textPrimary }}
+                        >
+                          {value}
+                        </Text>
+                      </View>
+                    ))}
+                  </View>
+
+                  {/* Admin actions for pending */}
+                  {sub.submissionStatus === 'pending_review' && (
+                    <TouchableOpacity
+                      style={[
+                        {
+                          backgroundColor: colors.primary,
+                          borderRadius: radii.md,
+                          paddingVertical: 10,
+                          alignItems: 'center',
+                        },
+                      ]}
+                      onPress={() => {
+                        setSelectedChefSubmission(sub);
+                        setChefPublishPrice('');
+                        setChefPublishStorageCentres([]);
+                        setChefPublishCities([]);
+                        setChefRejectNotes('');
+                        setChefSubmissionModalVisible(true);
+                      }}
+                    >
+                      <Text style={{ color: '#fff', fontWeight: '700', fontSize: 14 }}>
+                        Review & Publish / Reject
+                      </Text>
+                    </TouchableOpacity>
+                  )}
+
+                  {/* Rejection notes */}
+                  {sub.submissionStatus === 'rejected' && sub.reviewNotes && (
+                    <View
+                      style={{
+                        backgroundColor: '#FEF2F2',
+                        borderRadius: radii.md,
+                        padding: 10,
+                        marginTop: 8,
+                      }}
+                    >
+                      <Text style={{ fontSize: 12, color: colors.danger }}>
+                        Rejected: {sub.reviewNotes}
+                      </Text>
+                    </View>
+                  )}
+
+                  {/* Published info */}
+                  {sub.submissionStatus === 'published' && (
+                    <View
+                      style={{
+                        backgroundColor: '#F0FDF4',
+                        borderRadius: radii.md,
+                        padding: 10,
+                        marginTop: 8,
+                      }}
+                    >
+                      <Text style={{ fontSize: 12, color: '#15803D' }}>
+                        Published at Rs. {sub.price ?? 'N/A'}
+                      </Text>
+                    </View>
+                  )}
+                </View>
+              ))
+            )}
+
+            {/* Review Modal */}
+            <Modal
+              visible={chefSubmissionModalVisible}
+              animationType="slide"
+              presentationStyle="pageSheet"
+              onRequestClose={() => setChefSubmissionModalVisible(false)}
+            >
+              <ScrollView
+                style={{ flex: 1, backgroundColor: colors.bgSurface }}
+                keyboardShouldPersistTaps="handled"
+              >
+                <View
+                  style={{
+                    flexDirection: 'row',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    padding: 20,
+                    borderBottomWidth: 1,
+                    borderBottomColor: colors.borderLight,
+                  }}
+                >
+                  <Text style={{ fontSize: 18, fontWeight: '800', color: colors.textPrimary }}>
+                    Review Submission
+                  </Text>
+                  <TouchableOpacity onPress={() => setChefSubmissionModalVisible(false)}>
+                    <Icon name="close" size={22} color={colors.textMuted} />
+                  </TouchableOpacity>
+                </View>
+
+                {selectedChefSubmission && (
+                  <View style={{ padding: 20 }}>
+                    <Text
+                      style={{
+                        fontSize: 20,
+                        fontWeight: '800',
+                        color: colors.textPrimary,
+                        marginBottom: 4,
+                      }}
+                    >
+                      {selectedChefSubmission.name}
+                    </Text>
+                    <Text style={{ fontSize: 13, color: colors.textSecondary, marginBottom: 16 }}>
+                      by {selectedChefSubmission.chefName} • {selectedChefSubmission.cuisine}
+                    </Text>
+                    <Text
+                      style={{
+                        fontSize: 14,
+                        color: colors.textPrimary,
+                        marginBottom: 16,
+                        lineHeight: 22,
+                      }}
+                    >
+                      {selectedChefSubmission.description}
+                    </Text>
+
+                    {/* Ingredients */}
+                    <Text
+                      style={{
+                        fontSize: 13,
+                        fontWeight: '700',
+                        color: colors.textSecondary,
+                        marginBottom: 8,
+                        letterSpacing: 0.5,
+                      }}
+                    >
+                      INGREDIENTS ({selectedChefSubmission.ingredients.length})
+                    </Text>
+                    {selectedChefSubmission.ingredients.map((ing, i) => (
+                      <Text
+                        key={i}
+                        style={{ fontSize: 13, color: colors.textPrimary, marginBottom: 4 }}
+                      >
+                        • {ing.name}
+                        {ing.quantity ? ` — ${ing.quantity}` : ''}
+                      </Text>
+                    ))}
+
+                    {/* Steps */}
+                    <Text
+                      style={{
+                        fontSize: 13,
+                        fontWeight: '700',
+                        color: colors.textSecondary,
+                        marginTop: 16,
+                        marginBottom: 8,
+                        letterSpacing: 0.5,
+                      }}
+                    >
+                      RECIPE STEPS ({selectedChefSubmission.recipeSteps.length})
+                    </Text>
+                    {selectedChefSubmission.recipeSteps.map((step) => (
+                      <View key={step.stepNumber} style={{ marginBottom: 10 }}>
+                        <Text style={{ fontSize: 12, fontWeight: '700', color: colors.primary }}>
+                          Step {step.stepNumber}
+                          {step.title ? `: ${step.title}` : ''}
+                        </Text>
+                        <Text style={{ fontSize: 13, color: colors.textPrimary, lineHeight: 20 }}>
+                          {step.instruction}
+                        </Text>
+                      </View>
+                    ))}
+
+                    {/* Admin: Set Price */}
+                    <Text
+                      style={{
+                        fontSize: 13,
+                        fontWeight: '700',
+                        color: colors.textSecondary,
+                        marginTop: 20,
+                        marginBottom: 8,
+                      }}
+                    >
+                      SET PRICE (Rs.) *
+                    </Text>
+                    <TextInput
+                      style={[
+                        {
+                          backgroundColor: colors.bgSubtle,
+                          borderRadius: radii.md,
+                          padding: 14,
+                          fontSize: 15,
+                          color: colors.textPrimary,
+                          borderWidth: 1,
+                          borderColor: colors.border,
+                          marginBottom: 16,
+                        },
+                      ]}
+                      placeholder="e.g. 299"
+                      placeholderTextColor={colors.textMuted}
+                      keyboardType="number-pad"
+                      value={chefPublishPrice}
+                      onChangeText={setChefPublishPrice}
+                    />
+
+                    {/* Admin: Select Storage Centres */}
+                    <Text
+                      style={{
+                        fontSize: 13,
+                        fontWeight: '700',
+                        color: colors.textSecondary,
+                        marginBottom: 8,
+                      }}
+                    >
+                      AVAILABILITY REGIONS
+                    </Text>
+                    <Text style={{ fontSize: 12, color: colors.textMuted, marginBottom: 10 }}>
+                      Select which storage centres will fulfil this kit. Leave empty to make it
+                      pan-India.
+                    </Text>
+                    <View
+                      style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}
+                    >
+                      {STORAGE_CENTRE_REGIONS.map((sc) => {
+                        const sel = chefPublishStorageCentres.includes(sc.id);
+                        return (
+                          <TouchableOpacity
+                            key={sc.id}
+                            onPress={() =>
+                              setChefPublishStorageCentres((prev) =>
+                                sel ? prev.filter((x) => x !== sc.id) : [...prev, sc.id],
+                              )
+                            }
+                            style={[
+                              {
+                                paddingHorizontal: 12,
+                                paddingVertical: 6,
+                                borderRadius: radii.pill,
+                                backgroundColor: sel ? colors.primary : colors.bgSubtle,
+                                borderWidth: 1,
+                                borderColor: sel ? colors.primary : colors.border,
+                              },
+                            ]}
+                          >
+                            <Text
+                              style={{
+                                fontSize: 11,
+                                fontWeight: '700',
+                                color: sel ? '#fff' : colors.textSecondary,
+                              }}
+                            >
+                              {sc.name} ({sc.city})
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+
+                    {/* Rejection notes field */}
+                    <Text
+                      style={{
+                        fontSize: 13,
+                        fontWeight: '700',
+                        color: colors.textSecondary,
+                        marginBottom: 8,
+                      }}
+                    >
+                      REJECTION NOTES (if rejecting)
+                    </Text>
+                    <TextInput
+                      style={[
+                        {
+                          backgroundColor: colors.bgSubtle,
+                          borderRadius: radii.md,
+                          padding: 14,
+                          fontSize: 14,
+                          color: colors.textPrimary,
+                          borderWidth: 1,
+                          borderColor: colors.border,
+                          minHeight: 80,
+                          textAlignVertical: 'top',
+                          marginBottom: 24,
+                        },
+                      ]}
+                      placeholder="Explain why the recipe was rejected (optional for publishing)"
+                      placeholderTextColor={colors.textMuted}
+                      value={chefRejectNotes}
+                      onChangeText={setChefRejectNotes}
+                      multiline
+                    />
+
+                    {/* Action buttons */}
+                    <View style={{ flexDirection: 'row', gap: 12 }}>
+                      <TouchableOpacity
+                        style={[
+                          {
+                            flex: 1,
+                            padding: 14,
+                            borderRadius: radii.lg,
+                            alignItems: 'center',
+                            backgroundColor: colors.danger,
+                            opacity: isProcessingChefSubmission ? 0.5 : 1,
+                          },
+                        ]}
+                        disabled={isProcessingChefSubmission}
+                        onPress={async () => {
+                          if (!selectedChefSubmission) return;
+                          if (!chefRejectNotes.trim()) {
+                            Alert.alert('Required', 'Please enter a reason for rejection.');
+                            return;
+                          }
+                          setIsProcessingChefSubmission(true);
+                          await rejectChefSubmission(
+                            selectedChefSubmission.id,
+                            chefRejectNotes.trim(),
+                          );
+                          await reloadChefData();
+                          setIsProcessingChefSubmission(false);
+                          setChefSubmissionModalVisible(false);
+                          showInAppAlert(
+                            'Recipe Rejected',
+                            `"${selectedChefSubmission.name}" has been rejected with feedback sent to ${selectedChefSubmission.chefName}.`,
+                          );
+                        }}
+                      >
+                        <Text style={{ color: '#fff', fontWeight: '700', fontSize: 14 }}>
+                          Reject
+                        </Text>
+                      </TouchableOpacity>
+
+                      <TouchableOpacity
+                        style={[
+                          {
+                            flex: 2,
+                            padding: 14,
+                            borderRadius: radii.lg,
+                            alignItems: 'center',
+                            backgroundColor: colors.primary,
+                            opacity: isProcessingChefSubmission ? 0.5 : 1,
+                          },
+                        ]}
+                        disabled={isProcessingChefSubmission}
+                        onPress={async () => {
+                          if (!selectedChefSubmission) return;
+                          const price = parseFloat(chefPublishPrice);
+                          if (!chefPublishPrice || isNaN(price) || price <= 0) {
+                            Alert.alert('Required', 'Please set a valid price before publishing.');
+                            return;
+                          }
+                          setIsProcessingChefSubmission(true);
+                          const regions =
+                            chefPublishStorageCentres.length > 0
+                              ? [
+                                  ...new Set(
+                                    STORAGE_CENTRE_REGIONS.filter((r) =>
+                                      chefPublishStorageCentres.includes(r.id),
+                                    ).map((r) => r.zone),
+                                  ),
+                                ]
+                              : ['North', 'South', 'West', 'East'];
+                          await publishChefSubmission(
+                            selectedChefSubmission.id,
+                            price,
+                            regions,
+                            chefPublishStorageCentres,
+                            chefPublishCities,
+                          );
+                          await reloadChefData();
+                          setIsProcessingChefSubmission(false);
+                          setChefSubmissionModalVisible(false);
+                          showInAppAlert(
+                            'Recipe Published',
+                            `"${selectedChefSubmission.name}" by ${selectedChefSubmission.chefName} is now live at Rs. ${price}.`,
+                          );
+                        }}
+                      >
+                        <Text style={{ color: '#fff', fontWeight: '700', fontSize: 14 }}>
+                          Publish at Rs. {chefPublishPrice || '—'}
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                )}
+              </ScrollView>
+            </Modal>
+
+            {/* Grant Chef Role Modal */}
+            <Modal
+              visible={grantChefModalVisible}
+              animationType="slide"
+              presentationStyle="pageSheet"
+              onRequestClose={() => setGrantChefModalVisible(false)}
+            >
+              <View style={{ flex: 1, backgroundColor: colors.bgSurface, padding: 20 }}>
+                <View
+                  style={{
+                    flexDirection: 'row',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    marginBottom: 20,
+                  }}
+                >
+                  <Text style={{ fontSize: 18, fontWeight: '800', color: colors.textPrimary }}>
+                    Grant Chef Role
+                  </Text>
+                  <TouchableOpacity onPress={() => setGrantChefModalVisible(false)}>
+                    <Icon name="close" size={22} color={colors.textMuted} />
+                  </TouchableOpacity>
+                </View>
+                <Text
+                  style={{
+                    fontSize: 14,
+                    color: colors.textSecondary,
+                    marginBottom: 20,
+                    lineHeight: 22,
+                  }}
+                >
+                  To grant the chef role, go to the Users tab and select a registered customer.
+                  Their account will be upgraded to a Chef and they will see the Chef Studio tab
+                  after their next login.
+                </Text>
+                {/* Users list to pick from */}
+                {users.length === 0 ? (
+                  <Text style={{ color: colors.textMuted, fontSize: 13 }}>
+                    No registered customers found.
+                  </Text>
+                ) : (
+                  users.map((u) => (
+                    <View
+                      key={u.id}
+                      style={{
+                        flexDirection: 'row',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        paddingVertical: 14,
+                        borderBottomWidth: 1,
+                        borderBottomColor: colors.borderLight,
+                      }}
+                    >
+                      <View>
+                        <Text
+                          style={{ fontSize: 14, fontWeight: '700', color: colors.textPrimary }}
+                        >
+                          {u.name}
+                        </Text>
+                        <Text style={{ fontSize: 12, color: colors.textMuted }}>{u.email}</Text>
+                      </View>
+                      <TouchableOpacity
+                        style={{
+                          backgroundColor: colors.primaryLight,
+                          borderRadius: radii.md,
+                          paddingHorizontal: 14,
+                          paddingVertical: 8,
+                        }}
+                        onPress={async () => {
+                          const result = await grantChefRole(
+                            u.id,
+                            u.email || '',
+                            u.name,
+                            user?.email || 'admin',
+                          );
+                          if (result.success) {
+                            reloadChefData();
+                            setGrantChefModalVisible(false);
+                            showInAppAlert(
+                              'Chef Role Granted',
+                              `${u.name} is now an approved chef. They will see the Chef Studio tab after their next login.`,
+                            );
+                          } else {
+                            Alert.alert('Error', result.error || 'Could not grant chef role.');
+                          }
+                        }}
+                      >
+                        <Text style={{ fontSize: 13, fontWeight: '700', color: colors.primary }}>
+                          Make Chef
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  ))
+                )}
+              </View>
+            </Modal>
           </View>
         )}
 
@@ -3003,6 +4403,41 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
                           {inspectOrder.addressTag ? `[${inspectOrder.addressTag}]` : ''}
                         </Text>
                       </Text>
+                      {(() => {
+                        const sc = resolveStorageCentre(inspectOrder.deliveryAddress);
+                        return (
+                          <View
+                            style={{
+                              marginTop: 6,
+                              marginBottom: 4,
+                              padding: 8,
+                              backgroundColor: colors.bgSurface,
+                              borderRadius: radii.sm,
+                              borderLeftWidth: 3,
+                              borderLeftColor: colors.primary,
+                            }}
+                          >
+                            <Text
+                              style={{ fontSize: 11, fontWeight: '800', color: colors.primary }}
+                            >
+                              Fulfillment Storage Centre:
+                            </Text>
+                            <Text
+                              style={{
+                                fontSize: 12,
+                                fontWeight: '700',
+                                color: colors.textPrimary,
+                                marginTop: 2,
+                              }}
+                            >
+                              {sc.storageCentreName} ({sc.name}, {sc.city})
+                            </Text>
+                            <Text style={{ fontSize: 11, color: colors.textSecondary }}>
+                              Depot: {sc.storageCentreAddress}
+                            </Text>
+                          </View>
+                        );
+                      })()}
                       <Text style={{ fontSize: 12, color: colors.textPrimary, fontWeight: '700' }}>
                         Slot:{' '}
                         <Text style={{ fontWeight: '400', color: colors.textSecondary }}>
@@ -3501,6 +4936,355 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
           setEditingKit(null);
         }}
       />
+
+      {/* REGIONAL ADMIN ASSIGNMENT MODAL (SUPER ADMIN ONLY) */}
+      <Modal visible={adminModalVisible} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View
+            style={[
+              styles.modalBox,
+              {
+                backgroundColor: colors.bgSurface,
+                borderRadius: radii.xl,
+                maxWidth: 480,
+                ...shadows.card,
+              },
+            ]}
+          >
+            <View style={{ marginBottom: 4 }}>
+              <Text style={[styles.modalHeading, { color: colors.textPrimary, marginBottom: 0 }]}>
+                {adminProfiles.some(
+                  (a) => a.email.toLowerCase() === adminFormEmail.trim().toLowerCase(),
+                )
+                  ? 'Edit Regional Admin Access'
+                  : 'Assign New Regional Admin'}
+              </Text>
+            </View>
+            <Text style={{ fontSize: 12, color: colors.textSecondary, marginBottom: 16 }}>
+              Admins and regions have a many-to-many relationship. One admin can manage several
+              regions, and one region can have several admins.
+            </Text>
+
+            <Text style={[styles.inputLabel, { color: colors.textPrimary }]}>
+              Staff Admin Email
+            </Text>
+            <TextInput
+              style={[
+                styles.modalInput,
+                {
+                  backgroundColor: colors.bgSubtle,
+                  borderColor: colors.border,
+                  borderRadius: radii.md,
+                },
+              ]}
+              placeholder="e.g. karthik.raman@mulyam.in"
+              placeholderTextColor={colors.textMuted}
+              autoCapitalize="none"
+              keyboardType="email-address"
+              value={adminFormEmail}
+              onChangeText={setAdminFormEmail}
+              editable={
+                !adminProfiles.some(
+                  (a) =>
+                    a.email.toLowerCase() === adminFormEmail.trim().toLowerCase() &&
+                    a.role === 'super_admin',
+                )
+              }
+            />
+
+            <Text style={[styles.inputLabel, { color: colors.textPrimary }]}>Staff Name</Text>
+            <TextInput
+              style={[
+                styles.modalInput,
+                {
+                  backgroundColor: colors.bgSubtle,
+                  borderColor: colors.border,
+                  borderRadius: radii.md,
+                },
+              ]}
+              placeholder="e.g. Karthik Raman"
+              placeholderTextColor={colors.textMuted}
+              value={adminFormName}
+              onChangeText={setAdminFormName}
+            />
+
+            <Text style={[styles.inputLabel, { color: colors.textPrimary }]}>Admin Role</Text>
+            <View style={{ flexDirection: 'row', gap: 8, marginBottom: 14 }}>
+              <TouchableOpacity
+                onPress={() => setAdminFormRole('regional_admin')}
+                style={[
+                  {
+                    borderRadius: radii.pill,
+                    borderWidth: 1,
+                    backgroundColor:
+                      adminFormRole === 'regional_admin' ? colors.primary : colors.bgSubtle,
+                    borderColor:
+                      adminFormRole === 'regional_admin' ? colors.primary : colors.borderLight,
+                    paddingHorizontal: 12,
+                    paddingVertical: 8,
+                  },
+                ]}
+              >
+                <Text
+                  style={{
+                    color: adminFormRole === 'regional_admin' ? '#fff' : colors.textPrimary,
+                    fontWeight: '700',
+                    fontSize: 12,
+                  }}
+                >
+                  Regional Admin
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={() => setAdminFormRole('super_admin')}
+                style={[
+                  {
+                    borderRadius: radii.pill,
+                    borderWidth: 1,
+                    backgroundColor: adminFormRole === 'super_admin' ? '#F59E0B' : colors.bgSubtle,
+                    borderColor: adminFormRole === 'super_admin' ? '#F59E0B' : colors.borderLight,
+                    paddingHorizontal: 12,
+                    paddingVertical: 8,
+                  },
+                ]}
+              >
+                <Text
+                  style={{
+                    color: adminFormRole === 'super_admin' ? '#fff' : colors.textPrimary,
+                    fontWeight: '700',
+                    fontSize: 12,
+                  }}
+                >
+                  Super Admin (All Regions)
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            {adminFormRole === 'regional_admin' && (
+              <>
+                <Text style={[styles.inputLabel, { color: colors.textPrimary }]}>
+                  Assigned Micro-Regions & Storage Centres (Many-to-Many)
+                </Text>
+                <Text style={{ fontSize: 11, color: colors.textMuted, marginBottom: 8 }}>
+                  Select the local storage centre regions this admin oversees. Meal kits are
+                  dispatched to customers based on these regional boundaries:
+                </Text>
+
+                <ScrollView
+                  style={{ maxHeight: 280, marginBottom: 14 }}
+                  nestedScrollEnabled={true}
+                  showsVerticalScrollIndicator={true}
+                >
+                  {/* Grouped by City */}
+                  {Array.from(new Set(STORAGE_CENTRE_REGIONS.map((r) => r.city))).map(
+                    (cityName) => {
+                      const cityRegions = STORAGE_CENTRE_REGIONS.filter((r) => r.city === cityName);
+                      const allSelectedForCity = cityRegions.every((r) =>
+                        adminFormRegions.includes(r.id),
+                      );
+                      return (
+                        <View
+                          key={cityName}
+                          style={{
+                            marginBottom: 10,
+                            backgroundColor: colors.bgSubtle,
+                            borderRadius: radii.md,
+                            padding: 10,
+                            borderWidth: 1,
+                            borderColor: colors.borderLight,
+                          }}
+                        >
+                          <View
+                            style={{
+                              flexDirection: 'row',
+                              justifyContent: 'space-between',
+                              alignItems: 'center',
+                              marginBottom: 6,
+                              paddingBottom: 4,
+                              borderBottomWidth: 1,
+                              borderBottomColor: colors.borderLight,
+                            }}
+                          >
+                            <Text
+                              style={{ fontSize: 12, fontWeight: '800', color: colors.textPrimary }}
+                            >
+                              {cityName} ({cityRegions.length} Storage Centres)
+                            </Text>
+                            <TouchableOpacity
+                              onPress={() => {
+                                if (allSelectedForCity) {
+                                  setAdminFormRegions((prev) =>
+                                    prev.filter((id) => !cityRegions.some((cr) => cr.id === id)),
+                                  );
+                                } else {
+                                  setAdminFormRegions((prev) => [
+                                    ...prev,
+                                    ...cityRegions
+                                      .map((cr) => cr.id)
+                                      .filter((id) => !prev.includes(id)),
+                                  ]);
+                                }
+                              }}
+                            >
+                              <Text
+                                style={{ fontSize: 11, color: colors.primary, fontWeight: '700' }}
+                              >
+                                {allSelectedForCity ? 'Deselect All' : 'Select All'}
+                              </Text>
+                            </TouchableOpacity>
+                          </View>
+
+                          <View style={{ gap: 6 }}>
+                            {cityRegions.map((reg) => {
+                              const isSelected = adminFormRegions.includes(reg.id);
+                              return (
+                                <TouchableOpacity
+                                  key={reg.id}
+                                  onPress={() => {
+                                    setAdminFormRegions((prev) =>
+                                      prev.includes(reg.id)
+                                        ? prev.length > 1
+                                          ? prev.filter((r) => r !== reg.id)
+                                          : prev
+                                        : [...prev, reg.id],
+                                    );
+                                  }}
+                                  style={{
+                                    borderRadius: radii.sm,
+                                    borderWidth: 1,
+                                    backgroundColor: isSelected
+                                      ? colors.primary + '18'
+                                      : colors.bgSurface,
+                                    borderColor: isSelected ? colors.primary : colors.borderLight,
+                                    padding: 8,
+                                  }}
+                                >
+                                  <View
+                                    style={{
+                                      flexDirection: 'row',
+                                      justifyContent: 'space-between',
+                                      alignItems: 'center',
+                                    }}
+                                  >
+                                    <Text
+                                      style={{
+                                        color: isSelected ? colors.primary : colors.textPrimary,
+                                        fontWeight: '700',
+                                        fontSize: 12,
+                                      }}
+                                    >
+                                      {reg.name}
+                                    </Text>
+                                    <Badge
+                                      label={isSelected ? 'ASSIGNED' : 'UNASSIGNED'}
+                                      variant={isSelected ? 'success' : 'neutral'}
+                                      size="sm"
+                                    />
+                                  </View>
+                                  <Text
+                                    style={{
+                                      fontSize: 11,
+                                      color: colors.textSecondary,
+                                      marginTop: 2,
+                                      fontWeight: '500',
+                                    }}
+                                  >
+                                    Depot: {reg.storageCentreName}
+                                  </Text>
+                                  <Text
+                                    style={{ fontSize: 10, color: colors.textMuted, marginTop: 1 }}
+                                  >
+                                    Areas: {reg.coverageAreas.slice(0, 5).join(', ')}
+                                    {reg.coverageAreas.length > 5 ? '...' : ''}
+                                  </Text>
+                                </TouchableOpacity>
+                              );
+                            })}
+                          </View>
+                        </View>
+                      );
+                    },
+                  )}
+
+                  {/* Macro Region Zones Option */}
+                  <View
+                    style={{
+                      marginTop: 6,
+                      paddingTop: 8,
+                      borderTopWidth: 1,
+                      borderTopColor: colors.borderLight,
+                    }}
+                  >
+                    <Text
+                      style={{
+                        fontSize: 11,
+                        fontWeight: '700',
+                        color: colors.textMuted,
+                        marginBottom: 6,
+                      }}
+                    >
+                      Macro-Zone Access (Optional):
+                    </Text>
+                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+                      {(['North', 'South', 'West', 'East'] as RegionHub[]).map((zone) => {
+                        const isSelected = adminFormRegions.includes(zone);
+                        return (
+                          <TouchableOpacity
+                            key={zone}
+                            onPress={() => {
+                              setAdminFormRegions((prev) =>
+                                prev.includes(zone)
+                                  ? prev.length > 1
+                                    ? prev.filter((r) => r !== zone)
+                                    : prev
+                                  : [...prev, zone],
+                              );
+                            }}
+                            style={{
+                              borderRadius: radii.pill,
+                              borderWidth: 1,
+                              backgroundColor: isSelected ? colors.primary : colors.bgSubtle,
+                              borderColor: isSelected ? colors.primary : colors.borderLight,
+                              paddingHorizontal: 10,
+                              paddingVertical: 5,
+                            }}
+                          >
+                            <Text
+                              style={{
+                                color: isSelected ? '#fff' : colors.textPrimary,
+                                fontWeight: '700',
+                                fontSize: 11,
+                              }}
+                            >
+                              Entire {zone} Hub
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  </View>
+                </ScrollView>
+              </>
+            )}
+
+            <View style={{ flexDirection: 'row', marginTop: 14 }}>
+              <Button
+                title="Cancel"
+                variant="secondary"
+                style={{ flex: 1, marginRight: 8 }}
+                onPress={() => setAdminModalVisible(false)}
+              />
+              <Button
+                title={isSavingAdmin ? 'Saving...' : 'Save Permissions'}
+                loading={isSavingAdmin}
+                style={{ flex: 1.4 }}
+                onPress={handleSaveAdmin}
+              />
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       {/* ADD COUPON MODAL */}
       <Modal visible={couponModalVisible} transparent animationType="fade">

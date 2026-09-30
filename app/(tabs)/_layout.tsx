@@ -12,7 +12,7 @@ import { subscribeToPendingApprovalCount } from '../../framework/services/notifi
 import { refreshPendingApprovalCount } from '../../framework/services/supabaseOrdersService';
 
 export default function TabLayout() {
-  const { user, isAdmin } = useAuth();
+  const { user, isAdmin, isChef } = useAuth();
   const { preferences, isLoadingProfile } = usePreferences();
   const { colors } = useTheme();
   const { totalCount } = useCart();
@@ -116,6 +116,15 @@ export default function TabLayout() {
             fontWeight: '800',
           },
           tabBarIcon: ({ color }) => <Icon name="stats" size={22} color={color as string} />,
+        }}
+      />
+
+      <Tabs.Screen
+        name="chef"
+        options={{
+          title: 'Chef Studio',
+          href: isChef ? '/chef' : null,
+          tabBarIcon: ({ color }) => <Icon name="chef" size={22} color={color as string} />,
         }}
       />
 

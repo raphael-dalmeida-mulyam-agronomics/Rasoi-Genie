@@ -51,7 +51,7 @@ describe('User Profile & Preferences Persistence Service', () => {
       displayName: 'Chef Arjun',
       phoneNumber: '+91 9876543210',
       preferences: {
-        dietType: 'veg',
+        dietTypes: ['veg'],
         allergies: ['Peanuts'],
         spiceTolerance: 'Spicy',
         preferredCuisines: ['Hyderabadi', 'Punjabi', 'Coastal'],
@@ -84,7 +84,7 @@ describe('User Profile & Preferences Persistence Service', () => {
     expect(retrieved).not.toBeNull();
     expect(retrieved?.uid).toBe('user_chef_99');
     expect(retrieved?.displayName).toBe('Chef Arjun');
-    expect(retrieved?.preferences.dietType).toBe('veg');
+    expect(retrieved?.preferences.dietTypes).toContain('veg');
     expect(retrieved?.preferences.spiceTolerance).toBe('Spicy');
     expect(retrieved?.preferences.preferredCuisines).toContain('Hyderabadi');
     expect(retrieved?.addresses).toHaveLength(1);
@@ -105,7 +105,7 @@ describe('User Profile & Preferences Persistence Service', () => {
       email: 'foodie@gmail.com',
       displayName: 'Foodie Fan',
       preferences: {
-        dietType: 'nonveg',
+        dietTypes: ['nonveg'],
         allergies: [],
         spiceTolerance: 'Medium',
         preferredCuisines: ['Coastal', 'Mughlai'],

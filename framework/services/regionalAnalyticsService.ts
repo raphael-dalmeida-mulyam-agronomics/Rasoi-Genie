@@ -1,10 +1,11 @@
-import { CuisineType, DietTag, getMealKits } from './mealKitsService';
+import { CuisineType, DietTag, RegionHub, getMealKits } from './mealKitsService';
 
 export interface StateData {
   stateCode: string;
   stateName: string;
   capitalCity: string;
   hubName: string;
+  region: RegionHub;
   totalOrders: number;
   totalRevenue: number;
   topMealKitName: string;
@@ -19,7 +20,8 @@ export const INDIAN_STATES_ANALYTICS: StateData[] = [
     stateCode: 'MH',
     stateName: 'Maharashtra',
     capitalCity: 'Mumbai',
-    hubName: 'West Hub (Bhiwandi)',
+    hubName: 'West Region (Mumbai)',
+    region: 'West',
     totalOrders: 4280,
     totalRevenue: 1420500,
     topMealKitName: 'Paneer Butter Masala Kit',
@@ -32,7 +34,8 @@ export const INDIAN_STATES_ANALYTICS: StateData[] = [
     stateCode: 'KA',
     stateName: 'Karnataka',
     capitalCity: 'Bengaluru',
-    hubName: 'South Hub (Electronic City)',
+    hubName: 'South Region (Bengaluru)',
+    region: 'South',
     totalOrders: 5120,
     totalRevenue: 1785000,
     topMealKitName: 'Hyderabadi Dum Chicken Biryani Kit',
@@ -45,7 +48,8 @@ export const INDIAN_STATES_ANALYTICS: StateData[] = [
     stateCode: 'DL',
     stateName: 'Delhi NCR',
     capitalCity: 'New Delhi',
-    hubName: 'North Hub (Noida)',
+    hubName: 'North Region (Delhi NCR)',
+    region: 'North',
     totalOrders: 4650,
     totalRevenue: 1560000,
     topMealKitName: 'Slow-Brew Dal Makhani Kit',
@@ -58,7 +62,8 @@ export const INDIAN_STATES_ANALYTICS: StateData[] = [
     stateCode: 'TS',
     stateName: 'Telangana',
     capitalCity: 'Hyderabad',
-    hubName: 'South Hub (Madhapur)',
+    hubName: 'South Region (Hyderabad)',
+    region: 'South',
     totalOrders: 3890,
     totalRevenue: 1342000,
     topMealKitName: 'Hyderabadi Dum Chicken Biryani Kit',
@@ -71,7 +76,8 @@ export const INDIAN_STATES_ANALYTICS: StateData[] = [
     stateCode: 'GJ',
     stateName: 'Gujarat',
     capitalCity: 'Ahmedabad',
-    hubName: 'West Hub (Sanand)',
+    hubName: 'West Region (Ahmedabad)',
+    region: 'West',
     totalOrders: 2940,
     totalRevenue: 894000,
     topMealKitName: 'Paneer Butter Masala Kit',
@@ -84,7 +90,8 @@ export const INDIAN_STATES_ANALYTICS: StateData[] = [
     stateCode: 'TN',
     stateName: 'Tamil Nadu',
     capitalCity: 'Chennai',
-    hubName: 'South Hub (Guindy)',
+    hubName: 'South Region (Chennai)',
+    region: 'South',
     totalOrders: 2450,
     totalRevenue: 812000,
     topMealKitName: 'Coastal Prawns Ghee Roast Kit',
@@ -97,7 +104,8 @@ export const INDIAN_STATES_ANALYTICS: StateData[] = [
     stateCode: 'WB',
     stateName: 'West Bengal',
     capitalCity: 'Kolkata',
-    hubName: 'East Hub (Salt Lake)',
+    hubName: 'East Region (Kolkata)',
+    region: 'East',
     totalOrders: 2180,
     totalRevenue: 694000,
     topMealKitName: 'Kolkata Kathi Paneer Roll Kit',
@@ -107,6 +115,48 @@ export const INDIAN_STATES_ANALYTICS: StateData[] = [
     growthRate: 21.0,
   },
 ];
+
+/**
+ * Filters state statistics based on regional admin permissions.
+ * Super Admin sees all states from all regions.
+ * Regional Admins only see states in their assigned regions.
+ */
+export function getFilteredStateAnalytics(
+  assignedRegions?: (RegionHub | string)[],
+  isSuperAdmin?: boolean,
+): StateData[] {
+  if (isSuperAdmin || !assignedRegions || assignedRegions.length === 0) {
+    if (isSuperAdmin) return INDIAN_STATES_ANALYTICS;
+  }
+  if (!assignedRegions || assignedRegions.length === 0) return [];
+  const assignedSet = new Set(assignedRegions);
+
+  return INDIAN_STATES_ANALYTICS.filter((s) => {
+    // 1. Direct region zone match (North, South, West, East)
+    if (assignedSet.has(s.region)) return true;
+
+    // 2. City / smaller region mapping
+    const stateCityPrefixes: Record<string, string[]> = {
+      Maharashtra: ['pune', 'mumbai', 'thane', 'pcmc'],
+      Karnataka: ['blr', 'bengaluru', 'bangalore'],
+      'Delhi NCR': ['delhi', 'noida', 'gurugram'],
+      Telangana: ['hyd', 'hyderabad'],
+      Gujarat: ['ahm', 'ahmedabad'],
+      'West Bengal': ['kol', 'kolkata'],
+      'Tamil Nadu': ['chn', 'chennai'],
+    };
+
+    const prefixes = stateCityPrefixes[s.stateName] || [];
+    for (const reg of assignedRegions) {
+      const lower = reg.toLowerCase();
+      if (prefixes.some((p) => lower.includes(p))) {
+        return true;
+      }
+    }
+
+    return false;
+  });
+}
 
 export interface TrendDataPoint {
   month: string;

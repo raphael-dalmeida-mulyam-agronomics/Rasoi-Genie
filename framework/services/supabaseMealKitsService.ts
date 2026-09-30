@@ -1,5 +1,6 @@
 import { supabase } from '../supabase/client';
-import { INITIAL_MEAL_KITS, MealKit } from './mealKitsService';
+import { INITIAL_MEAL_KITS, MealKit, RegionHub, compileMealKitTags } from './mealKitsService';
+import { STORAGE_CENTRE_REGIONS } from './adminRbacService';
 
 /**
  * Fetches published meal kits from Supabase.
@@ -46,6 +47,10 @@ export async function fetchPublishedMealKitsFromSupabase(): Promise<MealKit[]> {
         spiceLevel: row.spice_level || 'Medium',
         difficulty: 'Easy',
         dietaryTags: [row.diet_type || 'veg'],
+        isTrending:
+          row.is_trending !== undefined
+            ? Boolean(row.is_trending)
+            : (existing?.isTrending ?? false),
         availableRegions:
           Array.isArray(row.available_regions) && row.available_regions.length > 0
             ? row.available_regions
@@ -68,7 +73,17 @@ export async function fetchPublishedMealKitsFromSupabase(): Promise<MealKit[]> {
           fat: 10,
           fiber: 4,
         },
-        allergens: existing?.allergens || [],
+        allergens: row.allergens || existing?.allergens || [],
+        tags:
+          row.tags ||
+          existing?.tags ||
+          compileMealKitTags({
+            diet: row.diet_type || 'veg',
+            cuisine: row.cuisine || 'North Indian',
+            dishCategory: row.category || 'Curries & Gravies',
+            availableRegions: row.available_regions || ['North', 'South', 'West', 'East'],
+            allergens: row.allergens || existing?.allergens || [],
+          }),
         ingredients: row.ingredients || [],
         masalaSachets: (row.masala_sachets || []).map((s: any) =>
           typeof s === 'string' ? s : s.name || s.sachetName || 'Masala Sachet',
@@ -128,8 +143,13 @@ export async function saveMealKitToSupabase(
       cities: kit.cities || [],
       origin_city: kit.originCity || null,
       category: kit.dishCategory || 'Curries & Gravies',
+      dish_type: kit.dishCategory || 'Curries & Gravies',
       diet_type: kit.diet || 'veg',
+      dietary_tags: kit.dietaryTags || [kit.diet || 'veg'],
+      allergens: kit.allergens || [],
+      tags: kit.tags && kit.tags.length > 0 ? kit.tags : compileMealKitTags(kit),
       spice_level: kit.spiceLevel || 'Medium',
+      is_trending: kit.isTrending ?? false,
       prep_time_minutes: (kit.prepTimeMinutes || 10) + (kit.cookTimeMinutes || 20),
       servings: kit.servings || 2,
       calories: kit.nutrition?.calories || 450,
@@ -161,6 +181,82 @@ export async function saveMealKitToSupabase(
   } catch (err: any) {
     return { success: false, error: err?.message || String(err) };
   }
+}
+
+/**
+ * Toggles trending status for a meal kit in Supabase and in-memory store.
+ */
+export async function toggleMealKitTrendingStatus(
+  kitId: string,
+  isTrending: boolean,
+): Promise<{ success: boolean }> {
+  try {
+    const { error } = await supabase
+      .from('meal_kits')
+      .update({ is_trending: isTrending, updated_at: new Date().toISOString() })
+      .eq('id', kitId);
+
+    if (error) {
+      console.warn('[Supabase MealKits] Toggle trending error:', error.message);
+    }
+    return { success: !error };
+  } catch {
+    return { success: false };
+  }
+}
+
+/**
+ * Filters meal kits by regional admin permissions.
+ * Super Admin sees all dishes from all regions.
+ * Regional Admins only see dishes that include their assigned region(s).
+ */
+export function filterMealKitsByAdminRegions(
+  kits: MealKit[],
+  assignedRegions?: (RegionHub | string)[],
+  isSuperAdmin?: boolean,
+): MealKit[] {
+  if (isSuperAdmin) return kits;
+  if (!assignedRegions || assignedRegions.length === 0) return [];
+  const assignedSet = new Set(assignedRegions);
+
+  // Derive all cities & zones associated with assigned smaller storage centre regions
+  const matchedCities = new Set<string>();
+  const matchedZones = new Set<string>();
+  for (const reg of assignedRegions) {
+    const sc = STORAGE_CENTRE_REGIONS.find(
+      (r) => r.id.toLowerCase() === reg.toLowerCase() || r.name.toLowerCase() === reg.toLowerCase(),
+    );
+    if (sc) {
+      matchedCities.add(sc.city.toLowerCase());
+      matchedZones.add(sc.zone);
+    }
+  }
+
+  return kits.filter((k) => {
+    // 1. Direct RegionHub match (e.g. 'West')
+    if (k.availableRegions && k.availableRegions.some((r) => assignedSet.has(r))) {
+      return true;
+    }
+    // 2. Direct smaller region / storage centre match
+    if (k.availableStorageCentres && k.availableStorageCentres.some((sc) => assignedSet.has(sc))) {
+      return true;
+    }
+    // 3. Parent zone match from assigned smaller regions
+    if (k.availableRegions && k.availableRegions.some((r) => matchedZones.has(r))) {
+      return true;
+    }
+    // 4. City match (e.g. 'Pune' for pune-city / pune-pcmc)
+    if (
+      k.cities &&
+      k.cities.some((c) => matchedCities.has(c.toLowerCase()) || assignedSet.has(c))
+    ) {
+      return true;
+    }
+    if (k.originCity && matchedCities.has(k.originCity.toLowerCase())) {
+      return true;
+    }
+    return false;
+  });
 }
 
 /**
@@ -248,5 +344,70 @@ export async function deleteMealKitFromSupabase(kitId: string): Promise<{ succes
     return { success: !error };
   } catch {
     return { success: false };
+  }
+}
+
+/**
+ * Shared Supabase Realtime channel for meal_kits.
+ * Broadcasts instant updates (trending toggles, stock changes, etc.) to all connected clients.
+ */
+let sharedMealKitsRealtimeChannel: ReturnType<typeof supabase.channel> | null = null;
+const realtimeMealKitListeners = new Set<() => void>();
+
+export function subscribeToMealKitsRealtime(listener: () => void): () => void {
+  realtimeMealKitListeners.add(listener);
+  ensureSharedMealKitsRealtimeChannel();
+  return () => {
+    realtimeMealKitListeners.delete(listener);
+  };
+}
+
+function ensureSharedMealKitsRealtimeChannel() {
+  if (sharedMealKitsRealtimeChannel) return;
+
+  try {
+    const channelTopic = `rasoi_mealkits_realtime_${Math.random().toString(36).substring(2, 9)}`;
+    const channel = supabase.channel(channelTopic);
+
+    channel.on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'meal_kits' },
+      async (payload: any) => {
+        try {
+          const { updateMealKit, syncMealKitsWithSupabase } = await import('./mealKitsService');
+          if (payload?.eventType === 'UPDATE' && payload?.new) {
+            const updatedRow = payload.new;
+            updateMealKit(updatedRow.id, {
+              isTrending:
+                typeof updatedRow.is_trending === 'boolean' ? updatedRow.is_trending : undefined,
+              isOutOfStock: updatedRow.stock_status === 'out_of_stock',
+              price: typeof updatedRow.price === 'number' ? updatedRow.price : undefined,
+            });
+          } else {
+            await syncMealKitsWithSupabase();
+          }
+
+          realtimeMealKitListeners.forEach((listener) => {
+            try {
+              listener();
+            } catch (err) {
+              console.warn('[Supabase Realtime MealKits] Listener callback error:', err);
+            }
+          });
+        } catch (err) {
+          console.warn('[Supabase Realtime MealKits] Error in change event handler:', err);
+        }
+      },
+    );
+
+    channel.subscribe((status: string, err?: any) => {
+      if (err) {
+        console.warn('[Supabase Realtime MealKits] Subscription error:', status, err);
+      }
+    });
+
+    sharedMealKitsRealtimeChannel = channel;
+  } catch (err) {
+    console.warn('[Supabase Realtime MealKits] Could not initialize realtime channel:', err);
   }
 }

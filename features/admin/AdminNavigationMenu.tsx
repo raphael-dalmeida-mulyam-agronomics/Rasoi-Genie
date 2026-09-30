@@ -10,6 +10,7 @@ export type AdminTab =
   | 'inventory'
   | 'analytics'
   | 'users'
+  | 'chefs'
   | 'coupons'
   | 'revenue'
   | 'reviews';
@@ -30,6 +31,8 @@ export interface AdminNavigationMenuProps {
   pendingApprovalCount?: number;
   kitsCount?: number;
   usersCount?: number;
+  chefsCount?: number;
+  pendingChefSubmissions?: number;
   couponsCount?: number;
   reviewsCount?: number;
   style?: ViewStyle;
@@ -47,6 +50,8 @@ export const AdminNavigationMenu: React.FC<AdminNavigationMenuProps> = ({
   pendingApprovalCount = 0,
   kitsCount = 0,
   usersCount = 0,
+  chefsCount = 0,
+  pendingChefSubmissions = 0,
   couponsCount = 0,
   reviewsCount = 0,
   style,
@@ -89,6 +94,14 @@ export const AdminNavigationMenu: React.FC<AdminNavigationMenuProps> = ({
       label: 'Users',
       icon: 'people',
       count: usersCount,
+    },
+    {
+      id: 'chefs',
+      label: 'Chef Submissions',
+      icon: 'chef',
+      count: chefsCount,
+      alertBadge: pendingChefSubmissions > 0 ? `${pendingChefSubmissions} Pending` : undefined,
+      highlightAlert: pendingChefSubmissions > 0,
     },
     {
       id: 'coupons',

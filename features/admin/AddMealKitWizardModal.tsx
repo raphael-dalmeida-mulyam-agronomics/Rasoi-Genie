@@ -15,11 +15,18 @@ import {
 import {
   CuisineType,
   DietTag,
+  DishCategory,
   MealKit,
   NutritionFacts,
+  RegionHub,
   SachetItem,
   SpiceLevel,
+  COMMON_ALLERGENS,
+  compileMealKitTags,
+  parseCategorizedTags,
 } from '../../framework/services/mealKitsService';
+import { STORAGE_CENTRE_REGIONS } from '../../framework/services/adminRbacService';
+import { useAuth } from '../../framework/context/AuthContext';
 import { useTheme } from '../../framework/theme/ThemeContext';
 import { Badge, getDietBadgeInfo } from '../../framework/ui/Badge';
 import { Button } from '../../framework/ui/Button';
@@ -306,18 +313,65 @@ export const AddMealKitWizardModal: React.FC<AddMealKitWizardModalProps> = ({
   const prevVisibleRef = useRef(false);
   const prevKitIdRef = useRef<string | undefined>(undefined);
 
+  const { isSuperAdmin, assignedRegions } = useAuth();
+
+  const resolveZonesFromAssigned = (regions?: (RegionHub | string)[]): RegionHub[] => {
+    if (!regions || regions.length === 0) return ['North'];
+    const zones = new Set<RegionHub>();
+    for (const reg of regions) {
+      if (['North', 'South', 'West', 'East'].includes(reg as RegionHub)) {
+        zones.add(reg as RegionHub);
+      } else {
+        const sc = STORAGE_CENTRE_REGIONS.find((r) => r.id === reg);
+        if (sc) zones.add(sc.zone);
+      }
+    }
+    return zones.size > 0 ? Array.from(zones) : ['North'];
+  };
+
   // Step 1: Dish Basics
   const [name, setName] = useState(initialKit?.name || '');
   const [hindiName, setHindiName] = useState(initialKit?.hindiName || '');
   const [tagline, setTagline] = useState(initialKit?.tagline || '');
   const [cuisine, setCuisine] = useState<CuisineType>(initialKit?.cuisine || 'North Indian');
   const [diet, setDiet] = useState<DietTag>(initialKit?.diet || 'veg');
+  const [dishCategory, setDishCategory] = useState<DishCategory>(
+    initialKit?.dishCategory || 'Curries & Gravies',
+  );
+  const [selectedRegions, setSelectedRegions] = useState<RegionHub[]>(
+    initialKit?.availableRegions && initialKit.availableRegions.length > 0
+      ? initialKit.availableRegions
+      : isSuperAdmin
+        ? ['North', 'South', 'West', 'East']
+        : resolveZonesFromAssigned(assignedRegions),
+  );
+  const [selectedStorageCentres, setSelectedStorageCentres] = useState<string[]>(
+    initialKit?.availableStorageCentres || [],
+  );
+  const [isTrending, setIsTrending] = useState<boolean>(initialKit?.isTrending ?? false);
   const [spiceLevel, setSpiceLevel] = useState<SpiceLevel>(initialKit?.spiceLevel || 'Medium');
   const [servings, setServings] = useState(initialKit ? String(initialKit.servings) : '');
   const [prepTime, setPrepTime] = useState(initialKit ? String(initialKit.prepTimeMinutes) : '');
   const [cookTime, setCookTime] = useState(initialKit ? String(initialKit.cookTimeMinutes) : '');
   const [price, setPrice] = useState(initialKit ? String(initialKit.price) : '');
   const [heroImage, setHeroImage] = useState(initialKit?.heroImage || '');
+
+  // Tags & Allergens State
+  const [selectedAllergens, setSelectedAllergens] = useState<string[]>(
+    initialKit?.allergens || (initialKit?.diet === 'nonveg' ? [] : ['Dairy']),
+  );
+  const [customAllergenInput, setCustomAllergenInput] = useState('');
+  const [customTags, setCustomTags] = useState<string[]>(
+    initialKit?.tags
+      ? initialKit.tags
+          .filter(
+            (t) =>
+              !['Diet:', 'Cuisine:', 'Dish:', 'Region:', 'Allergy:'].some((p) => t.startsWith(p)),
+          )
+          .map((t) => t.replace(/^Tag:\s*/i, ''))
+      : [],
+  );
+  const [customTagInput, setCustomTagInput] = useState('');
 
   // City targeting: empty = all cities in hub, otherwise explicit city list
   const [allCitiesMode, setAllCitiesMode] = useState<boolean>(
@@ -481,6 +535,16 @@ export const AddMealKitWizardModal: React.FC<AddMealKitWizardModalProps> = ({
     setTagline('');
     setCuisine('North Indian');
     setDiet('veg');
+    setDishCategory('Curries & Gravies');
+    setSelectedRegions(
+      isSuperAdmin ? ['North', 'South', 'West', 'East'] : resolveZonesFromAssigned(assignedRegions),
+    );
+    setSelectedStorageCentres([]);
+    setSelectedAllergens(['Dairy']);
+    setCustomAllergenInput('');
+    setCustomTags([]);
+    setCustomTagInput('');
+    setIsTrending(false);
     setSpiceLevel('Medium');
     setServings('');
     setPrepTime('');
@@ -524,6 +588,37 @@ export const AddMealKitWizardModal: React.FC<AddMealKitWizardModalProps> = ({
         setTagline(initialKit.tagline || '');
         setCuisine(initialKit.cuisine || 'North Indian');
         setDiet(initialKit.diet || 'veg');
+        setDishCategory(initialKit.dishCategory || 'Curries & Gravies');
+        setSelectedRegions(
+          initialKit.availableRegions && initialKit.availableRegions.length > 0
+            ? initialKit.availableRegions
+            : isSuperAdmin
+              ? ['North', 'South', 'West', 'East']
+              : resolveZonesFromAssigned(assignedRegions),
+        );
+        setSelectedStorageCentres(initialKit.availableStorageCentres || []);
+        setSelectedAllergens(
+          initialKit.allergens && initialKit.allergens.length > 0
+            ? initialKit.allergens
+            : initialKit.diet === 'nonveg'
+              ? []
+              : ['Dairy'],
+        );
+        setCustomAllergenInput('');
+        setCustomTags(
+          initialKit.tags
+            ? initialKit.tags
+                .filter(
+                  (t) =>
+                    !['Diet:', 'Cuisine:', 'Dish:', 'Region:', 'Allergy:'].some((p) =>
+                      t.startsWith(p),
+                    ),
+                )
+                .map((t) => t.replace(/^Tag:\s*/i, ''))
+            : [],
+        );
+        setCustomTagInput('');
+        setIsTrending(initialKit.isTrending ?? false);
         setSpiceLevel(initialKit.spiceLevel || 'Medium');
         setServings(initialKit.servings ? String(initialKit.servings) : '');
         setPrepTime(initialKit.prepTimeMinutes ? String(initialKit.prepTimeMinutes) : '');
@@ -949,16 +1044,29 @@ export const AddMealKitWizardModal: React.FC<AddMealKitWizardModalProps> = ({
       cookTimeMinutes: cleanCookTime,
       diet,
       cuisine,
+      dishCategory,
       spiceLevel,
       difficulty: 'Easy',
       dietaryTags: [diet],
-      availableRegions: ['North', 'South', 'West', 'East'],
+      isTrending,
+      availableRegions: selectedRegions.length > 0 ? selectedRegions : ['North'],
       cities: allCitiesMode ? [] : kitCities,
+      availableStorageCentres: selectedStorageCentres,
       stockByRegion: initialKit?.stockByRegion || { North: 50, South: 50, West: 50, East: 50 },
       rating: initialKit?.rating || 5.0,
       reviewCount: initialKit?.reviewCount || 0,
       nutrition,
-      allergens: initialKit?.allergens || (diet === 'nonveg' ? [] : ['Dairy']),
+      allergens: selectedAllergens,
+      tags: compileMealKitTags({
+        diet,
+        cuisine,
+        dishCategory,
+        availableRegions: selectedRegions,
+        availableStorageCentres: selectedStorageCentres,
+        allergens: selectedAllergens,
+        isTrending,
+        dietaryTags: [diet, ...(customTags as any)],
+      }),
       ingredients: allKitIngredients,
       masalaSachets,
       sachets,
@@ -971,7 +1079,7 @@ export const AddMealKitWizardModal: React.FC<AddMealKitWizardModalProps> = ({
     try {
       await onSaveKit(savedKit);
       showWebSafeAlert(
-        'Meal Kit Published! 🎉',
+        'Meal Kit Published!',
         `"${savedKit.name}" (₹${savedKit.price}) is now live in your RasoiGenie catalog and saved to the database.`,
       );
       resetForm();
@@ -1005,16 +1113,29 @@ export const AddMealKitWizardModal: React.FC<AddMealKitWizardModalProps> = ({
     cookTimeMinutes: parseInt(cookTime) || 0,
     diet,
     cuisine,
+    dishCategory,
     spiceLevel,
     difficulty: 'Easy',
-    dietaryTags: [diet],
-    availableRegions: ['North', 'South', 'West', 'East'],
+    dietaryTags: [diet, ...(customTags as any)],
+    isTrending,
+    availableRegions: selectedRegions.length > 0 ? selectedRegions : ['North'],
     cities: allCitiesMode ? [] : kitCities,
+    availableStorageCentres: selectedStorageCentres,
     stockByRegion: { North: 50, South: 50, West: 50, East: 50 },
     rating: 5.0,
     reviewCount: 0,
     nutrition,
-    allergens: diet === 'nonveg' ? [] : ['Dairy'],
+    allergens: selectedAllergens,
+    tags: compileMealKitTags({
+      diet,
+      cuisine,
+      dishCategory,
+      availableRegions: selectedRegions,
+      availableStorageCentres: selectedStorageCentres,
+      allergens: selectedAllergens,
+      isTrending,
+      dietaryTags: [diet, ...(customTags as any)],
+    }),
     ingredients: [
       ...ingredients,
       ...sachets.map((s) => ({
@@ -1264,6 +1385,201 @@ export const AddMealKitWizardModal: React.FC<AddMealKitWizardModalProps> = ({
                       ))}
                     </View>
                   </View>
+                </View>
+
+                {/* Dish Type & Region Tags */}
+                <View style={[styles.rowTwoCol, { marginTop: 14 }]}>
+                  {/* Dish Type */}
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.inputLabel, { color: colors.textPrimary }]}>
+                      Dish Type <Text style={{ color: colors.textMuted }}>(Category)</Text>
+                    </Text>
+                    <View style={styles.chipsWrap}>
+                      {(
+                        [
+                          'Curries & Gravies',
+                          'Biryani & Rice',
+                          'Burgers & Sliders',
+                          'Pizzas',
+                          'Tacos',
+                          'Burritos & Bowls',
+                          'Pastas',
+                          'Street Food',
+                          'Soups & Stews',
+                        ] as DishCategory[]
+                      ).map((cat) => (
+                        <TouchableOpacity
+                          key={cat}
+                          onPress={() => setDishCategory(cat)}
+                          style={[
+                            styles.chip,
+                            {
+                              backgroundColor:
+                                dishCategory === cat ? colors.primary : colors.bgSubtle,
+                              borderColor:
+                                dishCategory === cat ? colors.primary : colors.borderLight,
+                            },
+                          ]}
+                        >
+                          <Text
+                            style={{
+                              color: dishCategory === cat ? '#fff' : colors.textPrimary,
+                              fontSize: 12,
+                              fontWeight: '700',
+                            }}
+                          >
+                            {cat}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  </View>
+
+                  {/* Available Regions */}
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.inputLabel, { color: colors.textPrimary }]}>
+                      Operating Regions{' '}
+                      {!isSuperAdmin && (
+                        <Text style={{ color: colors.primary, fontSize: 11 }}>
+                          (Regional Admin Scope)
+                        </Text>
+                      )}
+                    </Text>
+                    <View style={styles.chipsWrap}>
+                      {(['North', 'South', 'West', 'East'] as RegionHub[]).map((reg) => {
+                        const isPermitted =
+                          isSuperAdmin ||
+                          (assignedRegions &&
+                            (assignedRegions.includes(reg) ||
+                              resolveZonesFromAssigned(assignedRegions).includes(reg)));
+                        const isSelected = selectedRegions.includes(reg);
+                        return (
+                          <TouchableOpacity
+                            key={reg}
+                            disabled={!isPermitted}
+                            onPress={() => {
+                              setSelectedRegions((prev) =>
+                                prev.includes(reg)
+                                  ? prev.length > 1
+                                    ? prev.filter((r) => r !== reg)
+                                    : prev
+                                  : [...prev, reg],
+                              );
+                            }}
+                            style={[
+                              styles.chip,
+                              {
+                                backgroundColor: isSelected ? colors.primary : colors.bgSubtle,
+                                borderColor: isSelected ? colors.primary : colors.borderLight,
+                                opacity: isPermitted ? 1 : 0.4,
+                              },
+                            ]}
+                          >
+                            <Text
+                              style={{
+                                color: isSelected ? '#fff' : colors.textPrimary,
+                                fontSize: 12,
+                                fontWeight: '700',
+                              }}
+                            >
+                              {reg} Region
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  </View>
+                </View>
+
+                {/* Micro-Regions / Storage Centres Selection */}
+                <View style={{ marginTop: 14 }}>
+                  <Text style={[styles.inputLabel, { color: colors.textPrimary }]}>
+                    Fulfillment Storage Centres (Micro-Regions)
+                  </Text>
+                  <Text style={{ fontSize: 11, color: colors.textMuted, marginBottom: 8 }}>
+                    Select specific storage centres to dispatch this meal kit (e.g. Pune City vs
+                    Pimpri Chinchwad). Leave unselected to dispatch from all depots in the operating
+                    regions.
+                  </Text>
+                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+                    {STORAGE_CENTRE_REGIONS.filter((sc) => selectedRegions.includes(sc.zone)).map(
+                      (sc) => {
+                        const isSelected = selectedStorageCentres.includes(sc.id);
+                        return (
+                          <TouchableOpacity
+                            key={sc.id}
+                            onPress={() => {
+                              setSelectedStorageCentres((prev) =>
+                                prev.includes(sc.id)
+                                  ? prev.filter((id) => id !== sc.id)
+                                  : [...prev, sc.id],
+                              );
+                            }}
+                            style={[
+                              styles.chip,
+                              {
+                                backgroundColor: isSelected ? colors.primary : colors.bgSubtle,
+                                borderColor: isSelected ? colors.primary : colors.borderLight,
+                              },
+                            ]}
+                          >
+                            <Text
+                              style={{
+                                color: isSelected ? '#fff' : colors.textPrimary,
+                                fontSize: 11,
+                                fontWeight: '700',
+                              }}
+                            >
+                              {sc.name} ({sc.city})
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      },
+                    )}
+                  </View>
+                </View>
+
+                {/* Trending Toggle Option */}
+                <View style={{ marginTop: 14 }}>
+                  <TouchableOpacity
+                    activeOpacity={0.8}
+                    onPress={() => setIsTrending((prev) => !prev)}
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      padding: 12,
+                      backgroundColor: isTrending ? colors.primary + '18' : colors.bgSubtle,
+                      borderColor: isTrending ? colors.primary : colors.borderLight,
+                      borderWidth: 1.5,
+                      borderRadius: radii.lg,
+                    }}
+                  >
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 }}>
+                      <View
+                        style={{
+                          width: 10,
+                          height: 10,
+                          borderRadius: 5,
+                          backgroundColor: isTrending ? colors.primary : colors.border,
+                        }}
+                      />
+                      <View>
+                        <Text
+                          style={{ fontSize: 13, fontWeight: '700', color: colors.textPrimary }}
+                        >
+                          {isTrending ? 'Marked as Trending Dish' : 'Set as Trending Dish'}
+                        </Text>
+                        <Text style={{ fontSize: 11, color: colors.textSecondary }}>
+                          Highlight this meal kit with a Trending badge on customer feeds & homepage
+                        </Text>
+                      </View>
+                    </View>
+                    <Badge
+                      label={isTrending ? 'TRENDING ACTIVE' : 'STANDARD DISH'}
+                      variant={isTrending ? 'warning' : 'neutral'}
+                    />
+                  </TouchableOpacity>
                 </View>
 
                 {/* Price, Servings, Cook Time */}
@@ -1637,7 +1953,7 @@ export const AddMealKitWizardModal: React.FC<AddMealKitWizardModalProps> = ({
                         { color: allCitiesMode ? '#fff' : colors.textPrimary },
                       ]}
                     >
-                      🌐 All Cities in Hub
+                      All Cities in Region
                     </Text>
                   </TouchableOpacity>
                   <TouchableOpacity
@@ -1658,7 +1974,7 @@ export const AddMealKitWizardModal: React.FC<AddMealKitWizardModalProps> = ({
                         { color: !allCitiesMode ? '#fff' : colors.textPrimary },
                       ]}
                     >
-                      📍 Specific Cities
+                      Specific Cities
                     </Text>
                   </TouchableOpacity>
                 </View>
@@ -1764,6 +2080,322 @@ export const AddMealKitWizardModal: React.FC<AddMealKitWizardModalProps> = ({
                     This kit will appear in the catalog for all users in the selected region hub.
                   </Text>
                 )}
+              </View>
+
+              {/* Allergens & Kitchen Advisory */}
+              <View
+                style={[styles.card, { backgroundColor: colors.bgSurface, borderRadius: radii.xl }]}
+              >
+                <View
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    marginBottom: 4,
+                  }}
+                >
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                    <Icon name="warning" size={18} color="#f59e0b" />
+                    <Text
+                      style={[
+                        styles.sectionHeading,
+                        { color: colors.textPrimary, marginBottom: 0 },
+                      ]}
+                    >
+                      Allergens & Kitchen Advisory
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    onPress={() => setSelectedAllergens([])}
+                    style={{
+                      paddingHorizontal: 8,
+                      paddingVertical: 4,
+                      borderRadius: 6,
+                      backgroundColor:
+                        selectedAllergens.length === 0 ? colors.primary + '20' : colors.bgSubtle,
+                      borderColor:
+                        selectedAllergens.length === 0 ? colors.primary : colors.borderLight,
+                      borderWidth: 1,
+                    }}
+                  >
+                    <Text
+                      style={{
+                        fontSize: 11,
+                        fontWeight: '700',
+                        color:
+                          selectedAllergens.length === 0 ? colors.primary : colors.textSecondary,
+                      }}
+                    >
+                      {selectedAllergens.length === 0 ? '✓ Allergen-Free' : 'Mark Allergen-Free'}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+                <Text style={[styles.sectionHint, { color: colors.textSecondary }]}>
+                  Disclose common culinary allergens contained in this meal kit box for customer
+                  food safety.
+                </Text>
+
+                {/* Common Allergens Toggles */}
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 12 }}>
+                  {COMMON_ALLERGENS.map((allergen) => {
+                    const isSelected = selectedAllergens.includes(allergen);
+                    return (
+                      <TouchableOpacity
+                        key={allergen}
+                        onPress={() => {
+                          setSelectedAllergens((prev) =>
+                            prev.includes(allergen)
+                              ? prev.filter((a) => a !== allergen)
+                              : [...prev, allergen],
+                          );
+                        }}
+                        style={[
+                          styles.chip,
+                          {
+                            backgroundColor: isSelected ? '#ef4444' : colors.bgSubtle,
+                            borderColor: isSelected ? '#ef4444' : colors.borderLight,
+                          },
+                        ]}
+                      >
+                        <Text
+                          style={{
+                            color: isSelected ? '#fff' : colors.textPrimary,
+                            fontSize: 12,
+                            fontWeight: '700',
+                          }}
+                        >
+                          {isSelected ? '✓ ' : ''}
+                          {allergen}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+
+                {/* Custom Allergen Input */}
+                <View style={{ flexDirection: 'row', gap: 8, marginTop: 12 }}>
+                  <TextInput
+                    style={[
+                      styles.textInput,
+                      {
+                        flex: 1,
+                        backgroundColor: colors.bgSubtle,
+                        borderColor: colors.border,
+                        color: colors.textPrimary,
+                      },
+                    ]}
+                    placeholder="Add custom allergen (e.g. Fish, Celery, Sulphites)"
+                    placeholderTextColor={colors.textMuted}
+                    value={customAllergenInput}
+                    onChangeText={setCustomAllergenInput}
+                    onSubmitEditing={() => {
+                      const trimmed = customAllergenInput.trim();
+                      if (trimmed && !selectedAllergens.includes(trimmed)) {
+                        setSelectedAllergens((prev) => [...prev, trimmed]);
+                      }
+                      setCustomAllergenInput('');
+                    }}
+                    returnKeyType="done"
+                  />
+                  <TouchableOpacity
+                    style={{
+                      backgroundColor: colors.primary,
+                      paddingHorizontal: 14,
+                      paddingVertical: 10,
+                      borderRadius: 8,
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                    onPress={() => {
+                      const trimmed = customAllergenInput.trim();
+                      if (trimmed && !selectedAllergens.includes(trimmed)) {
+                        setSelectedAllergens((prev) => [...prev, trimmed]);
+                      }
+                      setCustomAllergenInput('');
+                    }}
+                  >
+                    <Icon name="add" size={18} color="#fff" />
+                  </TouchableOpacity>
+                </View>
+
+                {selectedAllergens.length > 0 && (
+                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 10 }}>
+                    <Text
+                      style={{
+                        fontSize: 11,
+                        color: colors.textMuted,
+                        width: '100%',
+                        marginBottom: 2,
+                      }}
+                    >
+                      Active Advisory Disclosures:
+                    </Text>
+                    {selectedAllergens.map((alg) => (
+                      <TouchableOpacity
+                        key={alg}
+                        onPress={() =>
+                          setSelectedAllergens((prev) => prev.filter((a) => a !== alg))
+                        }
+                        style={{
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          gap: 4,
+                          backgroundColor: '#ef444420',
+                          borderColor: '#ef444460',
+                          borderWidth: 1,
+                          paddingHorizontal: 8,
+                          paddingVertical: 3,
+                          borderRadius: radii.pill,
+                        }}
+                      >
+                        <Text style={{ fontSize: 11, fontWeight: '700', color: '#ef4444' }}>
+                          {alg}
+                        </Text>
+                        <Icon name="close-circle" size={13} color="#ef4444" />
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                )}
+              </View>
+
+              {/* Categorized Meal Kit Tags */}
+              <View
+                style={[styles.card, { backgroundColor: colors.bgSurface, borderRadius: radii.xl }]}
+              >
+                <View
+                  style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 }}
+                >
+                  <Icon name="tag" size={18} color={colors.primary} />
+                  <Text
+                    style={[styles.sectionHeading, { color: colors.textPrimary, marginBottom: 0 }]}
+                  >
+                    Categorized Meal Kit Tags
+                  </Text>
+                </View>
+                <Text style={[styles.sectionHint, { color: colors.textSecondary }]}>
+                  Tags are automatically generated across Diet Type, Cuisine Type, Dish Type,
+                  Region, and Allergens. Add custom specialty tags below.
+                </Text>
+
+                {/* Auto-compiled tags preview */}
+                <View style={{ marginTop: 10 }}>
+                  <Text
+                    style={{
+                      fontSize: 11,
+                      fontWeight: '700',
+                      color: colors.textSecondary,
+                      marginBottom: 6,
+                    }}
+                  >
+                    Live Auto-Generated Tags:
+                  </Text>
+                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+                    {parseCategorizedTags(
+                      compileMealKitTags({
+                        diet,
+                        cuisine,
+                        dishCategory,
+                        availableRegions: selectedRegions,
+                        availableStorageCentres: selectedStorageCentres,
+                        allergens: selectedAllergens,
+                        isTrending,
+                        dietaryTags: [diet, ...(customTags as any)],
+                      }),
+                    ).map((t, idx) => (
+                      <Badge
+                        key={`${t.category}-${idx}`}
+                        label={t.label}
+                        variant={t.variant}
+                        size="sm"
+                      />
+                    ))}
+                  </View>
+                </View>
+
+                {/* Custom Tags adder */}
+                <View style={{ marginTop: 14 }}>
+                  <Text
+                    style={{
+                      fontSize: 11,
+                      fontWeight: '700',
+                      color: colors.textSecondary,
+                      marginBottom: 6,
+                    }}
+                  >
+                    Custom Specialty Tags (Optional):
+                  </Text>
+                  <View style={{ flexDirection: 'row', gap: 8 }}>
+                    <TextInput
+                      style={[
+                        styles.textInput,
+                        {
+                          flex: 1,
+                          backgroundColor: colors.bgSubtle,
+                          borderColor: colors.border,
+                          color: colors.textPrimary,
+                        },
+                      ]}
+                      placeholder="Add tag (e.g. High Protein, Fast Cooking, Festival Special)"
+                      placeholderTextColor={colors.textMuted}
+                      value={customTagInput}
+                      onChangeText={setCustomTagInput}
+                      onSubmitEditing={() => {
+                        const trimmed = customTagInput.trim();
+                        if (trimmed && !customTags.includes(trimmed)) {
+                          setCustomTags((prev) => [...prev, trimmed]);
+                        }
+                        setCustomTagInput('');
+                      }}
+                      returnKeyType="done"
+                    />
+                    <TouchableOpacity
+                      style={{
+                        backgroundColor: colors.primary,
+                        paddingHorizontal: 14,
+                        paddingVertical: 10,
+                        borderRadius: 8,
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}
+                      onPress={() => {
+                        const trimmed = customTagInput.trim();
+                        if (trimmed && !customTags.includes(trimmed)) {
+                          setCustomTags((prev) => [...prev, trimmed]);
+                        }
+                        setCustomTagInput('');
+                      }}
+                    >
+                      <Icon name="add" size={18} color="#fff" />
+                    </TouchableOpacity>
+                  </View>
+
+                  {customTags.length > 0 && (
+                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
+                      {customTags.map((ct) => (
+                        <TouchableOpacity
+                          key={ct}
+                          onPress={() => setCustomTags((prev) => prev.filter((t) => t !== ct))}
+                          style={{
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            gap: 4,
+                            backgroundColor: colors.primary + '18',
+                            borderColor: colors.primary + '40',
+                            borderWidth: 1,
+                            paddingHorizontal: 8,
+                            paddingVertical: 3,
+                            borderRadius: radii.pill,
+                          }}
+                        >
+                          <Text style={{ fontSize: 11, fontWeight: '700', color: colors.primary }}>
+                            {ct}
+                          </Text>
+                          <Icon name="close-circle" size={13} color={colors.primary} />
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  )}
+                </View>
               </View>
 
               {step1Error ? (
@@ -2713,7 +3345,7 @@ export const AddMealKitWizardModal: React.FC<AddMealKitWizardModalProps> = ({
                       textAlign: 'center',
                     }}
                   >
-                    💡 {aiBreakdown.keyHighlights}
+                    {aiBreakdown.keyHighlights}
                   </Text>
                 ) : null}
               </View>
@@ -2847,7 +3479,7 @@ export const AddMealKitWizardModal: React.FC<AddMealKitWizardModalProps> = ({
                                   color: colors.primary,
                                 }}
                               >
-                                ⏱️ Timer: {Math.round(step.timerSeconds / 60)} mins
+                                Timer: {Math.round(step.timerSeconds / 60)} mins
                               </Text>
                             ) : (
                               <View />

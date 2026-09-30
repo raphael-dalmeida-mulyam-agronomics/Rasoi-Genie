@@ -59,6 +59,10 @@ const SEMANTIC_ICON_MAP: Record<string, keyof typeof Ionicons.glyphMap> = {
   people: 'people-outline',
   chef: 'restaurant-outline',
 
+  // Actions (add/create)
+  add: 'add',
+  'add-circle': 'add-circle-outline',
+
   // Commerce & Delivery
   delivery: 'bicycle-outline',
   location: 'location-outline',

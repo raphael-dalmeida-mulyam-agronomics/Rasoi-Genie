@@ -103,21 +103,163 @@ export interface MealKit {
   availableRegions: RegionHub[];
   cities: string[]; // city-level targeting, e.g. ['Bengaluru', 'Mumbai']. Empty = all cities in the hub.
   originCity?: string; // Origin / regional specialty city, e.g. 'Pune', 'Mumbai', 'Hyderabad'
+  availableStorageCentres?: string[]; // Smaller fulfillment regions / storage centres, e.g. ['pune-city', 'pune-pcmc']
   isOutOfStock?: boolean;
   stockByRegion: Record<RegionHub, number>;
   rating: number;
   reviewCount: number;
   nutrition: NutritionFacts;
   allergens: string[];
+  tags?: string[]; // Categorized tags: Diet, Cuisine, Dish Type, Region, Allergens
   ingredients: IngredientItem[];
   masalaSachets: string[];
   sachets?: SachetItem[];
   recipeSteps: RecipeStep[];
   reviews: BuyerReview[];
   salesByRegion: Record<string, number>; // state -> units sold
+  // Chef submission fields
+  chefId?: string; // UID of the chef who submitted this recipe (null for admin-created kits)
+  chefName?: string; // Display name of the submitting chef
+  submissionStatus?: 'draft' | 'pending_review' | 'published' | 'rejected'; // Review lifecycle
+  submittedAt?: string; // ISO timestamp when chef submitted for review
+  reviewedAt?: string; // ISO timestamp when admin acted on the submission
+  reviewNotes?: string; // Admin feedback to the chef (e.g. reason for rejection)
 }
 
-export const INITIAL_MEAL_KITS: MealKit[] = [
+export const COMMON_ALLERGENS = [
+  'Dairy',
+  'Gluten',
+  'Tree Nuts',
+  'Peanuts',
+  'Mustard',
+  'Sesame',
+  'Soy',
+  'Shellfish',
+  'Eggs',
+] as const;
+
+export interface CategorizedTag {
+  category: 'diet' | 'cuisine' | 'dishType' | 'region' | 'allergy' | 'specialty';
+  label: string;
+  prefix: string;
+  variant: 'success' | 'warning' | 'danger' | 'info' | 'accent' | 'neutral';
+}
+
+export function compileMealKitTags(kit: Partial<MealKit>): string[] {
+  const tags: string[] = [];
+
+  // 1. Diet Type Tag
+  if (kit.diet) {
+    const dietLabel =
+      kit.diet === 'veg' ? 'Veg' : kit.diet === 'nonveg' ? 'Non-Veg' : kit.diet.toUpperCase();
+    tags.push(`Diet: ${dietLabel}`);
+  }
+
+  // 2. Cuisine Type Tag
+  if (kit.cuisine) {
+    tags.push(`Cuisine: ${kit.cuisine}`);
+  }
+
+  // 3. Dish Type Tag
+  const dishType = kit.dishCategory || 'Curries & Gravies';
+  tags.push(`Dish: ${dishType}`);
+
+  // 4. Region Tag (Operating Hubs & Micro-Regions)
+  if (kit.availableStorageCentres && kit.availableStorageCentres.length > 0) {
+    for (const sc of kit.availableStorageCentres) {
+      tags.push(`Region: ${sc}`);
+    }
+  } else if (kit.availableRegions && kit.availableRegions.length > 0) {
+    if (kit.availableRegions.length >= 4) {
+      tags.push('Region: Pan-India');
+    } else {
+      tags.push(`Region: ${kit.availableRegions.join(', ')}`);
+    }
+  }
+
+  // 5. Allergens Tag
+  if (kit.allergens && kit.allergens.length > 0) {
+    for (const allergen of kit.allergens) {
+      tags.push(`Allergy: ${allergen}`);
+    }
+  } else {
+    tags.push('Allergy: None Reported');
+  }
+
+  // 6. Additional Dietary / Specialty Tags
+  if (kit.dietaryTags) {
+    for (const dt of kit.dietaryTags) {
+      if (dt !== kit.diet) {
+        tags.push(dt.toUpperCase());
+      }
+    }
+  }
+
+  if (kit.isTrending) {
+    tags.push('Trending');
+  }
+
+  return tags;
+}
+
+export function parseCategorizedTags(tags?: string[]): CategorizedTag[] {
+  if (!tags || tags.length === 0) return [];
+  return tags.map((t) => {
+    if (t.startsWith('Diet:')) {
+      const isVeg = t.toLowerCase().includes('veg') && !t.toLowerCase().includes('non-veg');
+      const isNonVeg = t.toLowerCase().includes('non-veg');
+      return {
+        category: 'diet',
+        prefix: 'Diet',
+        label: t,
+        variant: isVeg ? 'success' : isNonVeg ? 'danger' : 'accent',
+      };
+    }
+    if (t.startsWith('Cuisine:')) {
+      return {
+        category: 'cuisine',
+        prefix: 'Cuisine',
+        label: t,
+        variant: 'accent',
+      };
+    }
+    if (t.startsWith('Dish:')) {
+      return {
+        category: 'dishType',
+        prefix: 'Dish',
+        label: t,
+        variant: 'info',
+      };
+    }
+    if (t.startsWith('Region:')) {
+      return {
+        category: 'region',
+        prefix: 'Region',
+        label: t,
+        variant: 'neutral',
+      };
+    }
+    if (t.startsWith('Allergy:')) {
+      const isNone = t.toLowerCase().includes('none');
+      return {
+        category: 'allergy',
+        prefix: 'Allergy',
+        label: t,
+        variant: isNone ? 'neutral' : 'warning',
+      };
+    }
+    // Strip any legacy 'Tag: ' prefix from older data
+    const cleanLabel = t.replace(/^Tag:\s*/i, '');
+    return {
+      category: 'specialty',
+      prefix: 'Tag',
+      label: cleanLabel,
+      variant: cleanLabel.toLowerCase() === 'trending' ? 'warning' : 'accent',
+    };
+  });
+}
+
+const BASE_INITIAL_MEAL_KITS: MealKit[] = [
   {
     id: 'kit-101',
     name: 'Paneer Butter Masala Kit',
@@ -3306,6 +3448,11 @@ export const INITIAL_MEAL_KITS: MealKit[] = [
   },
 ];
 
+export const INITIAL_MEAL_KITS: MealKit[] = BASE_INITIAL_MEAL_KITS.map((kit) => ({
+  ...kit,
+  tags: kit.tags && kit.tags.length > 0 ? kit.tags : compileMealKitTags(kit),
+}));
+
 // In-memory catalog state with helper queries
 let catalogStore: MealKit[] = [...INITIAL_MEAL_KITS];
 
@@ -3334,7 +3481,7 @@ export interface FilterOptions {
 export function searchAndFilterMealKits(options: FilterOptions): MealKit[] {
   let results = [...catalogStore];
 
-  // Search by meal name, ingredient, cuisine, or dish category
+  // Search by meal name, ingredient, cuisine, dish category, tags, or allergens
   if (options.searchQuery && options.searchQuery.trim()) {
     const q = options.searchQuery.toLowerCase().trim();
     results = results.filter((kit) => {
@@ -3350,7 +3497,26 @@ export function searchAndFilterMealKits(options: FilterOptions): MealKit[] {
 
       const matchSachet = kit.masalaSachets.some((sachet) => sachet.toLowerCase().includes(q));
 
-      return matchName || matchIngredient || matchSachet;
+      const matchTags = kit.tags ? kit.tags.some((t) => t.toLowerCase().includes(q)) : false;
+
+      const matchAllergens = kit.allergens
+        ? kit.allergens.some((a) => a.toLowerCase().includes(q))
+        : false;
+
+      const matchDiet = kit.diet ? kit.diet.toLowerCase().includes(q) : false;
+
+      const matchRegion =
+        kit.availableRegions && kit.availableRegions.some((r) => r.toLowerCase().includes(q));
+
+      return (
+        matchName ||
+        matchIngredient ||
+        matchSachet ||
+        matchTags ||
+        matchAllergens ||
+        matchDiet ||
+        matchRegion
+      );
     });
   }
 
@@ -3511,4 +3677,21 @@ export function updateMealKitStock(id: string, region: RegionHub, stock: number)
     return kit;
   });
   notifyMealKitsChanged();
+}
+
+export function toggleMealKitTrending(id: string, isTrending?: boolean): MealKit | undefined {
+  let updatedKit: MealKit | undefined;
+  catalogStore = catalogStore.map((kit) => {
+    if (kit.id === id) {
+      const nextTrending = typeof isTrending === 'boolean' ? isTrending : !kit.isTrending;
+      updatedKit = {
+        ...kit,
+        isTrending: nextTrending,
+      };
+      return updatedKit;
+    }
+    return kit;
+  });
+  notifyMealKitsChanged();
+  return updatedKit;
 }

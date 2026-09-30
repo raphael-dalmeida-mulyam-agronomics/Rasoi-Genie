@@ -13,11 +13,25 @@ import {
   AUTH_STORAGE_KEY,
 } from '../firebase/authService';
 
+import {
+  isSuperAdminEmail,
+  fetchAdminProfile,
+  AdminRole,
+  ALL_REGIONS,
+} from '../services/adminRbacService';
+import { RegionHub } from '../services/mealKitsService';
+
 interface AuthContextType {
   user: UserProfile | null;
   loading: boolean;
   isAdmin: boolean;
-  userType: 'customer' | 'admin' | null;
+  isSuperAdmin: boolean;
+  isRegionalAdmin: boolean;
+  isChef: boolean;
+  assignedRegions: (RegionHub | string)[];
+  currentAdminRole: AdminRole | null;
+  refreshAdminPermissions: () => Promise<void>;
+  userType: 'customer' | 'admin' | 'chef' | null;
   verificationId: string | null;
   phoneNumber: string | null;
   emailAddress: string | null;
@@ -57,6 +71,45 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [emailAddress, setEmailAddress] = useState<string | null>(null);
   const [activeOtpHint, setActiveOtpHint] = useState<string | null>(null);
 
+  // Regional RBAC State
+  const [assignedRegions, setAssignedRegions] = useState<(RegionHub | string)[]>(ALL_REGIONS);
+  const [adminRole, setAdminRole] = useState<AdminRole | null>(null);
+
+  const loadAdminPermissions = async (userEmail?: string | null) => {
+    if (!userEmail) {
+      setAssignedRegions([]);
+      setAdminRole(null);
+      return;
+    }
+
+    if (isSuperAdminEmail(userEmail)) {
+      setAssignedRegions(ALL_REGIONS);
+      setAdminRole('super_admin');
+      return;
+    }
+
+    try {
+      const profile = await fetchAdminProfile(userEmail);
+      if (profile) {
+        setAdminRole(profile.role);
+        setAssignedRegions(profile.role === 'super_admin' ? ALL_REGIONS : profile.regions);
+      } else {
+        // Default new regional admin to North hub if not configured
+        setAdminRole('regional_admin');
+        setAssignedRegions(['North']);
+      }
+    } catch {
+      setAssignedRegions(['North']);
+      setAdminRole('regional_admin');
+    }
+  };
+
+  useEffect(() => {
+    if (user?.email && user.role === 'admin') {
+      loadAdminPermissions(user.email);
+    }
+  }, [user?.email, user?.role]);
+
   // Restore persisted session on native app startup / mount
   useEffect(() => {
     let isMounted = true;
@@ -85,6 +138,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const isAdmin = !!(user && user.role === 'admin' && user.email && validateAdminEmail(user.email));
+  const isSuperAdmin = isAdmin && isSuperAdminEmail(user?.email);
+  const isRegionalAdmin = isAdmin && !isSuperAdmin;
+  const isChef = !!(user && user.role === 'chef');
+
+  const refreshAdminPermissions = async () => {
+    if (user?.email) {
+      await loadAdminPermissions(user.email);
+    }
+  };
 
   const userType = user ? user.role : null;
 
@@ -194,6 +256,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         phoneNumber,
         emailAddress,
         activeOtpHint,
+        isSuperAdmin,
+        isRegionalAdmin,
+        isChef,
+        assignedRegions,
+        currentAdminRole: adminRole,
+        refreshAdminPermissions,
         loginGoogle,
         requestEmailOTP,
         confirmEmailOTP,

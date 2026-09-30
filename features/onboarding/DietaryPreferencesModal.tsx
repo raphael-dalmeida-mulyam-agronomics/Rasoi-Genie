@@ -12,12 +12,12 @@ import {
   SpiceLevel,
 } from '../../framework/services/mealKitsService';
 
-export interface DietaryPreferencesModalProps {
+interface DietaryPreferencesModalProps {
   visible: boolean;
   onClose: () => void;
 }
 
-const DIET_TYPES: { id: DietTag | 'all'; label: string; icon: string; desc: string }[] = [
+const DIET_TYPES: { id: DietTag; label: string; icon: string; desc: string }[] = [
   { id: 'veg', label: 'Vegetarian', icon: '', desc: '100% vegetarian dishes, paneer & dairy' },
   { id: 'nonveg', label: 'Non-Vegetarian', icon: '', desc: 'Chicken, seafood, meats & poultry' },
   { id: 'jain', label: 'Jain Friendly', icon: '', desc: 'No root vegetables, onions or garlic' },
@@ -55,9 +55,6 @@ const SPICE_LEVELS: { id: SpiceLevel; label: string; icon: string }[] = [
 ];
 
 const CUISINES: CuisineType[] = [
-  'Italian',
-  'Mexican',
-  'American',
   'North Indian',
   'South Indian',
   'Hyderabadi',
@@ -65,8 +62,14 @@ const CUISINES: CuisineType[] = [
   'Mughlai',
   'Coastal',
   'Gujarati',
+  'Maharashtrian',
   'Indo-Chinese',
+  'Italian',
+  'Mexican',
+  'American',
   'Continental',
+  'European',
+  'Mediterranean',
 ];
 
 const REGIONAL_HUBS: { id: RegionHub; name: string; city: string }[] = [
@@ -83,13 +86,24 @@ export const DietaryPreferencesModal: React.FC<DietaryPreferencesModalProps> = (
   const { preferences, updatePreferences } = usePreferences();
   const { colors, radii, shadows } = useTheme();
 
-  const [dietType, setDietType] = useState<DietTag | 'all'>(preferences.dietType);
+  const [selectedDiets, setSelectedDiets] = useState<DietTag[]>([]);
   const [allergies, setAllergies] = useState<string[]>(preferences.allergies);
   const [spiceTolerance, setSpiceTolerance] = useState<SpiceLevel>(preferences.spiceTolerance);
   const [preferredCuisines, setPreferredCuisines] = useState<CuisineType[]>(
     preferences.preferredCuisines,
   );
   const [regionHub, setRegionHub] = useState<RegionHub>(preferences.regionHub);
+
+  // Sync state whenever modal opens or preferences update
+  React.useEffect(() => {
+    if (visible) {
+      setSelectedDiets(preferences.dietTypes || []);
+      setAllergies(preferences.allergies || []);
+      setSpiceTolerance(preferences.spiceTolerance || 'Medium');
+      setPreferredCuisines(preferences.preferredCuisines || []);
+      setRegionHub(preferences.regionHub || 'South');
+    }
+  }, [visible, preferences]);
 
   const toggleAllergy = (allergy: string) => {
     setAllergies((prev) =>
@@ -106,7 +120,7 @@ export const DietaryPreferencesModal: React.FC<DietaryPreferencesModalProps> = (
   const handleSave = () => {
     const hubMatch = REGIONAL_HUBS.find((h) => h.id === regionHub);
     updatePreferences({
-      dietType,
+      dietTypes: selectedDiets,
       allergies,
       spiceTolerance,
       preferredCuisines,
@@ -153,15 +167,15 @@ export const DietaryPreferencesModal: React.FC<DietaryPreferencesModalProps> = (
             style={[styles.section, { backgroundColor: colors.bgSurface, borderRadius: radii.xl }]}
           >
             <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
-              1. What is your primary diet?
+              1. What are your diet preferences?
             </Text>
             <Text style={[styles.sectionDesc, { color: colors.textSecondary }]}>
-              We’ll filter home feed meal kits according to your diet.
+              Select all that apply. We’ll filter home feed meal kits according to your diet.
             </Text>
 
             <View style={styles.dietGrid}>
               {DIET_TYPES.map((dt) => {
-                const isSelected = dietType === dt.id;
+                const isSelected = selectedDiets.includes(dt.id);
                 return (
                   <TouchableOpacity
                     key={dt.id}
@@ -173,7 +187,11 @@ export const DietaryPreferencesModal: React.FC<DietaryPreferencesModalProps> = (
                         borderRadius: radii.lg,
                       },
                     ]}
-                    onPress={() => setDietType(dt.id)}
+                    onPress={() =>
+                      setSelectedDiets((prev) =>
+                        prev.includes(dt.id) ? prev.filter((a) => a !== dt.id) : [...prev, dt.id],
+                      )
+                    }
                     activeOpacity={0.8}
                   >
                     {dt.icon ? <Text style={styles.dietIcon}>{dt.icon}</Text> : null}
@@ -384,10 +402,6 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  closeText: {
-    fontSize: 20,
-    fontWeight: '700',
   },
   headerTitle: {
     fontSize: 17,

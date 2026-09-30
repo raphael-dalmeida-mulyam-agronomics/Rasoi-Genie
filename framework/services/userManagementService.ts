@@ -3,7 +3,7 @@ export interface ManagedUser {
   name: string;
   email: string;
   phone: string;
-  role: 'admin' | 'customer';
+  role: 'admin' | 'customer' | 'chef';
   status: 'active' | 'suspended';
   city: string;
   ordersCount: number;

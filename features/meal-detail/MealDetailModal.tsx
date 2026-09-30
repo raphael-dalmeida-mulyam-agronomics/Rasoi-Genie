@@ -11,7 +11,11 @@ import {
   Animated,
   Easing,
 } from 'react-native';
-import { MealKit } from '../../framework/services/mealKitsService';
+import {
+  MealKit,
+  compileMealKitTags,
+  parseCategorizedTags,
+} from '../../framework/services/mealKitsService';
 import { useTheme } from '../../framework/theme/ThemeContext';
 import { useCart } from '../../framework/context/CartContext';
 import { useWishlist } from '../../framework/context/WishlistContext';
@@ -94,6 +98,16 @@ export const MealDetailModal: React.FC<MealDetailModalProps> = ({
       setSelectedSpiceLevel(kit.spiceLevel || 'Medium');
     }
   }, [kit?.id]);
+
+  // Check if kit contains allergens matching customer profile
+  const matchingUserAllergens = React.useMemo(() => {
+    if (!kit?.allergens || !preferences?.allergies || preferences.allergies.length === 0) return [];
+    const kitAllergens = kit.allergens.map((a) => a.toLowerCase().trim());
+    return preferences.allergies.filter((ua) => {
+      const u = ua.toLowerCase().trim();
+      return kitAllergens.some((ka) => ka.includes(u) || u.includes(ka));
+    });
+  }, [kit?.allergens, preferences?.allergies]);
 
   // Countdown timer effect
   useEffect(() => {
@@ -341,6 +355,60 @@ export const MealDetailModal: React.FC<MealDetailModalProps> = ({
                     {selectedServings} Servings
                   </Text>
                 </View>
+              </View>
+
+              {/* Categorized Meal Kit Tags: Diet, Cuisine, Dish Type, Region, Allergens */}
+              <View style={{ marginTop: 14 }}>
+                <View
+                  style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 }}
+                >
+                  <Icon name="tag" size={14} color={colors.primary} />
+                  <Text
+                    style={{
+                      fontSize: 11,
+                      fontWeight: '800',
+                      color: colors.textSecondary,
+                      textTransform: 'uppercase',
+                      letterSpacing: 0.5,
+                    }}
+                  >
+                    Tags & Dietary Classifications
+                  </Text>
+                </View>
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+                  {parseCategorizedTags(
+                    kit.tags && kit.tags.length > 0 ? kit.tags : compileMealKitTags(kit),
+                  ).map((tag, idx) => (
+                    <Badge
+                      key={`detail-tag-${tag.category}-${idx}`}
+                      label={tag.label}
+                      variant={tag.variant}
+                      size="sm"
+                    />
+                  ))}
+                </View>
+
+                {matchingUserAllergens.length > 0 && (
+                  <View
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      gap: 8,
+                      marginTop: 10,
+                      padding: 10,
+                      backgroundColor: '#FEF2F2',
+                      borderColor: '#F87171',
+                      borderWidth: 1,
+                      borderRadius: radii.md,
+                    }}
+                  >
+                    <Icon name="warning" size={18} color="#DC2626" />
+                    <Text style={{ flex: 1, fontSize: 12, fontWeight: '700', color: '#B91C1C' }}>
+                      Allergen Advisory: This kit contains {matchingUserAllergens.join(', ')}, which
+                      you flagged in your profile preferences.
+                    </Text>
+                  </View>
+                )}
               </View>
 
               {/* Interactive Customization: Serving Size & Spice Level */}
