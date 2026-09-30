@@ -32,8 +32,13 @@ const responsiveBackground = `
 body {
   background-color: #fff;
 }
+input, textarea, select, input:focus, textarea:focus, select:focus {
+  outline: none !important;
+  box-shadow: none !important;
+}
 @media (prefers-color-scheme: dark) {
   body {
     background-color: #000;
   }
 }`;
+

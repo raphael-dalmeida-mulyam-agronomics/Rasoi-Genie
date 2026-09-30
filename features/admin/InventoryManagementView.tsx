@@ -125,25 +125,63 @@ export const InventoryManagementView: React.FC = () => {
         );
         if (!regionMatch) return false;
       }
-      if (filter !== 'all') { const s = item.section || (item.name.toLowerCase().includes('sachet') || item.name.toLowerCase().includes('masala') || item.name.toLowerCase().includes('powder') ? 'seasonings' : item.name.toLowerCase().includes('cup') || item.name.toLowerCase().includes('pack') ? 'packaging' : 'raw_ingredients'); if (s !== filter) return false; }
+      if (filter !== 'all') {
+        const inferSection = (name: string): string => {
+          const n = name.toLowerCase();
+          if (
+            n.includes('sachet') || n.includes('masala') || n.includes('spice') ||
+            n.includes('powder') || n.includes('blend') || n.includes('dust') ||
+            n.includes('tadka') || n.includes('seasoning') || n.includes('tempering') ||
+            n.includes('premix') || n.includes('turmeric') || n.includes('cumin') ||
+            n.includes('saffron') || n.includes('cardamom') || n.includes('clove') ||
+            n.includes('nutmeg') || n.includes('cinnamon') || n.includes('bayleaf') ||
+            n.includes('bay leaf') || n.includes('curry leaves') || n.includes('curry leaf') ||
+            n.includes('fresh coriander') || n.includes('fresh cilantro') ||
+            n.includes('fresh mint') || n.includes('fresh basil') ||
+            n.includes('fresh thyme') || n.includes('fresh oregano') ||
+            n.includes('fresh chilli') || n.includes('fresh chili') ||
+            n.includes('green chilli') || n.includes('green chili') ||
+            n.includes('kasuri methi') || n.includes('methi')
+          ) return 'seasonings';
+          if (
+            n.includes('paper cup') || n.includes('foil tray') || n.includes('foil container') ||
+            n.includes('cling wrap') || n.includes('cling film') || n.includes('parchment') ||
+            n.includes('meal kit box') || n.includes('insulated box') || n.includes('delivery box') ||
+            n.includes('zip-lock') || n.includes('ziplock') || n.includes('heat-seal') ||
+            n.includes('tamper seal') || n.includes('sticker label') || n.includes('food tray')
+          ) return 'packaging';
+          return 'raw_ingredients';
+        };
+        const s = item.section || inferSection(item.name);
+        if (s !== filter) return false;
+      }
       // Status filter
       const shelfStatus = calculateShelfLifeStatus(item);
       if (statusFilter !== 'all' && shelfStatus.status !== statusFilter) return false;
 
-      // Search
+      // Search: search strictly based on item names (NOT kit names, NOT notes, NOT category)
       if (q) {
-        const name = item.name || '';
-        const n = name.toLowerCase();
-        // Exact match first, then substring
-        if (n === q || n.includes(q)) return true;
-        if ((item.section || '').toLowerCase().includes(q)) return true;
-        if (item.notes && item.notes.toLowerCase().includes(q)) return true;
+        const rawName = (item.name || '').toLowerCase();
+        // Remove prefix like "Sachet 1: " to get the clean display item name as well
+        const cleanName = rawName.replace(/sachet\s*\d+\s*:?\s*/gi, '').trim();
+
+        if (rawName.includes(q) || cleanName.includes(q)) return true;
+
+        // Multi-word item search (e.g. "malai paneer" or "paneer cubes")
+        const terms = q.split(/\s+/).filter(Boolean);
+        if (terms.length > 1) {
+          const allMatch = terms.every(
+            (term) => rawName.includes(term) || cleanName.includes(term)
+          );
+          if (allMatch) return true;
+        }
+
         return false;
       }
 
       return true;
     });
-  }, [items, filter, statusFilter, searchQuery]);
+  }, [items, filter, statusFilter, searchQuery, isSuperAdmin, assignedRegions]);
 
   // Stats
   const stats = useMemo(() => {
@@ -153,6 +191,47 @@ export const InventoryManagementView: React.FC = () => {
     const expiring = items.filter((i) => calculateShelfLifeStatus(i).status === 'expiring_soon').length;
     const expired = items.filter((i) => calculateShelfLifeStatus(i).status === 'expired').length;
     return { total, lowStock, outOfStock, expiring, expired };
+  }, [items]);
+
+  const tabConfig = useMemo(() => {
+    const inferSection = (name: string): string => {
+      const n = name.toLowerCase();
+      if (
+        n.includes('sachet') || n.includes('masala') || n.includes('spice') ||
+        n.includes('powder') || n.includes('blend') || n.includes('dust') ||
+        n.includes('tadka') || n.includes('seasoning') || n.includes('tempering') ||
+        n.includes('premix') || n.includes('turmeric') || n.includes('cumin') ||
+        n.includes('saffron') || n.includes('cardamom') || n.includes('clove') ||
+        n.includes('nutmeg') || n.includes('cinnamon') || n.includes('bayleaf') ||
+        n.includes('bay leaf') || n.includes('curry leaves') || n.includes('curry leaf') ||
+        n.includes('fresh coriander') || n.includes('fresh cilantro') ||
+        n.includes('fresh mint') || n.includes('fresh basil') ||
+        n.includes('fresh thyme') || n.includes('fresh oregano') ||
+        n.includes('fresh chilli') || n.includes('fresh chili') ||
+        n.includes('green chilli') || n.includes('green chili') ||
+        n.includes('kasuri methi') || n.includes('methi')
+      ) return 'seasonings';
+      if (
+        n.includes('paper cup') || n.includes('foil tray') || n.includes('foil container') ||
+        n.includes('cling wrap') || n.includes('cling film') || n.includes('parchment') ||
+        n.includes('meal kit box') || n.includes('insulated box') || n.includes('delivery box') ||
+        n.includes('zip-lock') || n.includes('ziplock') || n.includes('heat-seal') ||
+        n.includes('tamper seal') || n.includes('sticker label') || n.includes('food tray')
+      ) return 'packaging';
+      return 'raw_ingredients';
+    };
+
+    const sectionOf = (i: (typeof items)[0]) => i.section || inferSection(i.name);
+    const rawCount = items.filter((i) => sectionOf(i) === 'raw_ingredients').length;
+    const packCount = items.filter((i) => sectionOf(i) === 'packaging').length;
+    const seasonCount = items.filter((i) => sectionOf(i) === 'seasonings').length;
+
+    return [
+      { key: 'all' as const, label: 'All Items', icon: 'cube' as AppIconName, count: items.length },
+      { key: 'raw_ingredients' as const, label: 'Raw Ingredients', icon: 'basket' as AppIconName, count: rawCount },
+      { key: 'packaging' as const, label: 'Packaging', icon: 'package' as AppIconName, count: packCount },
+      { key: 'seasonings' as const, label: 'Seasonings & Herbs', icon: 'sparkles' as AppIconName, count: seasonCount },
+    ];
   }, [items]);
 
   const handleAddItem = () => {
@@ -183,11 +262,12 @@ export const InventoryManagementView: React.FC = () => {
 
     setNewItem({
       name: '',
-      category: 'raw_material',
+      section: 'raw_ingredients',
       currentStock: 0,
       unit: 'kg',
       shelfLifeDays: 30,
       thresholdLow: 5,
+      region: assignedRegions?.[0] || 'West',
       storageCondition: '',
       supplier: '',
       costPerUnit: 0,
@@ -300,31 +380,88 @@ export const InventoryManagementView: React.FC = () => {
         </View>
       </View>
 
-      {/* 4 Horizontal Tabs */}
-      <View style={[styles.tabRow, { borderBottomColor: colors.borderLight }]}>
-        {[
-          { key: 'all' as const, label: 'All' },
-          { key: 'raw_ingredients' as const, label: 'Raw Ingredients' },
-          { key: 'packaging' as const, label: 'Packaging' },
-          { key: 'seasonings' as const, label: 'Seasonings & Herbs' },
-        ].map((t) => (
-          <TouchableOpacity
-            key={t.key}
-            onPress={() => setFilter(t.key)}
-            style={[
-              styles.tab,
-              { borderBottomWidth: filter === t.key ? 2.5 : 1, borderBottomColor: filter === t.key ? colors.primary : colors.borderLight, backgroundColor: filter === t.key ? colors.primaryLight : 'transparent' },
-            ]}
-          >
-            <Text style={{ color: filter === t.key ? colors.primary : colors.textSecondary, fontWeight: filter === t.key ? '800' : '600', fontSize: 12 }}>
-              {t.label}
-            </Text>
-          </TouchableOpacity>
-        ))}
+      {/* Category Filter Tabs */}
+      <View style={styles.tabContainer}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.tabRow}
+        >
+          {tabConfig.map((t) => {
+            const isSelected = filter === t.key;
+            return (
+              <TouchableOpacity
+                key={t.key}
+                onPress={() => setFilter(t.key)}
+                activeOpacity={0.7}
+                accessibilityRole="tab"
+                accessibilityState={{ selected: isSelected }}
+                style={[
+                  styles.tabPill,
+                  {
+                    backgroundColor: isSelected ? colors.primary : colors.bgSurface,
+                    borderColor: isSelected ? colors.primary : colors.borderLight,
+                    borderRadius: radii.pill,
+                  },
+                  isSelected ? shadows.soft : null,
+                ]}
+              >
+                <Icon
+                  name={t.icon}
+                  size={14}
+                  color={isSelected ? '#FFFFFF' : colors.textSecondary}
+                />
+                <Text
+                  style={[
+                    styles.tabLabel,
+                    {
+                      color: isSelected ? '#FFFFFF' : colors.textPrimary,
+                      fontWeight: isSelected ? '700' : '600',
+                    },
+                  ]}
+                >
+                  {t.label}
+                </Text>
+                <View
+                  style={[
+                    styles.tabBadge,
+                    {
+                      backgroundColor: isSelected
+                        ? 'rgba(255, 255, 255, 0.25)'
+                        : colors.bgSubtle,
+                    },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.tabBadgeText,
+                      {
+                        color: isSelected ? '#FFFFFF' : colors.textSecondary,
+                        fontWeight: isSelected ? '700' : '600',
+                      },
+                    ]}
+                  >
+                    {t.count}
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
       </View>
 
       {/* Status dropdown */}
-      <View style={[styles.searchBar, { backgroundColor: colors.bgSurface, borderColor: 'transparent', borderWidth: 0, marginBottom: 8, outline: 'none' }]}>
+      <View
+        style={[
+          styles.searchBar,
+          {
+            backgroundColor: colors.bgSurface,
+            borderColor: 'transparent',
+            borderWidth: 0,
+            marginBottom: 8,
+          },
+        ]}
+      >
         <Icon name="filter" size={16} color={colors.textMuted} />
         <Text style={{ fontSize: 13, fontWeight: '700', color: colors.textSecondary, marginLeft: 8 }}>
           Status:
@@ -352,14 +489,27 @@ export const InventoryManagementView: React.FC = () => {
       )}
 
       {/* Search */}
-      <View style={[styles.searchBar, { backgroundColor: colors.bgSurface, borderColor: 'transparent', borderWidth: 0, marginBottom: 8, outline: 'none' }]}>
+      <View
+        style={[
+          styles.searchBar,
+          {
+            backgroundColor: colors.bgSurface,
+            borderColor: colors.borderLight,
+            borderWidth: 1,
+            marginBottom: 8,
+          },
+        ]}
+      >
         <Icon name="search" size={16} color={colors.textMuted} />
         <TextInput
-          style={[styles.searchInput, { color: colors.textPrimary, caretColor: colors.primary }]}
-          placeholder="Search items..."
+          style={[styles.searchInput, { color: colors.textPrimary }]}
+          placeholder="Search items by name..."
           placeholderTextColor={colors.textMuted}
           value={searchQuery}
           onChangeText={setSearchQuery}
+          selectionColor={colors.primary}
+          autoCorrect={false}
+          autoCapitalize="none"
         />
         {searchQuery.length > 0 && (
           <TouchableOpacity onPress={() => setSearchQuery('')}>
@@ -393,7 +543,7 @@ export const InventoryManagementView: React.FC = () => {
                     </Text>
                     <View style={{ flexDirection: 'row', gap: 6, marginTop: 4 }}>
                       <Badge
-                        label={CATEGORY_LABELS[item.category]}
+                        label={CATEGORY_LABELS[item.section]}
                         variant="neutral"
                         size="sm"
                       />
@@ -507,16 +657,16 @@ export const InventoryManagementView: React.FC = () => {
               {(Object.keys(CATEGORY_LABELS) as InventorySection[]).map((cat) => (
                 <TouchableOpacity
                   key={cat}
-                  onPress={() => setNewItem({ ...newItem, category: cat })}
+                  onPress={() => setNewItem({ ...newItem, section: cat })}
                   style={[
                     styles.catPill,
                     {
-                      backgroundColor: newItem.category === cat ? colors.primary : colors.bgSubtle,
-                      borderColor: newItem.category === cat ? colors.primary : colors.borderLight,
+                      backgroundColor: newItem.section === cat ? colors.primary : colors.bgSubtle,
+                      borderColor: newItem.section === cat ? colors.primary : colors.borderLight,
                     },
                   ]}
                 >
-                  <Text style={{ color: newItem.category === cat ? '#fff' : colors.textPrimary, fontWeight: '700', fontSize: 11 }}>
+                  <Text style={{ color: newItem.section === cat ? '#fff' : colors.textPrimary, fontWeight: '700', fontSize: 11 }}>
                     {CATEGORY_LABELS[cat]}
                   </Text>
                 </TouchableOpacity>
@@ -703,19 +853,36 @@ export const InventoryManagementView: React.FC = () => {
 };
 
 const styles = StyleSheet.create({
+  tabContainer: {
+    marginBottom: 14,
+  },
   tabRow: {
     flexDirection: 'row',
-    gap: 4,
-    marginBottom: 14,
-    paddingBottom: 4,
-    borderBottomWidth: 1,
+    gap: 8,
+    alignItems: 'center',
+    paddingVertical: 2,
   },
-  tab: {
-    flex: 1,
-    paddingVertical: 10,
+  tabPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderWidth: 1,
+    gap: 6,
+  },
+  tabLabel: {
+    fontSize: 12,
+  },
+  tabBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 10,
+    minWidth: 18,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 8,
+  },
+  tabBadgeText: {
+    fontSize: 10,
   },
   container: {
     padding: 16,
@@ -783,6 +950,12 @@ const styles = StyleSheet.create({
   searchInput: {
     flex: 1,
     fontSize: 13,
+    paddingVertical: 0,
+    borderWidth: 0,
+  },
+  dropdownMenu: {
+    borderWidth: 1,
+    overflow: 'hidden',
   },
   itemCard: {
     padding: 14,

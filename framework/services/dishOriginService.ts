@@ -260,7 +260,8 @@ const PUNE_SPECIALTY_SEEDS: Omit<MealKit, 'id'>[] = [
       { name: 'Sprouted Organic Matki (Moth Beans)', quantity: '200g' },
       { name: 'Fresh Pune Bakery Ladi Pav', quantity: '4 pcs' },
       { name: 'Special Puneri Crispy Farsan', quantity: '90g' },
-      { name: 'Diced Red Onions & Fresh Coriander', quantity: '80g' },
+      { name: 'Diced Red Onions', quantity: '60g' },
+      { name: 'Fresh Coriander', quantity: '20g' },
       { name: 'Fresh Juicy Lemon', quantity: '1 pc' },
       {
         name: 'Sachet 1: Puneri Goda Masala & Hing Tadka',
