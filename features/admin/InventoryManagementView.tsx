@@ -381,7 +381,7 @@ export const InventoryManagementView: React.FC = () => {
                 <View style={styles.itemCardHeader}>
                   <View style={{ flex: 1 }}>
                     <Text style={[styles.itemName, { color: colors.textPrimary }]}>
-                      {item.name}
+                      {item.name?.replace(/Sachet \d+:\s*/gi, '').replace(/Sachet \d+\s*:?\s*/gi, '')}
                     </Text>
                     <View style={{ flexDirection: 'row', gap: 6, marginTop: 4 }}>
                       <Badge
