@@ -1,15 +1,16 @@
 // framework/services/inventoryService.ts
 
-export type InventoryCategory = 'raw_material' | 'ingredient' | 'packaging' | 'spice' | 'other';
+export type InventorySection = 'raw_ingredients' | 'packaging' | 'seasonings';
 
 export interface InventoryItem {
   id: string;
   name: string;
-  category: InventoryCategory;
+  section: InventorySection;
   currentStock: number;
   unit: string;
   shelfLifeDays: number;
   thresholdLow: number;
+  region: string; // region-scoped inventory
   lastRestocked: string;
   expiryDate: string;
   storageCondition: string;
@@ -58,11 +59,12 @@ function seedInventory(): void {
     {
       id: 'inv-001',
       name: 'Chicken Breast',
-      category: 'raw_material',
+      section: 'raw_ingredients',
       currentStock: 150,
       unit: 'kg',
       shelfLifeDays: 7,
       thresholdLow: 20,
+      region: 'West',
       lastRestocked: new Date().toISOString(),
       expiryDate: addDays(new Date(), 7).toISOString(),
       storageCondition: 'Refrigerated at 0-4°C',
@@ -73,11 +75,12 @@ function seedInventory(): void {
     {
       id: 'inv-002',
       name: 'Cumin Powder',
-      category: 'spice',
+      section: 'seasonings',
       currentStock: 45,
       unit: 'g',
       shelfLifeDays: 365,
       thresholdLow: 10,
+      region: 'West',
       lastRestocked: new Date().toISOString(),
       expiryDate: addDays(new Date(), 365).toISOString(),
       storageCondition: 'Cool & dry, away from sunlight',
@@ -88,11 +91,12 @@ function seedInventory(): void {
     {
       id: 'inv-003',
       name: 'Paper Cups (8oz)',
-      category: 'packaging',
+      section: 'packaging',
       currentStock: 2000,
       unit: 'units',
       shelfLifeDays: 730,
       thresholdLow: 200,
+      region: 'West',
       lastRestocked: new Date().toISOString(),
       expiryDate: addDays(new Date(), 730).toISOString(),
       storageCondition: 'Cool & dry warehouse',
@@ -103,11 +107,12 @@ function seedInventory(): void {
     {
       id: 'inv-004',
       name: 'Garam Masala Blend',
-      category: 'spice',
+      section: 'seasonings',
       currentStock: 8,
       unit: 'kg',
       shelfLifeDays: 180,
       thresholdLow: 5,
+      region: 'West',
       lastRestocked: new Date().toISOString(),
       expiryDate: addDays(new Date(), 180).toISOString(),
       storageCondition: 'Airtight container, cool place',
@@ -118,7 +123,7 @@ function seedInventory(): void {
     {
       id: 'inv-005',
       name: 'Tomato Puree (1L)',
-      category: 'ingredient',
+      section: 'raw_ingredients',
       currentStock: 30,
       unit: 'liters',
       shelfLifeDays: 30,
@@ -133,7 +138,7 @@ function seedInventory(): void {
     {
       id: 'inv-006',
       name: 'Desi Ghee (5L)',
-      category: 'ingredient',
+      section: 'raw_ingredients',
       currentStock: 0,
       unit: 'liters',
       shelfLifeDays: 180,
@@ -148,7 +153,7 @@ function seedInventory(): void {
     {
       id: 'inv-007',
       name: 'Kasuri Methi',
-      category: 'spice',
+      section: 'seasonings',
       currentStock: 120,
       unit: 'g',
       shelfLifeDays: 180,
@@ -163,7 +168,7 @@ function seedInventory(): void {
     {
       id: 'inv-008',
       name: 'Almond Slivered',
-      category: 'ingredient',
+      section: 'raw_ingredients',
       currentStock: 3,
       unit: 'kg',
       shelfLifeDays: 180,
@@ -178,7 +183,7 @@ function seedInventory(): void {
     {
       id: 'inv-009',
       name: 'Sesame Oil (1L)',
-      category: 'ingredient',
+      section: 'raw_ingredients',
       currentStock: 15,
       unit: 'liters',
       shelfLifeDays: 365,
@@ -193,7 +198,7 @@ function seedInventory(): void {
     {
       id: 'inv-010',
       name: 'Cardamom Pods',
-      category: 'spice',
+      section: 'seasonings',
       currentStock: 2,
       unit: 'kg',
       shelfLifeDays: 120,
@@ -322,19 +327,49 @@ export function calculateShelfLifeStatus(item: InventoryItem): ShelfLifeStatus {
   return { status: 'fresh', daysRemaining, expiryDate: item.expiryDate };
 }
 
-export function getDefaultShelfLife(category: InventoryCategory): number {
-  switch (category) {
-    case 'raw_material':
-      return 7;
-    case 'ingredient':
-      return 30;
-    case 'packaging':
-      return 730;
-    case 'spice':
-      return 180;
-    case 'other':
-      return 90;
-    default:
-      return 30;
+export function getDefaultShelfLife(section: InventorySection): number {
+  switch (section) {
+    case 'raw_ingredients': return 7;
+    case 'packaging': return 730;
+    case 'seasonings': return 180;
+    default: return 30;
   }
+}
+
+// ── Real-time deduction / restoration when meal kit is purchased / cancelled ──
+
+export function deductIngredientStock(itemId: string, qty: number, region: string): boolean {
+  const item = inventoryStore.find(i => i.id === itemId && i.region === region);
+  if (!item) return false;
+  if (item.currentStock < qty) return false;
+  item.currentStock -= qty;
+  persistStore();
+  notifyListeners();
+  // Alert admin if below threshold
+  if (item.currentStock <= item.thresholdLow) {
+    try {
+      const { notifyRegionalAdminsOutOfStock } = require('./notificationService');
+      notifyRegionalAdminsOutOfStock({
+        kitId: item.id,
+        kitName: item.name,
+        region,
+        remainingStock: item.currentStock,
+        reason: 'Low inventory after order deduction',
+      } as any);
+    } catch (e) {}
+  }
+  return true;
+}
+
+export function restoreIngredientStock(itemId: string, qty: number, region: string): boolean {
+  const item = inventoryStore.find(i => i.id === itemId && i.region === region);
+  if (!item) return false;
+  item.currentStock += qty;
+  persistStore();
+  notifyListeners();
+  return true;
+}
+
+export function getInventoryByRegion(region: string): InventoryItem[] {
+  return inventoryStore.filter(i => i.region === region || i.region === 'All');
 }

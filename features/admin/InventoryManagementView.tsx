@@ -12,10 +12,11 @@ import {
   Alert,
   Platform,
 } from 'react-native';
+import { useAuth } from '../../framework/context/AuthContext';
 import { useTheme } from '../../framework/theme/ThemeContext';
 import {
   InventoryItem,
-  InventoryCategory,
+  InventorySection,
   getInventoryItems,
   addInventoryItem,
   updateInventoryItem,
@@ -35,35 +36,30 @@ import { Badge, BadgeVariant, getDietBadgeInfo } from '../../framework/ui/Badge'
 import { Button } from '../../framework/ui/Button';
 import { Icon, AppIconName } from '../../framework/ui/Icon';
 
-const CATEGORY_LABELS: Record<InventoryCategory, string> = {
-  raw_material: 'Raw Material',
-  ingredient: 'Ingredient',
+const CATEGORY_LABELS: Record<InventorySection, string> = {
+  raw_ingredients: 'Raw Ingredients',
   packaging: 'Packaging',
-  spice: 'Spice',
-  other: 'Other',
+  seasonings: 'Seasonings & Herbs',
 };
 
-const CATEGORY_ICONS: Record<InventoryCategory, AppIconName> = {
-  raw_material: 'cube',
-  ingredient: 'flame',
+const CATEGORY_ICONS: Record<InventorySection, AppIconName> = {
+  raw_ingredients: 'cube',
   packaging: 'box',
-  spice: 'sparkles',
-  other: 'ellipsis-horizontal',
+  seasonings: 'sparkles',
 };
 
-const CATEGORY_COLORS: Record<InventoryCategory, string> = {
-  raw_material: '#3B82F6',
-  ingredient: '#F59E0B',
+const CATEGORY_COLORS: Record<InventorySection, string> = {
+  raw_ingredients: '#3B82F6',
   packaging: '#10B981',
-  spice: '#EF4444',
-  other: '#6B7280',
+  seasonings: '#EF4444',
 };
 
 export const InventoryManagementView: React.FC = () => {
+  const { user, isAdmin, isSuperAdmin, isRegionalAdmin, assignedRegions } = useAuth();
   const { colors, radii, shadows } = useTheme();
 
   const [items, setItems] = useState<InventoryItem[]>(getInventoryItems());
-  const [filter, setFilter] = useState<'all' | InventoryCategory>('all');
+  const [filter, setFilter] = useState<'all' | InventorySection>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | 'fresh' | 'expiring_soon' | 'expired'>('all');
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -81,11 +77,12 @@ export const InventoryManagementView: React.FC = () => {
   // Add form
   const [newItem, setNewItem] = useState({
     name: '',
-    category: 'raw_material' as InventoryCategory,
+    section: 'raw_ingredients' as InventorySection,
     currentStock: 0,
     unit: 'kg',
     shelfLifeDays: 30,
     thresholdLow: 5,
+    region: assignedRegions?.[0] || 'West',
     storageCondition: '',
     supplier: '',
     costPerUnit: 0,
@@ -104,9 +101,17 @@ export const InventoryManagementView: React.FC = () => {
   }, []);
 
   const filteredItems = useMemo(() => {
+    const adminRegions = assignedRegions || [];
+    const isSuper = isSuperAdmin;
     return items.filter((item) => {
-      // Category filter
-      if (filter !== 'all' && item.category !== filter) return false;
+      // Regional admin sees only their region's inventory
+      if (!isSuper && adminRegions.length > 0 && item.region) {
+        const regionMatch = adminRegions.some(
+          (r) => r.toString().toLowerCase() === item.region!.toLowerCase()
+        );
+        if (!regionMatch) return false;
+      }
+      if (filter !== 'all' && item.section !== filter) return false;
 
       // Status filter
       const shelfStatus = calculateShelfLifeStatus(item);
@@ -283,7 +288,7 @@ export const InventoryManagementView: React.FC = () => {
 
       {/* Filters */}
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterRow}>
-        {(['all', 'raw_material', 'ingredient', 'packaging', 'spice', 'other'] as const).map((f) => (
+        {(['all', 'raw_ingredients', 'packaging', 'seasonings'] as const).map((f) => (
           <TouchableOpacity
             key={f}
             onPress={() => setFilter(f)}
@@ -487,7 +492,7 @@ export const InventoryManagementView: React.FC = () => {
 
             <Text style={[styles.inputLabel, { color: colors.textPrimary, marginTop: 10 }]}>Category *</Text>
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 4 }}>
-              {(Object.keys(CATEGORY_LABELS) as InventoryCategory[]).map((cat) => (
+              {(Object.keys(CATEGORY_LABELS) as InventorySection[]).map((cat) => (
                 <TouchableOpacity
                   key={cat}
                   onPress={() => setNewItem({ ...newItem, category: cat })}
