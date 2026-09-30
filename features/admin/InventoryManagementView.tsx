@@ -332,7 +332,6 @@ export const InventoryManagementView: React.FC = () => {
             </Text>
           </TouchableOpacity>
         ))}
-      </ScrollView>
       </View>
 
       {/* Search */}
