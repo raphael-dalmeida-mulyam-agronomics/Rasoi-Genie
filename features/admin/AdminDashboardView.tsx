@@ -40,6 +40,8 @@ import {
   DishCategory,
   compileMealKitTags,
   parseCategorizedTags,
+  calculateMealKitFreshness,
+  updateMealKitShelfLife,
 } from '../../framework/services/mealKitsService';
 import {
   INDIAN_STATES_ANALYTICS,
@@ -113,11 +115,17 @@ import {
   toggleMealKitPublishStatus,
   toggleMealKitOutOfStockStatus,
   deleteMealKitFromSupabase,
+  updateMealKitShelfLifeInSupabase,
 } from '../../framework/services/supabaseMealKitsService';
 import {
   subscribeToPendingApprovalCount,
   playOrderAlertSound,
+  subscribeToOutOfStockAlerts,
+  dismissOutOfStockAlert,
+  notifyRegionalAdminsOutOfStock,
+  OutOfStockAlertPayload,
 } from '../../framework/services/notificationService';
+import { InventoryManagementView } from './InventoryManagementView';
 import { AdminNavigationMenu, AdminTab } from './AdminNavigationMenu';
 
 const STATUS_FILTERS: (OrderStatus | 'All')[] = [
@@ -244,6 +252,10 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
   const [selectedState, setSelectedState] = useState('Maharashtra');
   const [crossTabDiet, setCrossTabDiet] = useState<'all' | DietTag>('all');
 
+  // Inventory & Shelf Life State
+  const [outOfStockAlerts, setOutOfStockAlerts] = useState<OutOfStockAlertPayload[]>([]);
+  const [inventoryFilter, setInventoryFilter] = useState<'all' | 'low' | 'out' | 'short_shelf'>('all');
+
   // Coupons State
   const [coupons, setCoupons] = useState<Coupon[]>(getCoupons());
   const [couponModalVisible, setCouponModalVisible] = useState(false);
@@ -343,6 +355,10 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
       setKits(updatedKits);
     });
 
+    const unsubscribeOos = subscribeToOutOfStockAlerts((alerts) => {
+      setOutOfStockAlerts(alerts);
+    });
+
     const handleStorageChange = () => {
       reloadSupabaseOrders();
       refreshPendingApprovalCount();
@@ -366,6 +382,7 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
       unsubscribeCount();
       unsubscribeFb();
       unsubscribeKits();
+      unsubscribeOos();
     };
   }, [isMulyamAdmin]);
 
@@ -422,7 +439,10 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
       await refreshPendingApprovalCount();
       setCancelOrderModalVisible(false);
       setOrderToCancel(null);
-      showInAppAlert('Order Cancelled', `Order ${targetId} has been successfully cancelled.`);
+      showInAppAlert(
+        'Order Cancelled',
+        `Order ${targetId} cancelled. Inventory stock has been automatically reverted to pre-order levels.`,
+      );
     } catch (err: any) {
       showInAppAlert('Error', err?.message || 'Could not cancel order.');
     } finally {
@@ -491,8 +511,58 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
     const current = kit.stockByRegion[region] || 0;
     const next = Math.max(0, current + delta);
     updateMealKitStock(kitId, region, next);
+
+    if (next === 0) {
+      // Automatically set item to out of stock and inform all regional admins
+      updateMealKit(kitId, { isOutOfStock: true });
+      toggleMealKitOutOfStockStatus(kitId, true).catch(() => {});
+      notifyRegionalAdminsOutOfStock({
+        kitId,
+        kitName: kit.name,
+        region,
+        remainingStock: 0,
+      });
+    } else if (kit.isOutOfStock && next > 0) {
+      updateMealKit(kitId, { isOutOfStock: false });
+      toggleMealKitOutOfStockStatus(kitId, false).catch(() => {});
+      dismissOutOfStockAlert(kitId, region);
+    }
     setKits(getMealKits());
   };
+
+  const handleAdjustShelfLife = (kitId: string, deltaDays: number) => {
+    const kit = kits.find((k) => k.id === kitId);
+    if (!kit) return;
+    const currentDays = kit.shelfLifeDays || 4;
+    const nextDays = Math.max(1, currentDays + deltaDays);
+    updateMealKitShelfLife(kitId, nextDays, kit.storageCondition);
+    updateMealKitShelfLifeInSupabase(kitId, nextDays, kit.storageCondition).catch(() => {});
+    setKits(getMealKits());
+  };
+
+  const outOfStockCount = useMemo(() => {
+    return kits.filter((k) => {
+      const total = Object.values(k.stockByRegion || {}).reduce((a, b) => a + (Number(b) || 0), 0);
+      return k.isOutOfStock || total === 0;
+    }).length;
+  }, [kits]);
+
+  const displayedInventoryKits = useMemo(() => {
+    return kits.filter((kit) => {
+      const totalStock = Object.values(kit.stockByRegion || {}).reduce(
+        (a, b) => a + (Number(b) || 0),
+        0,
+      );
+      const isOut = kit.isOutOfStock || totalStock === 0;
+      const isLow = Object.values(kit.stockByRegion || {}).some((s) => s > 0 && s < 20);
+      const isShortShelf = (kit.shelfLifeDays || 4) <= 3;
+
+      if (inventoryFilter === 'low') return isLow;
+      if (inventoryFilter === 'out') return isOut;
+      if (inventoryFilter === 'short_shelf') return isShortShelf;
+      return true;
+    });
+  }, [kits, inventoryFilter]);
 
   const handleToggleOutOfStock = async (kit: MealKit) => {
     const nextStatus = !kit.isOutOfStock;
@@ -2363,83 +2433,9 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
           </View>
         )}
 
+
         {/* MODULE 3: INVENTORY & STOCK MANAGEMENT */}
-        {activeTab === 'inventory' && (
-          <View>
-            <View style={styles.moduleHeaderRow}>
-              <View>
-                <Text style={[styles.moduleTitle, { color: colors.textPrimary }]}>
-                  Regional Inventory
-                </Text>
-                <Text style={[styles.moduleSubtitle, { color: colors.textSecondary }]}>
-                  Stock levels per fulfillment center (Low-stock warning &lt; 20)
-                </Text>
-              </View>
-            </View>
-
-            {kits.map((kit) => (
-              <View
-                key={kit.id}
-                style={[
-                  styles.stockCard,
-                  {
-                    backgroundColor: colors.bgSurface,
-                    borderRadius: radii.xl,
-                    borderColor: colors.borderLight,
-                    ...shadows.card,
-                  },
-                ]}
-              >
-                <Text style={[styles.stockKitName, { color: colors.textPrimary }]}>{kit.name}</Text>
-
-                <View style={styles.hubsStockGrid}>
-                  {(['North', 'South', 'West', 'East'] as RegionHub[]).map((hub) => {
-                    const count = kit.stockByRegion[hub] || 0;
-                    const isLow = count < 20;
-
-                    return (
-                      <View
-                        key={hub}
-                        style={[
-                          styles.hubStockItem,
-                          { backgroundColor: colors.bgSubtle, borderRadius: radii.md },
-                        ]}
-                      >
-                        <Text style={[styles.hubLabel, { color: colors.textMuted }]}>
-                          {hub} Region
-                        </Text>
-                        <Text
-                          style={[
-                            styles.hubCount,
-                            { color: isLow ? colors.danger : colors.textPrimary },
-                          ]}
-                        >
-                          {count} kits
-                        </Text>
-                        {isLow && <Badge label="LOW STOCK" variant="danger" size="sm" />}
-
-                        <View style={styles.stockAdjButtons}>
-                          <TouchableOpacity
-                            onPress={() => handleStockAdjust(kit.id, hub, -5)}
-                            style={styles.stockAdjBtn}
-                          >
-                            <Text style={styles.stockAdjBtnText}>-5</Text>
-                          </TouchableOpacity>
-                          <TouchableOpacity
-                            onPress={() => handleStockAdjust(kit.id, hub, +10)}
-                            style={styles.stockAdjBtn}
-                          >
-                            <Text style={styles.stockAdjBtnText}>+10</Text>
-                          </TouchableOpacity>
-                        </View>
-                      </View>
-                    );
-                  })}
-                </View>
-              </View>
-            ))}
-          </View>
-        )}
+        {activeTab === 'inventory' && <InventoryManagementView />}
 
         {/* MODULE 4: REGIONAL ANALYTICS DASHBOARD */}
         {activeTab === 'analytics' && (

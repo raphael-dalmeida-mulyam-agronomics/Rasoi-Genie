@@ -64,6 +64,15 @@ export async function fetchPublishedMealKitsFromSupabase(): Promise<MealKit[]> {
           West: 50,
           East: 50,
         },
+        shelfLifeDays: Number(row.shelf_life_days) || existing?.shelfLifeDays || 4,
+        shelfLife:
+          row.shelf_life ||
+          existing?.shelfLife ||
+          `${existing?.shelfLifeDays || 4} days (Keep refrigerated at 2°C - 5°C)`,
+        storageCondition:
+          row.storage_condition ||
+          existing?.storageCondition ||
+          'Refrigerated at 2°C - 5°C',
         rating: Number(row.rating) || 5.0,
         reviewCount: Number(row.reviews_count) || 0,
         nutrition: row.nutrition || {
@@ -158,6 +167,10 @@ export async function saveMealKitToSupabase(
         'https://images.unsplash.com/photo-1546833999-b9f581a1996d?auto=format&fit=crop&w=1000&q=80',
       is_published: isPublished,
       stock_status: kit.isOutOfStock ? 'out_of_stock' : 'in_stock',
+      shelf_life_days: kit.shelfLifeDays || 4,
+      shelf_life:
+        kit.shelfLife || `${kit.shelfLifeDays || 4} days (${kit.storageCondition || 'Keep refrigerated at 2°C - 5°C'})`,
+      storage_condition: kit.storageCondition || 'Refrigerated at 2°C - 5°C',
       ingredients: kit.ingredients || [],
       instructions: (kit.recipeSteps || []).map((s) => ({
         step: s.stepNumber,
@@ -323,6 +336,34 @@ export async function toggleMealKitOutOfStockStatus(
 
     if (error) {
       console.warn('[Supabase MealKits] Toggle out of stock error:', error.message);
+    }
+    return { success: !error };
+  } catch {
+    return { success: false };
+  }
+}
+
+/**
+ * Updates shelf life days and storage condition for a meal kit in Supabase.
+ */
+export async function updateMealKitShelfLifeInSupabase(
+  kitId: string,
+  shelfLifeDays: number,
+  storageCondition: string = 'Refrigerated at 2°C - 5°C',
+): Promise<{ success: boolean }> {
+  try {
+    const { error } = await supabase
+      .from('meal_kits')
+      .update({
+        shelf_life_days: shelfLifeDays,
+        shelf_life: `${shelfLifeDays} days (${storageCondition})`,
+        storage_condition: storageCondition,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', kitId);
+
+    if (error) {
+      console.warn('[Supabase MealKits] Update shelf life error:', error.message);
     }
     return { success: !error };
   } catch {

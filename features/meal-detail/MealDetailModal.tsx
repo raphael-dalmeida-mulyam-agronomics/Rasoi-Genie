@@ -355,6 +355,36 @@ export const MealDetailModal: React.FC<MealDetailModalProps> = ({
                     {selectedServings} Servings
                   </Text>
                 </View>
+
+                <View style={styles.specDivider} />
+
+                <View style={styles.specItem}>
+                  <Text style={[styles.specLabel, { color: colors.textMuted }]}>SHELF LIFE</Text>
+                  <Text style={[styles.specVal, { color: colors.textPrimary }]}>
+                    {kit.shelfLifeDays || 4} Days
+                  </Text>
+                </View>
+              </View>
+
+              {/* Shelf Life & Freshness Assurance Banner */}
+              <View
+                style={{
+                  marginTop: 10,
+                  paddingHorizontal: 12,
+                  paddingVertical: 8,
+                  backgroundColor: '#ECFDF5',
+                  borderRadius: radii.md,
+                  borderWidth: 1,
+                  borderColor: '#A7F3D0',
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: 8,
+                }}
+              >
+                <Icon name="shield-checkmark" size={16} color="#059669" />
+                <Text style={{ fontSize: 12, color: '#065F46', flex: 1, fontWeight: '600' }}>
+                  Freshness Assured: Vacuum-packed fresh daily. {kit.shelfLife || `${kit.shelfLifeDays || 4} days shelf life (${kit.storageCondition || 'Keep refrigerated at 2-5°C'})`}.
+                </Text>
               </View>
 
               {/* Categorized Meal Kit Tags: Diet, Cuisine, Dish Type, Region, Allergens */}

@@ -3,6 +3,8 @@ import {
   notifyAdminNewOrder,
   setPendingApprovalOrdersCount,
   playOrderAlertSound,
+  notifyRegionalAdminsOutOfStock,
+  dismissOutOfStockAlert,
 } from './notificationService';
 import {
   Order,
@@ -17,6 +19,14 @@ import {
   clearAllOrders,
   MOCK_ORDER_IDS,
 } from '../firebase/ordersService';
+import {
+  deductMealKitStock,
+  restoreMealKitStock,
+  RegionHub,
+} from './mealKitsService';
+import { resolveStorageCentre } from './adminRbacService';
+import { deductIngredientStock, restoreIngredientStock, validateOrderIngredients } from './inventoryService';
+import { toggleMealKitOutOfStockStatus } from './supabaseMealKitsService';
 
 export interface CreateOrderParams {
   id?: string;
@@ -59,8 +69,64 @@ const localOrdersMemory: Order[] = [];
 export async function createOrderInSupabase(
   params: CreateOrderParams,
 ): Promise<{ success: boolean; orderId: string; error?: string }> {
-  const orderId = `ORD-${Date.now().toString().slice(-6)}`;
+  const orderId = params.orderId || params.id || `ORD-${Date.now().toString().slice(-6)}`;
   const now = new Date().toISOString();
+
+  const storageCentre = resolveStorageCentre(params.deliveryAddress || '');
+  const fulfillmentRegion: RegionHub = (storageCentre.zone as RegionHub) || 'West';
+
+  // 0. Pre-order inventory validation: all ingredients must exist with sufficient stock
+  try {
+    const required = params.items.map((it) => ({
+      itemId: it.kitId || it.name,
+      quantity: it.quantity,
+      region: fulfillmentRegion,
+    }));
+    const check = validateOrderIngredients(required);
+    if (!check.valid) {
+      console.warn('[Supabase Orders] Order blocked: missing/insufficient ingredients:', check.missing, check.insufficient);
+      return { success: false, orderId: '', error: 'Insufficient ingredients: ' + check.insufficient.join(', ') };
+    }
+  } catch (invErr) {
+    console.warn('[Supabase Orders] Inventory check error:', invErr);
+  }
+
+  // 1. Real-time inventory deduction based on user order
+  const deductedItems: { kitId: string; quantity: number; region: string }[] = [];
+  for (const it of params.items) {
+    deductedItems.push({ kitId: it.kitId, quantity: it.quantity, region: fulfillmentRegion });
+    try {
+      const deductionRes = deductMealKitStock(it.kitId, fulfillmentRegion, it.quantity);
+      // Deduct corresponding ingredients from inventory in real time
+      try {
+        const kit = getMealKitById(it.kitId);
+        if (kit && kit.ingredients) {
+          for (const ing of kit.ingredients) {
+            // Map ingredient to inventory item by name or id
+            const inv = getInventoryItems().find((i) =>
+              i.name.toLowerCase().includes(ing.name.toLowerCase()) ||
+              i.id === ing.name
+            );
+            if (inv) {
+              deductIngredientStock(inv.id, Math.round(it.quantity * (parseFloat(ing.quantity) || 1)), fulfillmentRegion);
+            }
+          }
+        }
+      } catch (ingErr) { console.warn('[Supabase Orders] Ingredient deduction error:', ingErr); }
+      if (deductionRes.wentOutOfStock) {
+        // Automatically set to out of stock in Supabase & notify regional admins
+        toggleMealKitOutOfStockStatus(it.kitId, true).catch(() => {});
+        notifyRegionalAdminsOutOfStock({
+          kitId: it.kitId,
+          kitName: it.name,
+          region: fulfillmentRegion,
+          remainingStock: 0,
+        });
+      }
+    } catch (stockErr) {
+      console.warn('[Supabase Orders] Error deducting stock for kit:', it.kitId, stockErr);
+    }
+  }
 
   const newOrder: Order = {
     id: orderId,
@@ -92,6 +158,7 @@ export async function createOrderInSupabase(
     ],
     items: params.items.map((it, idx) => ({
       id: `${orderId}-${idx + 1}`,
+      kitId: it.kitId,
       name: it.name,
       quantity: it.quantity,
       price: it.price,
@@ -100,6 +167,10 @@ export async function createOrderInSupabase(
       masalaSachets: it.masalaSachets || [],
       imageUrl: it.imageUrl,
     })),
+    inventoryDeducted: true,
+    inventoryReverted: false,
+    fulfillmentRegion,
+    deductedItems,
     createdAt: now,
     updatedAt: now,
   };
@@ -285,11 +356,52 @@ export async function updateOrderStatusInSupabase(
   // 1. Synchronously update orders in ordersService
   await updateOrderStatus(orderId, newStatus, adminNotes);
 
-  // 2. Keep localOrdersMemory synchronized
+  // 2. Keep localOrdersMemory synchronized & Revert inventory on cancel
   const allCurrent = await loadPersistedOrders();
   let found = false;
   const memIdx = localOrdersMemory.findIndex((o) => o.id === orderId);
   const existingMem = memIdx !== -1 ? localOrdersMemory[memIdx] : undefined;
+
+  // Revert inventory if order is being cancelled and inventory was deducted and not yet reverted
+  if (newStatus === 'Cancelled') {
+    const targetOrder = existingMem || allCurrent.find((o) => o.id === orderId);
+    if (targetOrder && !targetOrder.inventoryReverted && targetOrder.items && targetOrder.items.length > 0) {
+      try {
+        const fulfillmentRegion: RegionHub =
+          (targetOrder.fulfillmentRegion as RegionHub) ||
+          (resolveStorageCentre(targetOrder.deliveryAddress || '').zone as RegionHub) ||
+          'West';
+
+        for (const it of targetOrder.items) {
+          const kitId = it.kitId || it.id?.replace(/^ORD-[^-]+-/, '') || it.id;
+          const restoreRes = restoreMealKitStock(kitId, fulfillmentRegion, it.quantity);
+          // Restore corresponding ingredients to inventory
+          try {
+            const kit = getMealKitById(kitId);
+            if (kit && kit.ingredients) {
+              for (const ing of kit.ingredients) {
+                const inv = getInventoryItems().find((i) =>
+                  i.name.toLowerCase().includes(ing.name.toLowerCase()) || i.id === ing.name
+                );
+                if (inv) {
+                  restoreIngredientStock(inv.id, Math.round(it.quantity * (parseFloat(ing.quantity) || 1)), fulfillmentRegion);
+                }
+              }
+            }
+          } catch (ingErr) { console.warn('[Supabase Orders] Ingredient restore error:', ingErr); }
+          if (restoreRes.backInStock) {
+            toggleMealKitOutOfStockStatus(kitId, false).catch(() => {});
+            dismissOutOfStockAlert(kitId, fulfillmentRegion);
+          }
+        }
+        targetOrder.inventoryReverted = true;
+        targetOrder.inventoryDeducted = false;
+      } catch (revErr) {
+        console.warn('[Supabase Orders] Error restoring inventory for cancelled order:', revErr);
+      }
+    }
+  }
+
   if (existingMem) {
     localOrdersMemory[memIdx] = {
       ...existingMem,
@@ -300,6 +412,8 @@ export async function updateOrderStatusInSupabase(
           : (existingMem.isApproved ?? true),
       adminNotes,
       cancellationReason: newStatus === 'Cancelled' ? adminNotes : existingMem.cancellationReason,
+      inventoryReverted: newStatus === 'Cancelled' ? true : existingMem.inventoryReverted,
+      inventoryDeducted: newStatus === 'Cancelled' ? false : existingMem.inventoryDeducted,
       updatedAt: now,
     };
     found = true;

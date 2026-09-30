@@ -134,3 +134,135 @@ export function notifyAdminNewOrder(payload: OrderNotificationPayload): void {
     }
   }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// REGIONAL ADMIN OUT-OF-STOCK ALERTS
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface OutOfStockAlertPayload {
+  id?: string;
+  kitId: string;
+  kitName: string;
+  region?: string;
+  remainingStock: number;
+  reason?: string;
+  timestamp?: string;
+}
+
+export type OutOfStockAlertListener = (alerts: OutOfStockAlertPayload[]) => void;
+const outOfStockListeners = new Set<OutOfStockAlertListener>();
+const activeOutOfStockAlerts: OutOfStockAlertPayload[] = [];
+
+/**
+ * Returns currently active out of stock alerts for regional admins.
+ */
+export function getActiveOutOfStockAlerts(): OutOfStockAlertPayload[] {
+  return [...activeOutOfStockAlerts];
+}
+
+/**
+ * Subscribes to out of stock alert updates.
+ */
+export function subscribeToOutOfStockAlerts(listener: OutOfStockAlertListener): () => void {
+  outOfStockListeners.add(listener);
+  listener([...activeOutOfStockAlerts]);
+  return () => {
+    outOfStockListeners.delete(listener);
+  };
+}
+
+/**
+ * Dismisses an out of stock alert once restocked.
+ */
+export function dismissOutOfStockAlert(kitId: string, region?: string): void {
+  const initialLen = activeOutOfStockAlerts.length;
+  for (let i = activeOutOfStockAlerts.length - 1; i >= 0; i--) {
+    if (activeOutOfStockAlerts[i].kitId === kitId) {
+      if (!region || activeOutOfStockAlerts[i].region === region) {
+        activeOutOfStockAlerts.splice(i, 1);
+      }
+    }
+  }
+  if (activeOutOfStockAlerts.length !== initialLen) {
+    outOfStockListeners.forEach((fn) => {
+      try {
+        fn([...activeOutOfStockAlerts]);
+      } catch (e) {
+        console.warn('[NotificationService] Error notifying out of stock listener:', e);
+      }
+    });
+  }
+}
+
+/**
+ * Informs all regional admins that an item has gone out of stock:
+ * 1. Plays audible alert chime.
+ * 2. Emits in-app event to all listening regional admin components.
+ * 3. Sends system push / desktop notification to regional admins.
+ * 4. Records alert in Supabase admin_notifications table for persistent tracking.
+ */
+export async function notifyRegionalAdminsOutOfStock(alert: OutOfStockAlertPayload): Promise<void> {
+  const timestamp = new Date().toISOString();
+  const alertWithMeta: OutOfStockAlertPayload = {
+    ...alert,
+    id: alert.id || `oos-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+    timestamp,
+  };
+
+  // 1. In-memory dedup & store
+  const existingIdx = activeOutOfStockAlerts.findIndex(
+    (a) => a.kitId === alert.kitId && (!alert.region || a.region === alert.region),
+  );
+  if (existingIdx !== -1) {
+    activeOutOfStockAlerts[existingIdx] = alertWithMeta;
+  } else {
+    activeOutOfStockAlerts.unshift(alertWithMeta);
+  }
+
+  // 2. Play audible alert chime
+  playOrderAlertSound();
+
+  // 3. Notify in-memory regional admin listeners (e.g. AdminDashboard)
+  outOfStockListeners.forEach((fn) => {
+    try {
+      fn([...activeOutOfStockAlerts]);
+    } catch (e) {
+      console.warn('[NotificationService] Error notifying out of stock listener:', e);
+    }
+  });
+
+  // 4. Web Push Notification to regional admins
+  if (Platform.OS === 'web' && typeof window !== 'undefined' && 'Notification' in window) {
+    if (Notification.permission === 'granted') {
+      try {
+        const title = `⚠️ OUT OF STOCK: ${alert.kitName}`;
+        const regionText = alert.region ? ` in ${alert.region} Region` : '';
+        const body = `"${alert.kitName}" has reached 0 units${regionText}! It has been automatically set to OUT OF STOCK. Restocking required.`;
+        new Notification(title, {
+          body,
+          icon: '/favicon.ico',
+        });
+      } catch (err) {
+        console.warn('[NotificationService] Push notification error:', err);
+      }
+    }
+  }
+
+  // 5. Insert alert into Supabase admin_notifications table
+  try {
+    const { supabase } = await import('../supabase/client');
+    const regionText = alert.region ? ` in ${alert.region} Region` : '';
+    await supabase.from('admin_notifications').insert({
+      id: alertWithMeta.id,
+      type: 'out_of_stock',
+      title: `⚠️ OUT OF STOCK: ${alert.kitName}`,
+      message: `Meal kit "${alert.kitName}" (ID: ${alert.kitId}) is now OUT OF STOCK${regionText}. Item automatically marked out of stock. Immediate replenishment required.`,
+      region: alert.region || 'North',
+      is_read: false,
+      created_at: timestamp,
+    });
+  } catch (err) {
+    console.warn('[NotificationService] Supabase out-of-stock notification insert error:', err);
+  }
+}
+

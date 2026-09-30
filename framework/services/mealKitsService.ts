@@ -106,6 +106,11 @@ export interface MealKit {
   availableStorageCentres?: string[]; // Smaller fulfillment regions / storage centres, e.g. ['pune-city', 'pune-pcmc']
   isOutOfStock?: boolean;
   stockByRegion: Record<RegionHub, number>;
+  // Shelf life & Freshness fields
+  shelfLifeDays?: number; // Shelf life in days (e.g. 3, 4, 5, 7)
+  shelfLife?: string; // Human readable description, e.g. "4 days (Keep refrigerated at 2°C - 5°C)"
+  storageCondition?: string; // e.g. "Refrigerated at 2°C - 5°C" or "Cool & Dry"
+  batchExpiryDate?: string; // Specific batch expiration date YYYY-MM-DD or ISO string
   rating: number;
   reviewCount: number;
   nutrition: NutritionFacts;
@@ -193,6 +198,10 @@ export function compileMealKitTags(kit: Partial<MealKit>): string[] {
         tags.push(dt.toUpperCase());
       }
     }
+  }
+
+  if (kit.shelfLifeDays) {
+    tags.push(`Shelf Life: ${kit.shelfLifeDays} Days`);
   }
 
   if (kit.isTrending) {
@@ -304,7 +313,8 @@ const BASE_INITIAL_MEAL_KITS: MealKit[] = [
       { name: 'Fresh Malai Paneer Cubes', quantity: '250g' },
       { name: 'Fresh Tomato Puree Pouch', quantity: '180g' },
       { name: 'Cashew & Melon Seed Paste', quantity: '45g' },
-      { name: 'White Butter & Cream Pack', quantity: '30g' },
+      { name: 'White Butter', quantity: '20g' },
+      { name: 'Fresh Cream', quantity: '10g' },
       {
         name: 'Sachet 1: Whole Khada Masala (Cardamom, Clove, Cinnamon, Bayleaf)',
         quantity: '8g',
@@ -434,7 +444,8 @@ const BASE_INITIAL_MEAL_KITS: MealKit[] = [
       { name: 'Marinated Tender Chicken Cuts', quantity: '450g' },
       { name: 'Royal Aged Basmati Rice', quantity: '300g' },
       { name: 'Crispy Fried Barista Onions', quantity: '60g' },
-      { name: 'Pure Desi Ghee & Saffron Infusion', quantity: '25ml' },
+      { name: 'Pure Desi Ghee', quantity: '20ml' },
+      { name: 'Saffron Strands', quantity: '5ml' },
       {
         name: 'Sachet 1: Biryani Marinade Booster (Shahi Jeera, Mace, Star Anise)',
         quantity: '12g',
@@ -546,8 +557,10 @@ const BASE_INITIAL_MEAL_KITS: MealKit[] = [
     },
     allergens: ['Dairy (Butter & Cream)'],
     ingredients: [
-      { name: 'Pre-Cooked Slow-Brew Black Lentils & Rajma', quantity: '350g' },
-      { name: 'Artisanal White Butter & Cream Tub', quantity: '40g' },
+      { name: 'Pre-Cooked Slow-Brew Black Lentils (Urad Dal)', quantity: '280g' },
+      { name: 'Pre-Cooked Rajma (Kidney Beans)', quantity: '70g' },
+      { name: 'Artisanal White Butter', quantity: '25g' },
+      { name: 'Fresh Cream', quantity: '15g' },
       { name: 'Tomato Garlic Reduction Base', quantity: '120g' },
       {
         name: 'Sachet 1: Smoked Kashmiri Chilli & Degi Mirch Premix',
@@ -1262,8 +1275,10 @@ const BASE_INITIAL_MEAL_KITS: MealKit[] = [
     ingredients: [
       { name: 'Adobo Marinated Tender Chicken Strips', quantity: '320g' },
       { name: 'Cooked Cilantro-Lime Fluffy Rice Pouch', quantity: '280g' },
-      { name: 'Charred Bell Pepper & Red Onion Fajita Mix', quantity: '120g' },
-      { name: 'Sweet Roasted Corn & Black Bean Medley', quantity: '100g' },
+      { name: 'Charred Bell Pepper Fajita Strips', quantity: '80g' },
+      { name: 'Charred Red Onion Slices', quantity: '40g' },
+      { name: 'Sweet Roasted Corn Kernels', quantity: '60g' },
+      { name: 'Black Beans', quantity: '40g' },
       { name: 'Shredded Monterey Jack Cheese', quantity: '40g' },
       { name: 'Sachet 1: Tomatillo Salsa Verde Pouch', quantity: '50g', isMasalaSachet: true },
       {
@@ -1680,7 +1695,8 @@ const BASE_INITIAL_MEAL_KITS: MealKit[] = [
       { name: 'Artisan Stone-Ground Corn Tortillas (6 pcs)', quantity: '6 tortillas' },
       { name: 'Shredded Mexican Oaxaca Melting Cheese', quantity: '100g' },
       { name: 'Rich Spiced Chili Dipping Consomé Broth', quantity: '200ml' },
-      { name: 'Finely Diced White Onions & Fresh Cilantro', quantity: '50g' },
+      { name: 'Finely Diced White Onions', quantity: '35g' },
+      { name: 'Fresh Cilantro', quantity: '15g' },
       {
         name: 'Sachet 1: Mexican Spiced Chili Oil for Tortilla Dip',
         quantity: '25ml',
@@ -1781,7 +1797,8 @@ const BASE_INITIAL_MEAL_KITS: MealKit[] = [
     ingredients: [
       { name: 'Cilantro-Lime Parboiled Brown Rice', quantity: '200g' },
       { name: 'Seasoned Cuban Black Beans', quantity: '200g' },
-      { name: 'Sliced Tri-Color Fajita Bell Peppers & Red Onion', quantity: '180g' },
+      { name: 'Sliced Tri-Color Fajita Bell Peppers', quantity: '140g' },
+      { name: 'Sliced Red Onion', quantity: '40g' },
       { name: 'Fire-Roasted Tomato Salsa Pouch', quantity: '80g' },
       { name: 'Avocado-Lime Crema Drizzle Pouch', quantity: '50g' },
       {
@@ -1895,7 +1912,8 @@ const BASE_INITIAL_MEAL_KITS: MealKit[] = [
     allergens: ['Wheat / Gluten (Durum Wheat)', 'Dairy (Cream, Butter & Pecorino)'],
     ingredients: [
       { name: 'Fresh Handmade Durum Pappardelle Nests', quantity: '240g' },
-      { name: 'Assorted Porcini & Cremini Mushrooms', quantity: '180g' },
+      { name: 'Fresh Porcini Mushrooms', quantity: '90g' },
+      { name: 'Fresh Cremini Mushrooms', quantity: '90g' },
       { name: 'Italian Dairy Cooking Cream Pouch', quantity: '120ml' },
       { name: 'Pure White Truffle Infused Olive Oil', quantity: '15ml' },
       { name: 'Aged Italian Pecorino Romano Block', quantity: '35g' },
@@ -2141,7 +2159,8 @@ const BASE_INITIAL_MEAL_KITS: MealKit[] = [
     ingredients: [
       { name: 'Fresh Green Zucchini Rounds', quantity: '150g' },
       { name: 'Tender Purple Aubergine (Brinjal) Cubes', quantity: '150g' },
-      { name: 'Diced Yellow & Red Bell Peppers', quantity: '120g' },
+      { name: 'Diced Yellow Bell Pepper', quantity: '60g' },
+      { name: 'Diced Red Bell Pepper', quantity: '60g' },
       { name: 'Crushed Provencal Plum Tomatoes', quantity: '200g' },
       { name: 'Diced White Onions', quantity: '80g' },
       { name: 'Extra Virgin Olive Oil Pouch', quantity: '30ml' },
@@ -2499,8 +2518,11 @@ const BASE_INITIAL_MEAL_KITS: MealKit[] = [
     ingredients: [
       { name: 'Veg Manchurian Dumpling Base Mix', quantity: '220g' },
       { name: 'Eggless Hakka Noodles Pack', quantity: '180g' },
-      { name: 'Fresh Spring Onions & Capsicum', quantity: '80g' },
-      { name: 'Minced Ginger, Garlic & Green Chilli', quantity: '25g' },
+      { name: 'Fresh Spring Onions', quantity: '40g' },
+      { name: 'Capsicum', quantity: '40g' },
+      { name: 'Minced Ginger', quantity: '10g' },
+      { name: 'Minced Garlic', quantity: '10g' },
+      { name: 'Green Chilli', quantity: '5g' },
       {
         name: 'Sachet 1: Tangy Manchurian Dark Sauce Pouch',
         quantity: '60ml',
@@ -2870,7 +2892,8 @@ const BASE_INITIAL_MEAL_KITS: MealKit[] = [
     },
     allergens: ['Dairy (Butter & Cream)', 'Gluten / Wheat (Croutons)'],
     ingredients: [
-      { name: 'Fresh Button & Shiitake Mushrooms', quantity: '180g' },
+      { name: 'Fresh Button Mushrooms', quantity: '100g' },
+      { name: 'Fresh Shiitake Mushrooms', quantity: '80g' },
       { name: 'Sweet Golden Corn Kernels', quantity: '150g' },
       { name: 'Rich Dairy Cooking Cream Pouch', quantity: '100ml' },
       { name: 'Salted Butter Block', quantity: '25g' },
@@ -2989,7 +3012,8 @@ const BASE_INITIAL_MEAL_KITS: MealKit[] = [
       { name: 'Sprouted Organic Matki (Moth Beans)', quantity: '200g' },
       { name: 'Fresh Pune Bakery Ladi Pav', quantity: '4 pcs' },
       { name: 'Special Puneri Crispy Farsan', quantity: '90g' },
-      { name: 'Diced Red Onions & Fresh Coriander', quantity: '80g' },
+      { name: 'Diced Red Onions', quantity: '60g' },
+      { name: 'Fresh Coriander', quantity: '20g' },
       { name: 'Fresh Juicy Lemon', quantity: '1 pc' },
       {
         name: 'Sachet 1: Puneri Goda Masala & Hing Tadka',
@@ -3118,8 +3142,10 @@ const BASE_INITIAL_MEAL_KITS: MealKit[] = [
     ingredients: [
       { name: 'Premium Roasted Chana Besan (Gram Flour)', quantity: '120g' },
       { name: 'Stone-Ground Jowar (Sorghum) Bhakri Flour', quantity: '200g' },
-      { name: 'Fresh Green Chillies & Garlic Pods', quantity: '50g' },
-      { name: 'Curry Leaves & Mustard Tadka Mix', quantity: '15g' },
+      { name: 'Fresh Green Chillies', quantity: '20g' },
+      { name: 'Garlic Pods', quantity: '30g' },
+      { name: 'Fresh Curry Leaves', quantity: '8g' },
+      { name: 'Mustard Seeds', quantity: '7g' },
       {
         name: 'Sachet 1: Puneri Pithla Tempering Spice Blend',
         quantity: '12g',
@@ -3376,7 +3402,8 @@ const BASE_INITIAL_MEAL_KITS: MealKit[] = [
       { name: 'Slow-Roasted Crushed Peanuts (Shengdana Kut)', quantity: '60g' },
       { name: 'Boiled Diced Baby Potatoes', quantity: '80g' },
       { name: 'Pure Cow Desi Ghee', quantity: '30g' },
-      { name: 'Fresh Green Chillies & Curry Leaves', quantity: '20g' },
+      { name: 'Fresh Green Chillies', quantity: '10g' },
+      { name: 'Fresh Curry Leaves', quantity: '10g' },
       {
         name: 'Sachet 1: Puneri Khichdi Jeera & Sendha Namak Blend',
         quantity: '10g',
@@ -3448,10 +3475,74 @@ const BASE_INITIAL_MEAL_KITS: MealKit[] = [
   },
 ];
 
-export const INITIAL_MEAL_KITS: MealKit[] = BASE_INITIAL_MEAL_KITS.map((kit) => ({
-  ...kit,
-  tags: kit.tags && kit.tags.length > 0 ? kit.tags : compileMealKitTags(kit),
-}));
+export function getMealKitDefaultShelfLife(kit: Partial<MealKit>): {
+  shelfLifeDays: number;
+  shelfLife: string;
+  storageCondition: string;
+} {
+  let shelfLifeDays = 4;
+  let storageCondition = 'Refrigerated at 2°C - 5°C';
+
+  if (
+    kit.allergens?.some((a) => {
+      const lower = a.toLowerCase();
+      return (
+        lower.includes('fish') ||
+        lower.includes('prawn') ||
+        lower.includes('shellfish') ||
+        lower.includes('seafood')
+      );
+    })
+  ) {
+    shelfLifeDays = 2; // Fresh seafood
+    storageCondition = 'Refrigerated at 0°C - 2°C';
+  } else if (kit.diet === 'nonveg') {
+    shelfLifeDays = 3; // Fresh meat & poultry
+    storageCondition = 'Refrigerated at 2°C - 4°C';
+  } else if (
+    kit.allergens?.some((a) => {
+      const lower = a.toLowerCase();
+      return lower.includes('paneer') || lower.includes('dairy');
+    })
+  ) {
+    shelfLifeDays = 3; // Fresh paneer & artisanal dairy
+    storageCondition = 'Refrigerated at 2°C - 5°C';
+  } else if (
+    kit.dishCategory === 'Burgers & Sliders' ||
+    kit.dishCategory === 'Tacos' ||
+    kit.dishCategory === 'Pizzas'
+  ) {
+    shelfLifeDays = 5;
+    storageCondition = 'Chilled Vacuum Pack (4°C)';
+  } else if (kit.dishCategory === 'Pastas' || kit.dishCategory === 'Street Food') {
+    shelfLifeDays = 6;
+    storageCondition = 'Cool Dry Place & Chilled Sauces';
+  }
+
+  return {
+    shelfLifeDays,
+    shelfLife: `${shelfLifeDays} days (${storageCondition})`,
+    storageCondition,
+  };
+}
+
+export const INITIAL_MEAL_KITS: MealKit[] = BASE_INITIAL_MEAL_KITS.map((kit) => {
+  const defaults = getMealKitDefaultShelfLife(kit);
+  const shelfLifeDays = kit.shelfLifeDays || defaults.shelfLifeDays;
+  const storageCondition = kit.storageCondition || defaults.storageCondition;
+  const shelfLife = kit.shelfLife || `${shelfLifeDays} days (${storageCondition})`;
+
+  return {
+    ...kit,
+    shelfLifeDays,
+    shelfLife,
+    storageCondition,
+    tags:
+      kit.tags && kit.tags.length > 0
+        ? kit.tags
+        : compileMealKitTags({ ...kit, shelfLifeDays }),
+  };
+});
 
 // In-memory catalog state with helper queries
 let catalogStore: MealKit[] = [...INITIAL_MEAL_KITS];
@@ -3666,12 +3757,183 @@ export function deleteMealKit(id: string): void {
 export function updateMealKitStock(id: string, region: RegionHub, stock: number): void {
   catalogStore = catalogStore.map((kit) => {
     if (kit.id === id) {
+      const updatedStockByRegion = {
+        ...kit.stockByRegion,
+        [region]: stock,
+      };
+      // Check if all regional stock is zero
+      const totalStock = Object.values(updatedStockByRegion).reduce(
+        (acc, val) => acc + (Number(val) || 0),
+        0,
+      );
       return {
         ...kit,
-        stockByRegion: {
-          ...kit.stockByRegion,
-          [region]: stock,
-        },
+        stockByRegion: updatedStockByRegion,
+        isOutOfStock: totalStock === 0 ? true : kit.isOutOfStock,
+      };
+    }
+    return kit;
+  });
+  notifyMealKitsChanged();
+}
+
+/**
+ * Deducts inventory stock for a meal kit in a specific region hub.
+ * If region stock or total stock drops to 0, automatically marks the item as out of stock.
+ */
+export function deductMealKitStock(
+  id: string,
+  region: RegionHub,
+  quantity: number,
+): { updatedKit?: MealKit; remainingStock: number; wentOutOfStock: boolean } {
+  let wentOutOfStock = false;
+  let remainingStock = 0;
+  let updatedKit: MealKit | undefined;
+
+  catalogStore = catalogStore.map((kit) => {
+    if (kit.id === id) {
+      const currentStock = kit.stockByRegion?.[region] ?? 0;
+      remainingStock = Math.max(0, currentStock - quantity);
+      const isNowZero = remainingStock === 0;
+
+      const updatedStockByRegion = {
+        ...kit.stockByRegion,
+        [region]: remainingStock,
+      };
+
+      const totalRemainingAcrossRegions = Object.values(updatedStockByRegion).reduce(
+        (a, b) => a + (Number(b) || 0),
+        0,
+      );
+
+      const shouldMarkOutOfStock = isNowZero || totalRemainingAcrossRegions === 0;
+      if (shouldMarkOutOfStock && !kit.isOutOfStock) {
+        wentOutOfStock = true;
+      }
+
+      updatedKit = {
+        ...kit,
+        stockByRegion: updatedStockByRegion,
+        isOutOfStock: shouldMarkOutOfStock ? true : kit.isOutOfStock,
+      };
+      return updatedKit;
+    }
+    return kit;
+  });
+
+  notifyMealKitsChanged();
+  return { updatedKit, remainingStock, wentOutOfStock };
+}
+
+/**
+ * Restores/reverts inventory stock for a meal kit in a specific region hub.
+ * Used when an admin cancels an order.
+ * If the item was marked out of stock and now has positive stock restored, it can be marked back in stock.
+ */
+export function restoreMealKitStock(
+  id: string,
+  region: RegionHub,
+  quantity: number,
+): { updatedKit?: MealKit; restoredStock: number; backInStock: boolean } {
+  let backInStock = false;
+  let restoredStock = 0;
+  let updatedKit: MealKit | undefined;
+
+  catalogStore = catalogStore.map((kit) => {
+    if (kit.id === id) {
+      const currentStock = kit.stockByRegion?.[region] ?? 0;
+      restoredStock = currentStock + quantity;
+
+      const updatedStockByRegion = {
+        ...kit.stockByRegion,
+        [region]: restoredStock,
+      };
+
+      if (kit.isOutOfStock && restoredStock > 0) {
+        backInStock = true;
+      }
+
+      updatedKit = {
+        ...kit,
+        stockByRegion: updatedStockByRegion,
+        isOutOfStock: backInStock ? false : kit.isOutOfStock,
+      };
+      return updatedKit;
+    }
+    return kit;
+  });
+
+  notifyMealKitsChanged();
+  return { updatedKit, restoredStock, backInStock };
+}
+
+export interface FreshnessInfo {
+  shelfLifeDays: number;
+  storageCondition: string;
+  batchExpiryDate: string;
+  daysRemaining: number;
+  status: 'fresh' | 'near_expiry' | 'expired';
+  statusLabel: string;
+}
+
+/**
+ * Calculates current freshness metrics and expiration information for a meal kit.
+ */
+export function calculateMealKitFreshness(
+  kit: Partial<MealKit>,
+  batchDate?: string | Date,
+): FreshnessInfo {
+  const defaults = getMealKitDefaultShelfLife(kit);
+  const shelfLifeDays = kit.shelfLifeDays ?? defaults.shelfLifeDays;
+  const storageCondition = kit.storageCondition ?? defaults.storageCondition;
+
+  const baseDate = batchDate ? new Date(batchDate) : new Date();
+  const expiry = new Date(baseDate.getTime() + shelfLifeDays * 24 * 60 * 60 * 1000);
+  const now = new Date();
+
+  const diffMs = expiry.getTime() - now.getTime();
+  const daysRemaining = Math.max(0, Math.ceil(diffMs / (1000 * 60 * 60 * 24)));
+
+  let status: 'fresh' | 'near_expiry' | 'expired' = 'fresh';
+  let statusLabel = `Fresh (${daysRemaining}d shelf life)`;
+
+  if (diffMs <= 0 || daysRemaining === 0) {
+    status = 'expired';
+    statusLabel = 'Expired';
+  } else if (daysRemaining <= 1) {
+    status = 'near_expiry';
+    statusLabel = 'Near Expiry (1d left)';
+  } else if (daysRemaining <= 2) {
+    status = 'near_expiry';
+    statusLabel = `Expiring Soon (${daysRemaining}d)`;
+  }
+
+  return {
+    shelfLifeDays,
+    storageCondition,
+    batchExpiryDate: expiry.toISOString().split('T')[0] || '',
+    daysRemaining,
+    status,
+    statusLabel,
+  };
+}
+
+/**
+ * Updates the shelf life and storage conditions of a meal kit in the catalog.
+ */
+export function updateMealKitShelfLife(
+  id: string,
+  shelfLifeDays: number,
+  storageCondition?: string,
+): void {
+  catalogStore = catalogStore.map((kit) => {
+    if (kit.id === id) {
+      const condition = storageCondition || kit.storageCondition || 'Refrigerated at 2°C - 5°C';
+      return {
+        ...kit,
+        shelfLifeDays,
+        shelfLife: `${shelfLifeDays} days (${condition})`,
+        storageCondition: condition,
       };
     }
     return kit;
