@@ -114,6 +114,7 @@ export const InventoryManagementView: React.FC = () => {
   }, [getInventoryItems]);
 
   const filteredItems = useMemo(() => {
+    const q = (searchQuery || '').trim().toLowerCase();
     const adminRegions = assignedRegions || [];
     const isSuper = isSuperAdmin;
     return items.filter((item) => {
@@ -130,8 +131,7 @@ export const InventoryManagementView: React.FC = () => {
       if (statusFilter !== 'all' && shelfStatus.status !== statusFilter) return false;
 
       // Search
-      if (debouncedQuery) {
-        const q = debouncedQuery.toLowerCase();
+      if (q) {
         const name = item.name || '';
         const n = name.toLowerCase();
         // Exact match first, then substring
@@ -352,7 +352,7 @@ export const InventoryManagementView: React.FC = () => {
       )}
 
       {/* Search */}
-      <View style={[styles.searchBar, { backgroundColor: colors.bgSurface, borderColor: colors.borderLight }]}>
+      <View style={[styles.searchBar, { backgroundColor: colors.bgSurface, borderColor: 'transparent', borderWidth: 0, marginBottom: 8, outline: 'none' }]}>
         <Icon name="search" size={16} color={colors.textMuted} />
         <TextInput
           style={[styles.searchInput, { color: colors.textPrimary, caretColor: colors.primary }]}
