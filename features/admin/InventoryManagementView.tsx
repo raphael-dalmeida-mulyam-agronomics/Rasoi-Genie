@@ -126,9 +126,9 @@ export const InventoryManagementView: React.FC = () => {
       // Search
       if (searchQuery.trim()) {
         const q = searchQuery.trim().toLowerCase();
-        return (
+          item.name?.toLowerCase().includes(q) ||
           item.name.toLowerCase().includes(q) ||
-          item.category.toLowerCase().includes(q) ||
+            (item.section || '').toLowerCase().includes(q) ||
           (item.notes?.toLowerCase().includes(q) ?? false)
         );
       }
