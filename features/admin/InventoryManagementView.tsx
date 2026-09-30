@@ -106,7 +106,7 @@ export const InventoryManagementView: React.FC = () => {
       setItems(getInventoryItems());
     });
     return unsub;
-  }, []);
+  }, [getInventoryItems]);
 
   const filteredItems = useMemo(() => {
     const adminRegions = assignedRegions || [];
