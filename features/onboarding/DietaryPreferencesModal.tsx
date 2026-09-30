@@ -12,7 +12,12 @@ import {
   SpiceLevel,
 } from '../../framework/services/mealKitsService';
 
-const DIET_TYPES: { id: DietTag | 'all'; label: string; icon: string; desc: string }[] = [
+interface DietaryPreferencesModalProps {
+  visible: boolean;
+  onClose: () => void;
+}
+
+const DIET_TYPES: { id: DietTag; label: string; icon: string; desc: string }[] = [
   { id: 'veg', label: 'Vegetarian', icon: '', desc: '100% vegetarian dishes, paneer & dairy' },
   { id: 'nonveg', label: 'Non-Vegetarian', icon: '', desc: 'Chicken, seafood, meats & poultry' },
   { id: 'jain', label: 'Jain Friendly', icon: '', desc: 'No root vegetables, onions or garlic' },

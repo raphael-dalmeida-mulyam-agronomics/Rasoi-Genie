@@ -43,7 +43,7 @@ const ALL_CUISINES: { id: CuisineType; name: string }[] = [
   { id: 'Mediterranean', name: 'Mediterranean' },
 ];
 
-const DIET_OPTIONS: { id: DietTag | 'all'; label: string; icon: AppIconName; desc: string }[] = [
+const DIET_OPTIONS: { id: DietTag; label: string; icon: AppIconName; desc: string }[] = [
   {
     id: 'veg',
     label: 'Vegetarian',
