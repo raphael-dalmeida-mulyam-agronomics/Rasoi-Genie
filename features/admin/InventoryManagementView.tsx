@@ -96,7 +96,12 @@ export const InventoryManagementView: React.FC = () => {
 
   // Seed meal-kit ingredients into inventory on load
   useEffect(() => {
-    try { const added = seedInventoryFromMealKits(); console.log('[Inventory] Seeded meal-kit ingredients:', added); } catch (e) {}
+    try {
+      const added = seedInventoryFromMealKits();
+      console.log('[Inventory] Seeded meal-kit ingredients:', added);
+      // Refresh items after seed writes to store
+      setItems(getInventoryItems());
+    } catch (e) { console.error('[Inventory] Seed error:', e); }
     const unsub = subscribeToInventory(() => {
       setItems(getInventoryItems());
     });
