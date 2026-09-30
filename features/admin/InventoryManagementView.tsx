@@ -66,6 +66,7 @@ export const InventoryManagementView: React.FC = () => {
   // Modal states
   const [addModalVisible, setAddModalVisible] = useState(false);
   const [editModalVisible, setEditModalVisible] = useState(false);
+  const [statusDropdownOpen, setStatusDropdownOpen] = useState(false);
   const [restockModalVisible, setRestockModalVisible] = useState(false);
   const [deleteModalVisible, setDeleteModalVisible] = useState(false);
 
@@ -286,58 +287,70 @@ export const InventoryManagementView: React.FC = () => {
         </View>
       </View>
 
-      {/* Filters */}
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterRow}>
-        {(['all', 'raw_ingredients', 'packaging', 'seasonings'] as const).map((f) => (
+      {/* Section buttons (4): All / Raw Ingredients / Packaging / Seasonings & Herbs */}
+      <View style={styles.sectionButtonsRow}>
+        {(
+          [
+            { id: 'all', label: 'All' },
+            { id: 'raw_ingredients', label: 'Raw Ingredients' },
+            { id: 'packaging', label: 'Packaging' },
+            { id: 'seasonings', label: 'Seasonings & Herbs' },
+          ] as const
+        ).map((btn) => (
           <TouchableOpacity
-            key={f}
-            onPress={() => setFilter(f)}
+            key={btn.id}
+            onPress={() => setFilter(btn.id as any)}
             style={[
-              styles.filterChip,
+              styles.sectionBtn,
               {
-                backgroundColor: filter === f ? colors.primary : colors.bgSurface,
-                borderColor: filter === f ? colors.primary : colors.borderLight,
+                backgroundColor: filter === btn.id ? colors.primary : colors.bgSurface,
+                borderColor: filter === btn.id ? colors.primary : colors.borderLight,
+                borderWidth: 1,
+                flex: 1,
               },
             ]}
           >
             <Text
               style={{
-                color: filter === f ? '#FFFFFF' : colors.textPrimary,
+                color: filter === btn.id ? '#FFFFFF' : colors.textPrimary,
                 fontWeight: '700',
                 fontSize: 11,
+                textAlign: 'center',
               }}
             >
-              {f === 'all' ? 'All' : CATEGORY_LABELS[f]}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
-
-      <View style={styles.filterRow}>
-        {(['all', 'fresh', 'expiring_soon', 'expired'] as const).map((f) => (
-          <TouchableOpacity
-            key={f}
-            onPress={() => setStatusFilter(f)}
-            style={[
-              styles.filterChip,
-              {
-                backgroundColor: statusFilter === f ? colors.primary : colors.bgSurface,
-                borderColor: statusFilter === f ? colors.primary : colors.borderLight,
-              },
-            ]}
-          >
-            <Text
-              style={{
-                color: statusFilter === f ? '#FFFFFF' : colors.textPrimary,
-                fontWeight: '700',
-                fontSize: 11,
-              }}
-            >
-              {f === 'all' ? 'All Status' : f === 'expiring_soon' ? 'Expiring Soon' : f === 'expired' ? 'Expired' : 'Fresh'}
+              {btn.label}
             </Text>
           </TouchableOpacity>
         ))}
       </View>
+
+      {/* Status dropdown */}
+      <View style={[styles.searchBar, { backgroundColor: colors.bgSurface, borderColor: colors.borderLight, marginBottom: 8 }]}>
+        <Icon name="filter" size={16} color={colors.textMuted} />
+        <Text style={{ fontSize: 13, fontWeight: '700', color: colors.textSecondary, marginLeft: 8 }}>
+          Status:
+        </Text>
+        <TouchableOpacity
+          onPress={() => setStatusDropdownOpen(!statusDropdownOpen)}
+          style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginLeft: 'auto' }}
+        >
+          <Text style={{ fontSize: 13, fontWeight: '700', color: colors.textPrimary }}>
+            {statusFilter === 'all' ? 'All Status' : statusFilter === 'fresh' ? 'Fresh' : statusFilter === 'expiring_soon' ? 'Expiring Soon' : 'Expired'}
+          </Text>
+          <Icon name={statusDropdownOpen ? 'chevron-up' : 'chevron-down'} size={14} color={colors.textMuted} />
+        </TouchableOpacity>
+      </View>
+      {statusDropdownOpen && (
+        <View style={[styles.dropdownMenu, { backgroundColor: colors.bgSurface, borderColor: colors.borderLight, borderRadius: radii.md, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.15, shadowRadius: 8, elevation: 4, marginBottom: 10 }]}>
+          {(['all', 'fresh', 'expiring_soon', 'expired'] as const).map((f) => (
+            <TouchableOpacity key={f} onPress={() => { setStatusFilter(f); setStatusDropdownOpen(false); }} style={{ padding: 10, borderBottomWidth: 1, borderBottomColor: colors.borderLight }}>
+              <Text style={{ fontSize: 13, color: colors.textPrimary, fontWeight: statusFilter === f ? '800' : '400' }}>
+                {f === 'all' ? 'All Status' : f === 'fresh' ? 'Fresh' : f === 'expiring_soon' ? 'Expiring Soon' : 'Expired'}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      )}
 
       {/* Search */}
       <View style={[styles.searchBar, { backgroundColor: colors.bgSurface, borderColor: colors.borderLight }]}>

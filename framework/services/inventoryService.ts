@@ -370,6 +370,28 @@ export function restoreIngredientStock(itemId: string, qty: number, region: stri
   return true;
 }
 
+/**
+ * Verify that every ingredient required by an order exists in inventory
+ * and has sufficient stock before allowing order placement.
+ */
+export function validateOrderIngredients(
+  required: { itemId: string; quantity: number; region: string }[]
+): { valid: boolean; missing: string[]; insufficient: string[] } {
+  const missing: string[] = [];
+  const insufficient: string[] = [];
+  for (const req of required) {
+    const item = inventoryStore.find((i) => i.id === req.itemId && i.region === req.region);
+    if (!item) {
+      missing.push(req.itemId);
+      continue;
+    }
+    if (item.currentStock < req.quantity) {
+      insufficient.push(`${item.name} (need ${req.quantity}, have ${item.currentStock})`);
+    }
+  }
+  return { valid: missing.length === 0 && insufficient.length === 0, missing, insufficient };
+}
+
 export function getInventoryByRegion(region: string): InventoryItem[] {
   return inventoryStore.filter(i => i.region === region || i.region === 'All');
 }
