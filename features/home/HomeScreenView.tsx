@@ -586,7 +586,7 @@ export const HomeScreenView: React.FC = () => {
         // 4. Sort by rating & popularity
         .sort((a, b) => (b.rating || 0) - (a.rating || 0))
     );
-  }, [allKits, preferences?.dietType, preferences?.allergies, preferences?.preferredCuisines]);
+  }, [allKits, preferences?.dietTypes, preferences?.allergies, preferences?.preferredCuisines]);
 
   // "Global Favorites & Foreign Specials"
   const foreignKits = useMemo(() => {
@@ -1152,7 +1152,7 @@ export const HomeScreenView: React.FC = () => {
                   }}
                 >
                   {preferences.preferredCuisines && preferences.preferredCuisines.length > 0
-                    ? `No meal kits found matching your preferred cuisines in the ${preferences.dietType.toUpperCase()} category.`
+                    ? `No meal kits found matching your preferred cuisines in the ${(preferences.dietTypes || []).join(', ').toUpperCase()} category.`
                     : 'Set your favorite cuisines in your profile to discover personalized chef recommendations.'}
                 </Text>
                 <Button
