@@ -395,3 +395,26 @@ export function validateOrderIngredients(
 export function getInventoryByRegion(region: string): InventoryItem[] {
   return inventoryStore.filter(i => i.region === region || i.region === 'All');
 }
+
+// Backend sync — persist to Supabase inventory_items (if table exists)
+export async function syncInventoryToSupabase(region?: string): Promise<void> {
+  try {
+    const { supabase } = await import('../supabase/client');
+    const items = region ? inventoryStore.filter(i => i.region === region || !i.region) : inventoryStore;
+    for (const item of items) {
+      await supabase.from('inventory_items').upsert({
+        id: item.id,
+        name: item.name,
+        section: item.section,
+        current_stock: item.currentStock,
+        unit: item.unit,
+        shelf_life_days: item.shelfLifeDays,
+        threshold_low: item.thresholdLow,
+        region: item.region || 'West',
+        storage_condition: item.storageCondition,
+        supplier: item.supplier,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'id' }).catch(() => {});
+    }
+  } catch {}
+}

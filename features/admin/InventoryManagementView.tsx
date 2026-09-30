@@ -94,7 +94,9 @@ export const InventoryManagementView: React.FC = () => {
   const [restockQty, setRestockQty] = useState('');
   const [restockNote, setRestockNote] = useState('');
 
+  // Seed meal-kit ingredients into inventory on load
   useEffect(() => {
+    try { const added = seedInventoryFromMealKits(); console.log('[Inventory] Seeded meal-kit ingredients:', added); } catch (e) {}
     const unsub = subscribeToInventory(() => {
       setItems(getInventoryItems());
     });
@@ -286,31 +288,24 @@ export const InventoryManagementView: React.FC = () => {
         </View>
       </View>
 
-      {/* 4 Horizontal Tabs — All / Raw Ingredients / Packaging / Seasonings & Herbs */}
-      <View style={{ flexDirection: 'row', gap: 6, marginBottom: 12 }}>
-        {(
-          [
-            { id: 'all', label: 'All', icon: 'list' as AppIconName },
-            { id: 'raw_ingredients', label: 'Raw Ingredients', icon: 'cube' as AppIconName },
-            { id: 'packaging', label: 'Packaging', icon: 'box' as AppIconName },
-            { id: 'seasonings', label: 'Seasonings & Herbs', icon: 'sparkles' as AppIconName },
-          ] as const
-        ).map((tab) => (
+      {/* 4 Horizontal Tabs */}
+      <View style={[styles.tabRow, { borderBottomColor: colors.borderLight }]}>
+        {[
+          { key: 'all' as const, label: 'All' },
+          { key: 'raw_ingredients' as const, label: 'Raw Ingredients' },
+          { key: 'packaging' as const, label: 'Packaging' },
+          { key: 'seasonings' as const, label: 'Seasonings & Herbs' },
+        ].map((t) => (
           <TouchableOpacity
-            key={tab.id}
-            onPress={() => setFilter(tab.id as any)}
+            key={t.key}
+            onPress={() => setFilter(t.key)}
             style={[
-              styles.tabButton,
-              {
-                backgroundColor: filter === tab.id ? colors.primary : colors.bgSurface,
-                borderColor: filter === tab.id ? colors.primary : colors.borderLight,
-                flex: 1,
-              },
+              styles.tab,
+              { borderBottomWidth: filter === t.key ? 2.5 : 1, borderBottomColor: filter === t.key ? colors.primary : colors.borderLight, backgroundColor: filter === t.key ? colors.primaryLight : 'transparent' },
             ]}
           >
-            <Icon name={tab.icon} size={14} color={filter === tab.id ? '#FFFFFF' : colors.textSecondary} />
-            <Text style={{ color: filter === tab.id ? '#FFFFFF' : colors.textPrimary, fontWeight: '700', fontSize: 11, textAlign: 'center', marginTop: 2 }}>
-              {tab.label}
+            <Text style={{ color: filter === t.key ? colors.primary : colors.textSecondary, fontWeight: filter === t.key ? '800' : '600', fontSize: 12 }}>
+              {t.label}
             </Text>
           </TouchableOpacity>
         ))}
@@ -696,6 +691,20 @@ export const InventoryManagementView: React.FC = () => {
 };
 
 const styles = StyleSheet.create({
+  tabRow: {
+    flexDirection: 'row',
+    gap: 4,
+    marginBottom: 14,
+    paddingBottom: 4,
+    borderBottomWidth: 1,
+  },
+  tab: {
+    flex: 1,
+    paddingVertical: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 8,
+  },
   container: {
     padding: 16,
     paddingBottom: 30,
