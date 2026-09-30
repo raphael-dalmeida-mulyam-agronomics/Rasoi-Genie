@@ -102,10 +102,8 @@ export const InventoryManagementView: React.FC = () => {
       // Refresh items after seed writes to store
       setItems(getInventoryItems());
     } catch (e) { console.error('[Inventory] Seed error:', e); }
-    const unsub = subscribeToInventory(() => {
-      setItems(getInventoryItems());
-    });
-    return unsub;
+    const unsub = subscribeToInventory(() => { setItems(getInventoryItems()); });
+    return () => { unsub(); };
   }, [getInventoryItems]);
 
   const filteredItems = useMemo(() => {
