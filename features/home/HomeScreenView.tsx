@@ -143,6 +143,7 @@ function MealKitCard({
 
   return (
     <TouchableOpacity
+      testID={`meal-kit-card-${kit.id}`}
       style={[
         styles.gridCard,
         {

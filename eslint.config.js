@@ -8,6 +8,8 @@ module.exports = [
       '**/dist/**',
       '**/build/**',
       '**/coverage/**',
+      '**/playwright-report/**',
+      '**/test-results/**',
       '**/*.config.js',
     ],
   },

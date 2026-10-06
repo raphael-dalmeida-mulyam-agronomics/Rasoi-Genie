@@ -367,7 +367,10 @@ export const CartView: React.FC = () => {
                   style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 2 }}
                 >
                   <Icon name="tag" size={16} color={colors.primary} />
-                  <Text style={[styles.couponCodeText, { color: colors.primary, marginBottom: 0 }]}>
+                  <Text
+                    testID="cart-applied-coupon-text"
+                    style={[styles.couponCodeText, { color: colors.primary, marginBottom: 0 }]}
+                  >
                     {appliedCoupon.code} Applied
                   </Text>
                 </View>
@@ -382,6 +385,7 @@ export const CartView: React.FC = () => {
           ) : (
             <View style={styles.couponInputRow}>
               <TextInput
+                testID="cart-coupon-input"
                 style={[
                   styles.couponInput,
                   {
@@ -398,6 +402,7 @@ export const CartView: React.FC = () => {
                 onChangeText={setCouponInput}
               />
               <Button
+                testID="cart-apply-coupon-btn"
                 title="Apply"
                 size="sm"
                 onPress={handleApplyCoupon}
@@ -412,6 +417,7 @@ export const CartView: React.FC = () => {
             </Text>
             <TouchableOpacity onPress={() => applyCouponCode('RASOI100')}>
               <Text
+                testID="cart-coupon-rasoi100"
                 style={[
                   styles.couponPill,
                   { color: colors.primary, borderColor: colors.primary + '40' },
@@ -422,6 +428,7 @@ export const CartView: React.FC = () => {
             </TouchableOpacity>
             <TouchableOpacity onPress={() => applyCouponCode('FREEDEL')}>
               <Text
+                testID="cart-coupon-freedel"
                 style={[
                   styles.couponPill,
                   { color: colors.accent, borderColor: colors.accent + '40' },
@@ -644,7 +651,7 @@ export const CartView: React.FC = () => {
 
           <View style={styles.summaryLineTotal}>
             <Text style={[styles.totalText, { color: colors.textPrimary }]}>Grand Total</Text>
-            <Text style={[styles.totalAmount, { color: colors.primary }]}>₹{total}</Text>
+            <Text testID="cart-grand-total" style={[styles.totalAmount, { color: colors.primary }]}>₹{total}</Text>
           </View>
         </View>
       </ScrollView>
@@ -666,6 +673,7 @@ export const CartView: React.FC = () => {
         </View>
 
         <Button
+          testID="cart-proceed-checkout-btn"
           title="Proceed to Checkout"
           icon={<Icon name="arrow-forward" size={18} color="#FFFFFF" />}
           size="lg"

@@ -540,6 +540,7 @@ function CreateRecipeModal({
                 <>
                   <Text style={s.label}>Recipe Name *</Text>
                   <TextInput
+                    testID="chef-recipe-name-input"
                     style={s.input}
                     placeholder="e.g. Grandma's Butter Chicken"
                     placeholderTextColor={colors.textMuted}
@@ -549,6 +550,7 @@ function CreateRecipeModal({
 
                   <Text style={s.label}>Tagline</Text>
                   <TextInput
+                    testID="chef-recipe-tagline-input"
                     style={s.input}
                     placeholder="One-line description for the card"
                     placeholderTextColor={colors.textMuted}
@@ -558,6 +560,7 @@ function CreateRecipeModal({
 
                   <Text style={s.label}>Description *</Text>
                   <TextInput
+                    testID="chef-recipe-desc-input"
                     style={[s.input, s.textArea]}
                     placeholder="Tell customers what makes this recipe special..."
                     placeholderTextColor={colors.textMuted}
@@ -683,6 +686,7 @@ function CreateRecipeModal({
                   {ingredients.map((ing, i) => (
                     <View key={i} style={s.ingredientRow}>
                       <TextInput
+                        testID={`chef-ingredient-name-${i}`}
                         style={[s.input, s.flex1]}
                         placeholder="Ingredient name"
                         placeholderTextColor={colors.textMuted}
@@ -690,6 +694,7 @@ function CreateRecipeModal({
                         onChangeText={(v) => updateIngredient(i, 'name', v)}
                       />
                       <TextInput
+                        testID={`chef-ingredient-qty-${i}`}
                         style={[s.input, { width: 90 }]}
                         placeholder="Qty"
                         placeholderTextColor={colors.textMuted}
@@ -703,7 +708,11 @@ function CreateRecipeModal({
                       )}
                     </View>
                   ))}
-                  <TouchableOpacity style={s.addBtn} onPress={addIngredient}>
+                  <TouchableOpacity
+                    testID="chef-add-ingredient-btn"
+                    style={s.addBtn}
+                    onPress={addIngredient}
+                  >
                     <Icon name="add" size={18} color={colors.primary} />
                     <Text style={s.addBtnText}>Add Ingredient</Text>
                   </TouchableOpacity>
@@ -726,6 +735,7 @@ function CreateRecipeModal({
                         )}
                       </View>
                       <TextInput
+                        testID={`chef-step-title-${i}`}
                         style={[s.input, { marginBottom: 8 }]}
                         placeholder="Step title (e.g. Marinate the paneer)"
                         placeholderTextColor={colors.textMuted}
@@ -733,6 +743,7 @@ function CreateRecipeModal({
                         onChangeText={(v) => updateStep(i, 'title', v)}
                       />
                       <TextInput
+                        testID={`chef-step-instruction-${i}`}
                         style={[s.input, s.textArea]}
                         placeholder="Write the instruction for this step..."
                         placeholderTextColor={colors.textMuted}
@@ -742,7 +753,7 @@ function CreateRecipeModal({
                       />
                     </View>
                   ))}
-                  <TouchableOpacity style={s.addBtn} onPress={addStep}>
+                  <TouchableOpacity testID="chef-add-step-btn" style={s.addBtn} onPress={addStep}>
                     <Icon name="add" size={18} color={colors.primary} />
                     <Text style={s.addBtnText}>Add Step</Text>
                   </TouchableOpacity>
@@ -813,6 +824,7 @@ function CreateRecipeModal({
 
             {step === 'basic' && (
               <TouchableOpacity
+                testID="chef-next-recipe-btn"
                 style={[s.nextBtn, { opacity: canProceedToRecipe ? 1 : 0.4 }]}
                 onPress={() => {
                   if (canProceedToRecipe) setStep('recipe');
@@ -825,6 +837,7 @@ function CreateRecipeModal({
 
             {step === 'recipe' && (
               <TouchableOpacity
+                testID="chef-next-review-btn"
                 style={[s.nextBtn, { opacity: canProceedToReview ? 1 : 0.4 }]}
                 onPress={() => {
                   if (canProceedToReview) setStep('review');
@@ -837,6 +850,7 @@ function CreateRecipeModal({
 
             {step === 'review' && (
               <TouchableOpacity
+                testID="chef-submit-recipe-btn"
                 style={[s.nextBtn, { opacity: submitting ? 0.6 : 1 }]}
                 onPress={handleSubmit}
                 disabled={submitting}
@@ -1039,6 +1053,7 @@ export function ChefStudioView() {
           </View>
         </View>
         <TouchableOpacity
+          testID="chef-create-recipe-btn"
           style={[st.createBtn, { backgroundColor: colors.primary }]}
           onPress={() => {
             setEditingRecipe(null);

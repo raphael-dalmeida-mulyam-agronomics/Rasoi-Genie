@@ -1717,7 +1717,9 @@ const analyticsMenuStyle = {
                           {order.customerName} ({order.customerPhone})
                         </Text>
                       </View>
-                      <Badge label={order.status} variant={getBadgeVariant(order.status)} />
+                      <View testID={`admin-order-status-${order.id}`}>
+                        <Badge label={order.status} variant={getBadgeVariant(order.status)} />
+                      </View>
                     </View>
 
                     <View
@@ -1909,6 +1911,7 @@ const analyticsMenuStyle = {
                       </View>
                       <View style={{ flexDirection: 'row', gap: 8, marginTop: 4 }}>
                         <Button
+                          testID={`admin-approve-order-${order.id}`}
                           title={updatingOrderId === order.id ? 'Approving...' : 'Approve Order'}
                           variant="primary"
                           size="sm"
@@ -1917,6 +1920,7 @@ const analyticsMenuStyle = {
                           onPress={() => handleApproveOrder(order.id)}
                         />
                         <Button
+                          testID={`admin-reject-order-${order.id}`}
                           title="Reject / Cancel"
                           variant="outline"
                           size="sm"
@@ -4089,6 +4093,7 @@ const analyticsMenuStyle = {
                   {/* Admin actions for pending */}
                   {sub.submissionStatus === 'pending_review' && (
                     <TouchableOpacity
+                      testID={`admin-review-chef-btn-${sub.id}`}
                       style={[
                         {
                           backgroundColor: colors.primary,
@@ -4262,6 +4267,7 @@ const analyticsMenuStyle = {
                       SET PRICE (Rs.) *
                     </Text>
                     <TextInput
+                      testID="admin-chef-price-input"
                       style={[
                         {
                           backgroundColor: colors.bgSubtle,
@@ -4346,6 +4352,7 @@ const analyticsMenuStyle = {
                       REJECTION NOTES (if rejecting)
                     </Text>
                     <TextInput
+                      testID="admin-chef-reject-notes"
                       style={[
                         {
                           backgroundColor: colors.bgSubtle,
@@ -4370,6 +4377,7 @@ const analyticsMenuStyle = {
                     {/* Action buttons */}
                     <View style={{ flexDirection: 'row', gap: 12 }}>
                       <TouchableOpacity
+                        testID="admin-chef-reject-btn"
                         style={[
                           {
                             flex: 1,
@@ -4407,6 +4415,7 @@ const analyticsMenuStyle = {
                       </TouchableOpacity>
 
                       <TouchableOpacity
+                        testID="admin-chef-publish-btn"
                         style={[
                           {
                             flex: 2,

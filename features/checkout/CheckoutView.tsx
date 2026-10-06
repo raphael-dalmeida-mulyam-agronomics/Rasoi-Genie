@@ -166,7 +166,7 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({ onBack, onOrderPlace
         customerName: selectedAddress.name || user?.displayName || 'Valued Chef',
         customerEmail: user?.email || undefined,
         deliveryAddress: deliveryAddressFormatted,
-        deliverySlot: selectedSlot || DELIVERY_SLOTS[0].title,
+        deliverySlot: selectedSlot || DELIVERY_SLOTS[0]!.title,
         items: items.map((i) => ({
           kitId: i.kit.id,
           name: i.kit.name,
@@ -373,6 +373,7 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({ onBack, onOrderPlace
             </View>
 
             <Switch
+              testID="checkout-wallet-toggle"
               value={useWalletCredits && availableBalance > 0}
               onValueChange={setUseWalletCredits}
               disabled={availableBalance <= 0}
@@ -447,6 +448,7 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({ onBack, onOrderPlace
                 return (
                   <TouchableOpacity
                     key={method}
+                    testID={`checkout-payment-method-${method}`}
                     style={[
                       styles.methodRow,
                       {
@@ -582,6 +584,7 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({ onBack, onOrderPlace
         {/* Place Order CTA */}
         <View style={styles.ctaWrap}>
           <Button
+            testID="checkout-place-order-btn"
             title={
               isProcessing
                 ? 'Securing Order...'

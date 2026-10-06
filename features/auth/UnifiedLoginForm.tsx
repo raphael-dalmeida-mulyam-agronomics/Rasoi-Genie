@@ -115,14 +115,15 @@ export const UnifiedLoginForm: React.FC<UnifiedLoginFormProps> = ({ onSuccess })
       </Text>
 
       {errorMsg ? (
-        <View style={styles.errorBox}>
+        <View style={styles.errorBox} testID="auth-error-box">
           <Icon name="alert" size={16} color="#DC2626" />
-          <Text style={styles.errorText}>{errorMsg}</Text>
+          <Text style={styles.errorText} testID="auth-error-msg">{errorMsg}</Text>
         </View>
       ) : null}
 
       {/* Google Auth Button */}
       <Button
+        testID="google-login-btn"
         title="Continue with Google"
         icon={<Icon name="google" size={18} color="#4285F4" />}
         variant="outline"
@@ -141,6 +142,7 @@ export const UnifiedLoginForm: React.FC<UnifiedLoginFormProps> = ({ onSuccess })
       {/* Auth Mode Switcher (Phone vs Email) */}
       <View style={styles.tabContainer}>
         <TouchableOpacity
+          testID="tab-login-phone"
           style={[styles.tabBtn, authMode === 'phone' && styles.tabBtnActive]}
           onPress={() => {
             setAuthMode('phone');
@@ -163,6 +165,7 @@ export const UnifiedLoginForm: React.FC<UnifiedLoginFormProps> = ({ onSuccess })
         </TouchableOpacity>
 
         <TouchableOpacity
+          testID="tab-login-email"
           style={[styles.tabBtn, authMode === 'email' && styles.tabBtnActive]}
           onPress={() => {
             setAuthMode('email');
@@ -185,6 +188,7 @@ export const UnifiedLoginForm: React.FC<UnifiedLoginFormProps> = ({ onSuccess })
         <View>
           {authMode === 'phone' ? (
             <Input
+              testID="input-phone"
               label="Mobile Number"
               prefixText="+91"
               placeholder="98765 43210"
@@ -198,6 +202,7 @@ export const UnifiedLoginForm: React.FC<UnifiedLoginFormProps> = ({ onSuccess })
             />
           ) : (
             <Input
+              testID="input-email"
               label="Email Address"
               placeholder="yourname@mulyam.in or personal email"
               keyboardType="email-address"
@@ -212,6 +217,7 @@ export const UnifiedLoginForm: React.FC<UnifiedLoginFormProps> = ({ onSuccess })
           )}
 
           <Button
+            testID="btn-request-otp"
             title="Get Verification OTP Code"
             onPress={handleRequestOTP}
             loading={loading}
@@ -233,6 +239,7 @@ export const UnifiedLoginForm: React.FC<UnifiedLoginFormProps> = ({ onSuccess })
           </Text>
 
           <Input
+            testID="input-otp"
             label="Enter 6-Digit Verification OTP"
             placeholder="e.g. 849201"
             keyboardType="number-pad"
@@ -245,6 +252,7 @@ export const UnifiedLoginForm: React.FC<UnifiedLoginFormProps> = ({ onSuccess })
           />
 
           <Button
+            testID="btn-verify-otp"
             title="Verify OTP & Sign In"
             onPress={handleVerifyOTP}
             loading={loading}

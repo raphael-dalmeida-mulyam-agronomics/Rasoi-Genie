@@ -1,4 +1,4 @@
-﻿import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   View,
   Text,
@@ -373,6 +373,7 @@ export const SearchView: React.FC = () => {
             <Icon name="search" size={18} color={colors.textMuted} />
           </View>
           <TextInput
+            testID="search-input"
             style={[styles.searchInput, { color: colors.textPrimary }]}
             placeholder="Search by meal name or ingredient..."
             placeholderTextColor={colors.textMuted}
@@ -603,6 +604,7 @@ export const SearchView: React.FC = () => {
             results.map((kit) => (
               <TouchableOpacity
                 key={kit.id}
+                testID={`search-result-card-${kit.id}`}
                 style={[
                   styles.resultCard,
                   {

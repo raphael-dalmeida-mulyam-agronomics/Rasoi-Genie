@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -205,6 +205,7 @@ export const MealDetailModal: React.FC<MealDetailModalProps> = ({
             ]}
           >
             <TouchableOpacity
+              testID="modal-close-detail-btn"
               style={[styles.circleButton, { backgroundColor: colors.bgSubtle }]}
               onPress={() => handleDropDownAndClose()}
             >
@@ -473,6 +474,7 @@ export const MealDetailModal: React.FC<MealDetailModalProps> = ({
                     return (
                       <TouchableOpacity
                         key={s.count}
+                        testID={`servings-option-${s.count}`}
                         activeOpacity={0.7}
                         onPress={() => setSelectedServings(s.count)}
                         style={[
@@ -541,6 +543,7 @@ export const MealDetailModal: React.FC<MealDetailModalProps> = ({
                       return (
                         <TouchableOpacity
                           key={sp.level}
+                          testID={`spice-option-${sp.level}`}
                           activeOpacity={0.7}
                           onPress={() => setSelectedSpiceLevel(sp.level)}
                           style={[
@@ -959,6 +962,7 @@ export const MealDetailModal: React.FC<MealDetailModalProps> = ({
             </View>
 
             <Button
+              testID="modal-add-to-cart-btn"
               title={kit.isOutOfStock ? 'Out of Stock' : 'Add to Cart'}
               icon={kit.isOutOfStock ? undefined : <Icon name="cart" size={18} color="#FFFFFF" />}
               style={{ flex: 1.4, opacity: kit.isOutOfStock ? 0.6 : 1 }}

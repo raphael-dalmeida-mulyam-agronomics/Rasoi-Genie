@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Modal } from 'react-native';
 import { router } from 'expo-router';
 import { useAuth } from '../../framework/context/AuthContext';
@@ -206,6 +206,7 @@ export const OrderHistoryView: React.FC = () => {
             ...shadows.card,
           },
         ]}
+        testID={`order-card-${order.id}`}
         onPress={() => {
           setSelectedOrder(order);
           setTrackingModalVisible(true);
@@ -224,7 +225,9 @@ export const OrderHistoryView: React.FC = () => {
               })}
             </Text>
           </View>
-          <Badge label={order.status} variant={getBadgeVariant(order.status)} />
+          <View testID={`order-status-badge-${order.id}`}>
+            <Badge label={order.status} variant={getBadgeVariant(order.status)} />
+          </View>
         </View>
 
         {isCancelled ? (

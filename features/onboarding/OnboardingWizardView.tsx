@@ -977,6 +977,7 @@ export const OnboardingWizardView: React.FC = () => {
         <View style={{ flex: 1, marginLeft: currentStep > 1 ? 12 : 0 }}>
           {currentStep < totalSteps ? (
             <Button
+              testID="onboarding-next-step-btn"
               title={`Next: Step ${currentStep + 1}`}
               onPress={handleNextStep}
               variant="primary"
@@ -984,6 +985,7 @@ export const OnboardingWizardView: React.FC = () => {
             />
           ) : (
             <Button
+              testID="onboarding-finish-btn"
               title={isSubmitting ? 'Saving Profile...' : 'Complete Setup & Start Cooking'}
               onPress={handleFinish}
               variant="primary"

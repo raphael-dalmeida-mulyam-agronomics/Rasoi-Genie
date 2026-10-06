@@ -45,3 +45,8 @@ id_ed25519_company*
 
 # firebase cache
 .firebase/
+
+# playwright
+playwright-report/
+test-results/
+

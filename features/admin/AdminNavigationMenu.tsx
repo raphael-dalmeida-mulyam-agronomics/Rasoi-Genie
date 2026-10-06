@@ -170,6 +170,7 @@ export const AdminNavigationMenu: React.FC<AdminNavigationMenuProps> = ({
           return (
             <TouchableOpacity
               key={tab.id}
+              testID={`admin-tab-${tab.id}`}
               accessibilityRole="tab"
               accessibilityState={{ selected: isSelected }}
               style={[
@@ -215,6 +216,7 @@ export const AdminNavigationMenu: React.FC<AdminNavigationMenuProps> = ({
               {/* Alert or Count Badge */}
               {tab.alertBadge ? (
                 <View
+                  testID={`admin-tab-${tab.id}-badge`}
                   style={[
                     styles.alertBadgeContainer,
                     {
@@ -228,6 +230,7 @@ export const AdminNavigationMenu: React.FC<AdminNavigationMenuProps> = ({
                 </View>
               ) : tab.count !== undefined ? (
                 <View
+                  testID={`admin-tab-${tab.id}-badge`}
                   style={[
                     styles.countBadgeContainer,
                     {
