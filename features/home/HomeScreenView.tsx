@@ -648,6 +648,20 @@ export const HomeScreenView: React.FC = () => {
               </Text>
             </View>
           </TouchableOpacity>
+
+          {/* Theme switcher button moved to top left, just to the right of "delivering to" */}
+          <TouchableOpacity
+            style={[
+              styles.iconButton,
+              { backgroundColor: colors.bgSubtle, borderColor: colors.borderLight, borderWidth: 1 },
+            ]}
+            onPress={toggleColorMode}
+            accessibilityLabel={`Switch to ${isDark ? 'Light' : 'Dark'} Mode`}
+            activeOpacity={0.7}
+            testID="theme-switcher-button"
+          >
+            <Icon name={isDark ? 'sun' : 'moon'} size={18} color={colors.textPrimary} />
+          </TouchableOpacity>
         </View>
 
         {/* Right header actions: Dietary badge, Wishlist, Cart */}
@@ -661,19 +675,6 @@ export const HomeScreenView: React.FC = () => {
                 ? preferences.dietTypes.join(', ').toUpperCase()
                 : 'ALL DIETS'}
             </Text>
-          </TouchableOpacity>
-
-          {/* Light / Dark Mode Quick Toggle */}
-          <TouchableOpacity
-            style={[
-              styles.iconButton,
-              { backgroundColor: colors.bgSubtle, borderColor: colors.borderLight, borderWidth: 1 },
-            ]}
-            onPress={toggleColorMode}
-            accessibilityLabel={`Switch to ${isDark ? 'Light' : 'Dark'} Mode`}
-            activeOpacity={0.7}
-          >
-            <Icon name={isDark ? 'sun' : 'moon'} size={18} color={colors.textPrimary} />
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -1313,9 +1314,6 @@ export const HomeScreenView: React.FC = () => {
         )}
       </ScrollView>
 
-      {/* Floating Theme Switcher Dev Tool */}
-      <ThemeSwitcher />
-
       {/* Meal Detail Modal */}
       <MealDetailModal
         kit={selectedKit}
@@ -1574,6 +1572,9 @@ const styles = StyleSheet.create({
   },
   headerLeft: {
     flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
   },
   locationSelector: {
     flexDirection: 'row',

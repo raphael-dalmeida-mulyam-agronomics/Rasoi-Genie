@@ -1,4 +1,4 @@
-﻿import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import {
   Alert,
   Dimensions,
@@ -210,6 +210,26 @@ export const InAppDialogProvider: React.FC<{ children: React.ReactNode }> = ({ c
     };
   }, []);
 
+  useEffect(() => {
+    if (activeDialog && typeof document !== 'undefined') {
+      // Elevate the dialog portal above all open modals in DOM
+      setTimeout(() => {
+        const card = document.querySelector('[data-testid="in-app-dialog-card"]');
+        if (card) {
+          let parent = card.parentElement;
+          while (parent && parent !== document.body) {
+            parent.style.zIndex = '999999';
+            parent = parent.parentElement;
+          }
+          const portalRoot = card.closest('body > div');
+          if (portalRoot && portalRoot.parentElement === document.body) {
+            document.body.appendChild(portalRoot);
+          }
+        }
+      }, 0);
+    }
+  }, [activeDialog]);
+
   const handleClose = useCallback(() => {
     const dialog = activeDialog;
     setActiveDialog(null);
@@ -296,6 +316,7 @@ export const InAppDialogProvider: React.FC<{ children: React.ReactNode }> = ({ c
           <View style={styles.backdrop}>
             <TouchableWithoutFeedback onPress={(e) => e.stopPropagation()}>
               <View
+                testID="in-app-dialog-card"
                 style={[
                   styles.card,
                   {
@@ -387,14 +408,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20,
-    zIndex: 99999,
+    zIndex: 999999,
   },
   card: {
     padding: 24,
     borderWidth: 1.5,
     alignItems: 'center',
     maxWidth: '100%',
-    zIndex: 100000,
+    zIndex: 1000000,
   },
   iconContainer: {
     width: 60,

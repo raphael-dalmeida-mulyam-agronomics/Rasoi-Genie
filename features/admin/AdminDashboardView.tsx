@@ -4403,6 +4403,7 @@ const analyticsMenuStyle = {
                           await reloadChefData();
                           setIsProcessingChefSubmission(false);
                           setChefSubmissionModalVisible(false);
+                          setSelectedChefSubmission(null);
                           showInAppAlert(
                             'Recipe Rejected',
                             `"${selectedChefSubmission.name}" has been rejected with feedback sent to ${selectedChefSubmission.chefName}.`,
@@ -4459,6 +4460,7 @@ const analyticsMenuStyle = {
                           await reloadChefData();
                           setIsProcessingChefSubmission(false);
                           setChefSubmissionModalVisible(false);
+                          setSelectedChefSubmission(null);
                           showInAppAlert(
                             'Recipe Published',
                             `"${selectedChefSubmission.name}" by ${selectedChefSubmission.chefName} is now live at Rs. ${price} and added to the meal kit database.`,

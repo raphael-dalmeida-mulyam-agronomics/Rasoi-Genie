@@ -300,34 +300,37 @@ function CreateRecipeModal({
     };
 
     const isEdit = !!initialRecipe;
-    let result;
-    if (isEdit) {
-      result = await updateChefSubmission(initialRecipe.id, submission, chefId);
-    } else {
-      result = await createChefSubmission(submission);
-    }
-    setSubmitting(false);
 
-    if (result.success) {
-      Alert.alert(
-        isEdit ? 'Recipe Updated' : 'Recipe Submitted',
-        isEdit
-          ? 'Your recipe changes have been submitted to the admin team for review. The recipe status is now Pending Review until approved.'
-          : 'Your recipe has been sent to the admin team for review. You will be notified once it is published.',
-        [
-          {
-            text: 'OK',
-            onPress: () => {
-              onSubmitted();
-              onClose();
-              resetForm();
-            },
-          },
-        ],
-      );
-    } else {
-      Alert.alert('Error', result.error || 'Failed to submit recipe. Please try again.');
-    }
+    // Immediately close the submission popup so user knows submission was made & cannot double-submit
+    onClose();
+    resetForm();
+
+    // Perform submission in background and notify user on completion
+    (async () => {
+      try {
+        let result;
+        if (isEdit) {
+          result = await updateChefSubmission(initialRecipe.id, submission, chefId);
+        } else {
+          result = await createChefSubmission(submission);
+        }
+
+        onSubmitted();
+
+        if (result.success) {
+          Alert.alert(
+            isEdit ? 'Recipe Updated' : 'Recipe Submitted',
+            isEdit
+              ? 'Your recipe changes have been submitted to the admin team for review. The recipe status is now Pending Review until approved.'
+              : 'Your recipe has been sent to the admin team for review. You will be notified once it is published.',
+          );
+        } else {
+          Alert.alert('Error', result.error || 'Failed to submit recipe. Please try again.');
+        }
+      } catch (err: any) {
+        Alert.alert('Error', err?.message || 'Failed to submit recipe. Please try again.');
+      }
+    })();
   };
 
   const resetForm = () => {
