@@ -1,4 +1,4 @@
-import { NutritionFacts } from '../../framework/services/mealKitsService';
+﻿import { NutritionFacts } from '../../framework/services/mealKitsService';
 
 export interface IngredientInput {
   name: string;

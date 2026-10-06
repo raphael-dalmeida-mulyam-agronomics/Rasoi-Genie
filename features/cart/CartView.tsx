@@ -22,6 +22,8 @@ import { Card } from '../../framework/ui/Card';
 import { Badge } from '../../framework/ui/Badge';
 import { QuantityStepper } from '../../framework/ui/QuantityStepper';
 import { Icon } from '../../framework/ui/Icon';
+import { CheckoutView } from '../checkout/CheckoutView';
+import { OrderConfirmationView } from '../checkout/OrderConfirmationView';
 
 const DELIVERY_SLOTS = [
   { id: 'slot-1', title: '6:00 PM - 8:00 PM (Dinner)', tag: 'Fastest' },
@@ -69,6 +71,10 @@ export const CartView: React.FC = () => {
   const [upiId, setUpiId] = useState('');
 
   // Checkout flow states
+  const [flowStep, setFlowStep] = useState<'cart' | 'checkout' | 'confirmation'>('cart');
+  const [walletCreditsApplied, setWalletCreditsApplied] = useState(0);
+  const [payableAmount, setPayableAmount] = useState(0);
+  const [deliveryInstructions, setDeliveryInstructions] = useState('');
   const [isCheckingOut, setIsCheckingOut] = useState(false);
   const [confirmedOrder, setConfirmedOrder] = useState<Order | null>(null);
 
@@ -171,6 +177,43 @@ export const CartView: React.FC = () => {
       setIsCheckingOut(false);
     }
   };
+
+  // Order confirmation step
+  if (flowStep === 'confirmation' && confirmedOrder) {
+    return (
+      <OrderConfirmationView
+        order={confirmedOrder}
+        walletCreditsApplied={walletCreditsApplied}
+        payableAmount={payableAmount}
+        deliveryInstructions={deliveryInstructions}
+        onContinueShopping={() => {
+          setConfirmedOrder(null);
+          setFlowStep('cart');
+        }}
+        onViewOrders={() => {
+          setConfirmedOrder(null);
+          setFlowStep('cart');
+          router.push('/(tabs)/orders' as any);
+        }}
+      />
+    );
+  }
+
+  // Dedicated checkout step
+  if (flowStep === 'checkout' && items.length > 0) {
+    return (
+      <CheckoutView
+        onBack={() => setFlowStep('cart')}
+        onOrderPlaced={(order, credits, payable, instructions) => {
+          setConfirmedOrder(order);
+          setWalletCreditsApplied(credits);
+          setPayableAmount(payable);
+          setDeliveryInstructions(instructions);
+          setFlowStep('confirmation');
+        }}
+      />
+    );
+  }
 
   // Empty cart screen
   if (items.length === 0 && !confirmedOrder) {
@@ -623,12 +666,11 @@ export const CartView: React.FC = () => {
         </View>
 
         <Button
-          title={isCheckingOut ? 'Authorizing Payment...' : `Place Order (₹${total})`}
+          title="Proceed to Checkout"
           icon={<Icon name="arrow-forward" size={18} color="#FFFFFF" />}
           size="lg"
           style={{ flex: 1, marginLeft: 16 }}
-          loading={isCheckingOut}
-          onPress={handlePlaceOrder}
+          onPress={() => setFlowStep('checkout')}
         />
       </View>
 

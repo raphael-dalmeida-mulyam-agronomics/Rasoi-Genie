@@ -23,10 +23,12 @@ import {
   deductMealKitStock,
   restoreMealKitStock,
   RegionHub,
+  getMealKitById,
 } from './mealKitsService';
 import { resolveStorageCentre } from './adminRbacService';
-import { deductIngredientStock, restoreIngredientStock, validateOrderIngredients } from './inventoryService';
+import { deductIngredientStock, restoreIngredientStock, validateOrderIngredients, getInventoryItems } from './inventoryService';
 import { toggleMealKitOutOfStockStatus } from './supabaseMealKitsService';
+import { creditWallet } from './walletService';
 
 export interface CreateOrderParams {
   id?: string;
@@ -767,6 +769,70 @@ function ensureSharedRealtimeChannel() {
     sharedRealtimeChannel = channel;
   } catch (err) {
     console.warn('[Supabase Realtime] Could not initialize realtime subscription channel:', err);
+  }
+}
+
+/**
+ * Processes an order refund. Supports refunding to Rasoi Credits Wallet (instant, never expires)
+ * or to Original Payment method.
+ */
+export async function processOrderRefund(params: {
+  orderId: string;
+  refundAmount: number;
+  refundMethod: 'WALLET' | 'ORIGINAL_PAYMENT';
+  reason: string;
+  adminId: string;
+}): Promise<{ success: boolean; error?: string; walletCredited?: boolean }> {
+  try {
+    const { data: orderData, error: fetchErr } = await supabase
+      .from('orders')
+      .select('*')
+      .eq('id', params.orderId)
+      .maybeSingle();
+
+    if (fetchErr || !orderData) {
+      return { success: false, error: fetchErr?.message || 'Order not found' };
+    }
+
+    const userId = orderData.user_id;
+
+    if (params.refundMethod === 'WALLET') {
+      // Credit to wallet (ORDER_REFUND = never expires)
+      const creditRes = await creditWallet({
+        userId,
+        amount: params.refundAmount,
+        source: 'ORDER_REFUND',
+        referenceId: params.orderId,
+        description: `Refund for Order #${params.orderId.slice(-6)}: ${params.reason}`,
+        adminId: params.adminId,
+        expiresInDays: null,
+      });
+
+      if (!creditRes.success) {
+        return { success: false, error: creditRes.error || 'Failed to credit refund to wallet' };
+      }
+    }
+
+    // Update order status in Supabase
+    const { error: updateErr } = await supabase
+      .from('orders')
+      .update({
+        payment_status: 'Refunded',
+        status: 'Refunded',
+        refund_method: params.refundMethod,
+        refund_amount: params.refundAmount,
+        refund_reason: params.reason,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', params.orderId);
+
+    if (updateErr) {
+      return { success: false, error: updateErr.message };
+    }
+
+    return { success: true, walletCredited: params.refundMethod === 'WALLET' };
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'Error processing refund' };
   }
 }
 

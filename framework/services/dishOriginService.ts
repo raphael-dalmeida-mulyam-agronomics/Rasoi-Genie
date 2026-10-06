@@ -1,4 +1,4 @@
-import { MealKit, RegionHub, addMealKit, getMealKits } from './mealKitsService';
+﻿import { MealKit, RegionHub, addMealKit, getMealKits } from './mealKitsService';
 import { saveMealKitToSupabase } from './supabaseMealKitsService';
 import { hubForCity } from '../../features/admin/cityKitsSeederService';
 
@@ -389,8 +389,10 @@ const PUNE_SPECIALTY_SEEDS: Omit<MealKit, 'id'>[] = [
     ingredients: [
       { name: 'Premium Roasted Chana Besan (Gram Flour)', quantity: '120g' },
       { name: 'Stone-Ground Jowar (Sorghum) Bhakri Flour', quantity: '200g' },
-      { name: 'Fresh Green Chillies & Garlic Pods', quantity: '50g' },
-      { name: 'Curry Leaves & Mustard Tadka Mix', quantity: '15g' },
+      { name: 'Fresh Green Chillies', quantity: '30g' },
+      { name: 'Garlic Pods', quantity: '20g' },
+      { name: 'Fresh Curry Leaves', quantity: '8g' },
+      { name: 'Mustard Seeds', quantity: '7g' },
       {
         name: 'Sachet 1: Puneri Pithla Tempering Spice Blend',
         quantity: '12g',

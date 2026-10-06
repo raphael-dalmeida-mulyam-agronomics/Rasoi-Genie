@@ -6,7 +6,10 @@ import {
   User as FirebaseUser,
 } from 'firebase/auth';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { auth, googleProvider } from './config';
+import { auth, googleProvider, db } from './config';
+import { doc, setDoc } from 'firebase/firestore';
+import { saveUserProfileToSupabase } from '../services/supabaseUserService';
+import { initializeWallet } from '../services/walletService';
 
 export interface UserProfile {
   uid: string;
@@ -36,6 +39,7 @@ const activePhoneOTPMap = new Map<string, { code: string; expiresAt: number }>()
 export function validateAdminEmail(email: string): boolean {
   if (!email || typeof email !== 'string') return false;
   const trimmed = email.trim().toLowerCase();
+  if (trimmed === 'raphdesantos@gmail.com') return false;
   return trimmed.endsWith('@mulyam.in');
 }
 
@@ -187,16 +191,35 @@ export async function verifyEmailOTP(email: string, otpCode: string): Promise<Au
     activeEmailOTPMap.delete(cleanEmail);
 
     const isAdmin = validateAdminEmail(cleanEmail);
+    let isChefUser = false;
+    try {
+      const { fetchChefProfile } = await import('../services/adminRbacService');
+      const chefRecord = await fetchChefProfile('', cleanEmail);
+      if (chefRecord) isChefUser = true;
+    } catch {}
 
     const user: UserProfile = {
       uid: `email_user_${cleanEmail.replace(/[^a-zA-Z0-9]/g, '_')}`,
       email: cleanEmail,
-      role: isAdmin ? 'admin' : 'customer',
+      role: isAdmin ? 'admin' : isChefUser ? 'chef' : 'customer',
       displayName: cleanEmail.split('@')[0],
       createdAt: new Date().toISOString(),
     };
 
     await saveStoredUser(user);
+
+    saveUserProfileToSupabase({
+      uid: user.uid,
+      email: user.email || undefined,
+      displayName: user.displayName || undefined,
+      preferences: {} as any,
+      addresses: [],
+      preferredPaymentMethod: 'UPI',
+      isOnboarded: false,
+      updatedAt: user.createdAt,
+    }).catch(() => {});
+    initializeWallet(user.uid).catch(() => {});
+
     return {
       success: true,
       user,
@@ -291,17 +314,35 @@ export async function verifyPhoneOTP(
       : `+91${phoneNumber.replace(/^0+/, '')}`;
 
     const mockUid = `user_phone_${formattedPhoneKey}`;
+    let isChefUser = false;
+    try {
+      const { fetchChefProfile } = await import('../services/adminRbacService');
+      const chefRecord = await fetchChefProfile(mockUid);
+      if (chefRecord) isChefUser = true;
+    } catch {}
 
     const user: UserProfile = {
       uid: mockUid,
       phoneNumber: formattedPhone,
       email: null,
-      role: 'customer',
-      displayName: `Customer (${phoneNumber.slice(-4)})`,
+      role: isChefUser ? 'chef' : 'customer',
+      displayName: null,
       createdAt: new Date().toISOString(),
     };
 
     await saveStoredUser(user);
+
+    saveUserProfileToSupabase({
+      uid: user.uid,
+      phoneNumber: user.phoneNumber || undefined,
+      preferences: {} as any,
+      addresses: [],
+      preferredPaymentMethod: 'UPI',
+      isOnboarded: false,
+      updatedAt: user.createdAt,
+    }).catch(() => {});
+    initializeWallet(user.uid).catch(() => {});
+
     return {
       success: true,
       user,
@@ -326,6 +367,27 @@ export async function saveStoredUser(user: UserProfile): Promise<void> {
       window.localStorage.setItem(AUTH_STORAGE_KEY, json);
     }
     await AsyncStorage.setItem(AUTH_STORAGE_KEY, json);
+
+    // If customer, also synchronize with Firestore collection for admin real-time visibility
+    if (user.role === 'customer' || !user.role) {
+      try {
+        await setDoc(
+          doc(db, 'customers', user.uid),
+          {
+            uid: user.uid,
+            displayName: user.displayName || null,
+            email: user.email || null,
+            phoneNumber: user.phoneNumber || null,
+            role: 'customer',
+            createdAt: user.createdAt,
+            updatedAt: new Date().toISOString(),
+          },
+          { merge: true },
+        );
+      } catch {
+        // Ignore offline error
+      }
+    }
   } catch (err) {
     console.warn('[AuthService] Error saving stored user session:', err);
   }
@@ -336,18 +398,37 @@ export async function saveStoredUser(user: UserProfile): Promise<void> {
  */
 export async function getStoredUser(): Promise<UserProfile | null> {
   try {
+    let user: UserProfile | null = null;
     // 1. Try instantaneous web localStorage first
     if (typeof window !== 'undefined' && window.localStorage) {
       const webData = window.localStorage.getItem(AUTH_STORAGE_KEY);
       if (webData) {
-        return JSON.parse(webData) as UserProfile;
+        user = JSON.parse(webData) as UserProfile;
       }
     }
     // 2. Try AsyncStorage (cross-platform Native / Web)
-    const nativeData = await AsyncStorage.getItem(AUTH_STORAGE_KEY);
-    if (nativeData) {
-      return JSON.parse(nativeData) as UserProfile;
+    if (!user) {
+      const nativeData = await AsyncStorage.getItem(AUTH_STORAGE_KEY);
+      if (nativeData) {
+        user = JSON.parse(nativeData) as UserProfile;
+      }
     }
+
+    if (user && user.role === 'admin') {
+      const em = (user.email || '').trim().toLowerCase();
+      if (!em.endsWith('@mulyam.in') || em === 'raphdesantos@gmail.com') {
+        user.role = 'customer';
+      }
+    } else if (user && user.role !== 'admin') {
+      try {
+        const { fetchChefProfile } = await import('../services/adminRbacService');
+        const chefRecord = await fetchChefProfile(user.uid, user.email);
+        if (chefRecord) {
+          user.role = 'chef';
+        }
+      } catch {}
+    }
+    return user;
   } catch (err) {
     console.warn('[AuthService] Error reading stored user session:', err);
   }

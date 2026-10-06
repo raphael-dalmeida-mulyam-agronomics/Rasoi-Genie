@@ -307,9 +307,16 @@ const styles = StyleSheet.create({
       web: 'Georgia, serif',
       default: undefined,
     }),
-    textShadowColor: 'rgba(0, 0, 0, 0.95)',
-    textShadowOffset: { width: 0, height: 2 },
-    textShadowRadius: 8,
+    ...Platform.select({
+      web: {
+        textShadow: '0px 2px 8px rgba(0, 0, 0, 0.95)',
+      },
+      default: {
+        textShadowColor: 'rgba(0, 0, 0, 0.95)',
+        textShadowOffset: { width: 0, height: 2 },
+        textShadowRadius: 8,
+      },
+    }),
     marginBottom: 8,
   },
   subtitle: {
@@ -318,9 +325,16 @@ const styles = StyleSheet.create({
     color: 'rgba(255, 255, 255, 0.9)',
     textAlign: 'center',
     letterSpacing: 0.2,
-    textShadowColor: 'rgba(0, 0, 0, 0.85)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 6,
+    ...Platform.select({
+      web: {
+        textShadow: '0px 1px 6px rgba(0, 0, 0, 0.85)',
+      },
+      default: {
+        textShadowColor: 'rgba(0, 0, 0, 0.85)',
+        textShadowOffset: { width: 0, height: 1 },
+        textShadowRadius: 6,
+      },
+    }),
   },
   bottomFloatingBar: {
     position: 'absolute',
@@ -358,11 +372,18 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#E24A2B',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.4,
-    shadowRadius: 10,
-    elevation: 8,
+    ...Platform.select({
+      web: {
+        boxShadow: '0px 6px 10px rgba(226, 74, 43, 0.4)',
+      },
+      default: {
+        shadowColor: '#E24A2B',
+        shadowOffset: { width: 0, height: 6 },
+        shadowOpacity: 0.4,
+        shadowRadius: 10,
+        elevation: 8,
+      },
+    }),
   },
   getStartedText: {
     color: '#FFFFFF',

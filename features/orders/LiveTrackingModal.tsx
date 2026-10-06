@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, Alert } from 'react-native';
 import { Order, generateInvoiceText } from '../../framework/firebase/ordersService';
 import { useTheme } from '../../framework/theme/ThemeContext';

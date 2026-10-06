@@ -45,18 +45,37 @@ export async function fetchPublishedMealKitsFromSupabase(): Promise<MealKit[]> {
         cuisine: row.cuisine || 'North Indian',
         dishCategory: row.category || 'Curries & Gravies',
         spiceLevel: row.spice_level || 'Medium',
-        difficulty: 'Easy',
-        dietaryTags: [row.diet_type || 'veg'],
+        difficulty: (row.difficulty as any) || existing?.difficulty || 'Easy',
+        dietaryTags:
+          Array.isArray(row.dietary_tags) && row.dietary_tags.length > 0
+            ? row.dietary_tags
+            : [row.diet_type || 'veg'],
+        isChefSpecial: Boolean(row.nutrition?.is_chef_special ?? existing?.isChefSpecial ?? false),
+        chefId: row.nutrition?.chef_id || existing?.chefId,
+        chefName: row.nutrition?.chef_name || existing?.chefName,
+        availableStorageCentres:
+          row.nutrition?.available_storage_centres ||
+          existing?.availableStorageCentres ||
+          [],
         isTrending:
-          row.is_trending !== undefined
+          row.nutrition?.is_trending !== undefined
+            ? Boolean(row.nutrition.is_trending)
+            : row.is_trending !== undefined
             ? Boolean(row.is_trending)
             : (existing?.isTrending ?? false),
         availableRegions:
-          Array.isArray(row.available_regions) && row.available_regions.length > 0
+          Array.isArray(row.nutrition?.available_regions) && row.nutrition.available_regions.length > 0
+            ? row.nutrition.available_regions
+            : Array.isArray(row.available_regions) && row.available_regions.length > 0
             ? row.available_regions
-            : ['North', 'South', 'West', 'East'],
-        cities: Array.isArray(row.cities) ? row.cities : [],
-        originCity: row.origin_city || existing?.originCity,
+            : existing?.availableRegions || ['North', 'South', 'West', 'East'],
+        cities:
+          Array.isArray(row.nutrition?.cities)
+            ? row.nutrition.cities
+            : Array.isArray(row.cities)
+            ? row.cities
+            : existing?.cities || [],
+        originCity: row.nutrition?.origin_city || row.origin_city || existing?.originCity || null,
         isOutOfStock: row.stock_status === 'out_of_stock' || Boolean(existing?.isOutOfStock),
         stockByRegion: existing?.stockByRegion || {
           North: 50,
@@ -64,12 +83,18 @@ export async function fetchPublishedMealKitsFromSupabase(): Promise<MealKit[]> {
           West: 50,
           East: 50,
         },
-        shelfLifeDays: Number(row.shelf_life_days) || existing?.shelfLifeDays || 4,
+        shelfLifeDays:
+          Number(row.nutrition?.shelf_life_days) ||
+          Number(row.shelf_life_days) ||
+          existing?.shelfLifeDays ||
+          4,
         shelfLife:
+          row.nutrition?.shelf_life ||
           row.shelf_life ||
           existing?.shelfLife ||
           `${existing?.shelfLifeDays || 4} days (Keep refrigerated at 2°C - 5°C)`,
         storageCondition:
+          row.nutrition?.storage_condition ||
           row.storage_condition ||
           existing?.storageCondition ||
           'Refrigerated at 2°C - 5°C',
@@ -82,16 +107,17 @@ export async function fetchPublishedMealKitsFromSupabase(): Promise<MealKit[]> {
           fat: 10,
           fiber: 4,
         },
-        allergens: row.allergens || existing?.allergens || [],
+        allergens: row.nutrition?.allergens || row.allergens || existing?.allergens || [],
         tags:
+          row.nutrition?.tags ||
           row.tags ||
           existing?.tags ||
           compileMealKitTags({
             diet: row.diet_type || 'veg',
             cuisine: row.cuisine || 'North Indian',
             dishCategory: row.category || 'Curries & Gravies',
-            availableRegions: row.available_regions || ['North', 'South', 'West', 'East'],
-            allergens: row.allergens || existing?.allergens || [],
+            availableRegions: row.nutrition?.available_regions || row.available_regions || ['North', 'South', 'West', 'East'],
+            allergens: row.nutrition?.allergens || row.allergens || existing?.allergens || [],
           }),
         ingredients: row.ingredients || [],
         masalaSachets: (row.masala_sachets || []).map((s: any) =>
@@ -139,6 +165,28 @@ export async function saveMealKitToSupabase(
   isPublished: boolean = true,
 ): Promise<{ success: boolean; error?: string }> {
   try {
+    const existingNutrition = (kit.nutrition || {}) as Record<string, any>;
+    const augmentedNutrition = {
+      ...existingNutrition,
+      allergens: kit.allergens || existingNutrition.allergens || [],
+      available_regions: kit.availableRegions || existingNutrition.available_regions || ['North', 'South', 'West', 'East'],
+      cities: kit.cities || existingNutrition.cities || [],
+      origin_city: kit.originCity || existingNutrition.origin_city || null,
+      tags: kit.tags && kit.tags.length > 0 ? kit.tags : compileMealKitTags(kit),
+      is_trending: kit.isTrending ?? existingNutrition.is_trending ?? false,
+      is_chef_special: kit.isChefSpecial ?? existingNutrition.is_chef_special ?? false,
+      chef_id: kit.chefId || existingNutrition.chef_id || null,
+      chef_name: kit.chefName || existingNutrition.chef_name || null,
+      available_storage_centres: kit.availableStorageCentres || existingNutrition.available_storage_centres || [],
+      shelf_life_days: kit.shelfLifeDays || existingNutrition.shelf_life_days || 4,
+      shelf_life:
+        kit.shelfLife ||
+        existingNutrition.shelf_life ||
+        `${kit.shelfLifeDays || 4} days (${kit.storageCondition || 'Keep refrigerated at 2°C - 5°C'})`,
+      storage_condition: kit.storageCondition || existingNutrition.storage_condition || 'Refrigerated at 2°C - 5°C',
+    };
+
+    // Columns present in the remote Supabase meal_kits table
     const row = {
       id: kit.id,
       name: kit.name,
@@ -150,34 +198,27 @@ export async function saveMealKitToSupabase(
       region: kit.availableRegions?.[0] || 'North',
       available_regions: kit.availableRegions || ['North', 'South', 'West', 'East'],
       cities: kit.cities || [],
-      origin_city: kit.originCity || null,
       category: kit.dishCategory || 'Curries & Gravies',
-      dish_type: kit.dishCategory || 'Curries & Gravies',
       diet_type: kit.diet || 'veg',
       dietary_tags: kit.dietaryTags || [kit.diet || 'veg'],
-      allergens: kit.allergens || [],
-      tags: kit.tags && kit.tags.length > 0 ? kit.tags : compileMealKitTags(kit),
       spice_level: kit.spiceLevel || 'Medium',
-      is_trending: kit.isTrending ?? false,
+      difficulty: kit.difficulty || 'Easy',
       prep_time_minutes: (kit.prepTimeMinutes || 10) + (kit.cookTimeMinutes || 20),
       servings: kit.servings || 2,
       calories: kit.nutrition?.calories || 450,
+      hero_image: kit.heroImage || null,
       image_url:
         kit.heroImage ||
         'https://images.unsplash.com/photo-1546833999-b9f581a1996d?auto=format&fit=crop&w=1000&q=80',
       is_published: isPublished,
       stock_status: kit.isOutOfStock ? 'out_of_stock' : 'in_stock',
-      shelf_life_days: kit.shelfLifeDays || 4,
-      shelf_life:
-        kit.shelfLife || `${kit.shelfLifeDays || 4} days (${kit.storageCondition || 'Keep refrigerated at 2°C - 5°C'})`,
-      storage_condition: kit.storageCondition || 'Refrigerated at 2°C - 5°C',
       ingredients: kit.ingredients || [],
       instructions: (kit.recipeSteps || []).map((s) => ({
         step: s.stepNumber,
         title: s.title,
         instruction: s.instruction,
       })),
-      nutrition: kit.nutrition || {},
+      nutrition: augmentedNutrition,
       masala_sachets: kit.sachets && kit.sachets.length > 0 ? kit.sachets : kit.masalaSachets || [],
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
@@ -204,9 +245,14 @@ export async function toggleMealKitTrendingStatus(
   isTrending: boolean,
 ): Promise<{ success: boolean }> {
   try {
+    const { data: current } = await supabase.from('meal_kits').select('nutrition').eq('id', kitId).maybeSingle();
+    const currentNutr = current?.nutrition || {};
     const { error } = await supabase
       .from('meal_kits')
-      .update({ is_trending: isTrending, updated_at: new Date().toISOString() })
+      .update({
+        nutrition: { ...currentNutr, is_trending: isTrending },
+        updated_at: new Date().toISOString(),
+      })
       .eq('id', kitId);
 
     if (error) {
@@ -281,7 +327,7 @@ export async function checkCityHasKitsInSupabase(city: string): Promise<boolean>
   try {
     const { data, error } = await supabase
       .from('meal_kits')
-      .select('id, cities')
+      .select('id, nutrition')
       .eq('is_published', true);
 
     if (error || !data) return false;
@@ -289,7 +335,12 @@ export async function checkCityHasKitsInSupabase(city: string): Promise<boolean>
     const targetCity = city.trim().toLowerCase();
     return data.some(
       (row: any) =>
-        Array.isArray(row.cities) && row.cities.some((c: string) => c.toLowerCase() === targetCity),
+        (Array.isArray(row.nutrition?.cities) &&
+          row.nutrition.cities.some((c: string) => c.toLowerCase() === targetCity)) ||
+        (Array.isArray(row.cities) &&
+          row.cities.some((c: string) => c.toLowerCase() === targetCity)) ||
+        (row.nutrition?.origin_city &&
+          String(row.nutrition.origin_city).toLowerCase() === targetCity),
     );
   } catch {
     return false;
@@ -352,12 +403,17 @@ export async function updateMealKitShelfLifeInSupabase(
   storageCondition: string = 'Refrigerated at 2°C - 5°C',
 ): Promise<{ success: boolean }> {
   try {
+    const { data: current } = await supabase.from('meal_kits').select('nutrition').eq('id', kitId).maybeSingle();
+    const currentNutr = current?.nutrition || {};
     const { error } = await supabase
       .from('meal_kits')
       .update({
-        shelf_life_days: shelfLifeDays,
-        shelf_life: `${shelfLifeDays} days (${storageCondition})`,
-        storage_condition: storageCondition,
+        nutrition: {
+          ...currentNutr,
+          shelf_life_days: shelfLifeDays,
+          shelf_life: `${shelfLifeDays} days (${storageCondition})`,
+          storage_condition: storageCondition,
+        },
         updated_at: new Date().toISOString(),
       })
       .eq('id', kitId);

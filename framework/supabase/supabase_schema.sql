@@ -335,10 +335,75 @@ CREATE POLICY "Admin notifications insert-update policy"
   USING (true)
   WITH CHECK (true);
 
--- 10. REALTIME REPLICATION
+-- 10. CHEF PROFILES & CHEF SUBMISSIONS
+CREATE TABLE IF NOT EXISTS public.chef_profiles (
+  uid          TEXT PRIMARY KEY,
+  email        TEXT,
+  display_name TEXT,
+  approved_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  approved_by  TEXT,
+  bio          TEXT,
+  speciality   TEXT
+);
+
+CREATE INDEX IF NOT EXISTS chef_profiles_email_idx ON public.chef_profiles (lower(email));
+ALTER TABLE public.chef_profiles ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "chef_profiles readable" ON public.chef_profiles;
+CREATE POLICY "chef_profiles readable" ON public.chef_profiles FOR SELECT USING (true);
+
+DROP POLICY IF EXISTS "chef_profiles writable" ON public.chef_profiles;
+CREATE POLICY "chef_profiles writable" ON public.chef_profiles FOR ALL USING (true) WITH CHECK (true);
+
+CREATE TABLE IF NOT EXISTS public.chef_submissions (
+  id                        TEXT PRIMARY KEY,
+  slug                      TEXT,
+  name                      TEXT NOT NULL,
+  tagline                   TEXT DEFAULT '',
+  description               TEXT DEFAULT '',
+  hero_image                TEXT DEFAULT '',
+  gallery_images            TEXT[] DEFAULT '{}'::TEXT[],
+  diet                      TEXT NOT NULL DEFAULT 'veg',
+  cuisine                   TEXT NOT NULL DEFAULT 'North Indian',
+  dish_category             TEXT,
+  spice_level               TEXT DEFAULT 'Medium',
+  servings                  INTEGER DEFAULT 2,
+  prep_time_minutes         INTEGER DEFAULT 15,
+  cook_time_minutes         INTEGER DEFAULT 30,
+  dietary_tags              TEXT[] DEFAULT ARRAY['veg']::TEXT[],
+  allergens                 TEXT[] DEFAULT '{}'::TEXT[],
+  ingredients               JSONB DEFAULT '[]'::JSONB,
+  recipe_steps              JSONB DEFAULT '[]'::JSONB,
+  chef_id                   TEXT NOT NULL,
+  chef_name                 TEXT NOT NULL,
+  submission_status         TEXT NOT NULL DEFAULT 'pending_review',
+  submitted_at              TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  reviewed_at               TIMESTAMPTZ,
+  review_notes              TEXT,
+  price                     NUMERIC,
+  available_regions         TEXT[] DEFAULT '{}'::TEXT[],
+  available_storage_centres TEXT[] DEFAULT '{}'::TEXT[],
+  cities                    TEXT[] DEFAULT '{}'::TEXT[]
+);
+
+CREATE INDEX IF NOT EXISTS chef_submissions_chef_id_idx ON public.chef_submissions (chef_id);
+CREATE INDEX IF NOT EXISTS chef_submissions_status_idx ON public.chef_submissions (submission_status);
+
+ALTER TABLE public.chef_submissions ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "chef_submissions readable" ON public.chef_submissions;
+CREATE POLICY "chef_submissions readable" ON public.chef_submissions FOR SELECT USING (true);
+
+DROP POLICY IF EXISTS "chef_submissions writable" ON public.chef_submissions;
+CREATE POLICY "chef_submissions writable" ON public.chef_submissions FOR ALL USING (true) WITH CHECK (true);
+
+-- 11. REALTIME REPLICATION
 ALTER PUBLICATION supabase_realtime ADD TABLE public.orders;
 ALTER PUBLICATION supabase_realtime ADD TABLE public.admin_notifications;
 ALTER PUBLICATION supabase_realtime ADD TABLE public.user_profiles;
 ALTER PUBLICATION supabase_realtime ADD TABLE public.meal_kits;
 ALTER PUBLICATION supabase_realtime ADD TABLE public.admin_users;
 ALTER PUBLICATION supabase_realtime ADD TABLE public.admin_regions;
+ALTER PUBLICATION supabase_realtime ADD TABLE public.chef_profiles;
+ALTER PUBLICATION supabase_realtime ADD TABLE public.chef_submissions;
+

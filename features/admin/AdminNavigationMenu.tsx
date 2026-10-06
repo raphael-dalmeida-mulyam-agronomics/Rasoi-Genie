@@ -9,11 +9,15 @@ export type AdminTab =
   | 'kits'
   | 'inventory'
   | 'analytics'
+  | 'customers'
+  | 'admins'
   | 'users'
   | 'chefs'
   | 'coupons'
   | 'revenue'
-  | 'reviews';
+  | 'reviews'
+  | 'wallets'
+  | 'referrals';
 
 export interface AdminNavTabItem {
   id: AdminTab;
@@ -31,6 +35,8 @@ export interface AdminNavigationMenuProps {
   pendingApprovalCount?: number;
   kitsCount?: number;
   usersCount?: number;
+  customersCount?: number;
+  adminsCount?: number;
   chefsCount?: number;
   pendingChefSubmissions?: number;
   couponsCount?: number;
@@ -50,6 +56,8 @@ export const AdminNavigationMenu: React.FC<AdminNavigationMenuProps> = ({
   pendingApprovalCount = 0,
   kitsCount = 0,
   usersCount = 0,
+  customersCount,
+  adminsCount = 0,
   chefsCount = 0,
   pendingChefSubmissions = 0,
   couponsCount = 0,
@@ -90,10 +98,16 @@ export const AdminNavigationMenu: React.FC<AdminNavigationMenuProps> = ({
       icon: 'bar-chart',
     },
     {
-      id: 'users',
-      label: 'Users',
+      id: 'customers',
+      label: 'Customers',
       icon: 'people',
-      count: usersCount,
+      count: customersCount ?? usersCount,
+    },
+    {
+      id: 'admins',
+      label: 'Staff Admins',
+      icon: 'lock',
+      count: adminsCount,
     },
     {
       id: 'chefs',
@@ -120,6 +134,16 @@ export const AdminNavigationMenu: React.FC<AdminNavigationMenuProps> = ({
       icon: 'star',
       count: reviewsCount,
     },
+    {
+      id: 'wallets',
+      label: 'Customer Wallets',
+      icon: 'wallet',
+    },
+    {
+      id: 'referrals',
+      label: 'Referral Programme',
+      icon: 'gift',
+    },
   ];
 
   return (
@@ -140,7 +164,7 @@ export const AdminNavigationMenu: React.FC<AdminNavigationMenuProps> = ({
         contentContainerStyle={styles.tabsContent}
       >
         {tabs.map((tab) => {
-          const isSelected = activeTab === tab.id;
+          const isSelected = activeTab === tab.id || (activeTab === 'users' && tab.id === 'customers');
           const hasAlert = tab.highlightAlert && !isSelected;
 
           return (

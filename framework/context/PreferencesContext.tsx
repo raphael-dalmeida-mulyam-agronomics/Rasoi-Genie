@@ -1,10 +1,11 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+﻿import React, { createContext, useContext, useEffect, useState } from 'react';
 import { CuisineType, DietTag, RegionHub, SpiceLevel } from '../services/mealKitsService';
+import { legacyHubForCity } from '../services/regionService';
 import {
-  clearAllLegacyUserData,
-  getUserProfileFromSupabase,
-  saveUserProfileToSupabase,
-  UserProfileData,
+    clearAllLegacyUserData,
+    getUserProfileFromSupabase,
+    saveUserProfileToSupabase,
+    UserProfileData,
 } from '../services/supabaseUserService';
 import { useAuth } from './AuthContext';
 import { PaymentMethod } from './CartContext';
@@ -26,7 +27,13 @@ export interface UserDietaryPreferences {
   allergies: string[];
   spiceTolerance: SpiceLevel;
   preferredCuisines: CuisineType[];
+  // ── Location hierarchy (replaces old single RegionHub) ─────────────────────
+  state: string;        // e.g. 'Maharashtra'
+  city: string;         // e.g. 'Pune'
+  subRegion: string;    // sub-region id, e.g. 'pune-koregaon-park' (empty = all sub-regions)
+  // Legacy alias — kept for backwards-compat with Supabase schema & admin RBAC; derived from city
   regionHub: RegionHub;
+  /** @deprecated Use city instead */
   currentCity: string;
   isOnboarded: boolean;
 }
@@ -46,7 +53,12 @@ export interface OnboardingData {
   spiceTolerance: SpiceLevel;
   address: Omit<AddressItem, 'id'>;
   paymentMethod: PaymentMethod;
-  regionHub: RegionHub;
+  state: string;
+  city: string;
+  subRegion?: string;
+  /** @deprecated kept for any legacy callers; prefer state/city */
+  regionHub?: RegionHub;
+  /** @deprecated kept for any legacy callers; prefer city */
   currentCity?: string;
 }
 
@@ -73,9 +85,12 @@ export const DEFAULT_PREFERENCES: UserDietaryPreferences = {
   allergies: [],
   spiceTolerance: 'Medium',
   preferredCuisines: ['North Indian', 'South Indian', 'Punjabi'],
-  regionHub: 'South',
-  currentCity: '',
-  isOnboarded: false, // Default false until first-time onboarding is completed
+  state: 'Karnataka',
+  city: 'Bengaluru',
+  subRegion: '',
+  regionHub: 'South',   // derived: legacyHubForCity('Bengaluru')
+  currentCity: 'Bengaluru',
+  isOnboarded: false,
 };
 
 export const DEFAULT_NOTIFICATIONS: NotificationSettings = {
@@ -127,7 +142,19 @@ export const PreferencesProvider: React.FC<{ children: React.ReactNode }> = ({ c
         const profile = await getUserProfileFromSupabase(authUser.uid);
         if (isMounted) {
           if (profile && profile.isOnboarded) {
-            setPreferences(profile.preferences || DEFAULT_PREFERENCES);
+            const raw = profile.preferences || DEFAULT_PREFERENCES;
+            // Migrate old profiles that only have regionHub/currentCity
+            const city = raw.city || (raw as any).currentCity || '';
+            const migratedPrefs: UserDietaryPreferences = {
+              ...DEFAULT_PREFERENCES,
+              ...raw,
+              city,
+              currentCity: city,
+              state: raw.state || '',
+              subRegion: raw.subRegion || '',
+              regionHub: raw.regionHub ?? legacyHubForCity(city),
+            };
+            setPreferences(migratedPrefs);
             setAddresses(profile.addresses || []);
             setPreferredPaymentMethodState(profile.preferredPaymentMethod || 'UPI');
           } else {
@@ -179,9 +206,14 @@ export const PreferencesProvider: React.FC<{ children: React.ReactNode }> = ({ c
   };
 
   const updatePreferences = async (updates: Partial<UserDietaryPreferences>) => {
-    const updated = { ...preferences, ...updates };
-    setPreferences(updated);
-    await persistState(updated, addresses, preferredPaymentMethod);
+    const merged = { ...preferences, ...updates };
+    // Keep legacy aliases in sync whenever city changes
+    if (updates.city) {
+      merged.currentCity = updates.city;
+      merged.regionHub = legacyHubForCity(updates.city);
+    }
+    setPreferences(merged);
+    await persistState(merged, addresses, preferredPaymentMethod);
   };
 
   const setPreferredPaymentMethod = async (method: PaymentMethod) => {
@@ -247,13 +279,21 @@ export const PreferencesProvider: React.FC<{ children: React.ReactNode }> = ({ c
       isDefault: true,
     };
 
+    const resolvedCity = data.city || data.currentCity || data.address.city || '';
+    const resolvedState = data.state || '';
+    const resolvedSubRegion = data.subRegion || '';
+    const resolvedHub: RegionHub = data.regionHub ?? legacyHubForCity(resolvedCity);
+
     const newPreferences: UserDietaryPreferences = {
       dietTypes: data.dietTypes,
       allergies: data.allergies,
       spiceTolerance: data.spiceTolerance,
       preferredCuisines: data.cuisines,
-      regionHub: data.regionHub,
-      currentCity: data.currentCity || data.address.city || '',
+      state: resolvedState,
+      city: resolvedCity,
+      subRegion: resolvedSubRegion,
+      regionHub: resolvedHub,
+      currentCity: resolvedCity,
       isOnboarded: true,
     };
 
@@ -265,6 +305,21 @@ export const PreferencesProvider: React.FC<{ children: React.ReactNode }> = ({ c
     setPreferredPaymentMethodState(newPayment);
 
     await persistState(newPreferences, newAddresses, newPayment);
+
+    // Patch the stored auth session's displayName with the name the user entered during onboarding.
+    // Without this the name stays as the email prefix (e.g. "john.doe" from "john.doe@gmail.com").
+    const enteredName = data.address.name?.trim();
+    if (enteredName) {
+      try {
+        const { getStoredUser, saveStoredUser } = await import('../firebase/authService');
+        const stored = await getStoredUser();
+        if (stored && (!stored.displayName || stored.displayName !== enteredName)) {
+          await saveStoredUser({ ...stored, displayName: enteredName });
+        }
+      } catch {
+        // Non-critical — profile name will still show via address
+      }
+    }
   };
 
   const reloadProfile = async () => {

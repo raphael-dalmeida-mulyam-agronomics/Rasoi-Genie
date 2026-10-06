@@ -1,34 +1,34 @@
 import { router } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  ActivityIndicator,
-  Dimensions,
-  Image,
-  Modal,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Dimensions,
+    Image,
+    Modal,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 import { useAuth } from '../../framework/context/AuthContext';
 import { useCart } from '../../framework/context/CartContext';
 import { usePreferences } from '../../framework/context/PreferencesContext';
 import { useWishlist } from '../../framework/context/WishlistContext';
 import {
-  ensureCitySpecialtiesSeeded,
-  isRegionalSpecialtyOfCity,
-  rankMealKitsForCityTrending,
+    ensureCitySpecialtiesSeeded,
+    isRegionalSpecialtyOfCity,
+    rankMealKitsForCityTrending,
 } from '../../framework/services/dishOriginService';
 import {
-  CuisineType,
-  DietTag,
-  DishCategory,
-  getMealKits,
-  MealKit,
-  SpiceLevel,
-  subscribeToMealKits,
-  syncMealKitsWithSupabase,
+    CuisineType,
+    DietTag,
+    DishCategory,
+    getMealKits,
+    MealKit,
+    SpiceLevel,
+    subscribeToMealKits,
+    syncMealKitsWithSupabase,
 } from '../../framework/services/mealKitsService';
 import { subscribeToMealKitsRealtime } from '../../framework/services/supabaseMealKitsService';
 import { useTheme } from '../../framework/theme/ThemeContext';
@@ -332,7 +332,7 @@ function MealKitHorizontalCard({
 }
 
 export const HomeScreenView: React.FC = () => {
-  const { user } = useAuth();
+  const { user, isAdmin, isChef } = useAuth();
   const { colors, radii, shadows, isDark, toggleColorMode } = useTheme();
   const { addItem, totalCount } = useCart();
   const { isInWishlist, toggleWishlist, wishlistCount } = useWishlist();
@@ -641,7 +641,9 @@ export const HomeScreenView: React.FC = () => {
                 <Icon name="chevron-down" size={12} color={colors.primary} />
               </View>
               <Text style={[styles.locationCity, { color: colors.textPrimary }]}>
-                {preferences.currentCity} ({preferences.regionHub} Hub)
+                {preferences.city || preferences.currentCity}
+                {preferences.subRegion ? `, ${preferences.subRegion.split('-').pop()}` : ''}
+                {preferences.state ? `, ${preferences.state}` : ''}
               </Text>
             </View>
           </TouchableOpacity>
@@ -723,6 +725,69 @@ export const HomeScreenView: React.FC = () => {
             </Text>
           </TouchableOpacity>
         </View>
+
+        {/* Chef Studio Quick Launcher for Chefs */}
+        {isChef && !isAdmin && (
+          <View style={{ marginHorizontal: 20, marginBottom: 14 }}>
+            <TouchableOpacity
+              onPress={() => router.push('/(tabs)/chef' as any)}
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                backgroundColor: '#D97706',
+                borderRadius: radii.xl,
+                paddingHorizontal: 16,
+                paddingVertical: 12,
+                ...shadows.soft,
+              }}
+              activeOpacity={0.88}
+            >
+              <View
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: 12,
+                  flex: 1,
+                  marginRight: 10,
+                }}
+              >
+                <View
+                  style={{
+                    width: 38,
+                    height: 38,
+                    borderRadius: 19,
+                    backgroundColor: 'rgba(255,255,255,0.25)',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  <Icon name="chef" size={22} color="#FFFFFF" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ color: '#FFFFFF', fontSize: 14, fontWeight: '800' }}>
+                    Chef Studio — Author Meal Kits
+                  </Text>
+                  <Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 12 }}>
+                    Create and edit signature recipes for admin review
+                  </Text>
+                </View>
+              </View>
+              <View
+                style={{
+                  backgroundColor: '#FFFFFF',
+                  paddingHorizontal: 12,
+                  paddingVertical: 6,
+                  borderRadius: radii.pill,
+                }}
+              >
+                <Text style={{ color: '#D97706', fontSize: 12, fontWeight: '800' }}>
+                  Open Studio →
+                </Text>
+              </View>
+            </TouchableOpacity>
+          </View>
+        )}
 
         {/* Promotional Offers Carousel */}
         <ScrollView

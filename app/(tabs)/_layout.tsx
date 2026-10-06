@@ -123,7 +123,7 @@ export default function TabLayout() {
         name="chef"
         options={{
           title: 'Chef Studio',
-          href: isChef ? '/chef' : null,
+          href: isChef && !isAdmin ? '/chef' : null,
           tabBarIcon: ({ color }) => <Icon name="chef" size={22} color={color as string} />,
         }}
       />

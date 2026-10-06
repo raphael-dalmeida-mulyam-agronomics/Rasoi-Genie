@@ -1,4 +1,4 @@
-export interface AiPhotoGenerationOptions {
+﻿export interface AiPhotoGenerationOptions {
   dishName: string;
   hindiName?: string;
   tagline?: string;

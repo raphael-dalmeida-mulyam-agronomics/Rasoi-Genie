@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 import { SearchView } from '../../features/search/SearchView';
 import { AuthGuard } from '../../features/auth/AuthGuard';
 

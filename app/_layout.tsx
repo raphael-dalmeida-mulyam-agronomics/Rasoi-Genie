@@ -17,6 +17,7 @@ import { PreferencesProvider } from '../framework/context/PreferencesContext';
 import { WishlistProvider } from '../framework/context/WishlistContext';
 import { CartProvider } from '../framework/context/CartContext';
 import { InAppDialogProvider } from '../framework/context/InAppDialogContext';
+import { WalletProvider } from '../framework/context/WalletContext';
 
 export {
   // Catch any errors thrown by the Layout component.
@@ -63,16 +64,18 @@ function RootLayoutNav() {
       <AuthProvider>
         <PreferencesProvider>
           <WishlistProvider>
-            <CartProvider>
-              <InAppDialogProvider>
-                <NavigationThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-                  <Stack>
-                    <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-                    <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
-                  </Stack>
-                </NavigationThemeProvider>
-              </InAppDialogProvider>
-            </CartProvider>
+            <WalletProvider>
+              <CartProvider>
+                <InAppDialogProvider>
+                  <NavigationThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+                    <Stack>
+                      <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+                      <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
+                    </Stack>
+                  </NavigationThemeProvider>
+                </InAppDialogProvider>
+              </CartProvider>
+            </WalletProvider>
           </WishlistProvider>
         </PreferencesProvider>
       </AuthProvider>

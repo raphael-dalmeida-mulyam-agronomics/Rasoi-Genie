@@ -1,4 +1,4 @@
-import { ScrollViewStyleReset } from 'expo-router/html';
+﻿import { ScrollViewStyleReset } from 'expo-router/html';
 import type { ReactNode } from 'react';
 
 // This file is web-only and used to configure the root HTML for every

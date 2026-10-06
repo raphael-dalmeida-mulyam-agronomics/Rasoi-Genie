@@ -1,4 +1,4 @@
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
+﻿import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { CONFIG } from '../../src/constants/config';
 
 let clientInstance: SupabaseClient | null = null;

@@ -1,4 +1,4 @@
-const mockStorage = new Map<string, string>();
+﻿const mockStorage = new Map<string, string>();
 jest.mock('@react-native-async-storage/async-storage', () => ({
   setItem: jest.fn(async (key: string, value: string) => {
     mockStorage.set(key, value);
@@ -14,15 +14,14 @@ jest.mock('@react-native-async-storage/async-storage', () => ({
   }),
 }));
 
-import {
-  saveUserProfileToSupabase,
-  getUserProfileFromSupabase,
-  clearAllLegacyUserData,
-  UserProfileData,
-  USER_PROFILE_STORAGE_PREFIX,
-  LEGACY_MIGRATED_KEY,
-} from '../services/supabaseUserService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import {
+    clearAllLegacyUserData,
+    getUserProfileFromSupabase,
+    LEGACY_MIGRATED_KEY,
+    saveUserProfileToSupabase,
+    UserProfileData
+} from '../services/supabaseUserService';
 
 describe('User Profile & Preferences Persistence Service', () => {
   beforeEach(async () => {
@@ -55,6 +54,9 @@ describe('User Profile & Preferences Persistence Service', () => {
         allergies: ['Peanuts'],
         spiceTolerance: 'Spicy',
         preferredCuisines: ['Hyderabadi', 'Punjabi', 'Coastal'],
+        state: 'Karnataka',
+        city: 'Bengaluru',
+        subRegion: '',
         regionHub: 'South',
         currentCity: 'Bengaluru',
         isOnboarded: true,
@@ -109,6 +111,9 @@ describe('User Profile & Preferences Persistence Service', () => {
         allergies: [],
         spiceTolerance: 'Medium',
         preferredCuisines: ['Coastal', 'Mughlai'],
+        state: 'Maharashtra',
+        city: 'Mumbai',
+        subRegion: '',
         regionHub: 'West',
         currentCity: 'Mumbai',
         isOnboarded: true,

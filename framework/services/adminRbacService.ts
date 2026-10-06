@@ -1,3 +1,4 @@
+﻿import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../supabase/client';
 import { RegionHub } from './mealKitsService';
 
@@ -584,7 +585,9 @@ export function isSuperAdminEmail(email?: string | null): boolean {
  */
 export async function fetchAdminProfile(email: string): Promise<AdminProfile | null> {
   const cleanEmail = (email || '').trim().toLowerCase();
-  if (!cleanEmail) return null;
+  if (!cleanEmail || cleanEmail === 'raphdesantos@gmail.com' || !cleanEmail.endsWith('@mulyam.in')) {
+    return null;
+  }
 
   // Super Admin always has full access
   if (isSuperAdminEmail(cleanEmail)) {
@@ -632,7 +635,12 @@ export async function fetchAdminProfile(email: string): Promise<AdminProfile | n
   }
 
   // Fallback to in-memory store
-  const match = adminStore.find((a) => a.email.toLowerCase() === cleanEmail);
+  const match = adminStore.find(
+    (a) =>
+      a.email.toLowerCase() === cleanEmail &&
+      cleanEmail.endsWith('@mulyam.in') &&
+      cleanEmail !== 'raphdesantos@gmail.com',
+  );
   return match || null;
 }
 
@@ -651,15 +659,28 @@ export async function getAdminRoleAndRegions(
 
 /**
  * Fetches all admin profiles with their assigned regions.
+ * Strictly filters out any non-@mulyam.in emails and raphdesantos@gmail.com.
  */
 export async function fetchAllAdminProfiles(): Promise<AdminProfile[]> {
   try {
+    // Purge raphdesantos@gmail.com from Supabase if present
+    try {
+      supabase.from('admin_users').delete().ilike('email', 'raphdesantos@gmail.com').then(() => {}, () => {});
+      supabase.from('admin_regions').delete().ilike('admin_email', 'raphdesantos@gmail.com').then(() => {}, () => {});
+    } catch {}
+
     const { data: users, error: usersErr } = await supabase
       .from('admin_users')
       .select('id, email, name, role, created_at, updated_at')
       .order('created_at', { ascending: true });
 
     if (!usersErr && users && users.length > 0) {
+      // Filter out raphdesantos@gmail.com and any email that does not end with @mulyam.in
+      const validAdminUsers = users.filter((u: any) => {
+        const em = (u.email || '').trim().toLowerCase();
+        return em !== 'raphdesantos@gmail.com' && em.endsWith('@mulyam.in');
+      });
+
       const { data: regionsData } = await supabase
         .from('admin_regions')
         .select('admin_email, region_id');
@@ -676,7 +697,7 @@ export async function fetchAllAdminProfiles(): Promise<AdminProfile[]> {
         }
       }
 
-      return users.map((u: any) => ({
+      return validAdminUsers.map((u: any) => ({
         id: u.id,
         email: u.email,
         name: u.name || u.email.split('@')[0],
@@ -693,12 +714,17 @@ export async function fetchAllAdminProfiles(): Promise<AdminProfile[]> {
     console.warn('[AdminRBAC] Error fetching from Supabase, using local store:', err);
   }
 
-  return [...adminStore];
+  return adminStore.filter(
+    (a) =>
+      a.email.toLowerCase() !== 'raphdesantos@gmail.com' &&
+      a.email.toLowerCase().endsWith('@mulyam.in'),
+  );
 }
 
 /**
  * Assigns an admin to specified regions (many-to-many relationship).
  * If the admin does not exist yet, creates them in admin_users.
+ * Strictly verifies email domain ends with @mulyam.in and rejects non-allowed accounts.
  * Only callable by Super Admin.
  */
 export async function assignAdminRegions(
@@ -708,8 +734,16 @@ export async function assignAdminRegions(
   role: AdminRole = 'regional_admin',
 ): Promise<{ success: boolean; error?: string }> {
   const cleanEmail = email.trim().toLowerCase();
-  if (!cleanEmail || !cleanEmail.includes('@')) {
-    return { success: false, error: 'A valid admin email is required.' };
+  if (
+    !cleanEmail ||
+    !cleanEmail.includes('@') ||
+    cleanEmail === 'raphdesantos@gmail.com' ||
+    !cleanEmail.endsWith('@mulyam.in')
+  ) {
+    return {
+      success: false,
+      error: 'Admin role can only be granted to email addresses ending with @mulyam.in.',
+    };
   }
 
   // Update in-memory store immediately
@@ -809,68 +843,158 @@ export interface ChefProfile {
   speciality?: string;
 }
 
-// In-memory fallback store for chef profiles
+// Persistent local store for chef profiles (survives reloads & re-logins on this device)
+const CHEF_STORE_KEY = '@rasoi_chef_profiles_v1';
 let chefStore: ChefProfile[] = [];
+let chefStoreLoaded = false;
+
+/** True when Supabase reports the table/column hasn't been created (migration not applied). */
+function isMissingTableError(err: any): boolean {
+  const msg = String(err?.message || '').toLowerCase();
+  return err?.code === 'PGRST205' || err?.code === '42P01' || msg.includes('schema cache');
+}
+
+async function ensureChefStoreLoaded(): Promise<void> {
+  if (chefStoreLoaded) return;
+  chefStoreLoaded = true;
+  try {
+    // On web, read from localStorage first (synchronous, cross-tab)
+    let raw: string | null = null;
+    if (typeof window !== 'undefined' && window.localStorage) {
+      raw = window.localStorage.getItem(CHEF_STORE_KEY);
+    }
+    // Fall back to AsyncStorage (native / non-web)
+    if (!raw) {
+      raw = await AsyncStorage.getItem(CHEF_STORE_KEY);
+    }
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        const merged = [...parsed];
+        for (const c of chefStore) {
+          if (!merged.some((m: ChefProfile) => m.uid === c.uid)) merged.push(c);
+        }
+        chefStore = merged;
+      }
+    }
+  } catch (err) {
+    console.warn('[ChefRBAC] Could not load local chef store:', err);
+  }
+}
+
+async function persistChefStore(): Promise<void> {
+  try {
+    const json = JSON.stringify(chefStore);
+    // Write to AsyncStorage (native) AND localStorage (web) so any tab on this
+    // origin can pick up the change immediately via the 'storage' event.
+    await AsyncStorage.setItem(CHEF_STORE_KEY, json);
+    if (typeof window !== 'undefined' && window.localStorage) {
+      window.localStorage.setItem(CHEF_STORE_KEY, json);
+    }
+  } catch (err) {
+    console.warn('[ChefRBAC] Could not persist local chef store:', err);
+  }
+}
+
+function mapChefRow(r: any): ChefProfile {
+  return {
+    uid: r.uid,
+    email: (r.email || '').toLowerCase(),
+    displayName: r.display_name || r.email?.split('@')[0] || 'Chef',
+    approvedAt: r.approved_at,
+    approvedBy: r.approved_by,
+    bio: r.bio,
+    speciality: r.speciality,
+  };
+}
 
 /**
- * Fetches all approved chef profiles from Supabase (with local fallback).
+ * Fetches all approved chef profiles, merging Supabase with the local persistent store.
  */
 export async function fetchAllChefProfiles(): Promise<ChefProfile[]> {
+  await ensureChefStoreLoaded();
+  const result: ChefProfile[] = [...chefStore];
   try {
     const { data, error } = await supabase
       .from('chef_profiles')
       .select('uid, email, display_name, approved_at, approved_by, bio, speciality')
       .order('approved_at', { ascending: true });
 
-    if (!error && data && data.length > 0) {
-      return data.map((r: any) => ({
-        uid: r.uid,
-        email: r.email,
-        displayName: r.display_name || r.email?.split('@')[0] || 'Chef',
-        approvedAt: r.approved_at,
-        approvedBy: r.approved_by,
-        bio: r.bio,
-        speciality: r.speciality,
-      }));
+    if (!error && Array.isArray(data)) {
+      for (const row of data) {
+        const c = mapChefRow(row);
+        if (!result.some((r) => r.uid === c.uid)) result.push(c);
+      }
     }
   } catch (err) {
     console.warn('[ChefRBAC] Supabase fetchAllChefProfiles error:', err);
   }
-  return [...chefStore];
+  return result;
 }
 
 /**
- * Fetches a single chef profile by UID.
+ * Fetches a single chef profile by UID or email.
  */
-export async function fetchChefProfile(uid: string): Promise<ChefProfile | null> {
-  try {
-    const { data, error } = await supabase
-      .from('chef_profiles')
-      .select('uid, email, display_name, approved_at, approved_by, bio, speciality')
-      .eq('uid', uid)
-      .maybeSingle();
+export async function fetchChefProfile(
+  identifier: string,
+  emailFallback?: string | null,
+): Promise<ChefProfile | null> {
+  const cleanId = (identifier || '').trim();
+  const cleanEmail = (emailFallback || '').trim().toLowerCase();
+  if (!cleanId && !cleanEmail) return null;
 
-    if (!error && data) {
-      return {
-        uid: data.uid,
-        email: data.email,
-        displayName: data.display_name || data.email?.split('@')[0] || 'Chef',
-        approvedAt: data.approved_at,
-        approvedBy: data.approved_by,
-        bio: data.bio,
-        speciality: data.speciality,
-      };
+  await ensureChefStoreLoaded();
+
+  // 1. Check local persistent store first
+  const foundLocal = chefStore.find(
+    (c) =>
+      (cleanId && c.uid === cleanId) ||
+      (cleanEmail && c.email?.toLowerCase() === cleanEmail),
+  );
+  if (foundLocal) {
+    return foundLocal;
+  }
+
+  // 2. Query Supabase chef_profiles (by uid, then by email)
+  try {
+    const select = 'uid, email, display_name, approved_at, approved_by, bio, speciality';
+    let row: any = null;
+    if (cleanId) {
+      const { data, error } = await supabase
+        .from('chef_profiles')
+        .select(select)
+        .eq('uid', cleanId)
+        .limit(1);
+      if (!error && Array.isArray(data) && data.length > 0) row = data[0];
+    }
+    if (!row && cleanEmail) {
+      const { data, error } = await supabase
+        .from('chef_profiles')
+        .select(select)
+        .ilike('email', cleanEmail)
+        .limit(1);
+      if (!error && Array.isArray(data) && data.length > 0) row = data[0];
+    }
+
+    if (row) {
+      const chefRecord = mapChefRow(row);
+      if (!chefStore.some((c) => c.uid === chefRecord.uid)) {
+        chefStore.push(chefRecord);
+        await persistChefStore();
+      }
+      return chefRecord;
     }
   } catch (err) {
     console.warn('[ChefRBAC] Supabase fetchChefProfile error:', err);
   }
-  return chefStore.find((c) => c.uid === uid) ?? null;
+  return null;
 }
 
 /**
  * Grants the chef role to a user. Called by Super Admin or Regional Admin.
- * This upserts a record in `chef_profiles` and updates the user's role in
- * `user_profiles` so their session picks up the new role on next login.
+ * This upserts a record in `chef_profiles`, updates the user's role in
+ * `user_profiles`, and updates local session storage so the user immediately
+ * gets Chef Studio access.
  */
 export async function grantChefRole(
   uid: string,
@@ -880,9 +1004,10 @@ export async function grantChefRole(
   bio?: string,
   speciality?: string,
 ): Promise<{ success: boolean; error?: string }> {
+  const cleanEmail = email.trim().toLowerCase();
   const chefEntry: ChefProfile = {
     uid,
-    email: email.trim().toLowerCase(),
+    email: cleanEmail,
     displayName,
     approvedAt: new Date().toISOString(),
     approvedBy: approvedByEmail,
@@ -890,16 +1015,38 @@ export async function grantChefRole(
     speciality,
   };
 
-  // Update local store
-  const idx = chefStore.findIndex((c) => c.uid === uid);
+  // 1. Update local chef store (persisted to device storage)
+  await ensureChefStoreLoaded();
+  const idx = chefStore.findIndex(
+    (c) => c.uid === uid || (cleanEmail && c.email.toLowerCase() === cleanEmail),
+  );
   if (idx >= 0) {
     chefStore[idx] = chefEntry;
   } else {
     chefStore.push(chefEntry);
   }
+  await persistChefStore();
+
+  // 2. Update local session storage if active user on device matches
+  try {
+    const { getStoredUser, saveStoredUser } = await import('../firebase/authService');
+    const stored = await getStoredUser();
+    if (
+      stored &&
+      (stored.uid === uid || (stored.email && stored.email.toLowerCase() === cleanEmail))
+    ) {
+      await saveStoredUser({ ...stored, role: 'chef' });
+    }
+  } catch {}
+
+  // 3. Update managed user store and emit notification
+  try {
+    const { setUserChefRole } = await import('./userManagementService');
+    setUserChefRole(uid, true);
+  } catch {}
 
   try {
-    // 1. Upsert chef_profiles
+    // 4. Upsert chef_profiles in Supabase
     const { error: chefError } = await supabase.from('chef_profiles').upsert(
       {
         uid,
@@ -912,17 +1059,19 @@ export async function grantChefRole(
       },
       { onConflict: 'uid' },
     );
-    if (chefError) {
+    if (chefError && !isMissingTableError(chefError)) {
       console.warn('[ChefRBAC] chef_profiles upsert error:', chefError.message);
     }
 
-    // 2. Update role in user_profiles table so the user sees 'chef' on next login
-    const { error: profileError } = await supabase
-      .from('user_profiles')
-      .update({ role: 'chef', updated_at: new Date().toISOString() })
-      .eq('uid', uid);
-    if (profileError) {
-      console.warn('[ChefRBAC] user_profiles role update error:', profileError.message);
+    // Touch user_profiles so AuthContext's realtime listener fires on the user's device.
+    // This is what actually wakes up the user's session without requiring a re-login.
+    try {
+      await supabase
+        .from('user_profiles')
+        .update({ updated_at: new Date().toISOString() })
+        .eq('uid', uid);
+    } catch {
+      // Non-critical — the 8s polling in AuthContext will catch it anyway
     }
 
     return { success: true };
@@ -940,14 +1089,45 @@ export async function revokeChefRole(
   uid: string,
   email: string,
 ): Promise<{ success: boolean; error?: string }> {
-  chefStore = chefStore.filter((c) => c.uid !== uid);
+  const cleanEmail = email.trim().toLowerCase();
+  await ensureChefStoreLoaded();
+  chefStore = chefStore.filter(
+    (c) => c.uid !== uid && (!cleanEmail || c.email.toLowerCase() !== cleanEmail),
+  );
+  await persistChefStore();
+
+  // Update local session storage if active user matches
+  try {
+    const { getStoredUser, saveStoredUser } = await import('../firebase/authService');
+    const stored = await getStoredUser();
+    if (
+      stored &&
+      (stored.uid === uid || (stored.email && stored.email.toLowerCase() === cleanEmail))
+    ) {
+      await saveStoredUser({ ...stored, role: 'customer' });
+    }
+  } catch {}
+
+  // Update managed user store
+  try {
+    const { setUserChefRole } = await import('./userManagementService');
+    setUserChefRole(uid, false);
+  } catch {}
 
   try {
     await supabase.from('chef_profiles').delete().eq('uid', uid);
-    await supabase
-      .from('user_profiles')
-      .update({ role: 'customer', updated_at: new Date().toISOString() })
-      .eq('uid', uid);
+    if (cleanEmail) {
+      await supabase.from('chef_profiles').delete().ilike('email', cleanEmail);
+    }
+    // Touch user_profiles to wake up AuthContext's realtime listener
+    try {
+      await supabase
+        .from('user_profiles')
+        .update({ updated_at: new Date().toISOString() })
+        .eq('uid', uid);
+    } catch {
+      // Non-critical
+    }
     return { success: true };
   } catch (err: any) {
     console.warn('[ChefRBAC] revokeChefRole exception:', err?.message || err);

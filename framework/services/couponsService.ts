@@ -1,4 +1,4 @@
-export interface Coupon {
+﻿export interface Coupon {
   code: string;
   type: 'percentage' | 'flat' | 'free_delivery';
   discountValue: number; // e.g. 20 for 20%, 100 for ₹100

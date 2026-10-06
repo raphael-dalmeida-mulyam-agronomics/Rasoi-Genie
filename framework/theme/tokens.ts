@@ -1,3 +1,5 @@
+import { Platform } from 'react-native';
+
 export type ColorMode = 'light' | 'dark';
 
 export interface ThemeColors {
@@ -392,63 +394,103 @@ export const RADII = {
 };
 
 export const SHADOWS = {
-  soft: {
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 2,
-  },
-  medium: {
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    elevation: 4,
-  },
-  card: {
-    shadowColor: '#1C1917',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 14,
-    elevation: 3,
-  },
-  hover: {
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.14,
-    shadowRadius: 20,
-    elevation: 6,
-  },
+  soft: Platform.select({
+    web: {
+      boxShadow: '0px 2px 8px rgba(0, 0, 0, 0.06)',
+    },
+    default: {
+      shadowColor: '#000000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.06,
+      shadowRadius: 8,
+      elevation: 2,
+    },
+  }) as any,
+  medium: Platform.select({
+    web: {
+      boxShadow: '0px 4px 12px rgba(0, 0, 0, 0.1)',
+    },
+    default: {
+      shadowColor: '#000000',
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.1,
+      shadowRadius: 12,
+      elevation: 4,
+    },
+  }) as any,
+  card: Platform.select({
+    web: {
+      boxShadow: '0px 4px 14px rgba(28, 25, 23, 0.08)',
+    },
+    default: {
+      shadowColor: '#1C1917',
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.08,
+      shadowRadius: 14,
+      elevation: 3,
+    },
+  }) as any,
+  hover: Platform.select({
+    web: {
+      boxShadow: '0px 8px 20px rgba(0, 0, 0, 0.14)',
+    },
+    default: {
+      shadowColor: '#000000',
+      shadowOffset: { width: 0, height: 8 },
+      shadowOpacity: 0.14,
+      shadowRadius: 20,
+      elevation: 6,
+    },
+  }) as any,
 };
 
 export const DARK_SHADOWS = {
-  soft: {
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.35,
-    shadowRadius: 8,
-    elevation: 2,
-  },
-  medium: {
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.45,
-    shadowRadius: 12,
-    elevation: 4,
-  },
-  card: {
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.5,
-    shadowRadius: 16,
-    elevation: 4,
-  },
-  hover: {
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.6,
-    shadowRadius: 24,
-    elevation: 8,
-  },
+  soft: Platform.select({
+    web: {
+      boxShadow: '0px 2px 8px rgba(0, 0, 0, 0.35)',
+    },
+    default: {
+      shadowColor: '#000000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.35,
+      shadowRadius: 8,
+      elevation: 2,
+    },
+  }) as any,
+  medium: Platform.select({
+    web: {
+      boxShadow: '0px 4px 12px rgba(0, 0, 0, 0.45)',
+    },
+    default: {
+      shadowColor: '#000000',
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.45,
+      shadowRadius: 12,
+      elevation: 4,
+    },
+  }) as any,
+  card: Platform.select({
+    web: {
+      boxShadow: '0px 4px 16px rgba(0, 0, 0, 0.5)',
+    },
+    default: {
+      shadowColor: '#000000',
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.5,
+      shadowRadius: 16,
+      elevation: 4,
+    },
+  }) as any,
+  hover: Platform.select({
+    web: {
+      boxShadow: '0px 8px 24px rgba(0, 0, 0, 0.6)',
+    },
+    default: {
+      shadowColor: '#000000',
+      shadowOffset: { width: 0, height: 8 },
+      shadowOpacity: 0.6,
+      shadowRadius: 24,
+      elevation: 8,
+    },
+  }) as any,
 };

@@ -1,4 +1,4 @@
-import { supabase } from '../supabase/client';
+﻿import { supabase } from '../supabase/client';
 import { INITIAL_MEAL_KITS, MealKit } from './mealKitsService';
 
 export interface SeedResult {

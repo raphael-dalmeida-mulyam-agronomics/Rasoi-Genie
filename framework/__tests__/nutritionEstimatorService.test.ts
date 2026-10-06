@@ -1,4 +1,4 @@
-import { estimateNutritionWithAI } from '../../features/admin/nutritionEstimatorService';
+﻿import { estimateNutritionWithAI } from '../../features/admin/nutritionEstimatorService';
 
 describe('nutritionEstimatorService', () => {
   it('correctly calculates macros for paneer butter masala ingredients', () => {

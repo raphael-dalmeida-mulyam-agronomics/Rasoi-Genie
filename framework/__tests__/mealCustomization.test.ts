@@ -1,4 +1,4 @@
-import { getMealKits } from '../services/mealKitsService';
+﻿import { getMealKits } from '../services/mealKitsService';
 import { CartItem } from '../context/CartContext';
 
 describe('Meal Ordering Customization: Servings & Spice Logic', () => {

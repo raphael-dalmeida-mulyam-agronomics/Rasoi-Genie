@@ -1,132 +1,135 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  TextInput,
-  Modal,
-  Alert,
-  Platform,
+    Alert,
+    Modal,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from 'react-native';
-import { showInAppAlert, showInAppConfirm } from '../../framework/context/InAppDialogContext';
 import { useAuth } from '../../framework/context/AuthContext';
-import { useTheme } from '../../framework/theme/ThemeContext';
-import {
-  Order,
-  OrderStatus,
-  subscribeToOrders,
-  updateOrderStatus,
-  issueRefund,
-  generateInvoiceText,
-  MOCK_ORDER_IDS,
-  isOrderApproved,
-} from '../../framework/firebase/ordersService';
+import { showInAppAlert, showInAppConfirm } from '../../framework/context/InAppDialogContext';
 import { validateAdminEmail } from '../../framework/firebase/authService';
 import {
-  getMealKits,
-  MealKit,
-  addMealKit,
-  updateMealKit,
-  deleteMealKit,
-  updateMealKitStock,
-  toggleMealKitTrending,
-  subscribeToMealKits,
-  syncMealKitsWithSupabase,
-  RegionHub,
-  DietTag,
-  CuisineType,
-  DishCategory,
-  compileMealKitTags,
-  parseCategorizedTags,
-  calculateMealKitFreshness,
-  updateMealKitShelfLife,
-} from '../../framework/services/mealKitsService';
+    MOCK_ORDER_IDS,
+    Order,
+    OrderStatus,
+    generateInvoiceText,
+    isOrderApproved,
+    issueRefund,
+    subscribeToOrders,
+    updateOrderStatus,
+} from '../../framework/firebase/ordersService';
 import {
-  INDIAN_STATES_ANALYTICS,
-  MONTHLY_TRENDS,
-  getCrossTabAnalytics,
-  generateRegionalCSV,
-  getFilteredStateAnalytics,
-} from '../../framework/services/regionalAnalyticsService';
-import {
-  AdminProfile,
-  AdminRole,
-  fetchAllAdminProfiles,
-  assignAdminRegions,
-  deleteAdminProfile,
-  SUPER_ADMIN_EMAIL,
-  ALL_REGIONS,
-  REGIONS_LIST,
-  STORAGE_CENTRE_REGIONS,
-  StorageCentreRegion,
-  resolveStorageCentre,
-  ChefProfile,
-  fetchAllChefProfiles,
-  grantChefRole,
-  revokeChefRole,
+    ALL_REGIONS,
+    AdminProfile,
+    AdminRole,
+    ChefProfile,
+    STORAGE_CENTRE_REGIONS,
+    SUPER_ADMIN_EMAIL,
+    assignAdminRegions,
+    deleteAdminProfile,
+    fetchAllAdminProfiles,
+    fetchAllChefProfiles,
+    grantChefRole,
+    resolveStorageCentre,
+    revokeChefRole
 } from '../../framework/services/adminRbacService';
 import {
-  ChefSubmissionRecord,
-  fetchAllChefSubmissions,
-  publishChefSubmission,
-  rejectChefSubmission,
-  deleteChefSubmission,
+    ChefSubmissionRecord,
+    fetchAllChefSubmissions,
+    publishChefSubmission,
+    rejectChefSubmission
 } from '../../framework/services/chefMealKitsService';
 import {
-  toggleMealKitTrendingStatus,
-  filterMealKitsByAdminRegions,
-} from '../../framework/services/supabaseMealKitsService';
-import {
-  getCoupons,
-  addCoupon,
-  toggleCouponActive,
-  deleteCoupon,
-  Coupon,
+    Coupon,
+    addCoupon,
+    deleteCoupon,
+    getCoupons,
+    toggleCouponActive,
 } from '../../framework/services/couponsService';
 import {
-  getAllReviewsForModeration,
-  moderateReview,
-  ExtendedReview,
+    CuisineType,
+    DietTag,
+    DishCategory,
+    MealKit,
+    RegionHub,
+    addMealKit,
+    compileMealKitTags,
+    deleteMealKit,
+    getMealKits,
+    parseCategorizedTags,
+    subscribeToMealKits,
+    syncMealKitsWithSupabase,
+    toggleMealKitTrending,
+    updateMealKit,
+    updateMealKitShelfLife,
+    updateMealKitStock
+} from '../../framework/services/mealKitsService';
+import {
+    OutOfStockAlertPayload,
+    dismissOutOfStockAlert,
+    notifyRegionalAdminsOutOfStock,
+    subscribeToOutOfStockAlerts,
+    subscribeToPendingApprovalCount
+} from '../../framework/services/notificationService';
+import {
+    MONTHLY_TRENDS,
+    generateRegionalCSV,
+    getCrossTabAnalytics,
+    getFilteredStateAnalytics
+} from '../../framework/services/regionalAnalyticsService';
+import {
+    getCitiesForState,
+    getSubRegionsForCity,
+} from '../../framework/services/regionService';
+import {
+    ExtendedReview,
+    getAllReviewsForModeration,
+    moderateReview,
 } from '../../framework/services/reviewsService';
 import {
-  getManagedUsers,
-  toggleUserStatus,
-  toggleUserAdminRole,
-  ManagedUser,
-} from '../../framework/services/userManagementService';
-import { Card } from '../../framework/ui/Card';
-import { Badge, BadgeVariant, getDietBadgeInfo } from '../../framework/ui/Badge';
-import { Button } from '../../framework/ui/Button';
-import { Icon, AppIconName } from '../../framework/ui/Icon';
-import { AddMealKitWizardModal } from './AddMealKitWizardModal';
-import { RecipeCardPrintModal, triggerRecipeCardPrint } from './RecipeCardPrintModal';
-import {
-  fetchAllOrdersFromSupabase,
-  approveOrderInSupabase,
-  subscribeToOrdersRealtime,
-  refreshPendingApprovalCount,
-  updateOrderStatusInSupabase,
-  clearAllOrdersFromSupabase,
-} from '../../framework/services/supabaseOrdersService';
-import {
-  saveMealKitToSupabase,
-  toggleMealKitPublishStatus,
-  toggleMealKitOutOfStockStatus,
-  deleteMealKitFromSupabase,
-  updateMealKitShelfLifeInSupabase,
+    deleteMealKitFromSupabase,
+    filterMealKitsByAdminRegions,
+    saveMealKitToSupabase,
+    toggleMealKitOutOfStockStatus,
+    toggleMealKitPublishStatus,
+    toggleMealKitTrendingStatus,
+    updateMealKitShelfLifeInSupabase,
 } from '../../framework/services/supabaseMealKitsService';
 import {
-  subscribeToPendingApprovalCount,
-  playOrderAlertSound,
-  subscribeToOutOfStockAlerts,
-  dismissOutOfStockAlert,
-  notifyRegionalAdminsOutOfStock,
-  OutOfStockAlertPayload,
-} from '../../framework/services/notificationService';
-import { InventoryManagementView } from './InventoryManagementView';
+    approveOrderInSupabase,
+    clearAllOrdersFromSupabase,
+    fetchAllOrdersFromSupabase,
+    processOrderRefund,
+    refreshPendingApprovalCount,
+    subscribeToOrdersRealtime,
+    updateOrderStatusInSupabase,
+} from '../../framework/services/supabaseOrdersService';
+import {
+    ManagedUser,
+    fetchLiveManagedUsers,
+    getManagedUsers,
+    subscribeToManagedUsers,
+    toggleUserAdminRole,
+    toggleUserStatus,
+    updateUserWalletBalance,
+} from '../../framework/services/userManagementService';
+import { adminIssueCredits } from '../../framework/services/walletService';
+import { useTheme } from '../../framework/theme/ThemeContext';
+import { Badge, BadgeVariant } from '../../framework/ui/Badge';
+import { Button } from '../../framework/ui/Button';
+import { Card } from '../../framework/ui/Card';
+import { AppIconName, Icon } from '../../framework/ui/Icon';
+import { AddMealKitWizardModal } from './AddMealKitWizardModal';
 import { AdminNavigationMenu, AdminTab } from './AdminNavigationMenu';
+import { AdminReferralsManagementView } from './AdminReferralsManagementView';
+import { AdminWalletsManagementView } from './AdminWalletsManagementView';
+import { InventoryManagementView } from './InventoryManagementView';
+import { RecipeCardPrintModal } from './RecipeCardPrintModal';
 
 const STATUS_FILTERS: (OrderStatus | 'All')[] = [
   'All',
@@ -181,7 +184,52 @@ const ADMIN_DISH_FILTERS: ('All' | DishCategory)[] = [
   'Street Food',
   'Soups & Stews',
 ];
+const ThinScrollView: React.FC<{
+  maxHeight: number;
+  keyboardShouldPersistTaps?: 'always' | 'never' | 'handled';
+  children: React.ReactNode;
+}> = ({ maxHeight, keyboardShouldPersistTaps, children }) => {
+  const [contentH, setContentH] = useState(0);
+  const [layoutH, setLayoutH] = useState(0);
+  const [scrollY, setScrollY] = useState(0);
 
+  const scrollable = layoutH > 0 && contentH > layoutH + 1;
+  const maxScroll = Math.max(1, contentH - layoutH);
+  const thumbH = scrollable ? Math.max(24, (layoutH / contentH) * layoutH) : 0;
+  const clampedY = Math.min(Math.max(scrollY, 0), maxScroll);
+  const thumbTop = scrollable ? (clampedY / maxScroll) * (layoutH - thumbH) : 0;
+
+  return (
+    <View style={{ position: 'relative' }}>
+      <ScrollView
+        nestedScrollEnabled
+        keyboardShouldPersistTaps={keyboardShouldPersistTaps}
+        showsVerticalScrollIndicator={false}
+        style={{ maxHeight }}
+        scrollEventThrottle={16}
+        onLayout={(e) => setLayoutH(e.nativeEvent.layout.height)}
+        onContentSizeChange={(_, h) => setContentH(h)}
+        onScroll={(e) => setScrollY(e.nativeEvent.contentOffset.y)}
+      >
+        {children}
+      </ScrollView>
+      {scrollable && (
+        <View
+          pointerEvents="none"
+          style={{
+            position: 'absolute',
+            right: 2,
+            top: thumbTop,
+            width: 2,
+            height: thumbH,
+            borderRadius: 1,
+            backgroundColor: '#000000',
+          }}
+        />
+      )}
+    </View>
+  );
+};
 export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = ({
   onNavigateToLogin,
 }) => {
@@ -200,6 +248,8 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
   const [refundReason, setRefundReason] = useState(
     'Customer reported issue with fresh ingredients',
   );
+  const [refundMethod, setRefundMethod] = useState<'WALLET' | 'ORIGINAL_PAYMENT'>('WALLET');
+  const [isProcessingRefund, setIsProcessingRefund] = useState(false);
 
   // Cancel Order Modal State
   const [cancelOrderModalVisible, setCancelOrderModalVisible] = useState(false);
@@ -250,7 +300,74 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
 
   // Regional Analytics State
   const [selectedState, setSelectedState] = useState('Maharashtra');
+  const [selectedCity, setSelectedCity] = useState('');
+  const [selectedSubRegion, setSelectedSubRegion] = useState('');
   const [crossTabDiet, setCrossTabDiet] = useState<'all' | DietTag>('all');
+
+  // Dropdown visibility for analytics region pickers
+  const [showAnalyticsStateDD, setShowAnalyticsStateDD] = useState(false);
+  const [showAnalyticsCityDD, setShowAnalyticsCityDD] = useState(false);
+  const [showAnalyticsSubRegionDD, setShowAnalyticsSubRegionDD] = useState(false);
+  const [analyticsStateSearch, setAnalyticsStateSearch] = useState('');
+  const [analyticsCitySearch, setAnalyticsCitySearch] = useState('');
+  const [showCrossTabDietDD, setShowCrossTabDietDD] = useState(false);
+  const crossTabDietOptions: { id: 'all' | DietTag; label: string }[] = [
+    { id: 'all', label: 'All Diets' },
+    ...ADMIN_DIET_FILTERS.filter((d) => d.id !== 'All').map((d) => ({
+      id: d.id as DietTag,
+      label: d.label,
+    })),
+  ];
+
+  // City and sub-region options based on selected state
+  const availableCities = selectedState ? getCitiesForState(selectedState) : [];
+  const availableSubRegions = selectedCity ? getSubRegionsForCity(selectedCity) : [];
+
+  const filteredAnalyticsCities = analyticsCitySearch
+    ? availableCities.filter((c: string) => c.toLowerCase().includes(analyticsCitySearch.toLowerCase()))
+    : availableCities;
+
+    const stateInputRef = useRef<TextInput>(null);
+const cityInputRef = useRef<TextInput>(null);
+
+// Taller, fully tappable field wrapper (the whole box is the touch target)
+const analyticsFieldStyle = (open: boolean, disabled = false) => ({
+  flexDirection: 'row' as const,
+  alignItems: 'center' as const,
+  borderWidth: 1.5,
+  borderColor: open ? colors.primary : colors.borderLight,
+  borderRadius: radii.lg,
+  backgroundColor: disabled ? colors.bgSubtle : colors.bgSurface,
+  paddingHorizontal: 12,
+  height: 52,
+  opacity: disabled ? 0.6 : 1,
+});
+
+const analyticsLabelStyle = {
+  fontSize: 11,
+  fontWeight: '700' as const,
+  color: colors.textMuted,
+  marginBottom: 4,
+  textTransform: 'uppercase' as const,
+  letterSpacing: 0.5,
+};
+
+const analyticsMenuStyle = {
+  position: 'absolute' as const,
+  top: '100%' as const,
+  left: 0,
+  right: 0,
+  marginTop: 2,
+  borderWidth: 1,
+  borderColor: colors.borderLight,
+  borderRadius: radii.lg,
+  backgroundColor: colors.bgSurface,
+  maxHeight: 200,
+  overflow: 'hidden' as const,
+  ...shadows.card,
+  zIndex: 99999,
+  elevation: 99999,
+};
 
   // Inventory & Shelf Life State
   const [outOfStockAlerts, setOutOfStockAlerts] = useState<OutOfStockAlertPayload[]>([]);
@@ -265,6 +382,89 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
 
   // Users State
   const [users, setUsers] = useState<ManagedUser[]>(getManagedUsers());
+  const [copiedCustomerId, setCopiedCustomerId] = useState<string | null>(null);
+  const [customerSearchQuery, setCustomerSearchQuery] = useState('');
+
+  // Send Credits Modal in Dashboard
+  const [sendCreditsModalVisible, setSendCreditsModalVisible] = useState(false);
+  const [selectedCreditCustomer, setSelectedCreditCustomer] = useState<ManagedUser | null>(null);
+  const [creditSendAmount, setCreditSendAmount] = useState('150');
+  const [creditSendSource, setCreditSendSource] = useState<'PROMOTION' | 'ADMIN_ADJUSTMENT' | 'LOYALTY'>('PROMOTION');
+  const [creditSendDescription, setCreditSendDescription] = useState('Customer appreciation promotion');
+  const [isSubmittingCreditSend, setIsSubmittingCreditSend] = useState(false);
+
+  const reloadLiveUsers = async () => {
+    try {
+      const live = await fetchLiveManagedUsers();
+      setUsers(live);
+    } catch (err) {
+      console.warn('[AdminDashboard] Error loading live users:', err);
+    }
+  };
+
+  const handleCopyCustomerId = (id: string) => {
+    if (typeof navigator !== 'undefined' && navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(id).catch(() => {});
+    }
+    setCopiedCustomerId(id);
+    setTimeout(() => {
+      setCopiedCustomerId(null);
+    }, 2000);
+  };
+
+  const handleOpenSendCreditsModal = (targetUser: ManagedUser) => {
+    setSelectedCreditCustomer(targetUser);
+    setCreditSendAmount('150');
+    setCreditSendDescription(`Admin credit adjustment for ${targetUser.name}`);
+    setSendCreditsModalVisible(true);
+  };
+
+  const handleConfirmSendCredits = async () => {
+    if (!selectedCreditCustomer) return;
+    const amount = parseFloat(creditSendAmount);
+    if (isNaN(amount) || amount <= 0) {
+      Alert.alert('Invalid Amount', 'Please enter a valid credit amount in ₹.');
+      return;
+    }
+
+    setIsSubmittingCreditSend(true);
+    try {
+      const res = await adminIssueCredits({
+        targetUserId: selectedCreditCustomer.id,
+        amount,
+        source: creditSendSource,
+        description: creditSendDescription.trim() || 'Admin manual credit issuance',
+        adminId: user?.uid || 'super_admin',
+        idempotencyKey: `dash_cred_${selectedCreditCustomer.id}_${Date.now()}`,
+      });
+
+      if (res.success) {
+        const newBalance =
+          res.data?.newBalance ?? ((selectedCreditCustomer.walletBalance || 0) + amount);
+
+        // Immediate responsive UI update
+        updateUserWalletBalance(selectedCreditCustomer.id, newBalance);
+        setUsers((prev) =>
+          prev.map((u) =>
+            u.id === selectedCreditCustomer.id ? { ...u, walletBalance: newBalance } : u,
+          ),
+        );
+
+        Alert.alert(
+          'Credits Issued!',
+          `Successfully credited ₹${amount} to ${selectedCreditCustomer.name}.\nCustomer ID: ${selectedCreditCustomer.id}\nNew Balance: ₹${Math.round(newBalance).toLocaleString('en-IN')}`,
+        );
+        setSendCreditsModalVisible(false);
+        reloadLiveUsers();
+      } else {
+        Alert.alert('Error', res.error || 'Failed to issue credits.');
+      }
+    } catch (err: any) {
+      Alert.alert('Error', err?.message || 'Failed to issue credits.');
+    } finally {
+      setIsSubmittingCreditSend(false);
+    }
+  };
 
   // Chef Submissions State
   const [chefSubmissions, setChefSubmissions] = useState<ChefSubmissionRecord[]>([]);
@@ -298,7 +498,13 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
   const reloadAdminProfiles = async () => {
     try {
       const list = await fetchAllAdminProfiles();
-      setAdminProfiles(list);
+      const filtered = list.filter(
+        (a) =>
+          a.email &&
+          a.email.toLowerCase().endsWith('@mulyam.in') &&
+          a.email.toLowerCase() !== 'raphdesantos@gmail.com',
+      );
+      setAdminProfiles(filtered);
     } catch (err) {
       console.warn('[AdminDashboard] Error loading admin profiles:', err);
     }
@@ -336,7 +542,12 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
     syncMealKitsWithSupabase();
     reloadAdminProfiles();
     reloadChefData();
-    syncMealKitsWithSupabase();
+
+    reloadLiveUsers();
+
+    const unsubscribeUsers = subscribeToManagedUsers(() => {
+      reloadLiveUsers();
+    });
 
     const unsubscribeRealtime = subscribeToOrdersRealtime(() => {
       reloadSupabaseOrders();
@@ -362,27 +573,36 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
     const handleStorageChange = () => {
       reloadSupabaseOrders();
       refreshPendingApprovalCount();
+      reloadLiveUsers();
     };
 
     if (typeof window !== 'undefined' && window.addEventListener) {
       window.addEventListener('storage', handleStorageChange);
     }
 
-    const interval = setInterval(() => {
+    // Poll users + orders every 10s to catch new sign-ups discovered via
+    // Firestore/orders that don't trigger the Supabase user_profiles channel.
+    const usersInterval = setInterval(() => {
+      reloadLiveUsers();
+    }, 10000);
+
+    const ordersInterval = setInterval(() => {
       reloadSupabaseOrders();
       refreshPendingApprovalCount();
-    }, 2500);
+    }, 15000);
 
     return () => {
-      clearInterval(interval);
-      if (typeof window !== 'undefined' && window.removeEventListener) {
-        window.removeEventListener('storage', handleStorageChange);
-      }
       unsubscribeRealtime();
       unsubscribeCount();
       unsubscribeFb();
       unsubscribeKits();
       unsubscribeOos();
+      unsubscribeUsers();
+      clearInterval(usersInterval);
+      clearInterval(ordersInterval);
+      if (typeof window !== 'undefined' && window.removeEventListener) {
+        window.removeEventListener('storage', handleStorageChange);
+      }
     };
   }, [isMulyamAdmin]);
 
@@ -494,15 +714,37 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
   const handleOpenRefund = (order: Order) => {
     setRefundOrder(order);
     setRefundAmount(order.totalAmount.toString());
+    setRefundMethod('WALLET');
     setRefundModalVisible(true);
   };
 
   const handleExecuteRefund = async () => {
     if (!refundOrder) return;
     const amt = parseFloat(refundAmount) || refundOrder.totalAmount;
-    await issueRefund(refundOrder.id, amt, refundReason);
-    setRefundModalVisible(false);
-    Alert.alert('Refund Issued', `₹${amt} refunded for Order ${refundOrder.id}.`);
+    setIsProcessingRefund(true);
+    try {
+      const adminId = user?.uid || 'super_admin';
+      await processOrderRefund({
+        orderId: refundOrder.id,
+        refundAmount: amt,
+        refundMethod,
+        reason: refundReason,
+        adminId,
+      });
+      await issueRefund(refundOrder.id, amt, refundReason);
+      await reloadSupabaseOrders();
+      setRefundModalVisible(false);
+      Alert.alert(
+        'Refund Issued Successfully',
+        refundMethod === 'WALLET'
+          ? `₹${amt} credited directly to customer's Rasoi Credits Wallet (no expiry).`
+          : `₹${amt} marked for refund to original payment source.`,
+      );
+    } catch (err: any) {
+      Alert.alert('Refund Error', err?.message || 'Could not process refund');
+    } finally {
+      setIsProcessingRefund(false);
+    }
   };
 
   const handleStockAdjust = (kitId: string, region: RegionHub, delta: number) => {
@@ -748,8 +990,12 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
   };
 
   const handleSaveAdmin = async () => {
-    if (!adminFormEmail.trim() || !adminFormEmail.includes('@')) {
-      showInAppAlert('Invalid Email', 'Please enter a valid staff admin email address.');
+    const emailLower = adminFormEmail.trim().toLowerCase();
+    if (!emailLower || !emailLower.endsWith('@mulyam.in') || emailLower === 'raphdesantos@gmail.com') {
+      showInAppAlert(
+        'Invalid Domain',
+        'Staff Admin privileges can strictly only be granted to email addresses ending with @mulyam.in.',
+      );
       return;
     }
     if (adminFormRole !== 'super_admin' && adminFormRegions.length === 0) {
@@ -974,6 +1220,8 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
         pendingApprovalCount={pendingApprovalCount}
         kitsCount={scopedKits.length}
         usersCount={users.length}
+        customersCount={users.filter((u) => u.role !== 'admin').length}
+        adminsCount={adminProfiles.length}
         chefsCount={chefSubmissions.length}
         pendingChefSubmissions={
           chefSubmissions.filter((s) => s.submissionStatus === 'pending_review').length
@@ -1195,12 +1443,20 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
                   badgeVariant: 'accent' as BadgeVariant,
                 },
                 {
-                  id: 'users' as AdminTab,
-                  title: 'User Management',
-                  desc: 'View real customer accounts, manage staff permissions and platform roles',
+                  id: 'customers' as AdminTab,
+                  title: 'Customer Accounts',
+                  desc: 'Real registered customers, live wallet credits, Customer IDs & quick credit issuance',
                   icon: 'people' as AppIconName,
-                  badge: `${users.length} Users`,
+                  badge: `${users.filter((u) => u.role !== 'admin').length} Customers`,
                   badgeVariant: 'info' as BadgeVariant,
+                },
+                {
+                  id: 'admins' as AdminTab,
+                  title: 'Staff Admins & RBAC',
+                  desc: 'Manage staff admin accounts, multi-region jurisdictions & RBAC permissions',
+                  icon: 'lock' as AppIconName,
+                  badge: `${adminProfiles.length} Staff Admins`,
+                  badgeVariant: 'warning' as BadgeVariant,
                 },
                 {
                   id: 'coupons' as AdminTab,
@@ -1225,6 +1481,22 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
                   icon: 'star' as AppIconName,
                   badge: `${moderationReviews.length} Reviews`,
                   badgeVariant: 'neutral' as BadgeVariant,
+                },
+                {
+                  id: 'wallets' as AdminTab,
+                  title: 'Customer Credits Wallets',
+                  desc: 'Inspect customer balances, active credit lots, transaction ledger, and issue promotional adjustments',
+                  icon: 'wallet' as AppIconName,
+                  badge: 'Credits Hub',
+                  badgeVariant: 'warning' as BadgeVariant,
+                },
+                {
+                  id: 'referrals' as AdminTab,
+                  title: 'Referral & Rewards Engine',
+                  desc: 'Configure reward amounts, qualification rules, credit expiration dates, and monitor referrals',
+                  icon: 'gift' as AppIconName,
+                  badge: 'Growth Engine',
+                  badgeVariant: 'success' as BadgeVariant,
                 },
               ].map((mod) => (
                 <TouchableOpacity
@@ -2441,19 +2713,21 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
         {activeTab === 'analytics' && (
           <View>
             <View style={styles.moduleHeaderRow}>
-              <View>
-                <Text style={[styles.moduleTitle, { color: colors.textPrimary }]}>
-                  {isSuperAdmin
-                    ? 'Pan-India Regional Analytics (Super Admin View)'
-                    : `Regional Analytics (${assignedRegions && assignedRegions.length > 0 ? assignedRegions.map(formatRegionName).join(', ') : 'Pune City (Pune)'})`}
-                </Text>
-                <Text style={[styles.moduleSubtitle, { color: colors.textSecondary }]}>
-                  {isSuperAdmin
-                    ? 'Complete sales data, growth metrics & dietary split across all India operating regions'
-                    : `State & fulfillment metrics strictly restricted to your assigned jurisdiction: ${assignedRegions && assignedRegions.length > 0 ? assignedRegions.map(formatRegionName).join(', ') : 'Pune City (Pune)'}`}
-                </Text>
+              <View style={{ marginBottom: 14 }}>
+              <Text style={[styles.moduleTitle, { color: colors.textPrimary }]}>
+                {isSuperAdmin
+                  ? 'Pan-India Regional Analytics (Super Admin View)'
+                  : 'Regional Analytics (' + (assignedRegions && assignedRegions.length > 0 ? assignedRegions.map(formatRegionName).join(', ') : 'Pune City (Pune)') + ')'}
+              </Text>
+              <Text style={[styles.moduleSubtitle, { color: colors.textSecondary }]}>
+                {isSuperAdmin
+                  ? 'Complete sales data, growth metrics & dietary split across all India operating regions'
+                  : 'State & fulfillment metrics strictly restricted to your assigned jurisdiction: ' + (assignedRegions && assignedRegions.length > 0 ? assignedRegions.map(formatRegionName).join(', ') : 'Pune City (Pune)')}
+              </Text>
+              <View style={{ marginTop: 10, alignSelf: 'flex-start' }}>
+                <Button title="Export CSV" size="sm" onPress={handleExportCSV} />
               </View>
-              <Button title="Export CSV" size="sm" onPress={handleExportCSV} />
+            </View>
             </View>
 
             {/* RLS Status Badge Banner */}
@@ -2485,7 +2759,7 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
                 >
                   {isSuperAdmin
                     ? 'Super Admin: Full visibility across North, South, West & East Regions'
-                    : `Row Level Security (RLS) Active: Showing statistics only for ${assignedRegions && assignedRegions.length > 0 ? assignedRegions.map(formatRegionName).join(', ') : 'Pune City (Pune)'}`}
+                    : 'Row Level Security (RLS) Active: Showing statistics only for ' + (assignedRegions && assignedRegions.length > 0 ? assignedRegions.map(formatRegionName).join(', ') : 'Pune City (Pune)')}
                 </Text>
               </View>
               <Badge
@@ -2495,39 +2769,175 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
               />
             </View>
 
-            {/* Indian State Selector */}
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              style={{ marginBottom: 12 }}
-            >
-              {accessibleStates.map((st) => (
+          {/* Region Filters: State | City | Area in one horizontal row */}
+          <View style={{ flexDirection: 'row', gap: 10, marginBottom: 14, zIndex: 1000, elevation: 1000 }}>
+            {/* STATE */}
+            <View style={{ flex: 1, position: 'relative', zIndex: showAnalyticsStateDD ? 3000 : 1 }}>
+              <Text style={analyticsLabelStyle}>State</Text>
+              <TouchableOpacity
+                activeOpacity={1}
+                style={analyticsFieldStyle(showAnalyticsStateDD)}
+                onPress={() => {
+                  setShowAnalyticsStateDD(true);
+                  stateInputRef.current?.focus();
+                }}
+              >
+                <TextInput
+                  ref={stateInputRef}
+                  style={{ flex: 1, height: '100%', fontSize: 14, color: colors.textPrimary, paddingVertical: 0 }}
+                  placeholder="Search state..."
+                  placeholderTextColor={colors.textMuted}
+                  value={selectedState || analyticsStateSearch}
+                  onChangeText={(t) => {
+                    setAnalyticsStateSearch(t);
+                    setSelectedState('');
+                    setSelectedCity('');
+                    setSelectedSubRegion('');
+                    if (t) setShowAnalyticsStateDD(true);
+                  }}
+                  onFocus={() => setShowAnalyticsStateDD(true)}
+                  onBlur={() => setTimeout(() => setShowAnalyticsStateDD(false), 200)}
+                />
+              </TouchableOpacity>
+
+              {showAnalyticsStateDD && (() => {
+                const filtered = analyticsStateSearch
+                  ? accessibleStates.filter((s) => s.stateName.toLowerCase().includes(analyticsStateSearch.toLowerCase()))
+                  : accessibleStates;
+                return filtered.length > 0 ? (
+                  <View style={analyticsMenuStyle}>
+                    <ThinScrollView maxHeight={200} keyboardShouldPersistTaps="handled">
+                      {filtered.map((st) => (
+                        <TouchableOpacity
+                          key={st.stateCode}
+                          style={{ paddingVertical: 12, paddingHorizontal: 14, backgroundColor: selectedState === st.stateName ? colors.primaryLight : 'transparent' }}
+                          onPress={() => {
+                            setSelectedState(st.stateName);
+                            setSelectedCity('');
+                            setSelectedSubRegion('');
+                            setShowAnalyticsStateDD(false);
+                            setAnalyticsStateSearch('');
+                          }}
+                        >
+                          <Text style={{ fontSize: 14, color: selectedState === st.stateName ? colors.primary : colors.textPrimary, fontWeight: selectedState === st.stateName ? '700' : '400' }}>
+                            {st.stateName}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </ThinScrollView>
+                  </View>
+                ) : null;
+              })()}
+            </View>
+
+            {/* CITY */}
+            <View style={{ flex: 1, position: 'relative', zIndex: showAnalyticsCityDD ? 3000 : 1 }}>
+              <Text style={analyticsLabelStyle}>City</Text>
+              <TouchableOpacity
+                activeOpacity={1}
+                disabled={availableCities.length === 0}
+                style={analyticsFieldStyle(showAnalyticsCityDD, availableCities.length === 0)}
+                onPress={() => {
+                  setShowAnalyticsCityDD(true);
+                  cityInputRef.current?.focus();
+                }}
+              >
+                <TextInput
+                  ref={cityInputRef}
+                  editable={availableCities.length > 0}
+                  style={{ flex: 1, height: '100%', fontSize: 14, color: colors.textPrimary, paddingVertical: 0 }}
+                  placeholder="All cities"
+                  placeholderTextColor={colors.textMuted}
+                  value={selectedCity || analyticsCitySearch}
+                  onChangeText={(t) => {
+                    setAnalyticsCitySearch(t);
+                    setSelectedCity('');
+                    setSelectedSubRegion('');
+                    if (t) setShowAnalyticsCityDD(true);
+                  }}
+                  onFocus={() => setShowAnalyticsCityDD(true)}
+                  onBlur={() => setTimeout(() => setShowAnalyticsCityDD(false), 200)}
+                />
+                {!!selectedCity && (
                 <TouchableOpacity
-                  key={st.stateCode}
-                  style={[
-                    styles.statePill,
-                    {
-                      backgroundColor:
-                        selectedState === st.stateName ? colors.primary : colors.bgSurface,
-                      borderColor:
-                        selectedState === st.stateName ? colors.primary : colors.borderLight,
-                      borderRadius: radii.pill,
-                    },
-                  ]}
-                  onPress={() => setSelectedState(st.stateName)}
+                  onPress={() => { setSelectedCity(''); setSelectedSubRegion(''); setAnalyticsCitySearch(''); }}
+                  hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
                 >
-                  <Text
-                    style={{
-                      color: selectedState === st.stateName ? '#fff' : colors.textPrimary,
-                      fontWeight: '700',
-                      fontSize: 12,
-                    }}
-                  >
-                    {st.stateName}
-                  </Text>
+                  <Icon name="close" size={14} color={colors.textMuted} />
                 </TouchableOpacity>
-              ))}
-            </ScrollView>
+              )}
+              </TouchableOpacity>
+
+              {showAnalyticsCityDD && filteredAnalyticsCities.length > 0 && (
+                <View style={analyticsMenuStyle}>
+                  <ThinScrollView maxHeight={200} keyboardShouldPersistTaps="handled">
+                    {filteredAnalyticsCities.map((city: string) => (
+                      <TouchableOpacity
+                        key={city}
+                        style={{ paddingVertical: 12, paddingHorizontal: 14, backgroundColor: selectedCity === city ? colors.primaryLight : 'transparent' }}
+                        onPress={() => {
+                          setSelectedCity(city);
+                          setSelectedSubRegion('');
+                          setShowAnalyticsCityDD(false);
+                          setAnalyticsCitySearch('');
+                        }}
+                      >
+                        <Text style={{ fontSize: 14, color: selectedCity === city ? colors.primary : colors.textPrimary, fontWeight: selectedCity === city ? '700' : '400' }}>
+                          {city}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </ThinScrollView>
+                </View>
+              )}
+            </View>
+
+            {/* AREA / NEIGHBORHOOD */}
+            <View style={{ flex: 1, position: 'relative', zIndex: showAnalyticsSubRegionDD ? 3000 : 1 }}>
+              <Text style={analyticsLabelStyle}>Area</Text>
+              <TouchableOpacity
+                activeOpacity={0.8}
+                disabled={!selectedCity || availableSubRegions.length === 0}
+                style={analyticsFieldStyle(showAnalyticsSubRegionDD, !selectedCity || availableSubRegions.length === 0)}
+                onPress={() => setShowAnalyticsSubRegionDD((v) => !v)}
+              >
+                <Text
+                  numberOfLines={1}
+                  style={{ flex: 1, fontSize: 14, color: selectedSubRegion ? colors.textPrimary : colors.textMuted }}
+                >
+                  {selectedSubRegion
+                    ? availableSubRegions.find((sr) => sr.id === selectedSubRegion)?.name || 'All areas'
+                    : selectedCity ? 'All areas' : 'Select city first'}
+                </Text>
+                {!!selectedSubRegion && (
+                <TouchableOpacity
+                  onPress={() => { setSelectedSubRegion(''); setShowAnalyticsSubRegionDD(false); }}
+                  hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                >
+                  <Icon name="close" size={14} color={colors.textMuted} />
+                </TouchableOpacity>
+              )}
+              </TouchableOpacity>
+
+              {showAnalyticsSubRegionDD && availableSubRegions.length > 0 && (
+                <View style={analyticsMenuStyle}>
+                  <ThinScrollView maxHeight={200}>
+                    {availableSubRegions.map((sr) => (
+                      <TouchableOpacity
+                        key={sr.id}
+                        style={{ paddingVertical: 12, paddingHorizontal: 14, backgroundColor: selectedSubRegion === sr.id ? colors.primaryLight : 'transparent' }}
+                        onPress={() => { setSelectedSubRegion(sr.id); setShowAnalyticsSubRegionDD(false); }}
+                      >
+                        <Text style={{ fontSize: 14, color: selectedSubRegion === sr.id ? colors.primary : colors.textPrimary, fontWeight: selectedSubRegion === sr.id ? '700' : '400' }}>
+                          {sr.name}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </ThinScrollView>
+                </View>
+              )}
+            </View>
+          </View>
 
             {/* State Deep-Dive Card */}
             {(() => {
@@ -2645,52 +3055,65 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
                   borderRadius: radii.xl,
                   borderColor: colors.borderLight,
                   ...shadows.card,
-                },
+                },{ zIndex: showCrossTabDietDD ? 2000 : 1, elevation: showCrossTabDietDD ? 2000 : 1 }
               ]}
             >
               <Text style={[styles.crossTabTitle, { color: colors.textPrimary }]}>
                 Cross-Tab: Top Meals Among {crossTabDiet.toUpperCase()} in {selectedState}
               </Text>
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                style={{ marginBottom: 12 }}
-                contentContainerStyle={{ gap: 6 }}
+              <View
+              style={{
+                position: 'relative',
+                zIndex: showCrossTabDietDD ? 3000 : 1,
+                marginBottom: 12,
+                maxWidth: 280,
+              }}
+            >
+              <Text style={analyticsLabelStyle}>Diet</Text>
+              <TouchableOpacity
+                activeOpacity={0.8}
+                style={analyticsFieldStyle(showCrossTabDietDD)}
+                onPress={() => setShowCrossTabDietDD((v) => !v)}
               >
-                {(
-                  [
-                    { id: 'all', label: 'ALL DIETS' },
-                    { id: 'veg', label: 'VEG' },
-                    { id: 'nonveg', label: 'NON-VEG' },
-                    { id: 'vegan', label: 'VEGAN' },
-                    { id: 'keto', label: 'KETO' },
-                    { id: 'jain', label: 'JAIN' },
-                  ] as { id: 'all' | DietTag; label: string }[]
-                ).map((d) => (
-                  <TouchableOpacity
-                    key={d.id}
-                    style={[
-                      styles.crossTabFilterPill,
-                      {
-                        backgroundColor: crossTabDiet === d.id ? colors.primary : colors.bgSubtle,
-                        borderColor: crossTabDiet === d.id ? colors.primary : colors.borderLight,
-                        borderRadius: radii.pill,
-                      },
-                    ]}
-                    onPress={() => setCrossTabDiet(d.id)}
-                  >
-                    <Text
-                      style={{
-                        fontSize: 11,
-                        fontWeight: '700',
-                        color: crossTabDiet === d.id ? '#FFFFFF' : colors.textPrimary,
-                      }}
-                    >
-                      {d.label}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
+                <Text
+                  numberOfLines={1}
+                  style={{ flex: 1, fontSize: 14, color: colors.textPrimary, fontWeight: '600' }}
+                >
+                  {crossTabDietOptions.find((d) => d.id === crossTabDiet)?.label || 'All Diets'}
+                </Text>
+              </TouchableOpacity>
+
+              {showCrossTabDietDD && (
+                <View style={analyticsMenuStyle}>
+                  <ThinScrollView maxHeight={200}>
+                    {crossTabDietOptions.map((d) => (
+                      <TouchableOpacity
+                        key={d.id}
+                        style={{
+                          paddingVertical: 12,
+                          paddingHorizontal: 14,
+                          backgroundColor: crossTabDiet === d.id ? colors.primaryLight : 'transparent',
+                        }}
+                        onPress={() => {
+                          setCrossTabDiet(d.id);
+                          setShowCrossTabDietDD(false);
+                        }}
+                      >
+                        <Text
+                          style={{
+                            fontSize: 14,
+                            color: crossTabDiet === d.id ? colors.primary : colors.textPrimary,
+                            fontWeight: crossTabDiet === d.id ? '700' : '400',
+                          }}
+                        >
+                          {d.label}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </ThinScrollView>
+                </View>
+              )}
+            </View>
 
               <View style={{ gap: 8 }}>
                 {crossTabResult.topItems.map((dish, idx) => (
@@ -2724,10 +3147,53 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
           </View>
         )}
 
-        {/* MODULE 5: USER MANAGEMENT */}
-        {activeTab === 'users' && (
+        {/* MODULE 5A: STAFF ADMIN MANAGEMENT */}
+        {activeTab === 'admins' && (
           <View>
-            {/* 1. Regional Admin Role & Many-to-Many Region Assignments */}
+            {/* Top Subtab Switcher */}
+            <View style={{ flexDirection: 'row', gap: 10, marginBottom: 16 }}>
+              <TouchableOpacity
+                onPress={() => setActiveTab('customers')}
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: 6,
+                  paddingHorizontal: 16,
+                  paddingVertical: 10,
+                  borderRadius: radii.pill,
+                  backgroundColor: colors.bgSurface,
+                  borderColor: colors.borderLight,
+                  borderWidth: 1,
+                }}
+              >
+                <Icon name="people" size={16} color={colors.textSecondary} />
+                <Text style={{ fontWeight: '700', fontSize: 13, color: colors.textSecondary }}>
+                  Customers ({users.filter((u) => u.role !== 'admin').length})
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={() => setActiveTab('admins')}
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: 6,
+                  paddingHorizontal: 16,
+                  paddingVertical: 10,
+                  borderRadius: radii.pill,
+                  backgroundColor: colors.primary,
+                  borderColor: colors.primary,
+                  borderWidth: 1,
+                }}
+              >
+                <Icon name="lock" size={16} color="#FFF" />
+                <Text style={{ fontWeight: '700', fontSize: 13, color: '#FFF' }}>
+                  Staff Admins ({adminProfiles.length})
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Regional Admin Role & Many-to-Many Region Assignments */}
             <View
               style={[
                 {
@@ -2859,43 +3325,127 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
                 ))}
               </View>
             </View>
+          </View>
+        )}
 
-            {/* 2. Customer Accounts Header */}
-            <View style={styles.moduleHeaderRow}>
-              <View>
-                <Text style={[styles.moduleTitle, { color: colors.textPrimary }]}>
-                  Customer Accounts ({users.length})
+        {/* MODULE 5B: CUSTOMER ACCOUNTS (LIVE) */}
+        {(activeTab === 'customers' || activeTab === 'users') && (
+          <View>
+            {/* Top Subtab Switcher */}
+            <View style={{ flexDirection: 'row', gap: 10, marginBottom: 16 }}>
+              <TouchableOpacity
+                onPress={() => setActiveTab('customers')}
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: 6,
+                  paddingHorizontal: 16,
+                  paddingVertical: 10,
+                  borderRadius: radii.pill,
+                  backgroundColor: colors.primary,
+                  borderColor: colors.primary,
+                  borderWidth: 1,
+                }}
+              >
+                <Icon name="people" size={16} color="#FFF" />
+                <Text style={{ fontWeight: '700', fontSize: 13, color: '#FFF' }}>
+                  Customers ({users.filter((u) => u.role !== 'admin').length})
                 </Text>
-                <Text style={[styles.moduleSubtitle, { color: colors.textSecondary }]}>
-                  Manage staff admin roles and customer statuses
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={() => setActiveTab('admins')}
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: 6,
+                  paddingHorizontal: 16,
+                  paddingVertical: 10,
+                  borderRadius: radii.pill,
+                  backgroundColor: colors.bgSurface,
+                  borderColor: colors.borderLight,
+                  borderWidth: 1,
+                }}
+              >
+                <Icon name="lock" size={16} color={colors.textSecondary} />
+                <Text style={{ fontWeight: '700', fontSize: 13, color: colors.textSecondary }}>
+                  Staff Admins ({adminProfiles.length})
                 </Text>
-              </View>
+              </TouchableOpacity>
             </View>
 
-            {users.length === 0 ? (
-              <View
-                style={[
-                  styles.emptyStateCard,
-                  {
-                    backgroundColor: colors.bgSurface,
-                    borderColor: colors.borderLight,
-                    borderRadius: radii.xl,
-                  },
-                ]}
-              >
-                <View style={{ marginBottom: 12 }}>
-                  <Icon name="people" size={38} color={colors.textMuted} />
+            {/* Customer Accounts Header & Live Sync Status */}
+            <View style={styles.moduleHeaderRow}>
+              <View>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <Text style={[styles.moduleTitle, { color: colors.textPrimary }]}>
+                    Customer Accounts ({users.filter((u) => u.role !== 'admin').length})
+                  </Text>
                 </View>
-                <Text style={[styles.emptyStateTitle, { color: colors.textPrimary }]}>
-                  No Users Registered
-                </Text>
-                <Text style={[styles.emptyStateSubtitle, { color: colors.textSecondary }]}>
-                  Mock users have been removed. Real registered customer accounts will appear here
-                  once authenticated.
+                <Text style={[styles.moduleSubtitle, { color: colors.textSecondary }]}>
+                  Live accounts, Customer IDs, live wallet balances & credit allocations
                 </Text>
               </View>
-            ) : (
-              users.map((u) => (
+              <Button title="Refresh Live" size="sm" variant="outline" onPress={reloadLiveUsers} />
+            </View>
+
+            {/* Search Customers Bar */}
+            <View style={{ marginBottom: 14 }}>
+              <TextInput
+                style={{
+                  backgroundColor: colors.bgSurface,
+                  borderColor: colors.borderLight,
+                  borderWidth: 1,
+                  borderRadius: radii.md,
+                  paddingHorizontal: 14,
+                  paddingVertical: 10,
+                  color: colors.textPrimary,
+                  fontSize: 14,
+                }}
+                placeholder="Search by Customer ID, Name, Phone, or Email..."
+                placeholderTextColor={colors.textMuted}
+                value={customerSearchQuery}
+                onChangeText={setCustomerSearchQuery}
+              />
+            </View>
+
+            {/* Filtered Customer List */}
+            {(() => {
+              const customerList = users.filter(
+                (u) =>
+                  u.role !== 'admin' &&
+                  (u.id.toLowerCase().includes(customerSearchQuery.toLowerCase()) ||
+                    u.name.toLowerCase().includes(customerSearchQuery.toLowerCase()) ||
+                    u.phone.includes(customerSearchQuery) ||
+                    u.email.toLowerCase().includes(customerSearchQuery.toLowerCase())),
+              );
+
+              if (customerList.length === 0) {
+                return (
+                  <View
+                    style={[
+                      styles.emptyStateCard,
+                      {
+                        backgroundColor: colors.bgSurface,
+                        borderColor: colors.borderLight,
+                        borderRadius: radii.xl,
+                      },
+                    ]}
+                  >
+                    <View style={{ marginBottom: 12 }}>
+                      <Icon name="people" size={38} color={colors.textMuted} />
+                    </View>
+                    <Text style={[styles.emptyStateTitle, { color: colors.textPrimary }]}>
+                      No Customer Accounts Found
+                    </Text>
+                    <Text style={[styles.emptyStateSubtitle, { color: colors.textSecondary }]}>
+                      Registered customers will appear here automatically with their live Customer ID and wallet balance.
+                    </Text>
+                  </View>
+                );
+              }
+
+              return customerList.map((u) => (
                 <View
                   key={u.id}
                   style={[
@@ -2904,30 +3454,105 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
                       backgroundColor: colors.bgSurface,
                       borderRadius: radii.xl,
                       borderColor: colors.borderLight,
+                      marginBottom: 14,
                       ...shadows.card,
                     },
                   ]}
                 >
                   <View style={styles.userTopRow}>
-                    <View>
-                      <Text style={[styles.userNameText, { color: colors.textPrimary }]}>
-                        {u.name}
-                      </Text>
-                      <Text style={[styles.userEmailText, { color: colors.textSecondary }]}>
-                        {u.email}
-                      </Text>
+                    <View style={{ flex: 1, marginRight: 8 }}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                        <Text style={[styles.userNameText, { color: colors.textPrimary, fontSize: 16 }]}>
+                          {u.name}
+                        </Text>
+                        {u.role === 'chef' && (
+                          <Badge label="CHEF" variant="warning" size="sm" />
+                        )}
+                      </View>
+                      
+                      {/* Prominent Customer ID with 1-click Copy */}
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 }}>
+                        <TouchableOpacity
+                          onPress={() => handleCopyCustomerId(u.id)}
+                          style={{
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            gap: 5,
+                            backgroundColor: colors.bgSubtle,
+                            borderColor: colors.borderLight,
+                            borderWidth: 1,
+                            paddingHorizontal: 8,
+                            paddingVertical: 3,
+                            borderRadius: radii.sm,
+                          }}
+                          activeOpacity={0.7}
+                        >
+                          <Icon name="document" size={12} color={colors.primary} />
+                          <Text style={{ fontSize: 12, fontFamily: 'monospace', fontWeight: '700', color: colors.primary }}>
+                            Customer ID: {u.id}
+                          </Text>
+                          <Text style={{ fontSize: 11, color: copiedCustomerId === u.id ? '#10B981' : colors.textMuted }}>
+                            {copiedCustomerId === u.id ? '✓ Copied!' : 'Copy'}
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
                     </View>
                     <Badge
-                      label={u.role.toUpperCase()}
-                      variant={u.role === 'admin' ? 'info' : 'neutral'}
+                      label={u.status === 'active' ? 'ACTIVE' : 'SUSPENDED'}
+                      variant={u.status === 'active' ? 'success' : 'danger'}
                     />
                   </View>
 
-                  <Text style={[styles.userStats, { color: colors.textMuted }]}>
-                    Orders: {u.ordersCount} • Spent: ₹{u.totalSpend} • City: {u.city}
+                  <Text style={[styles.userStats, { color: colors.textSecondary, marginTop: 8 }]}>
+                    📞 {u.phone} • ✉️ {u.email} • 📍 {u.city} • 📅 Joined {u.joinedDate}
                   </Text>
 
+                  <Text style={[styles.userStats, { color: colors.textMuted, marginTop: 2 }]}>
+                    Orders: {u.ordersCount} • Total Spent: ₹{Math.round(u.totalSpend).toLocaleString('en-IN')}
+                  </Text>
+
+                  {/* Live Wallet Balance Banner & Quick Credit Issue */}
+                  <View
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      backgroundColor: colors.primaryLight + '35',
+                      borderColor: colors.primary + '30',
+                      borderWidth: 1,
+                      borderRadius: radii.md,
+                      paddingHorizontal: 12,
+                      paddingVertical: 8,
+                      marginVertical: 10,
+                    }}
+                  >
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                      <Icon name="wallet" size={16} color={colors.primary} />
+                      <Text style={{ fontSize: 13, fontWeight: '700', color: colors.primary }}>
+                        Wallet Balance: ₹{Math.round(u.walletBalance ?? 0).toLocaleString('en-IN')}
+                      </Text>
+                      {(u.walletReserved ?? 0) > 0 && (
+                        <Text style={{ fontSize: 11, color: colors.textMuted }}>
+                          (₹{u.walletReserved} reserved)
+                        </Text>
+                      )}
+                    </View>
+                    <Button
+                      title="+ Send Credits"
+                      size="sm"
+                      variant="primary"
+                      onPress={() => handleOpenSendCreditsModal(u)}
+                    />
+                  </View>
+
                   <View style={styles.userActionRow}>
+                    <Button
+                      title="View Wallet"
+                      variant="outline"
+                      size="sm"
+                      style={{ marginRight: 8 }}
+                      onPress={() => setActiveTab('wallets')}
+                    />
                     <Button
                       title={u.status === 'active' ? 'Suspend Account' : 'Activate Account'}
                       variant={u.status === 'active' ? 'outline' : 'primary'}
@@ -2935,22 +3560,47 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
                       style={{ marginRight: 8 }}
                       onPress={() => {
                         toggleUserStatus(u.id);
-                        setUsers(getManagedUsers());
+                        reloadLiveUsers();
                       }}
                     />
                     <Button
-                      title={u.role === 'admin' ? 'Revoke Admin' : 'Grant Admin'}
+                      title={u.role === 'chef' ? 'Revoke Chef' : 'Promote to Chef'}
                       variant="outline"
                       size="sm"
-                      onPress={() => {
-                        toggleUserAdminRole(u.id);
-                        setUsers(getManagedUsers());
+                      style={{ marginRight: 8 }}
+                      onPress={async () => {
+                        if (u.role === 'chef') {
+                          await revokeChefRole(u.id, u.email);
+                          showInAppAlert('Chef Revoked', `${u.name} role reset to regular customer.`);
+                        } else {
+                          await grantChefRole(u.id, u.email, u.name, user?.email || 'admin');
+                          showInAppAlert(
+                            'Promoted to Chef',
+                            `${u.name} has been promoted to Chef! They can now access Chef Studio to create and manage their meal kit recipes.`,
+                          );
+                        }
+                        reloadLiveUsers();
+                        reloadChefData();
                       }}
                     />
+
+                    {u.email &&
+                      u.email.trim().toLowerCase().endsWith('@mulyam.in') &&
+                      u.email.trim().toLowerCase() !== 'raphdesantos@gmail.com' && (
+                        <Button
+                          title={u.role === 'admin' ? 'Revoke Admin' : 'Grant Admin'}
+                          variant="outline"
+                          size="sm"
+                          onPress={() => {
+                            toggleUserAdminRole(u.id);
+                            reloadLiveUsers();
+                          }}
+                        />
+                      )}
                   </View>
                 </View>
-              ))
-            )}
+              ));
+            })()}
           </View>
         )}
 
@@ -3154,28 +3804,31 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
                 <Text style={[styles.moduleTitle, { color: colors.textPrimary, fontSize: 16 }]}>
                   Approved Chefs ({chefProfiles.length})
                 </Text>
-                <TouchableOpacity
-                  style={[
-                    {
-                      backgroundColor: colors.primaryLight,
-                      borderRadius: radii.md,
-                      paddingHorizontal: 14,
-                      paddingVertical: 8,
-                      flexDirection: 'row',
-                      alignItems: 'center',
-                      gap: 6,
-                    },
-                  ]}
-                  onPress={() => {
-                    setGrantChefTargetUser(null);
-                    setGrantChefModalVisible(true);
-                  }}
-                >
-                  <Icon name="add" size={14} color={colors.primary} />
-                  <Text style={{ fontSize: 13, fontWeight: '700', color: colors.primary }}>
-                    Grant Chef Role
-                  </Text>
-                </TouchableOpacity>
+                <View style={{ flexDirection: 'row', gap: 8 }}>
+
+                  <TouchableOpacity
+                    style={[
+                      {
+                        backgroundColor: colors.primaryLight,
+                        borderRadius: radii.md,
+                        paddingHorizontal: 14,
+                        paddingVertical: 8,
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        gap: 6,
+                      },
+                    ]}
+                    onPress={() => {
+                      setGrantChefTargetUser(null);
+                      setGrantChefModalVisible(true);
+                    }}
+                  >
+                    <Icon name="add" size={14} color={colors.primary} />
+                    <Text style={{ fontSize: 13, fontWeight: '700', color: colors.primary }}>
+                      Grant Chef Role
+                    </Text>
+                  </TouchableOpacity>
+                </View>
               </View>
               {chefProfiles.length === 0 ? (
                 <Text style={{ color: colors.textMuted, fontSize: 13 }}>
@@ -3208,42 +3861,45 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
                         </Text>
                       )}
                     </View>
-                    <TouchableOpacity
-                      onPress={() => {
-                        Alert.alert(
-                          'Revoke Chef Role',
-                          `Remove chef role from ${chef.displayName}? They will revert to a regular customer.`,
-                          [
-                            { text: 'Cancel', style: 'cancel' },
-                            {
-                              text: 'Revoke',
-                              style: 'destructive',
-                              onPress: async () => {
-                                await revokeChefRole(chef.uid, chef.email);
-                                reloadChefData();
-                                showInAppAlert(
-                                  'Chef Role Revoked',
-                                  `${chef.displayName} is now a regular customer.`,
-                                );
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+
+                      <TouchableOpacity
+                        onPress={() => {
+                          Alert.alert(
+                            'Revoke Chef Role',
+                            `Remove chef role from ${chef.displayName}? They will revert to a regular customer.`,
+                            [
+                              { text: 'Cancel', style: 'cancel' },
+                              {
+                                text: 'Revoke',
+                                style: 'destructive',
+                                onPress: async () => {
+                                  await revokeChefRole(chef.uid, chef.email);
+                                  reloadChefData();
+                                  showInAppAlert(
+                                    'Chef Role Revoked',
+                                    `${chef.displayName} is now a regular customer.`,
+                                  );
+                                },
                               },
-                            },
-                          ],
-                        );
-                      }}
-                      style={[
-                        {
-                          borderWidth: 1,
-                          borderColor: colors.danger,
-                          borderRadius: radii.md,
-                          paddingHorizontal: 12,
-                          paddingVertical: 6,
-                        },
-                      ]}
-                    >
-                      <Text style={{ fontSize: 12, fontWeight: '700', color: colors.danger }}>
-                        Revoke
-                      </Text>
-                    </TouchableOpacity>
+                            ],
+                          );
+                        }}
+                        style={[
+                          {
+                            borderWidth: 1,
+                            borderColor: colors.danger,
+                            borderRadius: radii.md,
+                            paddingHorizontal: 12,
+                            paddingVertical: 6,
+                          },
+                        ]}
+                      >
+                        <Text style={{ fontSize: 12, fontWeight: '700', color: colors.danger }}>
+                          Revoke
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
                   </View>
                 ))
               )}
@@ -3780,19 +4436,23 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
                                   ),
                                 ]
                               : ['North', 'South', 'West', 'East'];
-                          await publishChefSubmission(
+                          const res = await publishChefSubmission(
                             selectedChefSubmission.id,
                             price,
                             regions,
                             chefPublishStorageCentres,
                             chefPublishCities,
                           );
+                          if (res.kit) {
+                            addMealKit(res.kit as MealKit);
+                          }
+                          setKits(getMealKits());
                           await reloadChefData();
                           setIsProcessingChefSubmission(false);
                           setChefSubmissionModalVisible(false);
                           showInAppAlert(
                             'Recipe Published',
-                            `"${selectedChefSubmission.name}" by ${selectedChefSubmission.chefName} is now live at Rs. ${price}.`,
+                            `"${selectedChefSubmission.name}" by ${selectedChefSubmission.chefName} is now live at Rs. ${price} and added to the meal kit database.`,
                           );
                         }}
                       >
@@ -4017,6 +4677,12 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
             )}
           </View>
         )}
+
+        {/* MODULE 9: WALLETS MANAGEMENT */}
+        {activeTab === 'wallets' && <AdminWalletsManagementView />}
+
+        {/* MODULE 10: REFERRALS ENGINE */}
+        {activeTab === 'referrals' && <AdminReferralsManagementView />}
       </ScrollView>
 
       {/* REFUND MODAL */}
@@ -4072,17 +4738,71 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
               onChangeText={setRefundReason}
             />
 
+            <Text style={[styles.inputLabel, { color: colors.textPrimary, marginTop: 10 }]}>
+              Refund Destination
+            </Text>
+            <View style={{ flexDirection: 'row', gap: 8, marginBottom: 12 }}>
+              <TouchableOpacity
+                style={[
+                  {
+                    flex: 1,
+                    paddingVertical: 10,
+                    paddingHorizontal: 8,
+                    borderRadius: radii.md,
+                    borderWidth: 1.5,
+                    alignItems: 'center',
+                    backgroundColor: refundMethod === 'WALLET' ? colors.primaryLight + '30' : colors.bgSubtle,
+                    borderColor: refundMethod === 'WALLET' ? colors.primary : colors.borderLight,
+                  },
+                ]}
+                onPress={() => setRefundMethod('WALLET')}
+              >
+                <Text style={{ fontSize: 12, fontWeight: '700', color: refundMethod === 'WALLET' ? colors.primary : colors.textPrimary }}>
+                  ⚡ Rasoi Wallet Credits
+                </Text>
+                <Text style={{ fontSize: 10, color: colors.textSecondary, marginTop: 2 }}>
+                  Instant • Never Expires
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  {
+                    flex: 1,
+                    paddingVertical: 10,
+                    paddingHorizontal: 8,
+                    borderRadius: radii.md,
+                    borderWidth: 1.5,
+                    alignItems: 'center',
+                    backgroundColor: refundMethod === 'ORIGINAL_PAYMENT' ? colors.primaryLight + '30' : colors.bgSubtle,
+                    borderColor: refundMethod === 'ORIGINAL_PAYMENT' ? colors.primary : colors.borderLight,
+                  },
+                ]}
+                onPress={() => setRefundMethod('ORIGINAL_PAYMENT')}
+              >
+                <Text style={{ fontSize: 12, fontWeight: '700', color: refundMethod === 'ORIGINAL_PAYMENT' ? colors.primary : colors.textPrimary }}>
+                  💳 Original Payment
+                </Text>
+                <Text style={{ fontSize: 10, color: colors.textSecondary, marginTop: 2 }}>
+                  Gateway (5-7 days)
+                </Text>
+              </TouchableOpacity>
+            </View>
+
             <View style={{ flexDirection: 'row', marginTop: 14 }}>
               <Button
                 title="Cancel"
                 variant="secondary"
                 style={{ flex: 1, marginRight: 8 }}
                 onPress={() => setRefundModalVisible(false)}
+                disabled={isProcessingRefund}
               />
               <Button
-                title="Confirm Refund"
+                title={isProcessingRefund ? 'Processing...' : 'Confirm Refund'}
                 variant="danger"
                 style={{ flex: 1 }}
+                loading={isProcessingRefund}
+                disabled={isProcessingRefund}
                 onPress={handleExecuteRefund}
               />
             </View>
@@ -5373,6 +6093,146 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
         </View>
       </Modal>
 
+      {/* ISSUE CUSTOMER CREDITS MODAL */}
+      <Modal
+        visible={sendCreditsModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setSendCreditsModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View
+            style={[
+              styles.modalBox,
+              {
+                backgroundColor: colors.bgSurface,
+                borderRadius: radii.xl,
+                ...shadows.card,
+              },
+            ]}
+          >
+            <Text style={[styles.modalHeading, { color: colors.primary }]}>
+              Issue Customer Credits
+            </Text>
+            {selectedCreditCustomer && (
+              <View style={{ marginBottom: 14 }}>
+                <Text style={{ fontSize: 14, fontWeight: '700', color: colors.textPrimary }}>
+                  {selectedCreditCustomer.name}
+                </Text>
+                <View
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 6,
+                    backgroundColor: colors.bgSubtle,
+                    borderColor: colors.borderLight,
+                    borderWidth: 1,
+                    paddingHorizontal: 8,
+                    paddingVertical: 4,
+                    borderRadius: radii.sm,
+                    marginTop: 4,
+                  }}
+                >
+                  <Icon name="document" size={12} color={colors.primary} />
+                  <Text style={{ fontSize: 12, fontFamily: 'monospace', fontWeight: '700', color: colors.primary }}>
+                    Customer ID: {selectedCreditCustomer.id}
+                  </Text>
+                </View>
+                <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 4 }}>
+                  Current Balance: ₹{Math.round(selectedCreditCustomer.walletBalance ?? 0).toLocaleString('en-IN')}
+                </Text>
+              </View>
+            )}
+
+            <Text style={[styles.inputLabel, { color: colors.textPrimary }]}>
+              Credit Amount (₹)
+            </Text>
+            <TextInput
+              style={[
+                styles.modalInput,
+                {
+                  backgroundColor: colors.bgSubtle,
+                  borderColor: colors.border,
+                  borderRadius: radii.md,
+                },
+              ]}
+              value={creditSendAmount}
+              onChangeText={setCreditSendAmount}
+              placeholder="e.g. 150"
+              placeholderTextColor={colors.textMuted}
+              keyboardType="numeric"
+            />
+
+            <Text style={[styles.inputLabel, { color: colors.textPrimary, marginTop: 10 }]}>
+              Credit Category
+            </Text>
+            <View style={{ flexDirection: 'row', gap: 8, marginBottom: 12 }}>
+              {(['PROMOTION', 'ADMIN_ADJUSTMENT', 'LOYALTY'] as const).map((src) => (
+                <TouchableOpacity
+                  key={src}
+                  style={{
+                    flex: 1,
+                    paddingVertical: 8,
+                    borderRadius: radii.md,
+                    borderWidth: 1.5,
+                    alignItems: 'center',
+                    backgroundColor: creditSendSource === src ? colors.primaryLight + '30' : colors.bgSubtle,
+                    borderColor: creditSendSource === src ? colors.primary : colors.borderLight,
+                  }}
+                  onPress={() => setCreditSendSource(src)}
+                >
+                  <Text
+                    style={{
+                      fontSize: 11,
+                      fontWeight: '700',
+                      color: creditSendSource === src ? colors.primary : colors.textPrimary,
+                    }}
+                  >
+                    {src === 'PROMOTION' ? 'Promotion' : src === 'LOYALTY' ? 'Loyalty' : 'Adjustment'}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <Text style={[styles.inputLabel, { color: colors.textPrimary }]}>
+              Reason / Description
+            </Text>
+            <TextInput
+              style={[
+                styles.modalInput,
+                {
+                  backgroundColor: colors.bgSubtle,
+                  borderColor: colors.border,
+                  borderRadius: radii.md,
+                },
+              ]}
+              value={creditSendDescription}
+              onChangeText={setCreditSendDescription}
+              placeholder="e.g. Customer loyalty bonus"
+              placeholderTextColor={colors.textMuted}
+            />
+
+            <View style={{ flexDirection: 'row', marginTop: 16 }}>
+              <Button
+                title="Cancel"
+                variant="secondary"
+                style={{ flex: 1, marginRight: 8 }}
+                onPress={() => setSendCreditsModalVisible(false)}
+                disabled={isSubmittingCreditSend}
+              />
+              <Button
+                title={isSubmittingCreditSend ? 'Crediting...' : 'Confirm & Credit'}
+                variant="primary"
+                style={{ flex: 1.5 }}
+                loading={isSubmittingCreditSend}
+                disabled={isSubmittingCreditSend}
+                onPress={handleConfirmSendCredits}
+              />
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       {/* 2-SIDED MEAL KIT RECIPE CARD PRINT MODAL */}
       {printCardKit && (
         <RecipeCardPrintModal
@@ -5608,10 +6468,17 @@ const styles = StyleSheet.create({
     zIndex: 99999,
     elevation: 99999,
     overflow: 'hidden',
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.22,
-    shadowRadius: 16,
+    ...Platform.select({
+      web: {
+        boxShadow: '0px 10px 16px rgba(0, 0, 0, 0.22)',
+      },
+      default: {
+        shadowColor: '#000000',
+        shadowOffset: { width: 0, height: 10 },
+        shadowOpacity: 0.22,
+        shadowRadius: 16,
+      },
+    }),
   },
   dropdownMenuList: {
     maxHeight: 220,

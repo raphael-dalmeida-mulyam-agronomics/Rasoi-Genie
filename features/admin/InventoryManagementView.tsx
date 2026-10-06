@@ -1,41 +1,39 @@
 // features/admin/InventoryManagementView.tsx
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  TextInput,
-  Modal,
-  Alert,
-  Platform,
+    Alert,
+    Modal,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View
 } from 'react-native';
 import { useAuth } from '../../framework/context/AuthContext';
-import { seedInventoryFromMealKits } from '../../framework/services/seedInventoryFromMealKits';
-import { useTheme } from '../../framework/theme/ThemeContext';
 import {
-  InventoryItem,
-  InventorySection,
-  getInventoryItems,
-  addInventoryItem,
-  updateInventoryItem,
-  restockInventoryItem,
-  deleteInventoryItem,
-  subscribeToInventory,
-  calculateShelfLifeStatus,
-  ShelfLifeStatus,
-  getDefaultShelfLife,
+    addInventoryItem,
+    calculateShelfLifeStatus,
+    deleteInventoryItem,
+    getInventoryItems,
+    InventoryItem,
+    InventorySection,
+    restockInventoryItem,
+    ShelfLifeStatus,
+    subscribeToInventory,
+    updateInventoryItem
 } from '../../framework/services/inventoryService';
 import {
-  notifyRegionalAdminsOutOfStock,
-  OutOfStockAlertPayload,
+    notifyRegionalAdminsOutOfStock
 } from '../../framework/services/notificationService';
-import { Card } from '../../framework/ui/Card';
-import { Badge, BadgeVariant, getDietBadgeInfo } from '../../framework/ui/Badge';
+import { seedInventoryFromMealKits } from '../../framework/services/seedInventoryFromMealKits';
+import { useTheme } from '../../framework/theme/ThemeContext';
+import { Badge, BadgeVariant } from '../../framework/ui/Badge';
 import { Button } from '../../framework/ui/Button';
-import { Icon, AppIconName } from '../../framework/ui/Icon';
+import { AppIconName, Icon } from '../../framework/ui/Icon';
+import { CategoryDropdown, CategoryFilter } from './CategoryDropdown';
+import { getIngredientCategory } from './ingredientCategories';
 
 const CATEGORY_LABELS: Record<InventorySection, string> = {
   raw_ingredients: 'Raw Ingredients',
@@ -62,6 +60,7 @@ export const InventoryManagementView: React.FC = () => {
   const [items, setItems] = useState<InventoryItem[]>(getInventoryItems());
   const [filter, setFilter] = useState<'all' | 'raw_ingredients' | 'packaging' | 'seasonings'>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | 'fresh' | 'expiring_soon' | 'expired'>('all');
+  const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>('all');
   // Debounced search to reduce lag
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
@@ -179,9 +178,14 @@ export const InventoryManagementView: React.FC = () => {
         return false;
       }
 
+      // Category (ingredient type) filter
+      if (categoryFilter !== 'all') {
+        if (getIngredientCategory(item.name) !== categoryFilter) return false;
+      }
+
       return true;
     });
-  }, [items, filter, statusFilter, searchQuery, isSuperAdmin, assignedRegions]);
+  }, [items, filter, statusFilter, categoryFilter, searchQuery, isSuperAdmin, assignedRegions]);
 
   // Stats
   const stats = useMemo(() => {
@@ -233,6 +237,27 @@ export const InventoryManagementView: React.FC = () => {
       { key: 'seasonings' as const, label: 'Seasonings & Herbs', icon: 'sparkles' as AppIconName, count: seasonCount },
     ];
   }, [items]);
+
+  // Category counts — computed from the section-filtered list (before ingredient category filter)
+  // so the dropdown always shows counts relevant to the active tab.
+  const categoryCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    const sectionFiltered = items.filter((item) => {
+      if (filter === 'all') return true;
+      const inferSection = (name: string): string => {
+        const n = name.toLowerCase();
+        if (n.includes('sachet') || n.includes('masala') || n.includes('spice') || n.includes('powder') || n.includes('blend') || n.includes('seasoning') || n.includes('turmeric') || n.includes('cumin') || n.includes('cardamom') || n.includes('cinnamon') || n.includes('bay leaf') || n.includes('curry leaf') || n.includes('kasuri') || n.includes('methi')) return 'seasonings';
+        if (n.includes('paper cup') || n.includes('foil tray') || n.includes('cling wrap') || n.includes('meal kit box') || n.includes('zip-lock') || n.includes('ziplock') || n.includes('food tray') || n.includes('sticker label')) return 'packaging';
+        return 'raw_ingredients';
+      };
+      return (item.section || inferSection(item.name)) === filter;
+    });
+    sectionFiltered.forEach((item) => {
+      const cat = getIngredientCategory(item.name);
+      counts[cat] = (counts[cat] || 0) + 1;
+    });
+    return counts;
+  }, [items, filter]);
 
   const handleAddItem = () => {
     if (!newItem.name.trim()) {
@@ -392,7 +417,7 @@ export const InventoryManagementView: React.FC = () => {
             return (
               <TouchableOpacity
                 key={t.key}
-                onPress={() => setFilter(t.key)}
+                onPress={() => { setFilter(t.key); setCategoryFilter('all'); }}
                 activeOpacity={0.7}
                 accessibilityRole="tab"
                 accessibilityState={{ selected: isSelected }}
@@ -477,7 +502,7 @@ export const InventoryManagementView: React.FC = () => {
         </TouchableOpacity>
       </View>
       {statusDropdownOpen && (
-        <View style={[styles.dropdownMenu, { backgroundColor: colors.bgSurface, borderColor: colors.borderLight, borderRadius: radii.md, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.15, shadowRadius: 8, elevation: 4, marginBottom: 10 }]}>
+        <View style={[styles.dropdownMenu, { backgroundColor: colors.bgSurface, borderColor: colors.borderLight, borderRadius: radii.md, marginBottom: 10 }, shadows.medium]}>
           {(['all', 'fresh', 'expiring_soon', 'expired'] as const).map((f) => (
             <TouchableOpacity key={f} onPress={() => { setStatusFilter(f); setStatusDropdownOpen(false); }} style={{ padding: 10, borderBottomWidth: 1, borderBottomColor: colors.borderLight }}>
               <Text style={{ fontSize: 13, color: colors.textPrimary, fontWeight: statusFilter === f ? '800' : '400' }}>
@@ -519,6 +544,17 @@ export const InventoryManagementView: React.FC = () => {
       </View>
 
       {/* Items List */}
+      <CategoryDropdown
+        value={categoryFilter}
+        onChange={setCategoryFilter}
+        counts={categoryCounts}
+        totalCount={
+          filter === 'all'
+            ? items.length
+            : Object.values(categoryCounts).reduce((a, b) => a + b, 0)
+        }
+      />
+
       <View style={{ gap: 12, paddingBottom: 20 }}>
         {filteredItems.length === 0 ? (
           <View style={[styles.emptyCard, { backgroundColor: colors.bgSurface }]}>

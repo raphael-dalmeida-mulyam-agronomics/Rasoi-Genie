@@ -1,27 +1,31 @@
 import React, { useState } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  TextInput,
   Alert,
   Dimensions,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import { useAuth } from '../../framework/context/AuthContext';
+import { PaymentMethod } from '../../framework/context/CartContext';
 import { usePreferences } from '../../framework/context/PreferencesContext';
-import { useTheme } from '../../framework/theme/ThemeContext';
-import { Button } from '../../framework/ui/Button';
-import { PillTag } from '../../framework/ui/PillTag';
-import { Icon, AppIconName } from '../../framework/ui/Icon';
 import {
   CuisineType,
   DietTag,
-  RegionHub,
   SpiceLevel,
 } from '../../framework/services/mealKitsService';
-import { PaymentMethod } from '../../framework/context/CartContext';
+import {
+  getCitiesForState,
+  getStates,
+  getSubRegionsForCity,
+  SubRegion,
+} from '../../framework/services/regionService';
+import { useTheme } from '../../framework/theme/ThemeContext';
+import { Button } from '../../framework/ui/Button';
+import { AppIconName, Icon } from '../../framework/ui/Icon';
 
 const { width } = Dimensions.get('window');
 
@@ -105,11 +109,11 @@ const ALLERGY_OPTIONS = [
   'Mustard',
 ];
 
-const REGIONAL_HUBS: { id: RegionHub; name: string; cityInfo: string }[] = [
-  { id: 'South', name: 'South Hub', cityInfo: 'Bengaluru, Hyderabad, Chennai' },
-  { id: 'West', name: 'West Hub', cityInfo: 'Mumbai, Pune, Ahmedabad' },
-  { id: 'North', name: 'North Hub', cityInfo: 'Delhi NCR, Chandigarh, Jaipur' },
-  { id: 'East', name: 'East Hub', cityInfo: 'Kolkata, Bhubaneswar' },
+// Region hierarchy - states, cities, sub-regions from regionService
+const ALL_STATES = getStates();
+const ALL_CUISINES_WITH_SOUPS = [
+  ...ALL_CUISINES,
+  { id: 'Soups & Stews' as CuisineType, name: 'Soups & Stews' },
 ];
 
 const PAYMENT_OPTIONS: { id: PaymentMethod; title: string; subtitle: string; icon: AppIconName }[] =
@@ -159,15 +163,37 @@ export const OnboardingWizardView: React.FC = () => {
   const [dietTypes, setDietTypes] = useState<DietTag[]>(['veg']);
   const [allergies, setAllergies] = useState<string[]>([]);
 
-  // Step 3: Address & Hub
-  const [name, setName] = useState<string>(user?.displayName || '');
+  // Step 3: Address & Region Hierarchy
+  const [name, setName] = useState<string>('');
   const [phone, setPhone] = useState<string>(user?.phoneNumber || '');
   const [flatAndStreet, setFlatAndStreet] = useState<string>('');
   const [areaAndLandmark, setAreaAndLandmark] = useState<string>('');
-  const [city, setCity] = useState<string>('');
+  const [selectedState, setSelectedState] = useState<string>('');
+  const [selectedCity, setSelectedCity] = useState<string>('');
+  const [selectedSubRegion, setSelectedSubRegion] = useState<string>('');
   const [pincode, setPincode] = useState<string>('');
-  const [regionHub, setRegionHub] = useState<RegionHub>('South');
   const [addressTag, setAddressTag] = useState<'Home' | 'Work' | 'Other'>('Home');
+
+  // Dropdown visibility
+  const [showStateDropdown, setShowStateDropdown] = useState(false);
+  const [showCityDropdown, setShowCityDropdown] = useState(false);
+  const [showSubRegionDropdown, setShowSubRegionDropdown] = useState(false);
+
+  // Search text for filtering
+  const [stateSearchText, setStateSearchText] = useState('');
+  const [citySearchText, setCitySearchText] = useState('');
+
+  // Derived options
+  const availableCities = selectedState ? getCitiesForState(selectedState) : [];
+  const availableSubRegions = selectedCity ? getSubRegionsForCity(selectedCity) : [];
+
+  // Filtered lists based on search
+  const filteredStates = stateSearchText
+    ? ALL_STATES.filter((s) => s.toLowerCase().includes(stateSearchText.toLowerCase()))
+    : ALL_STATES;
+  const filteredCities = citySearchText
+    ? availableCities.filter((c) => c.toLowerCase().includes(citySearchText.toLowerCase()))
+    : availableCities;
 
   // Step 4: Payment
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('UPI');
@@ -194,6 +220,14 @@ export const OnboardingWizardView: React.FC = () => {
         return;
       }
     } else if (currentStep === 3) {
+      if (!selectedState) {
+        Alert.alert('State Required', 'Please select your state.');
+        return;
+      }
+      if (!selectedCity) {
+        Alert.alert('City Required', 'Please select your city.');
+        return;
+      }
       if (!name.trim()) {
         Alert.alert('Name Required', 'Please enter your delivery contact name.');
         return;
@@ -204,10 +238,6 @@ export const OnboardingWizardView: React.FC = () => {
       }
       if (!flatAndStreet.trim()) {
         Alert.alert('Address Required', 'Please enter flat / house number and street.');
-        return;
-      }
-      if (!city.trim()) {
-        Alert.alert('City Required', 'Please enter your delivery city.');
         return;
       }
       if (!pincode.trim() || pincode.trim().length < 5) {
@@ -234,14 +264,15 @@ export const OnboardingWizardView: React.FC = () => {
           phone: phone.trim() || '+91 9876543210',
           flatAndStreet: flatAndStreet.trim() || 'Flat 101, Main Road',
           areaAndLandmark: areaAndLandmark.trim(),
-          city: city.trim(),
+          city: selectedCity,
           pincode: pincode.trim() || '560001',
           tag: addressTag,
           isDefault: true,
         },
         paymentMethod,
-        regionHub,
-        currentCity: city.trim(),
+        state: selectedState,
+        city: selectedCity,
+        subRegion: selectedSubRegion,
       });
     } catch (err: any) {
       Alert.alert('Save Error', err?.message || 'Could not save profile setup.');
@@ -269,19 +300,22 @@ export const OnboardingWizardView: React.FC = () => {
         </View>
 
         <Text style={[styles.welcomeHeadline, { color: colors.textPrimary }]}>
-          {currentStep === 1 && 'What flavors excite your palate?'}
-          {currentStep === 2 && 'Your dietary lifestyle & allergies'}
-          {currentStep === 3 && 'Where should we deliver your fresh kits?'}
-          {currentStep === 4 && 'How would you prefer to pay?'}
+          {currentStep === 1
+            ? 'What flavors excite your palate?'
+            : currentStep === 2
+            ? 'Your dietary lifestyle & allergies'
+            : currentStep === 3
+            ? 'Where should we deliver your fresh kits?'
+            : 'How would you prefer to pay?'}
         </Text>
         <Text style={[styles.welcomeSubtext, { color: colors.textSecondary }]}>
-          {currentStep === 1 && 'Tailor your daily meal kit recommendations and recipe discovery.'}
-          {currentStep === 2 &&
-            'We curate ingredients strictly following your nutrition & allergen needs.'}
-          {currentStep === 3 &&
-            'Fast scheduled delivery from your nearest fresh regional kitchen hub.'}
-          {currentStep === 4 &&
-            'Select your default checkout method (you can change this anytime).'}
+          {currentStep === 1
+            ? 'Tailor your daily meal kit recommendations and recipe discovery.'
+            : currentStep === 2
+            ? 'We curate ingredients strictly following your nutrition & allergen needs.'
+            : currentStep === 3
+            ? 'Fast scheduled delivery from your nearest fresh regional kitchen hub.'
+            : 'Select your default checkout method (you can change this anytime).'}
         </Text>
 
         {/* Progress Bar */}
@@ -498,50 +532,194 @@ export const OnboardingWizardView: React.FC = () => {
           </View>
         )}
 
-        {/* STEP 3: ADDRESS & REGIONAL HUB */}
+        {/* STEP 3: ADDRESS & REGION HIERARCHY */}
         {currentStep === 3 && (
           <View style={styles.stepContent}>
             <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
-              Regional Delivery Kitchen Hub
+              Select Your Delivery Location
             </Text>
-            <View style={styles.hubGrid}>
-              {REGIONAL_HUBS.map((hub) => {
-                const isSelected = regionHub === hub.id;
-                return (
-                  <TouchableOpacity
-                    key={hub.id}
-                    onPress={() => setRegionHub(hub.id)}
-                    style={[
-                      styles.hubCard,
-                      {
-                        backgroundColor: colors.bgSurface,
-                        borderColor: isSelected ? colors.primary : colors.borderLight,
-                        borderWidth: isSelected ? 2 : 1,
-                      },
-                      shadows.soft,
-                    ]}
-                    activeOpacity={0.7}
-                  >
-                    <View
-                      style={{
-                        flexDirection: 'row',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        marginBottom: 2,
+            <Text style={[styles.sectionSubtitle, { color: colors.textSecondary }]}>
+              Choose your state, city, and neighborhood for local meal kit availability.
+            </Text>
+
+            {/* State Input with Dropdown */}
+            <Text style={[styles.label, { color: colors.textSecondary }]}>State *</Text>
+            <View style={[
+                styles.pickerButton,
+                {
+                  backgroundColor: colors.bgSurface,
+                  borderColor: showStateDropdown ? colors.primary : colors.borderLight,
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  paddingRight: 8,
+                },
+              ]}>
+              <TextInput
+                style={[styles.pickerButtonText, { flex: 1, paddingVertical: 0, color: selectedState ? colors.textPrimary : colors.textMuted }]}
+                placeholder="Select or type state"
+                placeholderTextColor={colors.textMuted}
+                value={selectedState || stateSearchText}
+                onChangeText={(text) => {
+                  setStateSearchText(text);
+                  setSelectedState('');
+                  if (text.length > 0) setShowStateDropdown(true);
+                }}
+                onFocus={() => setShowStateDropdown(true)}
+                onBlur={() => setTimeout(() => setShowStateDropdown(false), 200)}
+              />
+              <TouchableOpacity onPress={() => setShowStateDropdown(!showStateDropdown)} hitSlop={{top: 10, bottom: 10, left: 10, right: 10}}>
+                <Icon name={showStateDropdown ? 'chevron-up' : 'chevron-down'} size={16} color={colors.textMuted} />
+              </TouchableOpacity>
+            </View>
+            {showStateDropdown && filteredStates.length > 0 && (
+              <View style={[styles.pickerDropdown, { backgroundColor: colors.bgSurface, borderColor: colors.borderLight }]}>
+                <ScrollView style={styles.pickerScroll} nestedScrollEnabled>
+                  {filteredStates.map((state) => (
+                    <TouchableOpacity
+                      key={state}
+                      style={[
+                        styles.pickerOption,
+                        selectedState === state && { backgroundColor: colors.primaryLight },
+                      ]}
+                      onPress={() => {
+                        setSelectedState(state);
+                        setSelectedCity('');
+                        setSelectedSubRegion('');
+                        setShowStateDropdown(false);
+                        setStateSearchText('');
                       }}
                     >
-                      <Text style={[styles.hubName, { color: colors.textPrimary }]}>
-                        {hub.name}
+                      <Text style={[styles.pickerOptionText, { color: selectedState === state ? colors.primary : colors.textPrimary }]}>
+                        {state}
                       </Text>
-                      {isSelected && <Icon name="location" size={16} color={colors.primary} />}
-                    </View>
-                    <Text style={[styles.hubDesc, { color: colors.textSecondary }]}>
-                      {hub.cityInfo}
-                    </Text>
+                      {selectedState === state && <Icon name="check" size={16} color={colors.primary} />}
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </View>
+            )}
+
+            {/* City Input with Dropdown */}
+            {!!selectedState && (
+              <>
+                <Text style={[styles.label, { color: colors.textSecondary, marginTop: 16 }]}>City *</Text>
+                <View style={[
+                    styles.pickerButton,
+                    {
+                      backgroundColor: colors.bgSurface,
+                      borderColor: showCityDropdown ? colors.primary : colors.borderLight,
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      paddingRight: 8,
+                    },
+                  ]}>
+                  <TextInput
+                    style={[styles.pickerButtonText, { flex: 1, paddingVertical: 0, color: selectedCity ? colors.textPrimary : colors.textMuted }]}
+                    placeholder="Select or type city"
+                    placeholderTextColor={colors.textMuted}
+                    value={selectedCity || citySearchText}
+                    onChangeText={(text) => {
+                      setCitySearchText(text);
+                      setSelectedCity('');
+                      if (text.length > 0) setShowCityDropdown(true);
+                    }}
+                    onFocus={() => setShowCityDropdown(true)}
+                    onBlur={() => setTimeout(() => setShowCityDropdown(false), 200)}
+                  />
+                  <TouchableOpacity onPress={() => setShowCityDropdown(!showCityDropdown)} hitSlop={{top: 10, bottom: 10, left: 10, right: 10}}>
+                    <Icon name={showCityDropdown ? 'chevron-up' : 'chevron-down'} size={16} color={colors.textMuted} />
                   </TouchableOpacity>
-                );
-              })}
-            </View>
+                </View>
+                {showCityDropdown && filteredCities.length > 0 && (
+                  <View style={[styles.pickerDropdown, { backgroundColor: colors.bgSurface, borderColor: colors.borderLight }]}>
+                    <ScrollView style={styles.pickerScroll} nestedScrollEnabled>
+                      {filteredCities.map((city) => (
+                        <TouchableOpacity
+                          key={city}
+                          style={[
+                            styles.pickerOption,
+                            selectedCity === city && { backgroundColor: colors.primaryLight },
+                          ]}
+                          onPress={() => {
+                            setSelectedCity(city);
+                            setSelectedSubRegion('');
+                            setShowCityDropdown(false);
+                            setCitySearchText('');
+                          }}
+                        >
+                          <Text style={[styles.pickerOptionText, { color: selectedCity === city ? colors.primary : colors.textPrimary }]}>
+                            {city}
+                          </Text>
+                          {selectedCity === city && <Icon name="check" size={16} color={colors.primary} />}
+                        </TouchableOpacity>
+                      ))}
+                    </ScrollView>
+                  </View>
+                )}
+              </>
+            )}
+
+            {/* Sub-Region Picker */}
+            {!!selectedCity && availableSubRegions.length > 0 && (
+              <>
+                <Text style={[styles.label, { color: colors.textSecondary, marginTop: 16 }]}>
+                  Neighborhood / Zone (Optional)
+                </Text>
+                <TouchableOpacity
+                  style={[
+                    styles.pickerButton,
+                    {
+                      backgroundColor: colors.bgSurface,
+                      borderColor: showSubRegionDropdown ? colors.primary : colors.borderLight,
+                    },
+                  ]}
+                  onPress={() => setShowSubRegionDropdown(!showSubRegionDropdown)}
+                >
+                  <Text style={[styles.pickerButtonText, { color: selectedSubRegion ? colors.textPrimary : colors.textMuted }]}>
+                    {selectedSubRegion
+                      ? availableSubRegions.find((sr) => sr.id === selectedSubRegion)?.name || 'Select zone'
+                      : 'Select neighborhood (optional)'}
+                  </Text>
+                  <Icon name={showSubRegionDropdown ? 'chevron-up' : 'chevron-down'} size={16} color={colors.textMuted} />
+                </TouchableOpacity>
+                {showSubRegionDropdown && (
+                  <View style={[styles.pickerDropdown, { backgroundColor: colors.bgSurface, borderColor: colors.borderLight }]}>
+                    <ScrollView style={styles.pickerScroll} nestedScrollEnabled>
+                      <TouchableOpacity
+                        style={[styles.pickerOption, !selectedSubRegion && { backgroundColor: colors.primaryLight }]}
+                        onPress={() => {
+                          setSelectedSubRegion('');
+                          setShowSubRegionDropdown(false);
+                        }}
+                      >
+                        <Text style={[styles.pickerOptionText, { color: !selectedSubRegion ? colors.primary : colors.textPrimary }]}>
+                          All zones in {selectedCity}
+                        </Text>
+                        {!selectedSubRegion && <Icon name="check" size={16} color={colors.primary} />}
+                      </TouchableOpacity>
+                      {availableSubRegions.map((sr: SubRegion) => (
+                        <TouchableOpacity
+                          key={sr.id}
+                          style={[
+                            styles.pickerOption,
+                            selectedSubRegion === sr.id && { backgroundColor: colors.primaryLight },
+                          ]}
+                          onPress={() => {
+                            setSelectedSubRegion(sr.id);
+                            setShowSubRegionDropdown(false);
+                          }}
+                        >
+                          <Text style={[styles.pickerOptionText, { color: selectedSubRegion === sr.id ? colors.primary : colors.textPrimary }]}>
+                            {sr.name}
+                          </Text>
+                          {selectedSubRegion === sr.id && <Icon name="check" size={16} color={colors.primary} />}
+                        </TouchableOpacity>
+                      ))}
+                    </ScrollView>
+                  </View>
+                )}
+              </>
+            )}
 
             <Text style={[styles.sectionTitle, { color: colors.textPrimary, marginTop: 24 }]}>
               Primary Delivery Address
@@ -648,23 +826,24 @@ export const OnboardingWizardView: React.FC = () => {
                 placeholderTextColor={colors.textMuted}
               />
 
-              <View style={styles.rowInputs}>
+              {/* City is already selected above, just display it; Pincode is entered below */}
+            <View style={[styles.rowInputs, { marginTop: 8 }]}>
                 <View style={{ flex: 1, marginRight: 8 }}>
-                  <Text style={[styles.label, { color: colors.textSecondary }]}>City *</Text>
-                  <TextInput
+                  <Text style={[styles.label, { color: colors.textSecondary }]}>City</Text>
+                  <View
                     style={[
                       styles.input,
                       {
-                        backgroundColor: colors.bgSurface,
+                        backgroundColor: colors.bgSubtle,
                         borderColor: colors.borderLight,
-                        color: colors.textPrimary,
+                        justifyContent: 'center',
                       },
                     ]}
-                    value={city}
-                    onChangeText={setCity}
-                    placeholder="Enter delivery city"
-                    placeholderTextColor={colors.textMuted}
-                  />
+                  >
+                    <Text style={[styles.pickerButtonText, { color: colors.textPrimary }]}>
+                      {selectedCity || 'Select city above'}
+                    </Text>
+                  </View>
                 </View>
                 <View style={{ flex: 1, marginLeft: 8 }}>
                   <Text style={[styles.label, { color: colors.textSecondary }]}>Pincode *</Text>
@@ -761,7 +940,7 @@ export const OnboardingWizardView: React.FC = () => {
               </View>
               <Text style={[styles.summaryText, { color: colors.textSecondary }]}>
                 Cuisines: {selectedCuisines.join(', ')} • Diets:{' '}
-                {dietTypes.map((d) => d.toUpperCase()).join(', ')} • Hub: {regionHub}
+                {dietTypes.map((d) => d.toUpperCase()).join(', ')} • {selectedCity}, {selectedState}
               </Text>
             </View>
           </View>
@@ -982,6 +1161,52 @@ const styles = StyleSheet.create({
   },
   hubDesc: {
     fontSize: 12,
+  },
+  // Region picker styles
+  pickerButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    height: 44,
+    borderRadius: 10,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    marginBottom: 8,
+  },
+  pickerButtonText: {
+    fontSize: 14,
+    flex: 1,
+  },
+  pickerDropdown: {
+    maxHeight: 200,
+    borderRadius: 10,
+    borderWidth: 1,
+    marginBottom: 12,
+    overflow: 'hidden',
+  },
+  pickerScroll: {
+    maxHeight: 180,
+  },
+  pickerOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: 'rgba(0,0,0,0.1)',
+  },
+  pickerOptionText: {
+    fontSize: 14,
+    flex: 1,
+  },
+  searchInput: {
+    height: 40,
+    borderRadius: 8,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    fontSize: 14,
+    margin: 8,
   },
   tagRow: {
     flexDirection: 'row',

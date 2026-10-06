@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+﻿import React, { useState } from 'react';
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, Modal, Alert } from 'react-native';
 import { MealKit } from '../../framework/services/mealKitsService';
 import { addReview } from '../../framework/services/reviewsService';

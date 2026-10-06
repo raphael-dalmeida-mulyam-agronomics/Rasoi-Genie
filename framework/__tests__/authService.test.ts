@@ -1,4 +1,4 @@
-const mockStorage = new Map<string, string>();
+﻿const mockStorage = new Map<string, string>();
 jest.mock('@react-native-async-storage/async-storage', () => ({
   setItem: jest.fn(async (key: string, value: string) => {
     mockStorage.set(key, value);

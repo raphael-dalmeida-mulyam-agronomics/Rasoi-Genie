@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
+﻿import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
 import { Platform } from 'react-native';
 import {
   PALETTES,

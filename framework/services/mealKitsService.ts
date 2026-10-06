@@ -1,4 +1,4 @@
-export type DietTag = 'veg' | 'nonveg' | 'jain' | 'vegan' | 'keto' | 'gluten-free';
+﻿export type DietTag = 'veg' | 'nonveg' | 'jain' | 'vegan' | 'keto' | 'gluten-free';
 export type CuisineType =
   | 'North Indian'
   | 'South Indian'
@@ -102,6 +102,8 @@ export interface MealKit {
   isChefSpecial?: boolean;
   availableRegions: RegionHub[];
   cities: string[]; // city-level targeting, e.g. ['Bengaluru', 'Mumbai']. Empty = all cities in the hub.
+  availableStates?: string[]; // state-level targeting, e.g. ['Maharashtra', 'Karnataka']. Empty = all states.
+  subRegions?: string[]; // sub-region ids, e.g. ['pune-koregaon-park', 'pune-baner']. Empty = all sub-regions in city.
   originCity?: string; // Origin / regional specialty city, e.g. 'Pune', 'Mumbai', 'Hyderabad'
   availableStorageCentres?: string[]; // Smaller fulfillment regions / storage centres, e.g. ['pune-city', 'pune-pcmc']
   isOutOfStock?: boolean;
@@ -169,8 +171,17 @@ export function compileMealKitTags(kit: Partial<MealKit>): string[] {
   const dishType = kit.dishCategory || 'Curries & Gravies';
   tags.push(`Dish: ${dishType}`);
 
-  // 4. Region Tag (Operating Hubs & Micro-Regions)
-  if (kit.availableStorageCentres && kit.availableStorageCentres.length > 0) {
+  // 4. Region Tag (State, Cities, Sub-regions, Storage Centres)
+  if (kit.availableStates && kit.availableStates.length > 0) {
+    for (const st of kit.availableStates) {
+      tags.push(`State: ${st}`);
+    }
+  }
+  if (kit.subRegions && kit.subRegions.length > 0) {
+    for (const sr of kit.subRegions) {
+      tags.push(`SubRegion: ${sr}`);
+    }
+  } else if (kit.availableStorageCentres && kit.availableStorageCentres.length > 0) {
     for (const sc of kit.availableStorageCentres) {
       tags.push(`Region: ${sc}`);
     }
@@ -3566,6 +3577,8 @@ export interface FilterOptions {
   dietaryTags?: DietTag[];
   region?: RegionHub;
   city?: string; // filter to kits available in a specific city (case-insensitive). Kits with empty cities[] are shown to all cities in the hub.
+  state?: string; // filter to kits available in a specific state
+  subRegion?: string; // filter to kits available in a specific sub-region id
   sortBy?: 'popularity' | 'priceLowHigh' | 'priceHighLow' | 'prepTime';
 }
 
@@ -3669,6 +3682,28 @@ export function searchAndFilterMealKits(options: FilterOptions): MealKit[] {
         !kit.cities ||
         kit.cities.length === 0 ||
         kit.cities.some((c) => c.toLowerCase() === targetCity),
+    );
+  }
+
+  // Filter by state — kits with no availableStates are available in all states
+  if (options.state && options.state.trim()) {
+    const targetState = options.state.trim().toLowerCase();
+    results = results.filter(
+      (kit) =>
+        !kit.availableStates ||
+        kit.availableStates.length === 0 ||
+        kit.availableStates.some((s) => s.toLowerCase() === targetState),
+    );
+  }
+
+  // Filter by sub-region — kits with no subRegions are available in all sub-regions in the city
+  if (options.subRegion && options.subRegion.trim()) {
+    const targetSR = options.subRegion.trim().toLowerCase();
+    results = results.filter(
+      (kit) =>
+        !kit.subRegions ||
+        kit.subRegions.length === 0 ||
+        kit.subRegions.some((sr) => sr.toLowerCase() === targetSR),
     );
   }
 

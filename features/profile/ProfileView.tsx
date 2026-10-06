@@ -23,12 +23,16 @@ import { NotificationsView } from '../notifications/NotificationsView';
 import { SupportView } from '../support/SupportView';
 import { SubscriptionPlanView } from '../subscription/SubscriptionPlanView';
 import { subscribeToPendingApprovalCount } from '../../framework/services/notificationService';
+import { useWallet } from '../../framework/context/WalletContext';
+import { WalletView } from '../wallet/WalletView';
+import { ReferralView } from '../referral/ReferralView';
 
 export const ProfileView: React.FC = () => {
-  const { user, isAdmin, logout } = useAuth();
+  const { user, isAdmin, isChef, logout } = useAuth();
   const { colors, radii, shadows, isDark, toggleColorMode } = useTheme();
   const { preferences, defaultAddress, preferredPaymentMethod, setPreferredPaymentMethod } =
     usePreferences();
+  const { availableBalance } = useWallet();
   const [pendingApprovalCount, setPendingApprovalCount] = useState<number>(0);
   const [paymentModalVisible, setPaymentModalVisible] = useState<boolean>(false);
 
@@ -39,7 +43,7 @@ export const ProfileView: React.FC = () => {
 
   // Subview navigation states
   const [subView, setSubView] = useState<
-    'main' | 'addresses' | 'notifications' | 'support' | 'subscription'
+    'main' | 'addresses' | 'notifications' | 'support' | 'subscription' | 'wallet' | 'referral'
   >('main');
   const [dietModalVisible, setDietModalVisible] = useState(false);
 
@@ -89,6 +93,24 @@ export const ProfileView: React.FC = () => {
     return <SubscriptionPlanView onBack={() => setSubView('main')} />;
   }
 
+  if (subView === 'wallet') {
+    return (
+      <WalletView
+        onBack={() => setSubView('main')}
+        onNavigateToReferral={() => setSubView('referral')}
+      />
+    );
+  }
+
+  if (subView === 'referral') {
+    return (
+      <ReferralView
+        onBack={() => setSubView('main')}
+        onNavigateToWallet={() => setSubView('wallet')}
+      />
+    );
+  }
+
   const userDisplayName = user?.displayName || user?.email?.split('@')[0] || 'Gourmet Home Chef';
   const userContact = user?.email || user?.phoneNumber || '+91 98765 43210';
 
@@ -129,8 +151,8 @@ export const ProfileView: React.FC = () => {
                   {userDisplayName}
                 </Text>
                 <Badge
-                  label={isAdmin ? 'Admin' : 'Member'}
-                  variant={isAdmin ? 'info' : 'primary'}
+                  label={isAdmin ? 'Admin' : isChef ? 'Chef' : 'Member'}
+                  variant={isAdmin ? 'info' : isChef ? 'warning' : 'primary'}
                   size="sm"
                 />
               </View>
@@ -145,6 +167,20 @@ export const ProfileView: React.FC = () => {
               </View>
             </View>
           </View>
+
+          {isChef && !isAdmin && (
+            <Button
+              title="Open Chef Studio — Create & Edit Meal Kits"
+              icon={<Icon name="chef" size={16} color="#FFFFFF" />}
+              variant="primary"
+              size="sm"
+              style={{
+                marginTop: 14,
+                backgroundColor: '#D97706',
+              }}
+              onPress={() => router.push('/(tabs)/chef' as any)}
+            />
+          )}
 
           {isAdmin && (
             <Button
@@ -163,7 +199,7 @@ export const ProfileView: React.FC = () => {
               variant={pendingApprovalCount > 0 ? 'primary' : 'secondary'}
               size="sm"
               style={{
-                marginTop: 14,
+                marginTop: 8,
                 backgroundColor: pendingApprovalCount > 0 ? '#DC2626' : undefined,
               }}
               onPress={() => router.push('/(tabs)/admin' as any)}
@@ -229,6 +265,20 @@ export const ProfileView: React.FC = () => {
           ]}
         >
           <MenuRow
+            icon="wallet"
+            title="Rasoi Credits Wallet"
+            subtitle={`Available: ₹${Math.round(availableBalance).toLocaleString('en-IN')} — View details & ledger`}
+            onPress={() => setSubView('wallet')}
+          />
+
+          <MenuRow
+            icon="gift"
+            title="Refer & Earn Rewards"
+            subtitle="Give ₹200, Get ₹300 in credits — Invite friends"
+            onPress={() => setSubView('referral')}
+          />
+
+          <MenuRow
             icon="location"
             title="Saved Delivery Addresses"
             subtitle={`${defaultAddress?.flatAndStreet || 'Manage your delivery locations'}`}
@@ -282,13 +332,6 @@ export const ProfileView: React.FC = () => {
             title="Notification Settings"
             subtitle="Push, SMS & Email communication"
             onPress={() => setSubView('notifications')}
-          />
-
-          <MenuRow
-            icon="gift"
-            title="Refer a Friend (Earn ₹150)"
-            subtitle="Give ₹150, Get ₹150 cooking credits"
-            onPress={handleReferFriend}
           />
 
           <MenuRow

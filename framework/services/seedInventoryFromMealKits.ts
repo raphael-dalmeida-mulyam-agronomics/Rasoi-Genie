@@ -1,8 +1,8 @@
-// framework/services/seedInventoryFromMealKits.ts
+﻿// framework/services/seedInventoryFromMealKits.ts
 // Reads meal kit catalog and adds every ingredient into inventory with category
 
-import { INITIAL_MEAL_KITS, MealKit, IngredientItem } from './mealKitsService';
-import { addInventoryItem, InventoryItem, InventorySection } from './inventoryService';
+import { addInventoryItem, deleteInventoryItem, getInventoryItems, InventoryItem, InventorySection, updateInventoryItem } from './inventoryService';
+import { INITIAL_MEAL_KITS, MealKit } from './mealKitsService';
 
 function guessSection(name: string, isMasalaSachet?: boolean): InventorySection {
   const n = name.toLowerCase();
@@ -57,6 +57,7 @@ function guessSection(name: string, isMasalaSachet?: boolean): InventorySection 
 
   // ── Actual Packaging Material ───────────────────────────────────────────────
   // Only genuine packaging supply items — NOT food pouches, sauce bags, etc.
+  // Food pouches (e.g., "Tomato Puree Pouch", "Jaggery & Kokum Pouch") are raw ingredients, not packaging
   if (
     n.includes('paper cup') ||
     n.includes('foil tray') ||
@@ -73,8 +74,21 @@ function guessSection(name: string, isMasalaSachet?: boolean): InventorySection 
     n.includes('tamper seal') ||
     n.includes('sticker label') ||
     n.includes('box lid') ||
-    n.includes('food tray')
-  ) return 'packaging';
+    n.includes('food tray') ||
+    n.includes('bubble wrap')
+  ) {
+    // Don't mark food pouches, condiments, or fresh produce as packaging
+    if (!(n.includes('pouch') && (
+      n.includes('puree') || n.includes('sauce') || n.includes('paste') ||
+      n.includes('oil') || n.includes('cream') || n.includes('extract') ||
+      n.includes('jaggery') || n.includes('kokum') || n.includes('crema') ||
+      n.includes('drizzle') || n.includes('dip') || n.includes('mustard') ||
+      n.includes('kasundi') || n.includes('chutney') || n.includes('salsa') ||
+      n.includes('raita') || n.includes('aioli') || n.includes('mash')
+    )) && !n.includes('slaw') && !n.includes('cabbage') && !n.includes('pickled') && !n.includes('pickle')) {
+      return 'packaging';
+    }
+  }
 
   return 'raw_ingredients';
 }
@@ -89,12 +103,91 @@ function guessUnit(qtyStr: string): string {
   return 'units';
 }
 
+// Packaging items to always ensure exist in inventory
+const PACKAGING_ITEMS = [
+  { name: 'Meal Kit Box (Medium)', unit: 'units', quantity: 500, threshold: 100 },
+  { name: 'Insulated Delivery Bag', unit: 'units', quantity: 200, threshold: 50 },
+  { name: 'Gel Ice Pack', unit: 'units', quantity: 1000, threshold: 200 },
+  { name: 'Shipping Label Sticker', unit: 'units', quantity: 2000, threshold: 500 },
+  { name: 'Tamper-Evident Seal Sticker', unit: 'units', quantity: 1500, threshold: 300 },
+  { name: 'Corrugated Shipping Box (Large)', unit: 'units', quantity: 300, threshold: 75 },
+  { name: 'Bubble Wrap Roll', unit: 'meters', quantity: 20, threshold: 5 },
+];
+
+/**
+ * Remove inventory items that have combined ingredients with "&" in their name.
+ * These are legacy items from incorrectly seeded data.
+ */
+function cleanupCombinedIngredientItems(): number {
+  let removed = 0;
+  try {
+    const items = getInventoryItems();
+    for (const item of items) {
+      // Remove items with "&" in name (combined ingredients like "Fresh Green Chillies & Garlic Pods")
+      if (item.name.includes(' & ') || (item.name.includes('&') && item.name.indexOf('&') > 0)) {
+        console.log('[Inventory] Removing combined item:', item.name);
+        deleteInventoryItem(item.id);
+        removed++;
+      }
+    }
+  } catch (e) {
+    console.warn('[Inventory] Cleanup error:', e);
+  }
+  return removed;
+}
+
+/**
+ * Migrate packaging items that are actually food/ingredients to raw_ingredients.
+ * This fixes misclassified items like "Tomato Puree Pouch", "Dairy Cream Pouch", etc.
+ */
+function migrateIncorrectlyClassifiedItems(): number {
+  let migrated = 0;
+  try {
+    const items = getInventoryItems();
+    const foodKeywords = [
+      'puree', 'sauce', 'paste', 'oil', 'cream', 'extract', 'jaggery', 'kokum',
+      'ghee', 'butter', 'peanuts', 'noodles', 'rice', 'flour', 'dal', 'beans',
+      'lentils', 'spice', 'masala', 'milk', 'yogurt', 'paneer', 'cheese',
+      'tomato', 'onion', 'garlic', 'ginger', 'herb', 'leaf', 'leaves',
+      'chilli', 'chili', 'pepper', 'cumin', 'coriander', 'turmeric',
+      'salt', 'sugar', 'honey', 'vinegar', 'soy', 'sesame',
+      // Condiments, dressings & fresh produce
+      'avocado', 'crema', 'drizzle', 'dip', 'mustard', 'kasundi',
+      'slaw', 'cabbage', 'lime', 'salsa', 'chutney', 'raita', 'aioli',
+      'mash', 'puree', 'relish', 'pickle', 'pickled',
+    ];
+
+    for (const item of items) {
+      // If it's in packaging but contains food keywords, move it to raw_ingredients
+      if (item.section === 'packaging') {
+        const nameLower = item.name.toLowerCase();
+        const isFoodItem = foodKeywords.some(keyword => nameLower.includes(keyword));
+
+        if (isFoodItem) {
+          console.log('[Inventory] Migrating to raw_ingredients:', item.name);
+          updateInventoryItem(item.id, { section: 'raw_ingredients' });
+          migrated++;
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('[Inventory] Migration error:', e);
+  }
+  return migrated;
+}
+
 export function seedInventoryFromMealKits(): number {
   let added = 0;
+
+  // First, cleanup any legacy combined ingredient items
+  cleanupCombinedIngredientItems();
+
+  // Second, migrate incorrectly classified food items from packaging to raw_ingredients
+  migrateIncorrectlyClassifiedItems();
+
   const existingNames = new Set<string>();
   // Avoid duplicating existing seeded items by name (case-insensitive)
   try {
-    const { getInventoryItems } = require('./inventoryService');
     getInventoryItems().forEach((i: InventoryItem) => existingNames.add(i.name.toLowerCase()));
   } catch {}
 
@@ -124,5 +217,28 @@ export function seedInventoryFromMealKits(): number {
       } catch (e) {}
     }
   }
+
+  // Seed packaging items if they don't exist
+  for (const pkg of PACKAGING_ITEMS) {
+    if (!existingNames.has(pkg.name.toLowerCase())) {
+      try {
+        addInventoryItem({
+          name: pkg.name,
+          section: 'packaging',
+          currentStock: pkg.quantity,
+          unit: pkg.unit,
+          shelfLifeDays: 365,
+          thresholdLow: pkg.threshold,
+          region: 'West',
+          storageCondition: 'Dry warehouse',
+          supplier: 'Packaging Supplies',
+          notes: 'Auto-seeded packaging item',
+        });
+        added++;
+        existingNames.add(pkg.name.toLowerCase());
+      } catch (e) {}
+    }
+  }
+
   return added;
 }

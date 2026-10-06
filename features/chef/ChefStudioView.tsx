@@ -28,6 +28,7 @@ import {
   ChefRecipeSubmission,
   fetchChefSubmissions,
   createChefSubmission,
+  updateChefSubmission,
   deleteChefSubmission,
 } from '../../framework/services/chefMealKitsService';
 import {
@@ -38,6 +39,10 @@ import {
   IngredientItem,
   RecipeStep,
 } from '../../framework/services/mealKitsService';
+import {
+  ChefProfile,
+  fetchAllChefProfiles,
+} from '../../framework/services/adminRbacService';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -156,6 +161,7 @@ interface CreateRecipeModalProps {
   onSubmitted: () => void;
   chefId: string;
   chefName: string;
+  initialRecipe?: ChefSubmissionRecord | null;
 }
 
 function CreateRecipeModal({
@@ -164,6 +170,7 @@ function CreateRecipeModal({
   onSubmitted,
   chefId,
   chefName,
+  initialRecipe,
 }: CreateRecipeModalProps) {
   const { colors } = useTheme();
 
@@ -221,6 +228,37 @@ function CreateRecipeModal({
       prev.filter((_, idx) => idx !== i).map((s, idx) => ({ ...s, stepNumber: idx + 1 })),
     );
 
+  useEffect(() => {
+    if (initialRecipe) {
+      setName(initialRecipe.name || '');
+      setTagline(initialRecipe.tagline || '');
+      setDescription(initialRecipe.description || '');
+      setHeroImage(initialRecipe.heroImage || '');
+      setDiet(initialRecipe.diet || 'veg');
+      setCuisine(initialRecipe.cuisine || 'North Indian');
+      setDishCategory(initialRecipe.dishCategory || 'Curries & Gravies');
+      setSpiceLevel(initialRecipe.spiceLevel || 'Medium');
+      setServings(String(initialRecipe.servings || 2));
+      setPrepTime(String(initialRecipe.prepTimeMinutes || 15));
+      setCookTime(String(initialRecipe.cookTimeMinutes || 30));
+      setDietaryTags(initialRecipe.dietaryTags || []);
+      setAllergens(initialRecipe.allergens || []);
+      setIngredients(
+        initialRecipe.ingredients && initialRecipe.ingredients.length > 0
+          ? initialRecipe.ingredients
+          : [{ name: '', quantity: '' }],
+      );
+      setSteps(
+        initialRecipe.recipeSteps && initialRecipe.recipeSteps.length > 0
+          ? initialRecipe.recipeSteps
+          : [{ stepNumber: 1, title: '', instruction: '' }],
+      );
+      setStep('basic');
+    } else {
+      resetForm();
+    }
+  }, [initialRecipe, visible]);
+
   const handleSubmit = async () => {
     if (!name.trim()) {
       Alert.alert('Required', 'Please enter a recipe name.');
@@ -261,13 +299,21 @@ function CreateRecipeModal({
       chefName,
     };
 
-    const result = await createChefSubmission(submission);
+    const isEdit = !!initialRecipe;
+    let result;
+    if (isEdit) {
+      result = await updateChefSubmission(initialRecipe.id, submission, chefId);
+    } else {
+      result = await createChefSubmission(submission);
+    }
     setSubmitting(false);
 
     if (result.success) {
       Alert.alert(
-        'Recipe Submitted',
-        'Your recipe has been sent to the admin team for review. You will be notified once it is published.',
+        isEdit ? 'Recipe Updated' : 'Recipe Submitted',
+        isEdit
+          ? 'Your recipe changes have been submitted to the admin team for review. The recipe status is now Pending Review until approved.'
+          : 'Your recipe has been sent to the admin team for review. You will be notified once it is published.',
         [
           {
             text: 'OK',
@@ -461,7 +507,7 @@ function CreateRecipeModal({
         <View style={s.sheet}>
           {/* Header */}
           <View style={s.header}>
-            <Text style={s.title}>Create Recipe</Text>
+            <Text style={s.title}>{initialRecipe ? 'Edit Recipe' : 'Create Recipe'}</Text>
             <TouchableOpacity
               onPress={onClose}
               hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
@@ -744,8 +790,9 @@ function CreateRecipeModal({
 
                   <View style={s.reviewNote}>
                     <Text style={s.reviewNoteText}>
-                      After you submit, the admin team will review your recipe and set the price and
-                      delivery regions before publishing it as a live meal kit.
+                      {initialRecipe
+                        ? 'After you submit your updates, the recipe status will revert to Pending Review. The admin team will review and approve your changes before the updated recipe goes live.'
+                        : 'After you submit, the admin team will review your recipe and set the price and delivery regions before publishing it as a live meal kit.'}
                     </Text>
                   </View>
                 </>
@@ -797,7 +844,9 @@ function CreateRecipeModal({
                 {submitting ? (
                   <ActivityIndicator color="#FFFFFF" />
                 ) : (
-                  <Text style={s.nextBtnText}>Submit for Review</Text>
+                  <Text style={s.nextBtnText}>
+                    {initialRecipe ? 'Update & Submit for Review' : 'Submit for Review'}
+                  </Text>
                 )}
               </TouchableOpacity>
             )}
@@ -812,20 +861,47 @@ function CreateRecipeModal({
 
 export function ChefStudioView() {
   const { colors } = useTheme();
-  const { user } = useAuth();
+  const { user, isAdmin } = useAuth();
 
   const [submissions, setSubmissions] = useState<ChefSubmissionRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
+  const [editingRecipe, setEditingRecipe] = useState<ChefSubmissionRecord | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [approvedChefs, setApprovedChefs] = useState<ChefProfile[]>([]);
+  const [activeChefUid, setActiveChefUid] = useState<string>('');
+
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const chefs = await fetchAllChefProfiles();
+        if (mounted && chefs.length > 0) {
+          setApprovedChefs(chefs);
+          if (!activeChefUid) {
+            const currentIsChef = chefs.find((c) => c.uid === user?.uid);
+            setActiveChefUid(currentIsChef ? currentIsChef.uid : chefs[0]!.uid);
+          }
+        } else if (mounted && user?.uid) {
+          setActiveChefUid(user.uid);
+        }
+      } catch {
+        if (mounted && user?.uid) setActiveChefUid(user.uid);
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, [user?.uid]);
 
   const loadSubmissions = useCallback(async () => {
-    if (!user?.uid) return;
+    const targetUid = activeChefUid || user?.uid;
+    if (!targetUid) return;
     setLoading(true);
-    const result = await fetchChefSubmissions(user.uid);
+    const result = await fetchChefSubmissions(targetUid);
     setSubmissions(result);
     setLoading(false);
-  }, [user?.uid]);
+  }, [activeChefUid, user?.uid]);
 
   useEffect(() => {
     loadSubmissions();
@@ -908,6 +984,17 @@ export function ChefStudioView() {
 
       {/* Actions */}
       <View style={st.actions}>
+        <TouchableOpacity
+          style={[st.editBtn, { borderColor: colors.primary, marginRight: 8 }]}
+          onPress={() => {
+            setEditingRecipe(item);
+            setShowCreate(true);
+          }}
+        >
+          <Icon name="create" size={14} color={colors.primary} />
+          <Text style={[st.editBtnText, { color: colors.primary }]}>Edit Recipe</Text>
+        </TouchableOpacity>
+
         {(item.submissionStatus === 'draft' || item.submissionStatus === 'rejected') && (
           <TouchableOpacity
             style={[st.deleteBtn, { borderColor: colors.danger }]}
@@ -944,19 +1031,27 @@ export function ChefStudioView() {
           <View>
             <Text style={[st.headerTitle, { color: colors.textPrimary }]}>Chef Studio</Text>
             <Text style={[st.headerSubtitle, { color: colors.textMuted }]}>
-              {user?.displayName ?? 'Chef'} • Recipe Submissions
+              {approvedChefs.find((c) => c.uid === activeChefUid)?.displayName ??
+                user?.displayName ??
+                'Chef'}{' '}
+              • Recipe Submissions
             </Text>
           </View>
         </View>
         <TouchableOpacity
           style={[st.createBtn, { backgroundColor: colors.primary }]}
-          onPress={() => setShowCreate(true)}
+          onPress={() => {
+            setEditingRecipe(null);
+            setShowCreate(true);
+          }}
           id="chef-create-recipe-btn"
         >
           <Icon name="add" size={18} color="#FFFFFF" />
           <Text style={st.createBtnText}>New Recipe</Text>
         </TouchableOpacity>
       </View>
+
+
 
       {/* Stats strip */}
       {submissions.length > 0 && (
@@ -1028,14 +1123,25 @@ export function ChefStudioView() {
         />
       )}
 
-      {/* Create Recipe Modal */}
+      {/* Create / Edit Recipe Modal */}
       {user && (
         <CreateRecipeModal
           visible={showCreate}
-          onClose={() => setShowCreate(false)}
-          onSubmitted={loadSubmissions}
-          chefId={user.uid}
-          chefName={user.displayName ?? 'Chef'}
+          onClose={() => {
+            setShowCreate(false);
+            setEditingRecipe(null);
+          }}
+          onSubmitted={() => {
+            loadSubmissions();
+            setEditingRecipe(null);
+          }}
+          chefId={activeChefUid || user.uid}
+          chefName={
+            approvedChefs.find((c) => c.uid === (activeChefUid || user.uid))?.displayName ||
+            user.displayName ||
+            'Chef'
+          }
+          initialRecipe={editingRecipe}
         />
       )}
     </View>
@@ -1088,11 +1194,18 @@ const st = StyleSheet.create({
     borderRadius: 16,
     padding: 16,
     borderWidth: 1,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 6,
-    elevation: 2,
+    ...Platform.select({
+      web: {
+        boxShadow: '0px 2px 6px rgba(0, 0, 0, 0.06)',
+      },
+      default: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.06,
+        shadowRadius: 6,
+        elevation: 2,
+      },
+    }),
   },
   cardHeader: { marginBottom: 12 },
   cardTitleRow: {
@@ -1125,6 +1238,16 @@ const st = StyleSheet.create({
   },
   feedbackText: { fontSize: 12, flex: 1, lineHeight: 18 },
   actions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 10 },
+  editBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 10,
+    borderWidth: 1.5,
+  },
+  editBtnText: { fontSize: 13, fontWeight: '600' },
   deleteBtn: {
     flexDirection: 'row',
     alignItems: 'center',
