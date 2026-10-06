@@ -649,19 +649,8 @@ export const HomeScreenView: React.FC = () => {
             </View>
           </TouchableOpacity>
 
-          {/* Theme switcher button moved to top left, just to the right of "delivering to" */}
-          <TouchableOpacity
-            style={[
-              styles.iconButton,
-              { backgroundColor: colors.bgSubtle, borderColor: colors.borderLight, borderWidth: 1 },
-            ]}
-            onPress={toggleColorMode}
-            accessibilityLabel={`Switch to ${isDark ? 'Light' : 'Dark'} Mode`}
-            activeOpacity={0.7}
-            testID="theme-switcher-button"
-          >
-            <Icon name={isDark ? 'sun' : 'moon'} size={18} color={colors.textPrimary} />
-          </TouchableOpacity>
+          {/* Theme switcher with culinary color schemes & light/dark mode */}
+          <ThemeSwitcher variant="header" />
         </View>
 
         {/* Right header actions: Dietary badge, Wishlist, Cart */}

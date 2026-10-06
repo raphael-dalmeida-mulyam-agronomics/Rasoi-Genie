@@ -1,9 +1,17 @@
-﻿import React, { useState } from 'react';
+import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Modal, ScrollView } from 'react-native';
 import { useTheme } from './ThemeContext';
 import { Icon } from '../ui/Icon';
 
-export const ThemeSwitcher: React.FC = () => {
+export interface ThemeSwitcherProps {
+  variant?: 'floating' | 'header';
+  buttonStyle?: any;
+}
+
+export const ThemeSwitcher: React.FC<ThemeSwitcherProps> = ({
+  variant = 'floating',
+  buttonStyle,
+}) => {
   const {
     paletteKey,
     setPaletteKey,
@@ -20,27 +28,47 @@ export const ThemeSwitcher: React.FC = () => {
 
   return (
     <>
-      {/* Floating dev badge button */}
-      <TouchableOpacity
-        style={[
-          styles.floatingButton,
-          {
-            backgroundColor: colors.primary,
-            borderColor: colors.border,
-            ...shadows.medium,
-          },
-        ]}
-        onPress={() => setModalVisible(true)}
-        activeOpacity={0.85}
-        testID="theme-switcher-trigger"
-      >
-        <View style={{ marginRight: 6 }}>
-          <Icon name={isDark ? 'moon' : 'sun'} size={16} color={colors.textInverse} />
-        </View>
-        <Text style={[styles.floatingButtonText, { color: colors.textInverse }]}>
-          {isDark ? 'Dark' : 'Light'}
-        </Text>
-      </TouchableOpacity>
+      {variant === 'header' ? (
+        <TouchableOpacity
+          style={[
+            styles.headerButton,
+            {
+              backgroundColor: colors.bgSubtle,
+              borderColor: colors.borderLight,
+              borderWidth: 1,
+            },
+            buttonStyle,
+          ]}
+          onPress={() => setModalVisible(true)}
+          accessibilityLabel={`Customize Theme & Colors (${isDark ? 'Dark' : 'Light'})`}
+          activeOpacity={0.7}
+          testID="theme-switcher-button"
+        >
+          <Icon name={isDark ? 'sun' : 'moon'} size={18} color={colors.textPrimary} />
+        </TouchableOpacity>
+      ) : (
+        /* Floating dev badge button */
+        <TouchableOpacity
+          style={[
+            styles.floatingButton,
+            {
+              backgroundColor: colors.primary,
+              borderColor: colors.border,
+              ...shadows.medium,
+            },
+          ]}
+          onPress={() => setModalVisible(true)}
+          activeOpacity={0.85}
+          testID="theme-switcher-trigger"
+        >
+          <View style={{ marginRight: 6 }}>
+            <Icon name={isDark ? 'moon' : 'sun'} size={16} color={colors.textInverse} />
+          </View>
+          <Text style={[styles.floatingButtonText, { color: colors.textInverse }]}>
+            {isDark ? 'Dark' : 'Light'}
+          </Text>
+        </TouchableOpacity>
+      )}
 
       {/* Theme selection modal */}
       <Modal
@@ -214,6 +242,13 @@ export const ThemeSwitcher: React.FC = () => {
 };
 
 const styles = StyleSheet.create({
+  headerButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   floatingButton: {
     position: 'absolute',
     bottom: 85,
