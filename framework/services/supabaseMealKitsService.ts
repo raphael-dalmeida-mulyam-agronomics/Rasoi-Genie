@@ -28,11 +28,15 @@ export async function fetchPublishedMealKitsFromSupabase(): Promise<MealKit[]> {
         tagline: row.tagline || existing?.tagline || '',
         description: row.description || existing?.description || '',
         heroImage:
+          row.hero_image ||
           row.image_url ||
+          row.nutrition?.hero_image ||
           existing?.heroImage ||
           'https://images.unsplash.com/photo-1546833999-b9f581a1996d?auto=format&fit=crop&w=1000&q=80',
         galleryImages: [
-          row.image_url ||
+          row.hero_image ||
+            row.image_url ||
+            row.nutrition?.hero_image ||
             existing?.heroImage ||
             'https://images.unsplash.com/photo-1546833999-b9f581a1996d?auto=format&fit=crop&w=1000&q=80',
         ],
@@ -45,10 +49,12 @@ export async function fetchPublishedMealKitsFromSupabase(): Promise<MealKit[]> {
         cuisine: row.cuisine || 'North Indian',
         dishCategory: row.category || 'Curries & Gravies',
         spiceLevel: row.spice_level || 'Medium',
-        difficulty: (row.difficulty as any) || existing?.difficulty || 'Easy',
+        difficulty: (row.difficulty as any) || row.nutrition?.difficulty || existing?.difficulty || 'Easy',
         dietaryTags:
           Array.isArray(row.dietary_tags) && row.dietary_tags.length > 0
             ? row.dietary_tags
+            : Array.isArray(row.nutrition?.dietary_tags) && row.nutrition.dietary_tags.length > 0
+            ? row.nutrition.dietary_tags
             : [row.diet_type || 'veg'],
         isChefSpecial: Boolean(row.nutrition?.is_chef_special ?? existing?.isChefSpecial ?? false),
         chefId: row.nutrition?.chef_id || existing?.chefId,
@@ -75,6 +81,12 @@ export async function fetchPublishedMealKitsFromSupabase(): Promise<MealKit[]> {
             : Array.isArray(row.cities)
             ? row.cities
             : existing?.cities || [],
+        subRegions:
+          Array.isArray(row.nutrition?.sub_regions)
+            ? row.nutrition.sub_regions
+            : Array.isArray(row.sub_regions)
+            ? row.sub_regions
+            : existing?.subRegions || [],
         originCity: row.nutrition?.origin_city || row.origin_city || existing?.originCity || null,
         isOutOfStock: row.stock_status === 'out_of_stock' || Boolean(existing?.isOutOfStock),
         stockByRegion: existing?.stockByRegion || {
@@ -171,6 +183,7 @@ export async function saveMealKitToSupabase(
       allergens: kit.allergens || existingNutrition.allergens || [],
       available_regions: kit.availableRegions || existingNutrition.available_regions || ['North', 'South', 'West', 'East'],
       cities: kit.cities || existingNutrition.cities || [],
+      sub_regions: kit.subRegions || existingNutrition.sub_regions || [],
       origin_city: kit.originCity || existingNutrition.origin_city || null,
       tags: kit.tags && kit.tags.length > 0 ? kit.tags : compileMealKitTags(kit),
       is_trending: kit.isTrending ?? existingNutrition.is_trending ?? false,
@@ -184,6 +197,9 @@ export async function saveMealKitToSupabase(
         existingNutrition.shelf_life ||
         `${kit.shelfLifeDays || 4} days (${kit.storageCondition || 'Keep refrigerated at 2°C - 5°C'})`,
       storage_condition: kit.storageCondition || existingNutrition.storage_condition || 'Refrigerated at 2°C - 5°C',
+      dietary_tags: kit.dietaryTags || [kit.diet || 'veg'],
+      difficulty: kit.difficulty || 'Easy',
+      hero_image: kit.heroImage,
     };
 
     // Columns present in the remote Supabase meal_kits table
@@ -196,17 +212,12 @@ export async function saveMealKitToSupabase(
       original_price: kit.originalPrice || kit.price,
       cuisine: kit.cuisine || 'North Indian',
       region: kit.availableRegions?.[0] || 'North',
-      available_regions: kit.availableRegions || ['North', 'South', 'West', 'East'],
-      cities: kit.cities || [],
       category: kit.dishCategory || 'Curries & Gravies',
       diet_type: kit.diet || 'veg',
-      dietary_tags: kit.dietaryTags || [kit.diet || 'veg'],
       spice_level: kit.spiceLevel || 'Medium',
-      difficulty: kit.difficulty || 'Easy',
       prep_time_minutes: (kit.prepTimeMinutes || 10) + (kit.cookTimeMinutes || 20),
       servings: kit.servings || 2,
       calories: kit.nutrition?.calories || 450,
-      hero_image: kit.heroImage || null,
       image_url:
         kit.heroImage ||
         'https://images.unsplash.com/photo-1546833999-b9f581a1996d?auto=format&fit=crop&w=1000&q=80',
@@ -217,6 +228,7 @@ export async function saveMealKitToSupabase(
         step: s.stepNumber,
         title: s.title,
         instruction: s.instruction,
+        imageUrl: s.imageUrl,
       })),
       nutrition: augmentedNutrition,
       masala_sachets: kit.sachets && kit.sachets.length > 0 ? kit.sachets : kit.masalaSachets || [],

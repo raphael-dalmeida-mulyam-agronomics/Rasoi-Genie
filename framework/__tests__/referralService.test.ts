@@ -166,7 +166,7 @@ describe('referralService', () => {
     const res = await getCustomerReferralsList('user_1');
     expect(res.success).toBe(true);
     expect(Array.isArray(res.data)).toBe(true);
-    expect(res.data?.[0].status).toBe('REWARDED');
+    expect(res.data?.[0]?.status).toBe('REWARDED');
   });
 
   it('registers a referee with a friend referral code', async () => {

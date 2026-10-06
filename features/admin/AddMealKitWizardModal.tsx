@@ -1,47 +1,62 @@
-﻿import React, { useEffect, useRef, useState } from 'react';
+/**
+ * Add / Edit Meal Kit Modal (Chef Studio Aligned)
+ * Full-featured meal kit authoring and operational configuration modal
+ * matching the structured 4-stage UI of the Chef Studio recipe builder:
+ * Stage 1: Details (Thumbnail, Basic info, Diet, Cuisine, Category, Spice, Timings, Retail Price, Tags)
+ * Stage 2: Ingredients (Live Inventory search, strict units, Masala Sachets & whole spices, reordering)
+ * Stage 3: Cooking Steps (Title, instructions, step photos, AI generator, presets, reordering)
+ * Stage 4: Review & Fulfilment (Visual card preview, multi-city target dropdown, grouped sub-areas checklist,
+ *          12-item quality readiness checklist, shelf life, and catalog saving)
+ */
+
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
-  ActivityIndicator,
-  Alert,
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  TextInput,
   Image,
   Modal,
+  Alert,
   Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+  ActivityIndicator,
 } from 'react-native';
-import {
-  CuisineType,
-  DietTag,
-  DishCategory,
-  MealKit,
-  NutritionFacts,
-  RegionHub,
-  SachetItem,
-  SpiceLevel,
-  COMMON_ALLERGENS,
-  compileMealKitTags,
-  parseCategorizedTags,
-} from '../../framework/services/mealKitsService';
-import { STORAGE_CENTRE_REGIONS } from '../../framework/services/adminRbacService';
-import { useAuth } from '../../framework/context/AuthContext';
 import { useTheme } from '../../framework/theme/ThemeContext';
-import { Badge, getDietBadgeInfo } from '../../framework/ui/Badge';
+import { useAuth } from '../../framework/context/AuthContext';
+import { Icon } from '../../framework/ui/Icon';
+import { Badge } from '../../framework/ui/Badge';
 import { Button } from '../../framework/ui/Button';
-import { AppIconName, Icon } from '../../framework/ui/Icon';
 import {
-  AI_STEP_PREPARATION_PRESETS,
-  generateDishPhotoWithAI,
-  generateStepPhotoWithAI,
-} from './aiPhotoGeneratorService';
+  MealKit,
+  DietTag,
+  CuisineType,
+  DishCategory,
+  SpiceLevel,
+  RegionHub,
+  NutritionFacts,
+  SachetItem,
+  IngredientItem,
+  RecipeStep,
+  compileMealKitTags,
+} from '../../framework/services/mealKitsService';
+import {
+  getSubRegionsForCity,
+  getStateForCity,
+  legacyHubForCity,
+  SubRegion,
+} from '../../framework/services/regionService';
+import {
+  ALL_GEO_CITIES,
+  POPULAR_CITIES,
+  GeoCityOption,
+} from './ChefSubmissionApprovalView';
+import { STORAGE_CENTRE_REGIONS } from '../../framework/services/adminRbacService';
+import { getInventoryItems, InventoryItem } from '../../framework/services/inventoryService';
+import { SAMPLE_RECIPE_THUMBNAILS, SAMPLE_STEP_IMAGES } from '../chef/sampleImages';
+import { generateDishPhotoWithAI, generateStepPhotoWithAI } from './aiPhotoGeneratorService';
 import { estimateNutritionWithAI, NutritionEstimationResult } from './nutritionEstimatorService';
-import {
-  RecipeCardBackView,
-  RecipeCardFrontView,
-  RecipeCardPrintModal,
-} from './RecipeCardPrintModal';
 import { showInAppAlert } from '../../framework/context/InAppDialogContext';
 
 export const showWebSafeAlert = (title: string, message?: string) => {
@@ -55,30 +70,23 @@ export interface AddMealKitWizardModalProps {
   initialKit?: MealKit | null;
 }
 
-type WizardStep = 1 | 2 | 3 | 4 | 5;
+export type AdminKitStage = 'details' | 'ingredients' | 'steps' | 'review';
 
-const PRESET_DISH_IMAGES = [
-  {
-    name: 'Paneer Butter Masala',
-    url: 'https://images.unsplash.com/photo-1631452180519-c014fe946bc7?auto=format&fit=crop&w=800&q=80',
-  },
-  {
-    name: 'Dal Makhani',
-    url: 'https://images.unsplash.com/photo-1546833999-b9f581a1996d?auto=format&fit=crop&w=800&q=80',
-  },
-  {
-    name: 'Chicken Biryani',
-    url: 'https://images.unsplash.com/photo-1563379091339-03b21ab4a4f8?auto=format&fit=crop&w=800&q=80',
-  },
-  {
-    name: 'Chole Bhature',
-    url: 'https://images.unsplash.com/photo-1626777552726-4a6b54c97e46?auto=format&fit=crop&w=800&q=80',
-  },
-  {
-    name: 'Veg Pulao',
-    url: 'https://images.unsplash.com/photo-1596797038530-2c107229654b?auto=format&fit=crop&w=800&q=80',
-  },
-];
+export const VALID_UNITS = [
+  'g',
+  'kg',
+  'ml',
+  'L',
+  'piece',
+  'packet',
+  'sachet',
+  'bunch',
+  'clove',
+  'tbsp',
+  'tsp',
+] as const;
+
+export type MeasurementUnit = (typeof VALID_UNITS)[number];
 
 export interface SpiceCatalogItem {
   name: string;
@@ -88,213 +96,87 @@ export interface SpiceCatalogItem {
 }
 
 export const MASTER_SPICE_CATALOG: SpiceCatalogItem[] = [
-  // Whole Spices (Khada Masala)
   { name: 'Jeera (Cumin Seeds)', hindi: 'जीरा', category: 'Whole', defaultQty: '1 tsp' },
-  {
-    name: 'Sabut Dhaniya (Coriander Seeds)',
-    hindi: 'साबुत धनिया',
-    category: 'Whole',
-    defaultQty: '1 tsp',
-  },
-  {
-    name: 'Elaichi (Green Cardamom)',
-    hindi: 'हरी इलायची',
-    category: 'Whole',
-    defaultQty: '3 pods',
-  },
-  {
-    name: 'Badi Elaichi (Black Cardamom)',
-    hindi: 'बड़ी इलायची',
-    category: 'Whole',
-    defaultQty: '1 pod',
-  },
+  { name: 'Sabut Dhaniya (Coriander Seeds)', hindi: 'साबुत धनिया', category: 'Whole', defaultQty: '1 tsp' },
+  { name: 'Elaichi (Green Cardamom)', hindi: 'हरी इलायची', category: 'Whole', defaultQty: '3 pods' },
+  { name: 'Badi Elaichi (Black Cardamom)', hindi: 'बड़ी इलायची', category: 'Whole', defaultQty: '1 pod' },
   { name: 'Dalchini (Cinnamon Stick)', hindi: 'दालचीनी', category: 'Whole', defaultQty: '1 stick' },
   { name: 'Laung (Cloves)', hindi: 'लौंग', category: 'Whole', defaultQty: '4 pieces' },
-  {
-    name: 'Tejpatta (Indian Bay Leaf)',
-    hindi: 'तेजपत्ता',
-    category: 'Whole',
-    defaultQty: '2 leaves',
-  },
-  {
-    name: 'Kali Mirch (Black Peppercorns)',
-    hindi: 'काली मिर्च',
-    category: 'Whole',
-    defaultQty: '0.5 tsp',
-  },
-  {
-    name: 'Star Anise (Chakra Phool)',
-    hindi: 'चक्र फूल',
-    category: 'Whole',
-    defaultQty: '1 piece',
-  },
-  { name: 'Mace (Javitri)', hindi: 'जावित्री', category: 'Whole', defaultQty: '1 blade' },
-  { name: 'Jaiphal (Nutmeg)', hindi: 'जायफल', category: 'Whole', defaultQty: '0.25 tsp' },
-  {
-    name: 'Shahi Jeera (Caraway Seeds)',
-    hindi: 'शाही जीरा',
-    category: 'Whole',
-    defaultQty: '0.5 tsp',
-  },
-  {
-    name: 'Mustard Seeds (Rai / Sarson)',
-    hindi: 'राई / सरसों',
-    category: 'Whole',
-    defaultQty: '0.5 tsp',
-  },
-  {
-    name: 'Methi Seeds (Fenugreek Seeds)',
-    hindi: 'मेथी दाना',
-    category: 'Whole',
-    defaultQty: '0.25 tsp',
-  },
-  { name: 'Saunf (Fennel Seeds)', hindi: 'सौंफ', category: 'Whole', defaultQty: '0.5 tsp' },
-  { name: 'Ajwain (Carom Seeds)', hindi: 'अजवाइन', category: 'Whole', defaultQty: '0.25 tsp' },
-  { name: 'Kalonji (Nigella Seeds)', hindi: 'कलौंजी', category: 'Whole', defaultQty: '0.25 tsp' },
-  { name: 'White Sesame Seeds (Til)', hindi: 'सफेद तिल', category: 'Whole', defaultQty: '1 tsp' },
-  { name: 'Khus Khus (Poppy Seeds)', hindi: 'खसखस', category: 'Whole', defaultQty: '1 tsp' },
-
-  // Ground Masalas (Pisa Masala)
-  {
-    name: 'Haldi (Turmeric Powder)',
-    hindi: 'हल्दी पाउडर',
-    category: 'Ground',
-    defaultQty: '0.5 tsp',
-  },
-  {
-    name: 'Kashmiri Red Chilli Powder',
-    hindi: 'कश्मीरी लाल मिर्च',
-    category: 'Ground',
-    defaultQty: '1 tsp',
-  },
-  {
-    name: 'Lal Mirch (Spicy Red Chilli)',
-    hindi: 'तीखी लाल मिर्च',
-    category: 'Ground',
-    defaultQty: '0.5 tsp',
-  },
-  { name: 'Degi Mirch Powder', hindi: 'देगी मिर्च', category: 'Ground', defaultQty: '1 tsp' },
-  {
-    name: 'Dhaniya Powder (Coriander)',
-    hindi: 'धनिया पाउडर',
-    category: 'Ground',
-    defaultQty: '1.5 tsp',
-  },
-  {
-    name: 'Jeera Powder (Roasted Cumin)',
-    hindi: 'भुना जीरा पाउडर',
-    category: 'Ground',
-    defaultQty: '1 tsp',
-  },
-  {
-    name: 'Kali Mirch Powder (Black Pepper)',
-    hindi: 'काली मिर्च पाउडर',
-    category: 'Ground',
-    defaultQty: '0.5 tsp',
-  },
-  {
-    name: 'Amchur (Dry Mango Powder)',
-    hindi: 'आमचूर पाउडर',
-    category: 'Ground',
-    defaultQty: '0.75 tsp',
-  },
-  {
-    name: 'Saunth (Dry Ginger Powder)',
-    hindi: 'सोंठ पाउडर',
-    category: 'Ground',
-    defaultQty: '0.5 tsp',
-  },
-  {
-    name: 'Anardana Powder (Pomegranate)',
-    hindi: 'अनारदाना',
-    category: 'Ground',
-    defaultQty: '0.5 tsp',
-  },
-
-  // Blends & Special Masalas
-  { name: 'Garam Masala (Chef Blend)', hindi: 'गरम मसाला', category: 'Blend', defaultQty: '1 tsp' },
-  { name: 'Chaat Masala', hindi: 'चाट मसाला', category: 'Blend', defaultQty: '0.5 tsp' },
-  { name: 'Kitchen King Masala', hindi: 'किचन किंग', category: 'Blend', defaultQty: '1 tsp' },
-  {
-    name: 'Chana Masala (Chole Blend)',
-    hindi: 'चना मसाला',
-    category: 'Blend',
-    defaultQty: '1.5 tsp',
-  },
-  {
-    name: 'Biryani Masala (Potli Blend)',
-    hindi: 'बिरयानी मसाला',
-    category: 'Blend',
-    defaultQty: '2 tsp',
-  },
-  { name: 'Pav Bhaji Masala', hindi: 'पाव भाजी मसाला', category: 'Blend', defaultQty: '1.5 tsp' },
-  { name: 'Sambhar Masala', hindi: 'सांभर मसाला', category: 'Blend', defaultQty: '2 tsp' },
-  { name: 'Rasam Powder', hindi: 'रसम पाउडर', category: 'Blend', defaultQty: '1.5 tsp' },
-  {
-    name: 'Panch Phoron (Bengali 5-Spice)',
-    hindi: 'पांच फोड़न',
-    category: 'Blend',
-    defaultQty: '1 tsp',
-  },
-  { name: 'Tandoori Tikka Masala', hindi: 'तंदूरी मसाला', category: 'Blend', defaultQty: '2 tsp' },
-  {
-    name: 'Kadhai Masala (Crushed)',
-    hindi: 'कढ़ाई मसाला',
-    category: 'Blend',
-    defaultQty: '1.5 tsp',
-  },
-
-  // Herbs & Seasonings
-  {
-    name: 'Kasuri Methi (Fenugreek Leaves)',
-    hindi: 'कसूरी मेथी',
-    category: 'Herb/Seed',
-    defaultQty: '1 tbsp',
-  },
-  { name: 'Hing (Asafoetida)', hindi: 'हींग', category: 'Seasoning', defaultQty: '1 pinch' },
-  {
-    name: 'Kala Namak (Black Salt)',
-    hindi: 'काला नमक',
-    category: 'Seasoning',
-    defaultQty: '0.5 tsp',
-  },
-  {
-    name: 'Sendha Namak (Rock Salt)',
-    hindi: 'सेंधा नमक',
-    category: 'Seasoning',
-    defaultQty: '1 tsp',
-  },
-  {
-    name: 'Saffron Strands (Kesar)',
-    hindi: 'केसर',
-    category: 'Seasoning',
-    defaultQty: '6 strands',
-  },
-  {
-    name: 'Curry Leaves (Dried / Flaked)',
-    hindi: 'कढ़ी पत्ता',
-    category: 'Herb/Seed',
-    defaultQty: '8 leaves',
-  },
+  { name: 'Tejpatta (Indian Bay Leaf)', hindi: 'तेजपत्ता', category: 'Whole', defaultQty: '2 leaves' },
+  { name: 'Kali Mirch (Black Peppercorns)', hindi: 'काली मिर्च', category: 'Whole', defaultQty: '0.5 tsp' },
+  { name: 'Star Anise (Chakra Phool)', hindi: 'चक्र फूल', category: 'Whole', defaultQty: '1 piece' },
+  { name: 'Mustard Seeds (Rai / Sarson)', hindi: 'राई / सरसों', category: 'Whole', defaultQty: '0.5 tsp' },
+  { name: 'Methi Seeds (Fenugreek Seeds)', hindi: 'मेथी दाना', category: 'Whole', defaultQty: '0.25 tsp' },
+  { name: 'Kashmiri Red Chilli Powder', hindi: 'कश्मीरी लाल मिर्च', category: 'Ground', defaultQty: '1 tbsp' },
+  { name: 'Haldi (Turmeric Powder)', hindi: 'हल्दी पाउडर', category: 'Ground', defaultQty: '0.5 tsp' },
+  { name: 'Garam Masala Blend', hindi: 'गरम मसाला', category: 'Blend', defaultQty: '1 tsp' },
+  { name: 'Kasuri Methi (Fenugreek Leaves)', hindi: 'कसूरी मेथी', category: 'Herb/Seed', defaultQty: '1 tbsp' },
 ];
 
-export const COMMON_INDIAN_SPICES = MASTER_SPICE_CATALOG.map((s) => s.name);
+const DIET_TYPES: Array<{ key: DietTag; label: string; icon: string; desc: string }> = [
+  { key: 'veg', label: 'Vegetarian', icon: 'leaf-outline', desc: 'Plant-based with fresh dairy' },
+  { key: 'nonveg', label: 'Non-Vegetarian', icon: 'restaurant-outline', desc: 'Contains poultry/meat/fish' },
+  { key: 'jain', label: 'Jain', icon: 'flower-outline', desc: 'No root vegetables or onion/garlic' },
+  { key: 'vegan', label: 'Vegan', icon: 'nutrition-outline', desc: '100% plant-based, zero dairy' },
+  { key: 'keto', label: 'Keto', icon: 'flame-outline', desc: 'Low-carb, high good fats' },
+  { key: 'gluten-free', label: 'Gluten-Free', icon: 'shield-checkmark-outline', desc: 'Zero gluten grains' },
+];
 
-export const SPICE_QUANTITY_PRESETS = [
-  '0.25 tsp',
-  '0.5 tsp',
-  '0.75 tsp',
-  '1 tsp',
-  '1.5 tsp',
-  '2 tsp',
-  '1 tbsp',
-  '2 tbsp',
-  '2g',
-  '5g',
-  '10g',
-  '1 piece',
-  '2 pieces',
-  '1 pinch',
+const CUISINES: CuisineType[] = [
+  'North Indian',
+  'South Indian',
+  'Hyderabadi',
+  'Punjabi',
+  'Mughlai',
+  'Coastal',
+  'Gujarati',
+  'Maharashtrian',
+  'Indo-Chinese',
+  'Italian',
+  'Mexican',
+  'American',
+  'Continental',
+  'European',
+  'Mediterranean',
+];
+
+const DISH_CATEGORIES: DishCategory[] = [
+  'Curries & Gravies',
+  'Biryani & Rice',
+  'Burgers & Sliders',
+  'Pizzas',
+  'Tacos',
+  'Burritos & Bowls',
+  'Pastas',
+  'Street Food',
+  'Soups & Stews',
+];
+
+const SPICE_LEVELS: Array<{ level: SpiceLevel; label: string; color: string }> = [
+  { level: 'Mild', label: 'Mild', color: '#10B981' },
+  { level: 'Medium', label: 'Medium', color: '#F59E0B' },
+  { level: 'Spicy', label: 'Spicy', color: '#EF4444' },
+  { level: 'Fiery', label: 'Fiery', color: '#991B1B' },
+];
+
+const ALLERGEN_OPTIONS = [
+  'Dairy',
+  'Gluten',
+  'Tree Nuts',
+  'Peanuts',
+  'Mustard',
+  'Sesame',
+  'Soy',
+  'Shellfish',
+  'Eggs',
+];
+
+const DIETARY_TAG_OPTIONS: Array<{ key: DietTag; label: string }> = [
+  { key: 'veg', label: 'Vegetarian' },
+  { key: 'vegan', label: 'Vegan' },
+  { key: 'jain', label: 'Jain' },
+  { key: 'gluten-free', label: 'Gluten-Free' },
+  { key: 'keto', label: 'Keto' },
 ];
 
 export const AddMealKitWizardModal: React.FC<AddMealKitWizardModalProps> = ({
@@ -304,4228 +186,2116 @@ export const AddMealKitWizardModal: React.FC<AddMealKitWizardModalProps> = ({
   initialKit,
 }) => {
   const { colors, radii, shadows } = useTheme();
+  const { isSuperAdmin } = useAuth();
 
-  // Step state
-  const [currentStep, setCurrentStep] = useState<WizardStep>(1);
-  const [isPublishing, setIsPublishing] = useState(false);
-  const [step1Error, setStep1Error] = useState<string | null>(null);
-  const [step5Error, setStep5Error] = useState<string | null>(null);
-  const prevVisibleRef = useRef(false);
-  const prevKitIdRef = useRef<string | undefined>(undefined);
+  const isEditing = Boolean(initialKit);
 
-  const { isSuperAdmin, assignedRegions } = useAuth();
+  // Active Stage in the 4-Stage Builder
+  const [currentStage, setCurrentStage] = useState<AdminKitStage>('details');
+  const [isSaving, setIsSaving] = useState(false);
 
-  const resolveZonesFromAssigned = (regions?: (RegionHub | string)[]): RegionHub[] => {
-    if (!regions || regions.length === 0) return ['North'];
-    const zones = new Set<RegionHub>();
-    for (const reg of regions) {
-      if (['North', 'South', 'West', 'East'].includes(reg as RegionHub)) {
-        zones.add(reg as RegionHub);
-      } else {
-        const sc = STORAGE_CENTRE_REGIONS.find((r) => r.id === reg);
-        if (sc) zones.add(sc.zone);
-      }
-    }
-    return zones.size > 0 ? Array.from(zones) : ['North'];
-  };
+  // Stage 1: Recipe Identity & Details
+  const [name, setName] = useState('');
+  const [hindiName, setHindiName] = useState('');
+  const [tagline, setTagline] = useState('');
+  const [description, setDescription] = useState('');
+  const [price, setPrice] = useState('299');
+  const [originalPrice, setOriginalPrice] = useState('349');
+  const [heroImage, setHeroImage] = useState(SAMPLE_RECIPE_THUMBNAILS[0]?.url || '');
+  const [diet, setDiet] = useState<DietTag>('veg');
+  const [cuisine, setCuisine] = useState<CuisineType>('North Indian');
+  const [dishCategory, setDishCategory] = useState<DishCategory>('Curries & Gravies');
+  const [spiceLevel, setSpiceLevel] = useState<SpiceLevel>('Medium');
+  const [servings, setServings] = useState('2');
+  const [prepTimeMinutes, setPrepTimeMinutes] = useState('15');
+  const [cookTimeMinutes, setCookTimeMinutes] = useState('25');
+  const [dietaryTags, setDietaryTags] = useState<DietTag[]>(['veg']);
+  const [allergens, setAllergens] = useState<string[]>(['Dairy']);
+  const [isTrending, setIsTrending] = useState(false);
 
-  // Step 1: Dish Basics
-  const [name, setName] = useState(initialKit?.name || '');
-  const [hindiName, setHindiName] = useState(initialKit?.hindiName || '');
-  const [tagline, setTagline] = useState(initialKit?.tagline || '');
-  const [cuisine, setCuisine] = useState<CuisineType>(initialKit?.cuisine || 'North Indian');
-  const [diet, setDiet] = useState<DietTag>(initialKit?.diet || 'veg');
-  const [dishCategory, setDishCategory] = useState<DishCategory>(
-    initialKit?.dishCategory || 'Curries & Gravies',
-  );
-  const [selectedRegions, setSelectedRegions] = useState<RegionHub[]>(
-    initialKit?.availableRegions && initialKit.availableRegions.length > 0
-      ? initialKit.availableRegions
-      : isSuperAdmin
-        ? ['North', 'South', 'West', 'East']
-        : resolveZonesFromAssigned(assignedRegions),
-  );
-  const [selectedStorageCentres, setSelectedStorageCentres] = useState<string[]>(
-    initialKit?.availableStorageCentres || [],
-  );
-  const [isTrending, setIsTrending] = useState<boolean>(initialKit?.isTrending ?? false);
-  const [spiceLevel, setSpiceLevel] = useState<SpiceLevel>(initialKit?.spiceLevel || 'Medium');
-  const [servings, setServings] = useState(initialKit ? String(initialKit.servings) : '');
-  const [prepTime, setPrepTime] = useState(initialKit ? String(initialKit.prepTimeMinutes) : '');
-  const [cookTime, setCookTime] = useState(initialKit ? String(initialKit.cookTimeMinutes) : '');
-  const [price, setPrice] = useState(initialKit ? String(initialKit.price) : '');
-  const [heroImage, setHeroImage] = useState(initialKit?.heroImage || '');
-
-  // Tags & Allergens State
-  const [selectedAllergens, setSelectedAllergens] = useState<string[]>(
-    initialKit?.allergens || (initialKit?.diet === 'nonveg' ? [] : ['Dairy']),
-  );
-  const [customAllergenInput, setCustomAllergenInput] = useState('');
-  const [customTags, setCustomTags] = useState<string[]>(
-    initialKit?.tags
-      ? initialKit.tags
-          .filter(
-            (t) =>
-              !['Diet:', 'Cuisine:', 'Dish:', 'Region:', 'Allergy:'].some((p) => t.startsWith(p)),
-          )
-          .map((t) => t.replace(/^Tag:\s*/i, ''))
-      : [],
-  );
-  const [customTagInput, setCustomTagInput] = useState('');
-
-  // City targeting: empty = all cities in hub, otherwise explicit city list
-  const [allCitiesMode, setAllCitiesMode] = useState<boolean>(
-    !initialKit?.cities || initialKit.cities.length === 0,
-  );
-  const [kitCities, setKitCities] = useState<string[]>(initialKit?.cities || []);
-  const [cityInputValue, setCityInputValue] = useState('');
-
-  // Dish Photo Customization (Upload & AI)
-  type PhotoMode = 'ai' | 'upload' | 'presets';
-  const [photoMode, setPhotoMode] = useState<PhotoMode>('ai');
-  const [isGeneratingPhoto, setIsGeneratingPhoto] = useState(false);
-  const [photoStyle, setPhotoStyle] = useState<'handi' | 'finedining' | 'flatlay'>('handi');
+  // Stage 1: Photo selection modes
+  const [showPhotoPickerModal, setShowPhotoPickerModal] = useState(false);
   const [customPhotoUrl, setCustomPhotoUrl] = useState('');
-  const [photoBadge, setPhotoBadge] = useState(
-    initialKit?.heroImage ? 'Existing Photo' : 'No Photo Selected',
-  );
+  const [isGeneratingAiPhoto, setIsGeneratingAiPhoto] = useState(false);
 
-  const handleUploadFromDevice = () => {
-    if (Platform.OS === 'web' && typeof document !== 'undefined') {
-      const input = document.createElement('input');
-      input.type = 'file';
-      input.accept = 'image/*';
-      input.onchange = (e: any) => {
-        const file = e.target?.files?.[0];
-        if (file) {
-          const reader = new FileReader();
-          reader.onload = (evt) => {
-            if (evt.target?.result) {
-              setHeroImage(evt.target.result as string);
-              setPhotoBadge('Uploaded Photo');
-              showWebSafeAlert('Photo Uploaded', 'Your custom dish presentation photo is ready.');
-            }
-          };
-          reader.readAsDataURL(file);
-        }
-      };
-      input.click();
-    } else {
-      showWebSafeAlert(
-        'Upload Photo',
-        'Please enter the photo URL below or select AI Generation on this device.',
-      );
-    }
-  };
-
-  const handleGenerateAiPhoto = async () => {
-    if (!name.trim()) {
-      showWebSafeAlert(
-        'Dish Name Required',
-        'Please enter a dish name first so the AI can craft an authentic presentation photo.',
-      );
-      return;
-    }
-    setIsGeneratingPhoto(true);
-    try {
-      const result = await generateDishPhotoWithAI({
-        dishName: name.trim(),
-        hindiName: hindiName.trim(),
-        tagline: tagline.trim(),
-        cuisine,
-        diet,
-        spiceLevel,
-        ingredients: ingredients.map((i) => i.name),
-        sachets: sachets.map((s) => s.name),
-        presentationStyle: photoStyle,
-      });
-      setHeroImage(result.imageUrl);
-      setPhotoBadge(`AI Generated (${result.presentationStyle})`);
-      showWebSafeAlert(
-        'AI Photo Generated',
-        `Gourmet presentation photo generated for "${name.trim()}" in ${result.presentationStyle} style.`,
-      );
-    } catch {
-      showWebSafeAlert('Notice', 'Using chef presentation library.');
-    } finally {
-      setIsGeneratingPhoto(false);
-    }
-  };
-
-  const handleApplyCustomUrl = () => {
-    if (!customPhotoUrl.trim()) return;
-    setHeroImage(customPhotoUrl.trim());
-    setPhotoBadge('Custom Web URL');
-    setCustomPhotoUrl('');
-    showWebSafeAlert('Photo Updated', 'Custom dish image URL applied.');
-  };
-
-  // Step 2: Fresh Produce & Groceries
+  // Stage 2: Ingredients & Sachets
   const [ingredients, setIngredients] = useState<
-    { name: string; quantity: string; isMasalaSachet: boolean }[]
-  >(
-    initialKit?.ingredients
-      ?.filter((i) => !i.isMasalaSachet)
-      .map((i) => ({
-        name: i.name,
-        quantity: i.quantity,
-        isMasalaSachet: false,
-      })) || [],
-  );
-  const [newFreshName, setNewFreshName] = useState('');
-  const [newFreshQty, setNewFreshQty] = useState('');
+    Array<{
+      id: string;
+      name: string;
+      amount: number;
+      unit: string;
+      quantity: string;
+      ingredientId?: string;
+    }>
+  >([]);
+  const [inventorySearch, setInventorySearch] = useState('');
+  const [newIngName, setNewIngName] = useState('');
+  const [newIngAmount, setNewIngAmount] = useState('200');
+  const [newIngUnit, setNewIngUnit] = useState<MeasurementUnit>('g');
 
-  // Step 2: Pre-Portioned Masala Sachets (Multi-Sachet Mix)
-  const [sachets, setSachets] = useState<SachetItem[]>(() => {
-    if (initialKit?.sachets && initialKit.sachets.length > 0) {
-      return initialKit.sachets;
-    }
-    if (initialKit?.masalaSachets && initialKit.masalaSachets.length > 0) {
-      return initialKit.masalaSachets.map((mName, idx) => ({
-        id: `sachet-${idx + 1}`,
-        name: mName,
-        spices: [],
-      }));
-    }
-    return [];
-  });
-  const [sachetDrafts, setSachetDrafts] = useState<
-    Record<string, { spiceName: string; quantity: string; searchQuery: string }>
-  >({});
+  // Masala sachets
+  const [sachets, setSachets] = useState<SachetItem[]>([]);
+  const [newSachetName, setNewSachetName] = useState('');
+  const [selectedSpicesForSachet, setSelectedSpicesForSachet] = useState<
+    Array<{ name: string; quantity: string }>
+  >([]);
 
-  // Step 3: Step-by-Step Recipe Guide
+  // Stage 3: Cooking Steps
   const [recipeSteps, setRecipeSteps] = useState<
-    {
+    Array<{
       stepNumber: number;
       title: string;
       instruction: string;
       timerSeconds?: number;
       tip?: string;
-      imageUrl?: string;
-    }[]
-  >(initialKit?.recipeSteps || []);
-  const [newStepTitle, setNewStepTitle] = useState('');
-  const [newStepInstruction, setNewStepInstruction] = useState('');
-  const [newStepMinutes, setNewStepMinutes] = useState('');
-  const [newStepTip, setNewStepTip] = useState('');
+      imageUrl: string;
+    }>
+  >([]);
+  const [editingStepIndex, setEditingStepIndex] = useState<number | null>(null);
+  const [stepPhotoModalIndex, setStepPhotoModalIndex] = useState<number | null>(null);
+  const [stepCustomUrl, setStepCustomUrl] = useState('');
+  const [isGeneratingStepAi, setIsGeneratingStepAi] = useState(false);
 
-  // Step 3 Photo Management State (Upload, Presets & AI Contextual Generation)
-  type StepPhotoMode = 'ai' | 'upload' | 'presets';
-  const [newStepPhotoMode, setNewStepPhotoMode] = useState<StepPhotoMode>('ai');
-  const [newStepPhotoUrl, setNewStepPhotoUrl] = useState('');
-  const [customStepPhotoUrl, setCustomStepPhotoUrl] = useState('');
-  const [isGeneratingStepPhoto, setIsGeneratingStepPhoto] = useState(false);
-  const [stepAiBadge, setStepAiBadge] = useState('');
+  // Stage 4: Coverage & Review
+  const [selectedCities, setSelectedCities] = useState<string[]>(['Pune']);
+  const [selectedSubAreas, setSelectedSubAreas] = useState<string[]>([]);
+  const [isCityDropdownOpen, setIsCityDropdownOpen] = useState(false);
+  const [isAreaDropdownOpen, setIsAreaDropdownOpen] = useState(false);
+  const [citySearch, setCitySearch] = useState('');
+  const [areaSearch, setAreaSearch] = useState('');
 
-  // Live Card Preview in Step 3
-  const [cardPreviewSide, setCardPreviewSide] = useState<'front' | 'back'>('front');
-  const [printModalVisible, setPrintModalVisible] = useState(false);
+  // Shelf-life & Nutrition
+  const [shelfLifeDays, setShelfLifeDays] = useState('4');
+  const [storageCondition, setStorageCondition] = useState('Refrigerated at 2°C - 5°C');
+  const [nutrition, setNutrition] = useState<NutritionFacts>({
+    calories: 420,
+    protein: 16,
+    carbs: 48,
+    fat: 18,
+    fiber: 6,
+  });
+  const [isEstimatingNutrition, setIsEstimatingNutrition] = useState(false);
+  const [nutritionAIResult, setNutritionAIResult] = useState<NutritionEstimationResult | null>(null);
 
-  // Step 4: AI Nutrition Estimator
-  const [nutrition, setNutrition] = useState<NutritionFacts>(
-    initialKit?.nutrition || { calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0 },
-  );
-  const [isEstimatingAI, setIsEstimatingAI] = useState(false);
-  const [aiBreakdown, setAiBreakdown] = useState<NutritionEstimationResult | null>(null);
-
-  // Form Reset Function (Blanks out all fields, ingredients, sachets & steps)
-  const resetForm = () => {
-    setName('');
-    setHindiName('');
-    setTagline('');
-    setCuisine('North Indian');
-    setDiet('veg');
-    setDishCategory('Curries & Gravies');
-    setSelectedRegions(
-      isSuperAdmin ? ['North', 'South', 'West', 'East'] : resolveZonesFromAssigned(assignedRegions),
-    );
-    setSelectedStorageCentres([]);
-    setSelectedAllergens(['Dairy']);
-    setCustomAllergenInput('');
-    setCustomTags([]);
-    setCustomTagInput('');
-    setIsTrending(false);
-    setSpiceLevel('Medium');
-    setServings('');
-    setPrepTime('');
-    setCookTime('');
-    setPrice('');
-    setHeroImage('');
-    setPhotoBadge('No Photo Selected');
-    setAllCitiesMode(true);
-    setKitCities([]);
-    setCityInputValue('');
-    setIngredients([]);
-    setSachets([]);
-    setSachetDrafts({});
-    setNewFreshName('');
-    setNewFreshQty('');
-    setRecipeSteps([]);
-    setNutrition({ calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0 });
-    setAiBreakdown(null);
-    setNewStepTitle('');
-    setNewStepInstruction('');
-    setNewStepMinutes('');
-    setNewStepTip('');
-    setNewStepPhotoUrl('');
-    setCustomStepPhotoUrl('');
-    setStepAiBadge('');
-    setStep1Error(null);
-    setStep5Error(null);
-    setCurrentStep(1);
-  };
-
-  // Reset or populate fields only when modal opens or initialKit ID changes
+  // Initial load when modal opens
+  const prevKitIdRef = useRef<string | undefined>(undefined);
   useEffect(() => {
-    const isOpening = visible && !prevVisibleRef.current;
-    const isKitChanged = Boolean(initialKit && initialKit.id !== prevKitIdRef.current);
+    if (!visible) return;
 
-    if (visible && (isOpening || isKitChanged)) {
-      prevKitIdRef.current = initialKit?.id;
-      if (initialKit) {
-        setName(initialKit.name || '');
-        setHindiName(initialKit.hindiName || '');
-        setTagline(initialKit.tagline || '');
-        setCuisine(initialKit.cuisine || 'North Indian');
-        setDiet(initialKit.diet || 'veg');
-        setDishCategory(initialKit.dishCategory || 'Curries & Gravies');
-        setSelectedRegions(
-          initialKit.availableRegions && initialKit.availableRegions.length > 0
-            ? initialKit.availableRegions
-            : isSuperAdmin
-              ? ['North', 'South', 'West', 'East']
-              : resolveZonesFromAssigned(assignedRegions),
-        );
-        setSelectedStorageCentres(initialKit.availableStorageCentres || []);
-        setSelectedAllergens(
-          initialKit.allergens && initialKit.allergens.length > 0
-            ? initialKit.allergens
-            : initialKit.diet === 'nonveg'
-              ? []
-              : ['Dairy'],
-        );
-        setCustomAllergenInput('');
-        setCustomTags(
-          initialKit.tags
-            ? initialKit.tags
-                .filter(
-                  (t) =>
-                    !['Diet:', 'Cuisine:', 'Dish:', 'Region:', 'Allergy:'].some((p) =>
-                      t.startsWith(p),
-                    ),
-                )
-                .map((t) => t.replace(/^Tag:\s*/i, ''))
-            : [],
-        );
-        setCustomTagInput('');
-        setIsTrending(initialKit.isTrending ?? false);
-        setSpiceLevel(initialKit.spiceLevel || 'Medium');
-        setServings(initialKit.servings ? String(initialKit.servings) : '');
-        setPrepTime(initialKit.prepTimeMinutes ? String(initialKit.prepTimeMinutes) : '');
-        setCookTime(initialKit.cookTimeMinutes ? String(initialKit.cookTimeMinutes) : '');
-        setPrice(initialKit.price ? String(initialKit.price) : '');
-        setHeroImage(initialKit.heroImage || '');
-        setPhotoBadge(initialKit.heroImage ? 'Existing Photo' : 'No Photo Selected');
-        setAllCitiesMode(!initialKit.cities || initialKit.cities.length === 0);
-        setKitCities(initialKit.cities || []);
-        setCityInputValue('');
+    if (initialKit && initialKit.id !== prevKitIdRef.current) {
+      prevKitIdRef.current = initialKit.id;
+      setName(initialKit.name || '');
+      setHindiName(initialKit.hindiName || '');
+      setTagline(initialKit.tagline || '');
+      setDescription(initialKit.description || '');
+      setPrice(String(initialKit.price || 299));
+      setOriginalPrice(String(initialKit.originalPrice || Math.round((initialKit.price || 299) * 1.25)));
+      setHeroImage(initialKit.heroImage || SAMPLE_RECIPE_THUMBNAILS[0]?.url || '');
+      setDiet(initialKit.diet || 'veg');
+      setCuisine(initialKit.cuisine || 'North Indian');
+      setDishCategory(initialKit.dishCategory || 'Curries & Gravies');
+      setSpiceLevel(initialKit.spiceLevel || 'Medium');
+      setServings(String(initialKit.servings || 2));
+      setPrepTimeMinutes(String(initialKit.prepTimeMinutes || 15));
+      setCookTimeMinutes(String(initialKit.cookTimeMinutes || 25));
+      setDietaryTags(initialKit.dietaryTags || [initialKit.diet || 'veg']);
+      setAllergens(initialKit.allergens || ['Dairy']);
+      setIsTrending(Boolean(initialKit.isTrending));
+
+      // Ingredients
+      if (initialKit.ingredients && initialKit.ingredients.length > 0) {
         setIngredients(
-          initialKit.ingredients
-            ?.filter((i) => !i.isMasalaSachet)
-            .map((i) => ({
-              name: i.name,
-              quantity: i.quantity,
-              isMasalaSachet: false,
-            })) || [],
-        );
-        if (initialKit.sachets && initialKit.sachets.length > 0) {
-          setSachets(initialKit.sachets);
-        } else if (initialKit.masalaSachets && initialKit.masalaSachets.length > 0) {
-          setSachets(
-            initialKit.masalaSachets.map((mName, idx) => ({
-              id: `sachet-${idx + 1}`,
-              name: mName,
-              spices: [],
-            })),
-          );
-        } else {
-          setSachets([]);
-        }
-        setRecipeSteps(
-          initialKit.recipeSteps?.map((s, idx) => ({
-            stepNumber: s.stepNumber || idx + 1,
-            title: s.title || '',
-            instruction: s.instruction || '',
-            timerSeconds: s.timerSeconds,
-            tip: s.tip,
-            imageUrl: s.imageUrl,
-          })) || [],
-        );
-        setNutrition(
-          initialKit.nutrition || { calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0 },
+          initialKit.ingredients.map((ing, idx) => ({
+            id: `ing-${idx}-${Date.now()}`,
+            name: ing.name,
+            amount: parseFloat(ing.quantity) || 100,
+            unit: (ing.quantity.replace(/[0-9.\s]/g, '') || 'g') as MeasurementUnit,
+            quantity: ing.quantity,
+          })),
         );
       } else {
-        resetForm();
+        setIngredients([
+          { id: 'ing-1', name: 'Fresh Paneer / Protein', amount: 250, unit: 'g', quantity: '250 g' },
+          { id: 'ing-2', name: 'Tomatoes (Diced Puree)', amount: 200, unit: 'g', quantity: '200 g' },
+        ]);
+      }
+
+      // Sachets
+      setSachets(initialKit.sachets || []);
+
+      // Steps
+      if (initialKit.recipeSteps && initialKit.recipeSteps.length > 0) {
+        setRecipeSteps(
+          initialKit.recipeSteps.map((st, idx) => ({
+            stepNumber: st.stepNumber || idx + 1,
+            title: st.title || `Step ${idx + 1}`,
+            instruction: st.instruction,
+            timerSeconds: st.timerSeconds,
+            tip: st.tip,
+            imageUrl: st.imageUrl || SAMPLE_STEP_IMAGES[0]?.url || '',
+          })),
+        );
+      } else {
+        setRecipeSteps([
+          {
+            stepNumber: 1,
+            title: 'Prepare Fresh Produce & Base',
+            instruction: 'Wash and dice the vegetables. Sauté aromatics in a skillet with oil until golden and fragrant.',
+            imageUrl: SAMPLE_STEP_IMAGES[0]?.url || '',
+          },
+          {
+            stepNumber: 2,
+            title: 'Simmer Masala & Simmer Dish',
+            instruction: 'Add the chef masala sachet spices with pureed tomatoes and simmer on low heat for 12 minutes.',
+            imageUrl: SAMPLE_STEP_IMAGES[1]?.url || '',
+          },
+        ]);
+      }
+
+      // Operational coverage
+      const kitCities: string[] =
+        initialKit.cities && initialKit.cities.length > 0 ? initialKit.cities : ['Pune'];
+      setSelectedCities(kitCities);
+      if (initialKit.subRegions && initialKit.subRegions.length > 0) {
+        setSelectedSubAreas(initialKit.subRegions);
+      } else {
+        const subs: string[] = [];
+        for (const c of kitCities) {
+          const cSubs = getSubRegionsForCity(c);
+          if (cSubs.length > 0) subs.push(...cSubs.map((s) => s.id));
+        }
+        setSelectedSubAreas(subs);
+      }
+
+      // Shelf-life & Nutrition
+      setShelfLifeDays(String(initialKit.shelfLifeDays || 4));
+      setStorageCondition(initialKit.storageCondition || 'Refrigerated at 2°C - 5°C');
+      setNutrition(initialKit.nutrition || { calories: 420, protein: 16, carbs: 48, fat: 18, fiber: 6 });
+      setCurrentStage('details');
+    } else if (!initialKit && (!prevKitIdRef.current || prevKitIdRef.current !== 'new')) {
+      prevKitIdRef.current = 'new';
+      // Reset to defaults for a new kit
+      setName('');
+      setHindiName('');
+      setTagline('');
+      setDescription('');
+      setPrice('299');
+      setOriginalPrice('349');
+      setHeroImage(SAMPLE_RECIPE_THUMBNAILS[0]?.url || '');
+      setDiet('veg');
+      setCuisine('North Indian');
+      setDishCategory('Curries & Gravies');
+      setSpiceLevel('Medium');
+      setServings('2');
+      setPrepTimeMinutes('15');
+      setCookTimeMinutes('25');
+      setDietaryTags(['veg']);
+      setAllergens(['Dairy']);
+      setIsTrending(false);
+      setIngredients([
+        { id: 'ing-1', name: 'Fresh Paneer / Veggies', amount: 250, unit: 'g', quantity: '250 g' },
+      ]);
+      setSachets([]);
+      setRecipeSteps([
+        {
+          stepNumber: 1,
+          title: 'Sauté Aromatics & Temper Spices',
+          instruction: 'Heat 2 tbsp oil in a non-stick pan, add cumin and sauté aromatics until fragrant.',
+          imageUrl: SAMPLE_STEP_IMAGES[0]?.url || '',
+        },
+      ]);
+      setSelectedCities(['Pune']);
+      const puneSubs = getSubRegionsForCity('Pune');
+      setSelectedSubAreas(puneSubs.map((s) => s.id));
+      setShelfLifeDays('4');
+      setStorageCondition('Refrigerated at 2°C - 5°C');
+      setNutrition({ calories: 420, protein: 16, carbs: 48, fat: 18, fiber: 6 });
+      setCurrentStage('details');
+    }
+  }, [visible, initialKit]);
+
+  // Available sub-regions across all selected cities
+  const availableSubRegions = useMemo<SubRegion[]>(() => {
+    const list: SubRegion[] = [];
+    for (const city of selectedCities) {
+      const subs = getSubRegionsForCity(city);
+      if (subs && subs.length > 0) {
+        list.push(...subs);
+      } else {
+        const citySlug = city.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+        list.push(
+          { id: `${citySlug}-central`, name: `${city} Central / Downtown`, keywords: [city] },
+          { id: `${citySlug}-north`, name: `${city} North Zone`, keywords: [city] },
+          { id: `${citySlug}-south`, name: `${city} South Zone`, keywords: [city] },
+          { id: `${citySlug}-east`, name: `${city} East Zone`, keywords: [city] },
+          { id: `${citySlug}-west`, name: `${city} West Zone`, keywords: [city] },
+        );
       }
     }
-    prevVisibleRef.current = visible;
-  }, [visible, initialKit?.id]);
+    return list;
+  }, [selectedCities]);
 
-  // Real-time Live Nutrition Calculation based on all fresh ingredients + all sachet spices
-  useEffect(() => {
-    const s = parseInt(servings) || 2;
-    const freshItems = ingredients.map((i) => ({
-      name: i.name,
-      quantity: i.quantity,
-      isMasalaSachet: false,
-    }));
-    const sachetItems = sachets.flatMap((sachet) =>
-      sachet.spices.map((spice) => ({
-        name: spice.name,
-        quantity: spice.quantity,
-        isMasalaSachet: true,
-      })),
+  // Group sub-regions by city for clean categorized rendering
+  const subRegionsByCity = useMemo(() => {
+    const list: { city: string; subRegions: SubRegion[] }[] = [];
+    for (const city of selectedCities) {
+      const citySubs = getSubRegionsForCity(city);
+      const allCitySubs =
+        citySubs && citySubs.length > 0
+          ? citySubs
+          : [
+              { id: `${city.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-central`, name: `${city} Central / Downtown`, keywords: [city] },
+              { id: `${city.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-north`, name: `${city} North Zone`, keywords: [city] },
+              { id: `${city.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-south`, name: `${city} South Zone`, keywords: [city] },
+              { id: `${city.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-east`, name: `${city} East Zone`, keywords: [city] },
+              { id: `${city.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-west`, name: `${city} West Zone`, keywords: [city] },
+            ];
+
+      const filtered = !areaSearch.trim()
+        ? allCitySubs
+        : allCitySubs.filter((sr) => {
+            const q = areaSearch.toLowerCase().trim();
+            return (
+              sr.name.toLowerCase().includes(q) ||
+              sr.id.toLowerCase().includes(q) ||
+              sr.pincodes?.some((p) => p.includes(q))
+            );
+          });
+
+      if (filtered.length > 0) {
+        list.push({ city, subRegions: filtered });
+      }
+    }
+    return list;
+  }, [selectedCities, areaSearch]);
+
+  // City toggling
+  const toggleCity = (cityName: string) => {
+    setSelectedCities((prev) => {
+      const exists = prev.some((c) => c.toLowerCase() === cityName.toLowerCase());
+      if (exists) {
+        const next = prev.filter((c) => c.toLowerCase() !== cityName.toLowerCase());
+        const citySubs = getSubRegionsForCity(cityName).map((s) => s.id);
+        const citySlug = cityName.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+        setSelectedSubAreas((subPrev) =>
+          subPrev.filter((id) => !citySubs.includes(id) && !id.startsWith(`${citySlug}-`)),
+        );
+        return next;
+      } else {
+        const next = [...prev, cityName];
+        const citySubs = getSubRegionsForCity(cityName);
+        const newIds =
+          citySubs.length > 0
+            ? citySubs.map((s) => s.id)
+            : [`${cityName.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-central`];
+        setSelectedSubAreas((subPrev) => Array.from(new Set([...subPrev, ...newIds])));
+        return next;
+      }
+    });
+  };
+
+  const selectTopHubs = () => {
+    const topHubs = ['Pune', 'Mumbai', 'Bengaluru', 'New Delhi'];
+    setSelectedCities((prev) => Array.from(new Set([...prev, ...topHubs])));
+    const newIds: string[] = [];
+    for (const c of topHubs) {
+      const subs = getSubRegionsForCity(c);
+      if (subs.length > 0) newIds.push(...subs.map((s) => s.id));
+    }
+    setSelectedSubAreas((prev) => Array.from(new Set([...prev, ...newIds])));
+  };
+
+  const clearAllCities = () => {
+    setSelectedCities([]);
+    setSelectedSubAreas([]);
+  };
+
+  const toggleSubArea = (subId: string) => {
+    setSelectedSubAreas((prev) =>
+      prev.includes(subId) ? prev.filter((id) => id !== subId) : [...prev, subId],
     );
-    const combined = [...freshItems, ...sachetItems];
+  };
 
-    if (combined.length === 0) {
-      setNutrition({ calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0 });
-      setAiBreakdown(null);
+  const toggleCitySubAreas = (cityName: string) => {
+    const citySubs = getSubRegionsForCity(cityName);
+    const citySubIds =
+      citySubs.length > 0
+        ? citySubs.map((s) => s.id)
+        : [`${cityName.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-central`];
+    const allChecked = citySubIds.every((id) => selectedSubAreas.includes(id));
+    if (allChecked) {
+      setSelectedSubAreas((prev) => prev.filter((id) => !citySubIds.includes(id)));
+    } else {
+      setSelectedSubAreas((prev) => Array.from(new Set([...prev, ...citySubIds])));
+    }
+  };
+
+  const selectAllSubAreas = () => {
+    setSelectedSubAreas(availableSubRegions.map((s) => s.id));
+  };
+
+  const clearAllSubAreas = () => {
+    setSelectedSubAreas([]);
+  };
+
+  const filteredCities = useMemo(() => {
+    if (!citySearch.trim()) return ALL_GEO_CITIES;
+    const q = citySearch.toLowerCase().trim();
+    return ALL_GEO_CITIES.filter(
+      (c: GeoCityOption) => c.name.toLowerCase().includes(q) || c.state.toLowerCase().includes(q),
+    );
+  }, [citySearch]);
+
+  // Inventory suggestions
+  const inventorySuggestions = useMemo(() => {
+    const allItems = getInventoryItems();
+    if (!inventorySearch.trim()) return allItems.slice(0, 8);
+    const q = inventorySearch.toLowerCase().trim();
+    return allItems
+      .filter((i) => i.name.toLowerCase().includes(q) || i.section.toLowerCase().includes(q))
+      .slice(0, 10);
+  }, [inventorySearch]);
+
+  // 12-Item Quality Readiness Checklist
+  const numPrice = parseFloat(price);
+  const numServings = parseInt(servings, 10) || 0;
+  const numPrep = parseInt(prepTimeMinutes, 10) || 0;
+  const numCook = parseInt(cookTimeMinutes, 10) || 0;
+
+  const readinessChecks = [
+    {
+      key: 'thumbnail',
+      label: 'Recipe Hero Photo Uploaded',
+      isValid: !!heroImage && heroImage.trim().length > 0,
+    },
+    {
+      key: 'name',
+      label: 'Recipe Name Provided (min 3 chars)',
+      isValid: !!name && name.trim().length >= 3,
+    },
+    {
+      key: 'tagline',
+      label: 'Appetizing Tagline / Subtitle',
+      isValid: !!tagline && tagline.trim().length >= 5,
+    },
+    {
+      key: 'description',
+      label: 'Culinary Description (min 15 chars)',
+      isValid: !!description && description.trim().length >= 15,
+    },
+    {
+      key: 'diet',
+      label: 'Dietary Category Selected',
+      isValid: !!diet,
+    },
+    {
+      key: 'cuisine',
+      label: 'Regional Cuisine Specified',
+      isValid: !!cuisine && cuisine.trim().length > 0,
+    },
+    {
+      key: 'category',
+      label: 'Dish Category Specified',
+      isValid: !!dishCategory && dishCategory.trim().length > 0,
+    },
+    {
+      key: 'spice',
+      label: 'Spice Heat Level Specified',
+      isValid: !!spiceLevel,
+    },
+    {
+      key: 'timings',
+      label: 'Portion Servings & Prep/Cook Times',
+      isValid: numServings >= 1 && numPrep > 0 && numCook > 0,
+    },
+    {
+      key: 'price',
+      label: 'Retail Pricing Set (> ₹0)',
+      isValid: !isNaN(numPrice) && numPrice > 0,
+    },
+    {
+      key: 'ingredients',
+      label: 'Fresh Produce & Ingredients Added',
+      isValid: ingredients.length > 0 && ingredients.every((ing) => ing.name.trim().length > 0),
+    },
+    {
+      key: 'steps',
+      label: 'Cooking Steps Defined with Instructions',
+      isValid: recipeSteps.length > 0 && recipeSteps.every((s) => s.instruction.trim().length >= 10),
+    },
+  ];
+
+  const passedChecksCount = readinessChecks.filter((c) => c.isValid).length;
+  const allChecksPassed = passedChecksCount === readinessChecks.length;
+
+  // Add fresh ingredient
+  const handleAddIngredient = () => {
+    if (!newIngName.trim()) {
+      showWebSafeAlert('Ingredient Name Required', 'Please enter a name for the ingredient.');
       return;
     }
-
-    const result = estimateNutritionWithAI(combined, s);
-    setNutrition(result.perServing);
-    setAiBreakdown(result);
-  }, [ingredients, sachets, servings]);
-
-  // Fresh produce handlers
-  const handleAddFreshIngredient = () => {
-    if (!newFreshName.trim()) {
-      showWebSafeAlert('Missing Name', 'Please enter the produce / grocery name.');
-      return;
-    }
+    const amt = parseFloat(newIngAmount) || 100;
     setIngredients((prev) => [
       ...prev,
       {
-        name: newFreshName.trim(),
-        quantity: newFreshQty.trim() || '1 portion',
-        isMasalaSachet: false,
+        id: `ing-${Date.now()}`,
+        name: newIngName.trim(),
+        amount: amt,
+        unit: newIngUnit,
+        quantity: `${amt} ${newIngUnit}`,
       },
     ]);
-    setNewFreshName('');
-    setNewFreshQty('');
+    setNewIngName('');
+    setNewIngAmount('100');
   };
 
-  const handleRemoveFreshIngredient = (index: number) => {
-    setIngredients((prev) => prev.filter((_, i) => i !== index));
-  };
-
-  const handleUpdateFreshIngredientQty = (index: number, newQty: string) => {
-    setIngredients((prev) =>
-      prev.map((item, idx) => (idx === index ? { ...item, quantity: newQty } : item)),
-    );
-  };
-
-  // Masala Sachet Management Handlers
-  const handleAddSachet = () => {
-    const nextNum = sachets.length + 1;
-    const newId = `sachet-${Date.now()}-${nextNum}`;
-    const newSachet: SachetItem = {
-      id: newId,
-      name: `Sachet ${nextNum}: Masala Blend`,
-      spices: [],
-    };
-    setSachets((prev) => [...prev, newSachet]);
-    setSachetDrafts((prev) => ({
-      ...prev,
-      [newId]: { spiceName: '', quantity: '1 tsp', searchQuery: '' },
-    }));
-  };
-
-  const handleRemoveSachet = (id: string) => {
-    setSachets((prev) => prev.filter((s) => s.id !== id));
-    setSachetDrafts((prev) => {
-      const copy = { ...prev };
-      delete copy[id];
-      return copy;
-    });
-  };
-
-  const handleUpdateSachetName = (id: string, name: string) => {
-    setSachets((prev) => prev.map((s) => (s.id === id ? { ...s, name } : s)));
-  };
-
-  const handleUpdateSachetDraft = (
-    sachetId: string,
-    updates: Partial<{ spiceName: string; quantity: string; searchQuery: string }>,
-  ) => {
-    setSachetDrafts((prev) => {
-      const current = prev[sachetId] || { spiceName: '', quantity: '1 tsp', searchQuery: '' };
-      return {
-        ...prev,
-        [sachetId]: { ...current, ...updates },
-      };
-    });
-  };
-
-  const handleAddSpiceToSachet = (sachetId: string) => {
-    const draft = sachetDrafts[sachetId] || { spiceName: '', quantity: '1 tsp', searchQuery: '' };
-    const spiceToAdd = (draft.spiceName || draft.searchQuery || '').trim();
-    if (!spiceToAdd) {
-      showWebSafeAlert('Missing Spice', 'Please search and select a spice, or enter a spice name.');
+  const handleAddFromInventory = (item: InventoryItem) => {
+    const exists = ingredients.some((i) => i.name.toLowerCase() === item.name.toLowerCase());
+    if (exists) {
+      showWebSafeAlert('Already Added', `"${item.name}" is already in your ingredients list.`);
       return;
     }
-    const qty = (draft.quantity || '1 tsp').trim();
-    setSachets((prev) =>
-      prev.map((s) => {
-        if (s.id !== sachetId) return s;
-        return {
-          ...s,
-          spices: [...s.spices, { name: spiceToAdd, quantity: qty }],
-        };
-      }),
-    );
-    setSachetDrafts((prev) => ({
+    const unit = (VALID_UNITS.includes(item.unit as any) ? item.unit : 'g') as MeasurementUnit;
+    setIngredients((prev) => [
       ...prev,
-      [sachetId]: { spiceName: '', quantity: '1 tsp', searchQuery: '' },
-    }));
+      {
+        id: `ing-${Date.now()}`,
+        name: item.name,
+        amount: 200,
+        unit,
+        quantity: `200 ${unit}`,
+        ingredientId: item.id,
+      },
+    ]);
+    setInventorySearch('');
   };
 
-  const handleRemoveSpiceFromSachet = (sachetId: string, spiceIndex: number) => {
-    setSachets((prev) =>
-      prev.map((s) => {
-        if (s.id !== sachetId) return s;
-        return {
-          ...s,
-          spices: s.spices.filter((_, idx) => idx !== spiceIndex),
-        };
-      }),
-    );
+  const handleRemoveIngredient = (id: string) => {
+    setIngredients((prev) => prev.filter((i) => i.id !== id));
   };
 
-  // Upload step preparation photo from device
-  const handleUploadStepPhoto = () => {
-    if (Platform.OS === 'web' && typeof document !== 'undefined') {
-      const input = document.createElement('input');
-      input.type = 'file';
-      input.accept = 'image/*';
-      input.onchange = (e: any) => {
-        const file = e.target?.files?.[0];
-        if (file) {
-          const reader = new FileReader();
-          reader.onload = (evt) => {
-            if (evt.target?.result) {
-              setNewStepPhotoUrl(evt.target.result as string);
-              setStepAiBadge('Custom Uploaded Photo');
-              showWebSafeAlert('Step Photo Attached', 'Preparation step photo ready.');
-            }
-          };
-          reader.readAsDataURL(file);
-        }
-      };
-      input.click();
-    } else {
-      showWebSafeAlert('Upload Photo', 'Please paste the image URL below or select AI Generation.');
-    }
-  };
-
-  // AI Step Photo Generation: synthesizes dish name, all ingredients from step 2,
-  // and all previous cooking instructions to create the most accurate culinary stage photo
-  const handleGenerateStepAiPhoto = async () => {
-    if (!newStepTitle.trim() && !newStepInstruction.trim()) {
-      showWebSafeAlert(
-        'Step Details Needed',
-        'Please enter at least a step title or cooking instruction so the AI can read what stage is being prepared!',
-      );
-      return;
-    }
-
-    setIsGeneratingStepPhoto(true);
-    try {
-      const result = await generateStepPhotoWithAI({
-        dishName: name || 'Artisanal Indian Recipe',
-        cuisine,
-        diet,
-        stepNumber: recipeSteps.length + 1,
-        stepTitle: newStepTitle.trim() || `Step ${recipeSteps.length + 1}`,
-        stepInstruction: newStepInstruction.trim() || newStepTitle.trim(),
-        allIngredients: [
-          ...ingredients.map((i) => ({
-            name: i.name,
-            quantity: i.quantity,
-            isMasalaSachet: false,
-          })),
-          ...sachets.flatMap((s) =>
-            s.spices.map((sp) => ({
-              name: `${sp.name} (${s.name})`,
-              quantity: sp.quantity,
-              isMasalaSachet: true,
-            })),
-          ),
-        ],
-        previousSteps: recipeSteps,
-      });
-      setNewStepPhotoUrl(result.imageUrl);
-      setStepAiBadge(result.presentationStyle);
-      showWebSafeAlert(
-        'AI Step Photo Generated',
-        `Generated reference photo based on dish ingredients and cooking instructions (${result.presentationStyle}).`,
-      );
-    } catch {
-      showWebSafeAlert('Notice', 'Using chef preparation library.');
-    } finally {
-      setIsGeneratingStepPhoto(false);
-    }
-  };
-
-  // Regenerate an existing step's photo using AI
-  const handleRegenerateExistingStepPhoto = async (stepNumber: number) => {
-    const targetStep = recipeSteps.find((s) => s.stepNumber === stepNumber);
-    if (!targetStep) return;
-    const priorSteps = recipeSteps.filter((s) => s.stepNumber < stepNumber);
-
-    try {
-      const result = await generateStepPhotoWithAI({
-        dishName: name || 'Artisanal Indian Recipe',
-        cuisine,
-        diet,
-        stepNumber: targetStep.stepNumber,
-        stepTitle: targetStep.title,
-        stepInstruction: targetStep.instruction,
-        allIngredients: [
-          ...ingredients.map((i) => ({
-            name: i.name,
-            quantity: i.quantity,
-            isMasalaSachet: false,
-          })),
-          ...sachets.flatMap((s) =>
-            s.spices.map((sp) => ({
-              name: `${sp.name} (${s.name})`,
-              quantity: sp.quantity,
-              isMasalaSachet: true,
-            })),
-          ),
-        ],
-        previousSteps: priorSteps,
-      });
-      setRecipeSteps((prev) =>
-        prev.map((s) => (s.stepNumber === stepNumber ? { ...s, imageUrl: result.imageUrl } : s)),
-      );
-      showWebSafeAlert(
-        'Step Photo Refreshed',
-        `AI updated photo for Step ${stepNumber} (${result.presentationStyle}).`,
-      );
-    } catch {
-      showWebSafeAlert('Notice', 'Existing photo kept.');
-    }
-  };
-
-  const handleApplyCustomStepUrl = () => {
-    if (!customStepPhotoUrl.trim()) return;
-    setNewStepPhotoUrl(customStepPhotoUrl.trim());
-    setStepAiBadge('Custom Web URL');
-    setCustomStepPhotoUrl('');
-    showWebSafeAlert('Photo Updated', 'Custom step image URL applied.');
-  };
-
-  // Add recipe step (with photo)
+  // Add cooking step
   const handleAddStep = () => {
-    if (!newStepTitle.trim() || !newStepInstruction.trim()) {
-      showWebSafeAlert('Incomplete Step', 'Please enter a step title and cooking instruction.');
-      return;
-    }
-    const mins = parseFloat(newStepMinutes) || 0;
-    const nextStep = {
-      stepNumber: recipeSteps.length + 1,
-      title: newStepTitle.trim(),
-      instruction: newStepInstruction.trim(),
-      timerSeconds: mins > 0 ? Math.round(mins * 60) : undefined,
-      tip: newStepTip.trim() || undefined,
-      imageUrl: newStepPhotoUrl || undefined,
-    };
-    setRecipeSteps((prev) => [...prev, nextStep]);
-    setNewStepTitle('');
-    setNewStepInstruction('');
-    setNewStepMinutes('3');
-    setNewStepTip('');
-    setNewStepPhotoUrl('');
-    setCustomStepPhotoUrl('');
-    setStepAiBadge('');
+    const nextNum = recipeSteps.length + 1;
+    setRecipeSteps((prev) => [
+      ...prev,
+      {
+        stepNumber: nextNum,
+        title: `Step ${nextNum}: Cooking Phase`,
+        instruction: 'Explain the precise cooking action, flame temperature, and timing.',
+        imageUrl: SAMPLE_STEP_IMAGES[(nextNum - 1) % SAMPLE_STEP_IMAGES.length]?.url || '',
+      },
+    ]);
   };
 
-  const handleRemoveStep = (stepNumber: number) => {
-    setRecipeSteps((prev) =>
-      prev
-        .filter((s) => s.stepNumber !== stepNumber)
-        .map((s, idx) => ({ ...s, stepNumber: idx + 1 })),
-    );
+  const handleRemoveStep = (index: number) => {
+    setRecipeSteps((prev) => {
+      const next = prev.filter((_, idx) => idx !== index);
+      return next.map((st, idx) => ({ ...st, stepNumber: idx + 1 }));
+    });
   };
 
-  // AI Nutrition Manual Recalculation
-  const handleRunAiNutrition = () => {
-    const s = parseInt(servings) || 2;
-    const freshItems = ingredients.map((i) => ({
-      name: i.name,
-      quantity: i.quantity,
-      isMasalaSachet: false,
-    }));
-    const sachetItems = sachets.flatMap((sachet) =>
-      sachet.spices.map((spice) => ({
-        name: spice.name,
-        quantity: spice.quantity,
-        isMasalaSachet: true,
-      })),
-    );
-    const combined = [...freshItems, ...sachetItems];
+  const handleMoveStep = (index: number, direction: 'up' | 'down') => {
+    if (direction === 'up' && index === 0) return;
+    if (direction === 'down' && index === recipeSteps.length - 1) return;
+    const targetIdx = direction === 'up' ? index - 1 : index + 1;
+    setRecipeSteps((prev) => {
+      const copy = [...prev];
+      const temp = copy[index]!;
+      copy[index] = copy[targetIdx]!;
+      copy[targetIdx] = temp;
+      return copy.map((st, idx) => ({ ...st, stepNumber: idx + 1 }));
+    });
+  };
 
-    if (combined.length === 0) {
-      showWebSafeAlert('No Items Found', 'Please add fresh produce or masala sachets in Step 2.');
+  // AI photo generators
+  const handleGenerateAiDishPhoto = async () => {
+    if (!name.trim()) {
+      showWebSafeAlert('Dish Name Required', 'Please enter a dish name first for the AI generator.');
+      return;
+    }
+    setIsGeneratingAiPhoto(true);
+    try {
+      const res = await generateDishPhotoWithAI({
+        dishName: name.trim(),
+        cuisine,
+        diet,
+        spiceLevel,
+        ingredients: ingredients.map((i) => i.name),
+        presentationStyle: 'finedining',
+      });
+      setHeroImage(res.imageUrl);
+      showWebSafeAlert('AI Photo Generated', `Gourmet presentation photo created for ${name}.`);
+    } catch {
+      showWebSafeAlert('Notice', 'Using gourmet chef presentation photograph.');
+    } finally {
+      setIsGeneratingAiPhoto(false);
+    }
+  };
+
+  const handleEstimateNutrition = async () => {
+    if (ingredients.length === 0) {
+      showWebSafeAlert('Ingredients Needed', 'Please add ingredients before estimating nutrition.');
+      return;
+    }
+    setIsEstimatingNutrition(true);
+    try {
+      const res = estimateNutritionWithAI(
+        ingredients.map((i) => ({ name: i.name, quantity: i.quantity })),
+        numServings || 2,
+      );
+      setNutrition(res.perServing);
+      setNutritionAIResult(res);
+      showWebSafeAlert('Nutrition Estimated', `AI calculated ${res.perServing.calories} kcal per serving.`);
+    } catch {
+      showWebSafeAlert('Error', 'Could not estimate nutrition at this time.');
+    } finally {
+      setIsEstimatingNutrition(false);
+    }
+  };
+
+  // Final Save Handler
+  const handleSaveMealKit = async () => {
+    if (!name.trim() || name.trim().length < 3) {
+      setCurrentStage('details');
+      showWebSafeAlert('Name Required', 'Please enter a valid recipe name (min 3 chars).');
       return;
     }
 
-    setIsEstimatingAI(true);
-    setTimeout(() => {
-      const result = estimateNutritionWithAI(combined, s);
-      setAiBreakdown(result);
-      setNutrition(result.perServing);
-      setIsEstimatingAI(false);
-    }, 400);
-  };
-
-  // Publish / Save Kit
-  const handleFinalPublish = async () => {
-    const trimmedName = name.trim();
-    if (!trimmedName) {
-      setStep5Error('Dish Name is required before publishing.');
-      showWebSafeAlert('Dish Name Required', 'Please enter a dish name for your meal kit.');
+    if (isNaN(numPrice) || numPrice <= 0) {
+      setCurrentStage('details');
+      showWebSafeAlert('Price Required', 'Please enter a valid retail price for this meal kit.');
       return;
     }
-    setStep5Error(null);
 
-    // Clean price string; default to 299 if empty, whitespace, or invalid
-    const cleanPriceStr = price.replace(/[^0-9.]/g, '');
-    const parsedPrice = parseFloat(cleanPriceStr);
-    const finalPrice = !isNaN(parsedPrice) && parsedPrice > 0 ? Math.round(parsedPrice) : 299;
+    if (ingredients.length === 0) {
+      setCurrentStage('ingredients');
+      showWebSafeAlert('Ingredients Required', 'Please add at least one fresh produce ingredient.');
+      return;
+    }
+
+    if (recipeSteps.length === 0) {
+      setCurrentStage('steps');
+      showWebSafeAlert('Steps Required', 'Please provide at least one cooking step.');
+      return;
+    }
+
+    if (selectedCities.length === 0) {
+      setCurrentStage('review');
+      showWebSafeAlert('Target Cities Required', 'Please select at least one target operational city.');
+      return;
+    }
+
+    if (selectedSubAreas.length === 0) {
+      setCurrentStage('review');
+      showWebSafeAlert('Delivery Areas Required', 'Please check at least one delivery sub-area.');
+      return;
+    }
 
     const kitId = initialKit?.id || 'kit-' + Math.floor(100 + Math.random() * 900);
-    const masalaSachets = sachets.map((s) => s.name);
-    const imageToUse =
-      heroImage ||
-      'https://images.unsplash.com/photo-1546833999-b9f581a1996d?auto=format&fit=crop&w=800&q=80';
+    const legacyHubs = Array.from(new Set(selectedCities.map((c) => legacyHubForCity(c)))) as RegionHub[];
 
-    // Format all ingredients: fresh produce + sachet summaries
-    const sachetIngredientsForKit = sachets.map((s) => ({
-      name: s.name,
-      quantity:
-        s.spices.length > 0
-          ? `${s.spices.map((sp) => `${sp.name} (${sp.quantity})`).join(', ')}`
-          : 'Chef Masala Sachet',
-      isMasalaSachet: true,
+    // Map selected cities to depot IDs
+    const targetStorageCentres = STORAGE_CENTRE_REGIONS.filter((sc) => {
+      const matchCity = selectedCities.some(
+        (c) => sc.city.toLowerCase() === c.toLowerCase() || sc.name.toLowerCase().includes(c.toLowerCase()),
+      );
+      const matchZone = legacyHubs.includes(sc.zone);
+      return matchCity || matchZone;
+    }).map((sc) => sc.id);
+
+    // Format all ingredients
+    const formattedIngredients: IngredientItem[] = ingredients.map((i) => ({
+      name: i.name,
+      quantity: i.quantity,
     }));
-    const allKitIngredients = [...ingredients, ...sachetIngredientsForKit];
 
-    const cleanServings = parseInt(String(servings).replace(/[^0-9]/g, '')) || 2;
-    const cleanPrepTime = parseInt(String(prepTime).replace(/[^0-9]/g, '')) || 10;
-    const cleanCookTime = parseInt(String(cookTime).replace(/[^0-9]/g, '')) || 20;
+    // Add masala sachets to ingredients representation if defined
+    for (const s of sachets) {
+      formattedIngredients.push({
+        name: s.name,
+        quantity: s.spices.map((sp) => `${sp.name} (${sp.quantity})`).join(', ') || 'Chef Spice Blend',
+        isMasalaSachet: true,
+      });
+    }
 
     const savedKit: MealKit = {
       id: kitId,
-      name: trimmedName,
+      name: name.trim(),
       hindiName: hindiName.trim() || undefined,
-      slug: trimmedName.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
-      tagline: tagline.trim(),
-      description: `${trimmedName} kit carefully prepared by master chefs with fresh ingredients and authentic masala sachets for restaurant taste at home.`,
-      heroImage: imageToUse,
-      galleryImages: [imageToUse],
-      price: finalPrice,
-      servings: cleanServings,
-      prepTimeMinutes: cleanPrepTime,
-      cookTimeMinutes: cleanCookTime,
+      slug: name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+      tagline: tagline.trim() || `${cuisine} Specialty Meal Kit`,
+      description:
+        description.trim() ||
+        `${name.trim()} meal kit carefully curated with fresh produce, authentic spices, and restaurant-quality recipe steps.`,
+      heroImage: heroImage.trim() || SAMPLE_RECIPE_THUMBNAILS[0]!.url,
+      galleryImages: [heroImage.trim() || SAMPLE_RECIPE_THUMBNAILS[0]!.url],
+      price: numPrice,
+      originalPrice: parseFloat(originalPrice) || Math.round(numPrice * 1.2),
+      servings: numServings || 2,
+      prepTimeMinutes: numPrep || 15,
+      cookTimeMinutes: numCook || 25,
       diet,
       cuisine,
       dishCategory,
       spiceLevel,
       difficulty: 'Easy',
-      dietaryTags: [diet],
+      dietaryTags,
       isTrending,
-      availableRegions: selectedRegions.length > 0 ? selectedRegions : ['North'],
-      cities: allCitiesMode ? [] : kitCities,
-      availableStorageCentres: selectedStorageCentres,
+      availableRegions: legacyHubs.length > 0 ? legacyHubs : ['West'],
+      cities: selectedCities,
+      subRegions: selectedSubAreas,
+      originCity: selectedCities[0] || 'Pune',
+      availableStorageCentres: targetStorageCentres,
       stockByRegion: initialKit?.stockByRegion || { North: 50, South: 50, West: 50, East: 50 },
+      shelfLifeDays: parseInt(shelfLifeDays, 10) || 4,
+      shelfLife: `${shelfLifeDays} days (${storageCondition})`,
+      storageCondition,
       rating: initialKit?.rating || 5.0,
       reviewCount: initialKit?.reviewCount || 0,
       nutrition,
-      allergens: selectedAllergens,
+      allergens,
       tags: compileMealKitTags({
         diet,
         cuisine,
         dishCategory,
-        availableRegions: selectedRegions,
-        availableStorageCentres: selectedStorageCentres,
-        allergens: selectedAllergens,
+        availableRegions: legacyHubs,
+        availableStorageCentres: targetStorageCentres,
+        allergens,
         isTrending,
-        dietaryTags: [diet, ...(customTags as any)],
+        dietaryTags,
       }),
-      ingredients: allKitIngredients,
-      masalaSachets,
+      ingredients: formattedIngredients,
+      masalaSachets: sachets.map((s) => s.name),
       sachets,
-      recipeSteps,
+      recipeSteps: recipeSteps.map((st) => ({
+        stepNumber: st.stepNumber,
+        title: st.title,
+        instruction: st.instruction,
+        timerSeconds: st.timerSeconds,
+        tip: st.tip,
+        imageUrl: st.imageUrl,
+      })),
       reviews: initialKit?.reviews || [],
       salesByRegion: initialKit?.salesByRegion || {},
+      chefId: initialKit?.chefId,
+      chefName: initialKit?.chefName,
+      submissionStatus: 'published',
     };
 
-    setIsPublishing(true);
+    setIsSaving(true);
     try {
       await onSaveKit(savedKit);
       showWebSafeAlert(
-        'Meal Kit Published!',
-        `"${savedKit.name}" (₹${savedKit.price}) is now live in your RasoiGenie catalog and saved to the database.`,
+        'Meal Kit Saved!',
+        `"${savedKit.name}" (₹${savedKit.price}) has been saved and updated in the active meal kit catalog.`,
       );
-      resetForm();
       onClose();
     } catch (err: any) {
-      const errMsg = err?.message || 'Could not save meal kit to database.';
-      setStep5Error(errMsg);
-      showWebSafeAlert('Save Failed', errMsg);
+      showWebSafeAlert('Save Error', err?.message || 'Could not save meal kit.');
     } finally {
-      setIsPublishing(false);
+      setIsSaving(false);
     }
   };
 
-  const currentKitForPreview: MealKit = {
-    id: initialKit?.id || 'kit-preview',
-    name: name.trim() || 'Untitled Recipe',
-    hindiName: hindiName.trim() || undefined,
-    slug: (name || 'recipe').toLowerCase().replace(/[^a-z0-9]+/g, '-'),
-    tagline: tagline.trim() || '',
-    description: `${name || 'Dish'} kit carefully prepared with fresh ingredients and authentic masala sachets.`,
-    heroImage:
-      heroImage ||
-      'https://images.unsplash.com/photo-1546833999-b9f581a1996d?auto=format&fit=crop&w=800&q=80',
-    galleryImages: [
-      heroImage ||
-        'https://images.unsplash.com/photo-1546833999-b9f581a1996d?auto=format&fit=crop&w=800&q=80',
-    ],
-    price: parseInt(price) || 0,
-    servings: parseInt(servings) || 0,
-    prepTimeMinutes: parseInt(prepTime) || 0,
-    cookTimeMinutes: parseInt(cookTime) || 0,
-    diet,
-    cuisine,
-    dishCategory,
-    spiceLevel,
-    difficulty: 'Easy',
-    dietaryTags: [diet, ...(customTags as any)],
-    isTrending,
-    availableRegions: selectedRegions.length > 0 ? selectedRegions : ['North'],
-    cities: allCitiesMode ? [] : kitCities,
-    availableStorageCentres: selectedStorageCentres,
-    stockByRegion: { North: 50, South: 50, West: 50, East: 50 },
-    rating: 5.0,
-    reviewCount: 0,
-    nutrition,
-    allergens: selectedAllergens,
-    tags: compileMealKitTags({
-      diet,
-      cuisine,
-      dishCategory,
-      availableRegions: selectedRegions,
-      availableStorageCentres: selectedStorageCentres,
-      allergens: selectedAllergens,
-      isTrending,
-      dietaryTags: [diet, ...(customTags as any)],
-    }),
-    ingredients: [
-      ...ingredients,
-      ...sachets.map((s) => ({
-        name: s.name,
-        quantity:
-          s.spices.length > 0
-            ? `${s.spices.map((sp) => `${sp.name} (${sp.quantity})`).join(', ')}`
-            : 'Masala Sachet',
-        isMasalaSachet: true,
-      })),
-    ],
-    masalaSachets: sachets.map((s) => s.name),
-    sachets,
-    recipeSteps: recipeSteps.map((s) => ({
-      ...s,
-      imageUrl: s.imageUrl || heroImage,
-    })),
-    reviews: [],
-    salesByRegion: {},
-  };
+  const STAGE_CONFIGS: Array<{
+    key: AdminKitStage;
+    label: string;
+    subtitle: string;
+    icon: string;
+  }> = [
+    { key: 'details', label: 'Details', subtitle: 'Basic & Dietary', icon: 'document-text-outline' },
+    { key: 'ingredients', label: 'Ingredients', subtitle: 'Inventory Items', icon: 'nutrition-outline' },
+    { key: 'steps', label: 'Cooking Steps', subtitle: 'Method & Photos', icon: 'restaurant-outline' },
+    { key: 'review', label: 'Review & Fulfilment', subtitle: 'Readiness & Delivery', icon: 'checkmark-circle-outline' },
+  ];
 
-  const handleModalClose = () => {
-    resetForm();
-    onClose();
-  };
+  const currentStageIndex = STAGE_CONFIGS.findIndex((s) => s.key === currentStage);
 
   return (
-    <Modal visible={visible} animationType="slide" onRequestClose={handleModalClose}>
+    <Modal visible={visible} animationType="slide" transparent={false} onRequestClose={onClose}>
       <View style={[styles.container, { backgroundColor: colors.bgPrimary }]}>
-        {/* Top Chef Header */}
-        <View
-          style={[
-            styles.headerBar,
-            { backgroundColor: colors.bgSurface, borderBottomColor: colors.borderLight },
-          ]}
-        >
-          <TouchableOpacity onPress={handleModalClose} style={styles.closeBtn}>
-            <Text style={[styles.closeBtnText, { color: colors.textPrimary }]}>Cancel</Text>
-          </TouchableOpacity>
-          <View style={{ alignItems: 'center' }}>
-            <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>
-              Chef Recipe Builder
-            </Text>
-            <Text style={[styles.headerSubtitle, { color: colors.primary }]}>
-              {initialKit ? 'Edit Meal Kit' : 'Create Custom Meal Kit'}
-            </Text>
+        {/* ── 1. STUDIO HEADER ── */}
+        <View style={[styles.header, { backgroundColor: colors.bgSurface, borderBottomColor: colors.borderLight }]}>
+          <View style={styles.headerLeft}>
+            <TouchableOpacity
+              onPress={onClose}
+              style={[styles.backBtn, { borderColor: colors.borderLight, backgroundColor: colors.bgSubtle }]}
+              accessibilityLabel="Back to Meal Kits"
+            >
+              <Icon name="arrow-back" size={18} color={colors.textPrimary} />
+            </TouchableOpacity>
+
+            <View style={styles.headerTitleWrap}>
+              <View style={styles.breadcrumbRow}>
+                <Text style={[styles.breadcrumbText, { color: colors.textMuted }]}>Admin Kitchen</Text>
+                <Text style={[styles.breadcrumbDivider, { color: colors.textMuted }]}>/</Text>
+                <Text style={[styles.breadcrumbText, { color: colors.textMuted }]}>Meal Kits</Text>
+                <Text style={[styles.breadcrumbDivider, { color: colors.textMuted }]}>/</Text>
+                <Text style={[styles.breadcrumbCurrent, { color: colors.primary }]}>
+                  {isEditing ? 'Edit Meal Kit' : 'Author New Meal Kit'}
+                </Text>
+              </View>
+              <Text style={[styles.headerTitle, { color: colors.textPrimary }]} numberOfLines={1}>
+                {name.trim() ? name.trim() : isEditing ? 'Edit Meal Kit' : 'New Chef Meal Kit'}
+              </Text>
+            </View>
           </View>
-          <TouchableOpacity
-            onPress={handleFinalPublish}
-            disabled={isPublishing}
-            style={[
-              styles.publishHeaderBtn,
-              { backgroundColor: colors.primary, opacity: isPublishing ? 0.7 : 1 },
-            ]}
-          >
-            {isPublishing ? (
-              <ActivityIndicator color="#fff" size="small" />
-            ) : (
-              <Text style={styles.publishHeaderBtnText}>Save</Text>
-            )}
-          </TouchableOpacity>
+
+          <View style={styles.headerRight}>
+            <View
+              style={[
+                styles.statusBadge,
+                {
+                  backgroundColor: isEditing ? '#ECFDF5' : colors.bgSubtle,
+                  borderColor: isEditing ? '#A7F3D0' : colors.borderLight,
+                },
+              ]}
+            >
+              <Icon
+                name={isEditing ? 'checkmark-circle' : 'create-outline'}
+                size={14}
+                color={isEditing ? '#059669' : colors.textSecondary}
+              />
+              <Text style={[styles.statusBadgeText, { color: isEditing ? '#065F46' : colors.textSecondary }]}>
+                {isEditing ? 'Live Catalog Kit' : 'Draft Mode'}
+              </Text>
+            </View>
+
+            <TouchableOpacity
+              onPress={handleSaveMealKit}
+              disabled={isSaving}
+              style={[styles.headerQuickSaveBtn, { backgroundColor: colors.primary }]}
+            >
+              {isSaving ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <>
+                  <Icon name="checkmark" size={15} color="#fff" />
+                  <Text style={styles.headerQuickSaveBtnText}>Save</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          </View>
         </View>
 
-        {/* Wizard Step Progress Bar */}
-        <View style={[styles.stepNavBar, { backgroundColor: colors.bgSurface }]}>
-          {[
-            { step: 1, label: '1. Dish Info', icon: 'restaurant' as AppIconName },
-            { step: 2, label: '2. Ingredients', icon: 'nutrition' as AppIconName },
-            { step: 3, label: '3. Recipe Steps', icon: 'document-text' as AppIconName },
-            { step: 4, label: '4. AI Nutrition', icon: 'sparkles' as AppIconName },
-            { step: 5, label: '5. Preview', icon: 'eye' as AppIconName },
-          ].map((s) => {
-            const isActive = currentStep === s.step;
-            const isCompleted = currentStep > s.step;
-            return (
-              <TouchableOpacity
-                key={s.step}
-                onPress={() => setCurrentStep(s.step as WizardStep)}
-                style={[
-                  styles.stepTab,
-                  isActive && { borderBottomColor: colors.primary, borderBottomWidth: 3 },
-                ]}
-              >
-                <View style={{ marginBottom: 2 }}>
-                  <Icon
-                    name={s.icon}
-                    size={16}
-                    color={isActive ? colors.primary : colors.textMuted}
-                  />
-                </View>
-                <Text
-                  style={[
-                    styles.stepTabLabel,
-                    {
-                      color: isActive
-                        ? colors.primary
-                        : isCompleted
-                          ? colors.textPrimary
-                          : colors.textMuted,
-                      fontWeight: isActive ? '800' : '600',
-                    },
-                  ]}
-                >
-                  {s.label}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
+        {/* ── 2. STEP NAVIGATION BAR (MATCHING CHEF STUDIO) ── */}
+        <View style={[styles.stepNavBar, { backgroundColor: colors.bgSurface, borderBottomColor: colors.borderLight }]}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.stepNavScroll}>
+            {STAGE_CONFIGS.map((stage, idx) => {
+              const isActive = currentStage === stage.key;
+              const isPast = idx < currentStageIndex;
 
-        {/* Main Content Area */}
-        <ScrollView
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={styles.scrollContainer}
-        >
-          {/* STEP 1: DISH BASICS */}
-          {currentStep === 1 && (
-            <View style={styles.stepContent}>
-              <View
-                style={[styles.card, { backgroundColor: colors.bgSurface, borderRadius: radii.xl }]}
-              >
-                <Text style={[styles.sectionHeading, { color: colors.textPrimary }]}>
-                  What dish are you crafting?
-                </Text>
-                <Text style={[styles.sectionHint, { color: colors.textSecondary }]}>
-                  Give your meal kit a mouth-watering title and culinary details.
-                </Text>
+              return (
+                <React.Fragment key={stage.key}>
+                  {idx > 0 && (
+                    <View
+                      style={[
+                        styles.stepConnector,
+                        { backgroundColor: idx <= currentStageIndex ? colors.primary : colors.borderLight },
+                      ]}
+                    />
+                  )}
 
-                {/* Dish Name */}
-                <Text style={[styles.inputLabel, { color: colors.textPrimary }]}>
-                  Dish Name <Text style={{ color: colors.danger }}>*</Text>
-                </Text>
-                <TextInput
-                  style={[
-                    styles.textInput,
-                    { backgroundColor: colors.bgSubtle, borderColor: colors.border },
-                  ]}
-                  placeholder="e.g. Royal Shahi Paneer"
-                  placeholderTextColor={colors.textMuted}
-                  value={name}
-                  onChangeText={setName}
-                />
-
-                {/* Hindi Name */}
-                <Text style={[styles.inputLabel, { color: colors.textPrimary }]}>
-                  Hindi / Regional Name (Optional)
-                </Text>
-                <TextInput
-                  style={[
-                    styles.textInput,
-                    { backgroundColor: colors.bgSubtle, borderColor: colors.border },
-                  ]}
-                  placeholder="e.g. शाही पनीर"
-                  placeholderTextColor={colors.textMuted}
-                  value={hindiName}
-                  onChangeText={setHindiName}
-                />
-
-                {/* Tagline */}
-                <Text style={[styles.inputLabel, { color: colors.textPrimary }]}>
-                  Short Chef Tagline
-                </Text>
-                <TextInput
-                  style={[
-                    styles.textInput,
-                    { backgroundColor: colors.bgSubtle, borderColor: colors.border },
-                  ]}
-                  placeholder="e.g. Velvety tomato cashew gravy with hand-ground cardamom"
-                  placeholderTextColor={colors.textMuted}
-                  value={tagline}
-                  onChangeText={setTagline}
-                />
-
-                {/* Cuisine & Diet Row */}
-                <View style={styles.rowTwoCol}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={[styles.inputLabel, { color: colors.textPrimary }]}>Cuisine</Text>
-                    <View style={styles.chipsWrap}>
-                      {(
-                        [
-                          'North Indian',
-                          'South Indian',
-                          'Mughlai',
-                          'Punjabi',
-                          'Continental',
-                        ] as CuisineType[]
-                      ).map((c) => (
-                        <TouchableOpacity
-                          key={c}
-                          onPress={() => setCuisine(c)}
-                          style={[
-                            styles.chip,
-                            {
-                              backgroundColor: cuisine === c ? colors.primary : colors.bgSubtle,
-                              borderColor: cuisine === c ? colors.primary : colors.borderLight,
-                            },
-                          ]}
-                        >
-                          <Text
-                            style={{
-                              color: cuisine === c ? '#fff' : colors.textPrimary,
-                              fontSize: 12,
-                              fontWeight: '700',
-                            }}
-                          >
-                            {c}
-                          </Text>
-                        </TouchableOpacity>
-                      ))}
-                    </View>
-                  </View>
-
-                  <View style={{ flex: 1 }}>
-                    <Text style={[styles.inputLabel, { color: colors.textPrimary }]}>
-                      Diet Type
-                    </Text>
-                    <View style={styles.chipsWrap}>
-                      {[
-                        { key: 'veg', label: 'Pure Veg' },
-                        { key: 'nonveg', label: 'Non-Veg' },
-                        { key: 'vegan', label: 'Vegan' },
-                        { key: 'keto', label: 'Keto' },
-                        { key: 'jain', label: 'Jain' },
-                        { key: 'gluten-free', label: 'Gluten-Free' },
-                      ].map((d) => (
-                        <TouchableOpacity
-                          key={d.key}
-                          onPress={() => setDiet(d.key as DietTag)}
-                          style={[
-                            styles.chip,
-                            {
-                              backgroundColor: diet === d.key ? colors.primary : colors.bgSubtle,
-                              borderColor: diet === d.key ? colors.primary : colors.borderLight,
-                            },
-                          ]}
-                        >
-                          <Text
-                            style={{
-                              color: diet === d.key ? '#fff' : colors.textPrimary,
-                              fontSize: 12,
-                              fontWeight: '700',
-                            }}
-                          >
-                            {d.label}
-                          </Text>
-                        </TouchableOpacity>
-                      ))}
-                    </View>
-                  </View>
-                </View>
-
-                {/* Dish Type & Region Tags */}
-                <View style={[styles.rowTwoCol, { marginTop: 14 }]}>
-                  {/* Dish Type */}
-                  <View style={{ flex: 1 }}>
-                    <Text style={[styles.inputLabel, { color: colors.textPrimary }]}>
-                      Dish Type <Text style={{ color: colors.textMuted }}>(Category)</Text>
-                    </Text>
-                    <View style={styles.chipsWrap}>
-                      {(
-                        [
-                          'Curries & Gravies',
-                          'Biryani & Rice',
-                          'Burgers & Sliders',
-                          'Pizzas',
-                          'Tacos',
-                          'Burritos & Bowls',
-                          'Pastas',
-                          'Street Food',
-                          'Soups & Stews',
-                        ] as DishCategory[]
-                      ).map((cat) => (
-                        <TouchableOpacity
-                          key={cat}
-                          onPress={() => setDishCategory(cat)}
-                          style={[
-                            styles.chip,
-                            {
-                              backgroundColor:
-                                dishCategory === cat ? colors.primary : colors.bgSubtle,
-                              borderColor:
-                                dishCategory === cat ? colors.primary : colors.borderLight,
-                            },
-                          ]}
-                        >
-                          <Text
-                            style={{
-                              color: dishCategory === cat ? '#fff' : colors.textPrimary,
-                              fontSize: 12,
-                              fontWeight: '700',
-                            }}
-                          >
-                            {cat}
-                          </Text>
-                        </TouchableOpacity>
-                      ))}
-                    </View>
-                  </View>
-
-                  {/* Available Regions */}
-                  <View style={{ flex: 1 }}>
-                    <Text style={[styles.inputLabel, { color: colors.textPrimary }]}>
-                      Operating Regions{' '}
-                      {!isSuperAdmin && (
-                        <Text style={{ color: colors.primary, fontSize: 11 }}>
-                          (Regional Admin Scope)
+                  <TouchableOpacity
+                    onPress={() => setCurrentStage(stage.key)}
+                    activeOpacity={0.7}
+                    style={styles.stepNavItem}
+                  >
+                    <View
+                      style={[
+                        styles.stepBadge,
+                        {
+                          backgroundColor: isActive ? colors.primary : isPast ? '#10B981' : colors.bgSubtle,
+                          borderColor: isActive ? colors.primary : isPast ? '#10B981' : colors.borderLight,
+                        },
+                      ]}
+                    >
+                      {isPast ? (
+                        <Icon name="checkmark" size={13} color="#fff" />
+                      ) : (
+                        <Text style={[styles.stepBadgeNum, { color: isActive ? '#fff' : colors.textSecondary }]}>
+                          {idx + 1}
                         </Text>
                       )}
-                    </Text>
-                    <View style={styles.chipsWrap}>
-                      {(['North', 'South', 'West', 'East'] as RegionHub[]).map((reg) => {
-                        const isPermitted =
-                          isSuperAdmin ||
-                          (assignedRegions &&
-                            (assignedRegions.includes(reg) ||
-                              resolveZonesFromAssigned(assignedRegions).includes(reg)));
-                        const isSelected = selectedRegions.includes(reg);
-                        return (
-                          <TouchableOpacity
-                            key={reg}
-                            disabled={!isPermitted}
-                            onPress={() => {
-                              setSelectedRegions((prev) =>
-                                prev.includes(reg)
-                                  ? prev.length > 1
-                                    ? prev.filter((r) => r !== reg)
-                                    : prev
-                                  : [...prev, reg],
-                              );
-                            }}
-                            style={[
-                              styles.chip,
-                              {
-                                backgroundColor: isSelected ? colors.primary : colors.bgSubtle,
-                                borderColor: isSelected ? colors.primary : colors.borderLight,
-                                opacity: isPermitted ? 1 : 0.4,
-                              },
-                            ]}
-                          >
-                            <Text
-                              style={{
-                                color: isSelected ? '#fff' : colors.textPrimary,
-                                fontSize: 12,
-                                fontWeight: '700',
-                              }}
-                            >
-                              {reg} Region
-                            </Text>
-                          </TouchableOpacity>
-                        );
-                      })}
                     </View>
-                  </View>
-                </View>
 
-                {/* Micro-Regions / Storage Centres Selection */}
-                <View style={{ marginTop: 14 }}>
-                  <Text style={[styles.inputLabel, { color: colors.textPrimary }]}>
-                    Fulfillment Storage Centres (Micro-Regions)
-                  </Text>
-                  <Text style={{ fontSize: 11, color: colors.textMuted, marginBottom: 8 }}>
-                    Select specific storage centres to dispatch this meal kit (e.g. Pune City vs
-                    Pimpri Chinchwad). Leave unselected to dispatch from all depots in the operating
-                    regions.
-                  </Text>
-                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
-                    {STORAGE_CENTRE_REGIONS.filter((sc) => selectedRegions.includes(sc.zone)).map(
-                      (sc) => {
-                        const isSelected = selectedStorageCentres.includes(sc.id);
-                        return (
-                          <TouchableOpacity
-                            key={sc.id}
-                            onPress={() => {
-                              setSelectedStorageCentres((prev) =>
-                                prev.includes(sc.id)
-                                  ? prev.filter((id) => id !== sc.id)
-                                  : [...prev, sc.id],
-                              );
-                            }}
-                            style={[
-                              styles.chip,
-                              {
-                                backgroundColor: isSelected ? colors.primary : colors.bgSubtle,
-                                borderColor: isSelected ? colors.primary : colors.borderLight,
-                              },
-                            ]}
-                          >
-                            <Text
-                              style={{
-                                color: isSelected ? '#fff' : colors.textPrimary,
-                                fontSize: 11,
-                                fontWeight: '700',
-                              }}
-                            >
-                              {sc.name} ({sc.city})
-                            </Text>
-                          </TouchableOpacity>
-                        );
-                      },
-                    )}
-                  </View>
-                </View>
-
-                {/* Trending Toggle Option */}
-                <View style={{ marginTop: 14 }}>
-                  <TouchableOpacity
-                    activeOpacity={0.8}
-                    onPress={() => setIsTrending((prev) => !prev)}
-                    style={{
-                      flexDirection: 'row',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      padding: 12,
-                      backgroundColor: isTrending ? colors.primary + '18' : colors.bgSubtle,
-                      borderColor: isTrending ? colors.primary : colors.borderLight,
-                      borderWidth: 1.5,
-                      borderRadius: radii.lg,
-                    }}
-                  >
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 }}>
-                      <View
-                        style={{
-                          width: 10,
-                          height: 10,
-                          borderRadius: 5,
-                          backgroundColor: isTrending ? colors.primary : colors.border,
-                        }}
-                      />
-                      <View>
-                        <Text
-                          style={{ fontSize: 13, fontWeight: '700', color: colors.textPrimary }}
-                        >
-                          {isTrending ? 'Marked as Trending Dish' : 'Set as Trending Dish'}
-                        </Text>
-                        <Text style={{ fontSize: 11, color: colors.textSecondary }}>
-                          Highlight this meal kit with a Trending badge on customer feeds & homepage
-                        </Text>
-                      </View>
+                    <View style={styles.stepNavTextCol}>
+                      <Text
+                        style={[
+                          styles.stepNavLabel,
+                          {
+                            color: isActive ? colors.primary : isPast ? colors.textPrimary : colors.textSecondary,
+                            fontWeight: isActive ? '800' : '600',
+                          },
+                        ]}
+                      >
+                        {stage.label}
+                      </Text>
+                      <Text style={[styles.stepNavSubtitle, { color: colors.textMuted }]}>
+                        {stage.subtitle}
+                      </Text>
                     </View>
-                    <Badge
-                      label={isTrending ? 'TRENDING ACTIVE' : 'STANDARD DISH'}
-                      variant={isTrending ? 'warning' : 'neutral'}
-                    />
                   </TouchableOpacity>
-                </View>
+                </React.Fragment>
+              );
+            })}
+          </ScrollView>
+        </View>
 
-                {/* Price, Servings, Cook Time */}
-                <View style={[styles.rowTwoCol, { marginTop: 14 }]}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={[styles.inputLabel, { color: colors.textPrimary }]}>
-                      Kit Price (₹)
-                    </Text>
-                    <TextInput
-                      style={[
-                        styles.textInput,
-                        { backgroundColor: colors.bgSubtle, borderColor: colors.border },
-                      ]}
-                      placeholder="299"
-                      placeholderTextColor={colors.textMuted}
-                      value={price}
-                      onChangeText={setPrice}
-                      keyboardType="numeric"
-                    />
+        {/* ── 3. MAIN STAGE CONTENT SCROLLER ── */}
+        <ScrollView style={styles.mainScroll} contentContainerStyle={styles.mainScrollContent}>
+          {/* ════════════════ STAGE 1: DETAILS ════════════════ */}
+          {currentStage === 'details' && (
+            <View style={styles.stageWrap}>
+              {/* SECTION: Hero Image Selection */}
+              <View style={[styles.card, { backgroundColor: colors.bgSurface, borderColor: colors.borderLight, ...shadows.card }]}>
+                <View style={styles.cardHeaderRow}>
+                  <View style={styles.cardHeaderIconCol}>
+                    <Icon name="camera-outline" size={20} color={colors.primary} />
                   </View>
                   <View style={{ flex: 1 }}>
-                    <Text style={[styles.inputLabel, { color: colors.textPrimary }]}>
-                      Base Servings
+                    <Text style={[styles.cardTitle, { color: colors.textPrimary }]}>
+                      Recipe Hero Photo *
                     </Text>
-                    <TextInput
-                      style={[
-                        styles.textInput,
-                        { backgroundColor: colors.bgSubtle, borderColor: colors.border },
-                      ]}
-                      placeholder="2"
-                      placeholderTextColor={colors.textMuted}
-                      value={servings}
-                      onChangeText={setServings}
-                      keyboardType="numeric"
-                    />
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={[styles.inputLabel, { color: colors.textPrimary }]}>
-                      Cook Time (Mins)
+                    <Text style={[styles.cardSubtitle, { color: colors.textMuted }]}>
+                      High-resolution visual representation shown to customers on the app & web catalog.
                     </Text>
-                    <TextInput
-                      style={[
-                        styles.textInput,
-                        { backgroundColor: colors.bgSubtle, borderColor: colors.border },
-                      ]}
-                      placeholder="20"
-                      placeholderTextColor={colors.textMuted}
-                      value={cookTime}
-                      onChangeText={setCookTime}
-                      keyboardType="numeric"
-                    />
                   </View>
                 </View>
 
-                {/* Dish Presentation Photo Section: AI, Upload & Presets */}
-                <View
-                  style={[
-                    styles.photoSectionWrapper,
-                    {
-                      borderColor: colors.borderLight,
-                      backgroundColor: colors.bgSubtle,
-                      borderRadius: radii.lg,
-                    },
-                  ]}
-                >
-                  <View style={styles.photoHeaderRow}>
-                    <Text
-                      style={[
-                        styles.inputLabel,
-                        { color: colors.textPrimary, marginTop: 0, marginBottom: 0 },
-                      ]}
-                    >
-                      Dish Presentation Photo
-                    </Text>
-                    <Badge label={photoBadge} variant="accent" />
-                  </View>
-
-                  {/* Mode Selector Tabs */}
-                  <View style={styles.photoModeTabs}>
-                    <TouchableOpacity
-                      onPress={() => setPhotoMode('ai')}
-                      style={[
-                        styles.photoModeTab,
-                        photoMode === 'ai' && {
-                          backgroundColor: colors.primary,
-                          borderColor: colors.primary,
-                        },
-                      ]}
-                    >
-                      <Text
-                        style={[
-                          styles.photoModeTabText,
-                          { color: photoMode === 'ai' ? '#fff' : colors.textPrimary },
-                        ]}
+                {/* Hero Photo Preview & Actions */}
+                <View style={styles.heroPhotoRow}>
+                  <Image source={{ uri: heroImage }} style={styles.heroPhotoPreview} resizeMode="cover" />
+                  <View style={styles.heroPhotoControls}>
+                    <View style={styles.photoActionsGrid}>
+                      <TouchableOpacity
+                        onPress={() => setShowPhotoPickerModal(true)}
+                        style={[styles.photoActionBtn, { borderColor: colors.border, backgroundColor: colors.bgSubtle }]}
                       >
-                        Generate with AI
-                      </Text>
-                    </TouchableOpacity>
-
-                    <TouchableOpacity
-                      onPress={() => setPhotoMode('upload')}
-                      style={[
-                        styles.photoModeTab,
-                        photoMode === 'upload' && {
-                          backgroundColor: colors.primary,
-                          borderColor: colors.primary,
-                        },
-                      ]}
-                    >
-                      <Text
-                        style={[
-                          styles.photoModeTabText,
-                          { color: photoMode === 'upload' ? '#fff' : colors.textPrimary },
-                        ]}
-                      >
-                        Upload / URL
-                      </Text>
-                    </TouchableOpacity>
-
-                    <TouchableOpacity
-                      onPress={() => setPhotoMode('presets')}
-                      style={[
-                        styles.photoModeTab,
-                        photoMode === 'presets' && {
-                          backgroundColor: colors.primary,
-                          borderColor: colors.primary,
-                        },
-                      ]}
-                    >
-                      <Text
-                        style={[
-                          styles.photoModeTabText,
-                          { color: photoMode === 'presets' ? '#fff' : colors.textPrimary },
-                        ]}
-                      >
-                        Presets
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-
-                  {/* TAB 1: AI PHOTO GENERATION */}
-                  {photoMode === 'ai' && (
-                    <View style={styles.aiPhotoPanel}>
-                      <Text style={{ fontSize: 12, color: colors.textSecondary, marginBottom: 8 }}>
-                        AI creates an authentic presentation cover photo tailored to recipe name "
-                        {name || 'your dish'}", chef tagline "{tagline || 'your tagline'}", and
-                        selected presentation style.
-                      </Text>
-
-                      <Text
-                        style={[styles.inputLabel, { color: colors.textPrimary, marginTop: 0 }]}
-                      >
-                        Presentation Style:
-                      </Text>
-                      <View style={{ flexDirection: 'row', gap: 6, marginBottom: 10 }}>
-                        {[
-                          { key: 'handi', label: 'Brass Handi' },
-                          { key: 'finedining', label: 'Fine Dining' },
-                          { key: 'flatlay', label: 'Kit Box Flatlay' },
-                        ].map((s) => (
-                          <TouchableOpacity
-                            key={s.key}
-                            onPress={() => setPhotoStyle(s.key as any)}
-                            style={[
-                              styles.aiStyleChip,
-                              {
-                                backgroundColor:
-                                  photoStyle === s.key ? colors.primary : colors.bgSurface,
-                                borderColor:
-                                  photoStyle === s.key ? colors.primary : colors.borderLight,
-                              },
-                            ]}
-                          >
-                            <Text
-                              style={{
-                                fontSize: 11,
-                                fontWeight: '700',
-                                color: photoStyle === s.key ? '#fff' : colors.textPrimary,
-                              }}
-                            >
-                              {s.label}
-                            </Text>
-                          </TouchableOpacity>
-                        ))}
-                      </View>
+                        <Icon name="images-outline" size={16} color={colors.textPrimary} />
+                        <Text style={[styles.photoActionBtnText, { color: colors.textPrimary }]}>
+                          Preset Library
+                        </Text>
+                      </TouchableOpacity>
 
                       <TouchableOpacity
-                        activeOpacity={0.85}
-                        onPress={handleGenerateAiPhoto}
-                        style={[styles.aiGenerateBtn, { backgroundColor: colors.primary }]}
+                        onPress={handleGenerateAiDishPhoto}
+                        disabled={isGeneratingAiPhoto}
+                        style={[styles.photoActionBtn, { borderColor: '#818CF8', backgroundColor: '#EEF2FF' }]}
                       >
-                        {isGeneratingPhoto ? (
-                          <ActivityIndicator color="#fff" />
+                        {isGeneratingAiPhoto ? (
+                          <ActivityIndicator size="small" color="#4F46E5" />
                         ) : (
-                          <Text style={styles.aiGenerateBtnText}>Generate Dish Photo with AI</Text>
+                          <>
+                            <Icon name="sparkles" size={16} color="#4F46E5" />
+                            <Text style={[styles.photoActionBtnText, { color: '#4F46E5', fontWeight: '700' }]}>
+                              AI Generate
+                            </Text>
+                          </>
                         )}
                       </TouchableOpacity>
                     </View>
-                  )}
 
-                  {/* TAB 2: UPLOAD FROM DEVICE OR PASTE URL */}
-                  {photoMode === 'upload' && (
-                    <View style={styles.uploadPhotoPanel}>
-                      <TouchableOpacity
-                        activeOpacity={0.8}
-                        onPress={handleUploadFromDevice}
-                        style={[
-                          styles.deviceUploadButton,
-                          { borderColor: colors.primary, backgroundColor: colors.bgSurface },
-                        ]}
-                      >
-                        <View style={{ marginBottom: 4 }}>
-                          <Icon name="folder" size={22} color={colors.primary} />
-                        </View>
-                        <Text style={[styles.deviceUploadText, { color: colors.primary }]}>
-                          Click to Upload from Device / Files
-                        </Text>
-                        <Text style={{ fontSize: 11, color: colors.textMuted }}>
-                          Supports JPG, PNG, WEBP high-resolution photos
-                        </Text>
-                      </TouchableOpacity>
-
-                      <View
-                        style={{ flexDirection: 'row', alignItems: 'center', marginVertical: 8 }}
-                      >
-                        <View style={{ flex: 1, height: 1, backgroundColor: colors.borderLight }} />
-                        <Text
-                          style={{
-                            marginHorizontal: 8,
-                            fontSize: 11,
-                            color: colors.textMuted,
-                            fontWeight: '700',
-                          }}
-                        >
-                          OR WEB URL
-                        </Text>
-                        <View style={{ flex: 1, height: 1, backgroundColor: colors.borderLight }} />
-                      </View>
-
-                      <View style={{ flexDirection: 'row', gap: 6 }}>
-                        <TextInput
-                          style={[
-                            styles.textInput,
-                            {
-                              flex: 1,
-                              backgroundColor: colors.bgSurface,
-                              borderColor: colors.border,
-                            },
-                          ]}
-                          placeholder="Paste image URL (https://...)"
-                          placeholderTextColor={colors.textMuted}
-                          value={customPhotoUrl}
-                          onChangeText={setCustomPhotoUrl}
-                        />
-                        <Button title="Apply" size="sm" onPress={handleApplyCustomUrl} />
-                      </View>
-                    </View>
-                  )}
-
-                  {/* TAB 3: PRESET GALLERY */}
-                  {photoMode === 'presets' && (
-                    <ScrollView
-                      horizontal
-                      showsHorizontalScrollIndicator={false}
-                      style={{ marginVertical: 8 }}
-                    >
-                      {PRESET_DISH_IMAGES.map((img, idx) => (
-                        <TouchableOpacity
-                          key={idx}
-                          onPress={() => {
-                            setHeroImage(img.url);
-                            setPhotoBadge(`Preset: ${img.name}`);
-                          }}
-                          style={[
-                            styles.photoPresetCard,
-                            {
-                              borderColor:
-                                heroImage === img.url ? colors.primary : colors.borderLight,
-                              borderWidth: heroImage === img.url ? 2.5 : 1,
-                            },
-                          ]}
-                        >
-                          <Image source={{ uri: img.url }} style={styles.photoPresetImg} />
-                          <Text style={styles.photoPresetText} numberOfLines={1}>
-                            {img.name}
-                          </Text>
-                        </TouchableOpacity>
-                      ))}
-                    </ScrollView>
-                  )}
-
-                  {/* Live Active Preview Card */}
-                  <View
-                    style={[
-                      styles.activePhotoCard,
-                      { backgroundColor: colors.bgSurface, borderColor: colors.borderLight },
-                    ]}
-                  >
-                    {heroImage ? (
-                      <Image
-                        source={{ uri: heroImage }}
-                        style={styles.activePhotoImg}
-                        resizeMode="cover"
-                      />
-                    ) : (
-                      <View
-                        style={[
-                          styles.activePhotoImg,
-                          {
-                            backgroundColor: colors.bgSubtle,
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                          },
-                        ]}
-                      >
-                        <Icon name="image" size={28} color={colors.textMuted} />
-                      </View>
-                    )}
-                    <View style={styles.activePhotoInfo}>
-                      <Text style={[styles.activePhotoTitle, { color: colors.textPrimary }]}>
-                        Selected Presentation Cover
-                      </Text>
-                      <Text style={{ fontSize: 11, color: colors.textMuted }} numberOfLines={1}>
-                        {!heroImage
-                          ? 'No photo selected yet'
-                          : heroImage.startsWith('data:')
-                            ? 'Custom Uploaded File'
-                            : heroImage}
-                      </Text>
-                    </View>
-                  </View>
-                </View>
-              </View>
-
-              {/* City Targeting */}
-              <View
-                style={[styles.card, { backgroundColor: colors.bgSurface, borderRadius: radii.xl }]}
-              >
-                <View
-                  style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 }}
-                >
-                  <Icon name="location" size={18} color={colors.primary} />
-                  <Text
-                    style={[styles.sectionHeading, { color: colors.textPrimary, marginBottom: 0 }]}
-                  >
-                    City Availability
-                  </Text>
-                </View>
-                <Text style={[styles.sectionHint, { color: colors.textSecondary }]}>
-                  Choose whether this kit is available to everyone in the region hub, or only in
-                  specific cities.
-                </Text>
-
-                {/* All cities toggle */}
-                <View style={{ flexDirection: 'row', gap: 10, marginTop: 12 }}>
-                  <TouchableOpacity
-                    activeOpacity={0.8}
-                    onPress={() => setAllCitiesMode(true)}
-                    style={[
-                      styles.photoModeTab,
-                      allCitiesMode && {
-                        backgroundColor: colors.primary,
-                        borderColor: colors.primary,
-                      },
-                      { flex: 1 },
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.photoModeTabText,
-                        { color: allCitiesMode ? '#fff' : colors.textPrimary },
-                      ]}
-                    >
-                      All Cities in Region
-                    </Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    activeOpacity={0.8}
-                    onPress={() => setAllCitiesMode(false)}
-                    style={[
-                      styles.photoModeTab,
-                      !allCitiesMode && {
-                        backgroundColor: colors.primary,
-                        borderColor: colors.primary,
-                      },
-                      { flex: 1 },
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.photoModeTabText,
-                        { color: !allCitiesMode ? '#fff' : colors.textPrimary },
-                      ]}
-                    >
-                      Specific Cities
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-
-                {/* City chips + input */}
-                {!allCitiesMode && (
-                  <View style={{ marginTop: 12 }}>
-                    {/* Selected city chips */}
-                    {kitCities.length > 0 && (
-                      <View
-                        style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}
-                      >
-                        {kitCities.map((city) => (
-                          <TouchableOpacity
-                            key={city}
-                            activeOpacity={0.75}
-                            onPress={() => setKitCities((prev) => prev.filter((c) => c !== city))}
-                            style={{
-                              flexDirection: 'row',
-                              alignItems: 'center',
-                              backgroundColor: colors.primaryLight,
-                              borderRadius: 20,
-                              paddingHorizontal: 10,
-                              paddingVertical: 5,
-                              gap: 5,
-                            }}
-                          >
-                            <Text
-                              style={{ fontSize: 12, fontWeight: '700', color: colors.primary }}
-                            >
-                              {city}
-                            </Text>
-                            <Icon name="close-circle" size={14} color={colors.primary} />
-                          </TouchableOpacity>
-                        ))}
-                      </View>
-                    )}
-
-                    {/* Add city input */}
-                    <View style={{ flexDirection: 'row', gap: 8 }}>
+                    {/* Custom URL Input */}
+                    <View style={styles.photoUrlInputRow}>
                       <TextInput
-                        style={[
-                          styles.textInput,
-                          {
-                            flex: 1,
-                            backgroundColor: colors.bgSubtle,
-                            borderColor: colors.border,
-                            color: colors.textPrimary,
-                          },
-                        ]}
-                        placeholder="Type city name (e.g. Bengaluru)"
+                        style={[styles.input, { flex: 1, backgroundColor: colors.bgSubtle, borderColor: colors.border, color: colors.textPrimary }]}
+                        placeholder="Or paste external image URL..."
                         placeholderTextColor={colors.textMuted}
-                        value={cityInputValue}
-                        onChangeText={setCityInputValue}
-                        onSubmitEditing={() => {
-                          const city = cityInputValue.trim();
-                          if (
-                            city &&
-                            !kitCities.some((c) => c.toLowerCase() === city.toLowerCase())
-                          ) {
-                            setKitCities((prev) => [...prev, city]);
-                          }
-                          setCityInputValue('');
-                        }}
-                        returnKeyType="done"
+                        value={customPhotoUrl}
+                        onChangeText={setCustomPhotoUrl}
                       />
                       <TouchableOpacity
-                        style={[
-                          {
-                            backgroundColor: colors.primary,
-                            paddingHorizontal: 14,
-                            paddingVertical: 10,
-                            borderRadius: 8,
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                          },
-                        ]}
                         onPress={() => {
-                          const city = cityInputValue.trim();
-                          if (
-                            city &&
-                            !kitCities.some((c) => c.toLowerCase() === city.toLowerCase())
-                          ) {
-                            setKitCities((prev) => [...prev, city]);
+                          if (customPhotoUrl.trim()) {
+                            setHeroImage(customPhotoUrl.trim());
+                            setCustomPhotoUrl('');
                           }
-                          setCityInputValue('');
                         }}
+                        style={[styles.applyUrlBtn, { backgroundColor: colors.primary }]}
                       >
-                        <Icon name="add" size={18} color="#fff" />
+                        <Text style={styles.applyUrlBtnText}>Apply</Text>
                       </TouchableOpacity>
                     </View>
-
-                    {kitCities.length === 0 && (
-                      <Text style={{ fontSize: 11, color: colors.textMuted, marginTop: 6 }}>
-                        Add at least one city, or switch to "All Cities in Hub".
-                      </Text>
-                    )}
                   </View>
-                )}
-
-                {allCitiesMode && (
-                  <Text style={{ fontSize: 11, color: colors.textMuted, marginTop: 8 }}>
-                    This kit will appear in the catalog for all users in the selected region hub.
-                  </Text>
-                )}
+                </View>
               </View>
 
-              {/* Allergens & Kitchen Advisory */}
-              <View
-                style={[styles.card, { backgroundColor: colors.bgSurface, borderRadius: radii.xl }]}
-              >
-                <View
-                  style={{
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    marginBottom: 4,
-                  }}
-                >
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                    <Icon name="warning" size={18} color="#f59e0b" />
-                    <Text
-                      style={[
-                        styles.sectionHeading,
-                        { color: colors.textPrimary, marginBottom: 0 },
-                      ]}
-                    >
-                      Allergens & Kitchen Advisory
+              {/* SECTION: Basic Identity */}
+              <View style={[styles.card, { backgroundColor: colors.bgSurface, borderColor: colors.borderLight, ...shadows.card }]}>
+                <View style={styles.cardHeaderRow}>
+                  <View style={styles.cardHeaderIconCol}>
+                    <Icon name="document-text-outline" size={20} color={colors.primary} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.cardTitle, { color: colors.textPrimary }]}>
+                      Recipe Identity & Descriptions *
+                    </Text>
+                    <Text style={[styles.cardSubtitle, { color: colors.textMuted }]}>
+                      Core culinary details, title, appetizing tagline, and pricing.
                     </Text>
                   </View>
-                  <TouchableOpacity
-                    onPress={() => setSelectedAllergens([])}
-                    style={{
-                      paddingHorizontal: 8,
-                      paddingVertical: 4,
-                      borderRadius: 6,
-                      backgroundColor:
-                        selectedAllergens.length === 0 ? colors.primary + '20' : colors.bgSubtle,
-                      borderColor:
-                        selectedAllergens.length === 0 ? colors.primary : colors.borderLight,
-                      borderWidth: 1,
-                    }}
-                  >
-                    <Text
-                      style={{
-                        fontSize: 11,
-                        fontWeight: '700',
-                        color:
-                          selectedAllergens.length === 0 ? colors.primary : colors.textSecondary,
-                      }}
-                    >
-                      {selectedAllergens.length === 0 ? '✓ Allergen-Free' : 'Mark Allergen-Free'}
-                    </Text>
-                  </TouchableOpacity>
                 </View>
-                <Text style={[styles.sectionHint, { color: colors.textSecondary }]}>
-                  Disclose common culinary allergens contained in this meal kit box for customer
-                  food safety.
+
+                {/* Name & Hindi Name */}
+                <View style={styles.formRow2}>
+                  <View style={[styles.formCol, { flex: 2 }]}>
+                    <Text style={[styles.fieldLabel, { color: colors.textPrimary }]}>DISH NAME *</Text>
+                    <TextInput
+                      style={[styles.input, { backgroundColor: colors.bgSubtle, borderColor: colors.border, color: colors.textPrimary }]}
+                      placeholder="e.g. Handi Paneer Lazeez"
+                      placeholderTextColor={colors.textMuted}
+                      value={name}
+                      onChangeText={setName}
+                    />
+                  </View>
+
+                  <View style={[styles.formCol, { flex: 1 }]}>
+                    <Text style={[styles.fieldLabel, { color: colors.textPrimary }]}>HINDI NAME</Text>
+                    <TextInput
+                      style={[styles.input, { backgroundColor: colors.bgSubtle, borderColor: colors.border, color: colors.textPrimary }]}
+                      placeholder="e.g. हांडी पनीर लज़ीज़"
+                      placeholderTextColor={colors.textMuted}
+                      value={hindiName}
+                      onChangeText={setHindiName}
+                    />
+                  </View>
+                </View>
+
+                {/* Tagline */}
+                <View style={styles.formGroup}>
+                  <Text style={[styles.fieldLabel, { color: colors.textPrimary }]}>APPETIZING TAGLINE *</Text>
+                  <TextInput
+                    style={[styles.input, { backgroundColor: colors.bgSubtle, borderColor: colors.border, color: colors.textPrimary }]}
+                    placeholder="e.g. Slow-cooked cottage cheese in a clay pot aromatic gravy"
+                    placeholderTextColor={colors.textMuted}
+                    value={tagline}
+                    onChangeText={setTagline}
+                  />
+                </View>
+
+                {/* Description */}
+                <View style={styles.formGroup}>
+                  <Text style={[styles.fieldLabel, { color: colors.textPrimary }]}>CULINARY DESCRIPTION *</Text>
+                  <TextInput
+                    style={[styles.textArea, { backgroundColor: colors.bgSubtle, borderColor: colors.border, color: colors.textPrimary }]}
+                    placeholder="Describe the texture, taste profile, and culinary heritage of this meal kit..."
+                    placeholderTextColor={colors.textMuted}
+                    value={description}
+                    onChangeText={setDescription}
+                    multiline
+                    numberOfLines={3}
+                  />
+                </View>
+
+                {/* Pricing & MRP */}
+                <View style={styles.formRow2}>
+                  <View style={styles.formCol}>
+                    <Text style={[styles.fieldLabel, { color: colors.textPrimary }]}>RETAIL PRICE (₹) *</Text>
+                    <View style={styles.currencyInputWrap}>
+                      <Text style={[styles.currencyPrefix, { color: colors.primary }]}>₹</Text>
+                      <TextInput
+                        style={[styles.inputWithPrefix, { backgroundColor: colors.bgSubtle, borderColor: colors.border, color: colors.textPrimary }]}
+                        placeholder="299"
+                        placeholderTextColor={colors.textMuted}
+                        keyboardType="numeric"
+                        value={price}
+                        onChangeText={setPrice}
+                      />
+                    </View>
+                  </View>
+
+                  <View style={styles.formCol}>
+                    <Text style={[styles.fieldLabel, { color: colors.textPrimary }]}>ORIGINAL MRP (₹)</Text>
+                    <View style={styles.currencyInputWrap}>
+                      <Text style={[styles.currencyPrefix, { color: colors.textMuted }]}>₹</Text>
+                      <TextInput
+                        style={[styles.inputWithPrefix, { backgroundColor: colors.bgSubtle, borderColor: colors.border, color: colors.textPrimary }]}
+                        placeholder="349"
+                        placeholderTextColor={colors.textMuted}
+                        keyboardType="numeric"
+                        value={originalPrice}
+                        onChangeText={setOriginalPrice}
+                      />
+                    </View>
+                  </View>
+                </View>
+              </View>
+
+              {/* SECTION: Dietary Category (Chef Studio Cards) */}
+              <View style={[styles.card, { backgroundColor: colors.bgSurface, borderColor: colors.borderLight, ...shadows.card }]}>
+                <Text style={[styles.cardTitle, { color: colors.textPrimary, marginBottom: 4 }]}>
+                  Dietary Classification *
+                </Text>
+                <Text style={[styles.cardSubtitle, { color: colors.textMuted, marginBottom: 12 }]}>
+                  Select the dietary profile for customer filtering and dietary preferences.
                 </Text>
 
-                {/* Common Allergens Toggles */}
-                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 12 }}>
-                  {COMMON_ALLERGENS.map((allergen) => {
-                    const isSelected = selectedAllergens.includes(allergen);
+                <View style={styles.dietGrid}>
+                  {DIET_TYPES.map((dt) => {
+                    const isSelected = diet === dt.key;
                     return (
                       <TouchableOpacity
-                        key={allergen}
-                        onPress={() => {
-                          setSelectedAllergens((prev) =>
-                            prev.includes(allergen)
-                              ? prev.filter((a) => a !== allergen)
-                              : [...prev, allergen],
-                          );
-                        }}
+                        key={dt.key}
+                        onPress={() => setDiet(dt.key)}
+                        activeOpacity={0.8}
                         style={[
-                          styles.chip,
+                          styles.dietCard,
                           {
-                            backgroundColor: isSelected ? '#ef4444' : colors.bgSubtle,
-                            borderColor: isSelected ? '#ef4444' : colors.borderLight,
+                            backgroundColor: isSelected ? `${colors.primary}12` : colors.bgSubtle,
+                            borderColor: isSelected ? colors.primary : colors.borderLight,
                           },
                         ]}
                       >
-                        <Text
-                          style={{
-                            color: isSelected ? '#fff' : colors.textPrimary,
-                            fontSize: 12,
-                            fontWeight: '700',
-                          }}
-                        >
-                          {isSelected ? '✓ ' : ''}
-                          {allergen}
+                        <View style={styles.dietCardTop}>
+                          <View
+                            style={[
+                              styles.dietIconCircle,
+                              { backgroundColor: isSelected ? colors.primary : colors.bgSurface },
+                            ]}
+                          >
+                            <Icon name={dt.icon} size={18} color={isSelected ? '#fff' : colors.textPrimary} />
+                          </View>
+                          {isSelected && <Icon name="checkmark-circle" size={18} color={colors.primary} />}
+                        </View>
+                        <Text style={[styles.dietCardTitle, { color: colors.textPrimary }]}>{dt.label}</Text>
+                        <Text style={[styles.dietCardDesc, { color: colors.textMuted }]}>{dt.desc}</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
+
+              {/* SECTION: Cuisine, Category & Spice */}
+              <View style={[styles.card, { backgroundColor: colors.bgSurface, borderColor: colors.borderLight, ...shadows.card }]}>
+                {/* Cuisine */}
+                <Text style={[styles.fieldLabel, { color: colors.textPrimary }]}>REGIONAL CUISINE *</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.pillRowScroll}>
+                  {CUISINES.map((c) => {
+                    const isSelected = cuisine === c;
+                    return (
+                      <TouchableOpacity
+                        key={c}
+                        onPress={() => setCuisine(c)}
+                        style={[
+                          styles.selectionPill,
+                          {
+                            backgroundColor: isSelected ? colors.primary : colors.bgSubtle,
+                            borderColor: isSelected ? colors.primary : colors.borderLight,
+                          },
+                        ]}
+                      >
+                        <Text style={[styles.selectionPillText, { color: isSelected ? '#fff' : colors.textPrimary }]}>
+                          {c}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+
+                {/* Dish Category */}
+                <Text style={[styles.fieldLabel, { color: colors.textPrimary, marginTop: 14 }]}>
+                  DISH CATEGORY *
+                </Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.pillRowScroll}>
+                  {DISH_CATEGORIES.map((cat) => {
+                    const isSelected = dishCategory === cat;
+                    return (
+                      <TouchableOpacity
+                        key={cat}
+                        onPress={() => setDishCategory(cat)}
+                        style={[
+                          styles.selectionPill,
+                          {
+                            backgroundColor: isSelected ? colors.primary : colors.bgSubtle,
+                            borderColor: isSelected ? colors.primary : colors.borderLight,
+                          },
+                        ]}
+                      >
+                        <Text style={[styles.selectionPillText, { color: isSelected ? '#fff' : colors.textPrimary }]}>
+                          {cat}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+
+                {/* Spice Heat Level */}
+                <Text style={[styles.fieldLabel, { color: colors.textPrimary, marginTop: 14 }]}>
+                  SPICE HEAT LEVEL *
+                </Text>
+                <View style={styles.spiceRow}>
+                  {SPICE_LEVELS.map((sp) => {
+                    const isSelected = spiceLevel === sp.level;
+                    return (
+                      <TouchableOpacity
+                        key={sp.level}
+                        onPress={() => setSpiceLevel(sp.level)}
+                        style={[
+                          styles.spicePill,
+                          {
+                            backgroundColor: isSelected ? sp.color : colors.bgSubtle,
+                            borderColor: isSelected ? sp.color : colors.borderLight,
+                          },
+                        ]}
+                      >
+                        <Icon name="flame" size={14} color={isSelected ? '#fff' : sp.color} />
+                        <Text style={[styles.spicePillText, { color: isSelected ? '#fff' : colors.textPrimary }]}>
+                          {sp.label}
                         </Text>
                       </TouchableOpacity>
                     );
                   })}
                 </View>
 
-                {/* Custom Allergen Input */}
-                <View style={{ flexDirection: 'row', gap: 8, marginTop: 12 }}>
+                {/* Portions & Timings */}
+                <View style={[styles.formRow3, { marginTop: 16 }]}>
+                  <View style={styles.formCol}>
+                    <Text style={[styles.fieldLabel, { color: colors.textPrimary }]}>SERVINGS</Text>
+                    <TextInput
+                      style={[styles.input, { backgroundColor: colors.bgSubtle, borderColor: colors.border, color: colors.textPrimary }]}
+                      keyboardType="numeric"
+                      value={servings}
+                      onChangeText={setServings}
+                    />
+                  </View>
+
+                  <View style={styles.formCol}>
+                    <Text style={[styles.fieldLabel, { color: colors.textPrimary }]}>PREP TIME (MIN)</Text>
+                    <TextInput
+                      style={[styles.input, { backgroundColor: colors.bgSubtle, borderColor: colors.border, color: colors.textPrimary }]}
+                      keyboardType="numeric"
+                      value={prepTimeMinutes}
+                      onChangeText={setPrepTimeMinutes}
+                    />
+                  </View>
+
+                  <View style={styles.formCol}>
+                    <Text style={[styles.fieldLabel, { color: colors.textPrimary }]}>COOK TIME (MIN)</Text>
+                    <TextInput
+                      style={[styles.input, { backgroundColor: colors.bgSubtle, borderColor: colors.border, color: colors.textPrimary }]}
+                      keyboardType="numeric"
+                      value={cookTimeMinutes}
+                      onChangeText={setCookTimeMinutes}
+                    />
+                  </View>
+                </View>
+              </View>
+
+              {/* SECTION: Allergens */}
+              <View style={[styles.card, { backgroundColor: colors.bgSurface, borderColor: colors.borderLight, ...shadows.card }]}>
+                <Text style={[styles.cardTitle, { color: colors.textPrimary, marginBottom: 4 }]}>
+                  Allergen Warning Declarations
+                </Text>
+                <Text style={[styles.cardSubtitle, { color: colors.textMuted, marginBottom: 10 }]}>
+                  Check allergens present in this recipe for food safety compliance.
+                </Text>
+
+                <View style={styles.chipsWrap}>
+                  {ALLERGEN_OPTIONS.map((alg) => {
+                    const isChecked = allergens.includes(alg);
+                    return (
+                      <TouchableOpacity
+                        key={alg}
+                        onPress={() => {
+                          setAllergens((prev) =>
+                            isChecked ? prev.filter((a) => a !== alg) : [...prev, alg],
+                          );
+                        }}
+                        style={[
+                          styles.filterCheckPill,
+                          {
+                            backgroundColor: isChecked ? '#FEF2F2' : colors.bgSubtle,
+                            borderColor: isChecked ? '#F87171' : colors.borderLight,
+                          },
+                        ]}
+                      >
+                        <Icon
+                          name={isChecked ? 'checkmark-circle' : 'add-circle-outline'}
+                          size={14}
+                          color={isChecked ? '#DC2626' : colors.textMuted}
+                        />
+                        <Text style={[styles.filterCheckPillText, { color: isChecked ? '#DC2626' : colors.textPrimary }]}>
+                          {alg}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
+            </View>
+          )}
+
+          {/* ════════════════ STAGE 2: INGREDIENTS ════════════════ */}
+          {currentStage === 'ingredients' && (
+            <View style={styles.stageWrap}>
+              {/* Inventory Search & Quick Add */}
+              <View style={[styles.card, { backgroundColor: colors.bgSurface, borderColor: colors.borderLight, ...shadows.card }]}>
+                <View style={styles.cardHeaderRow}>
+                  <View style={styles.cardHeaderIconCol}>
+                    <Icon name="search" size={20} color={colors.primary} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.cardTitle, { color: colors.textPrimary }]}>
+                      Search Active Inventory Items
+                    </Text>
+                    <Text style={[styles.cardSubtitle, { color: colors.textMuted }]}>
+                      Pick tracked ingredients from warehouse inventory to connect stock and shelf-life.
+                    </Text>
+                  </View>
+                </View>
+
+                <View style={[styles.searchBarWrap, { backgroundColor: colors.bgSubtle, borderColor: colors.borderLight }]}>
+                  <Icon name="search" size={16} color={colors.textMuted} />
                   <TextInput
-                    style={[
-                      styles.textInput,
-                      {
-                        flex: 1,
-                        backgroundColor: colors.bgSubtle,
-                        borderColor: colors.border,
-                        color: colors.textPrimary,
-                      },
-                    ]}
-                    placeholder="Add custom allergen (e.g. Fish, Celery, Sulphites)"
+                    style={[styles.searchInput, { color: colors.textPrimary }]}
+                    placeholder="Search produce (e.g. Paneer, Basmati, Tomatoes, Ghee)..."
                     placeholderTextColor={colors.textMuted}
-                    value={customAllergenInput}
-                    onChangeText={setCustomAllergenInput}
-                    onSubmitEditing={() => {
-                      const trimmed = customAllergenInput.trim();
-                      if (trimmed && !selectedAllergens.includes(trimmed)) {
-                        setSelectedAllergens((prev) => [...prev, trimmed]);
-                      }
-                      setCustomAllergenInput('');
-                    }}
-                    returnKeyType="done"
+                    value={inventorySearch}
+                    onChangeText={setInventorySearch}
                   />
+                  {inventorySearch.length > 0 && (
+                    <TouchableOpacity onPress={() => setInventorySearch('')}>
+                      <Icon name="close" size={14} color={colors.textMuted} />
+                    </TouchableOpacity>
+                  )}
+                </View>
+
+                {/* Suggestions List */}
+                <View style={styles.inventorySuggestionsList}>
+                  {inventorySuggestions.map((item) => (
+                    <TouchableOpacity
+                      key={item.id}
+                      onPress={() => handleAddFromInventory(item)}
+                      style={[styles.inventorySuggestionRow, { borderColor: colors.borderLight }]}
+                    >
+                      <View style={{ flex: 1 }}>
+                        <Text style={[styles.inventoryItemName, { color: colors.textPrimary }]}>
+                          {item.name}
+                        </Text>
+                        <Text style={[styles.inventoryItemSub, { color: colors.textMuted }]}>
+                          {item.section.replace('_', ' ').toUpperCase()} • Stock: {item.currentStock} {item.unit}
+                        </Text>
+                      </View>
+                      <View style={[styles.addPillBtn, { backgroundColor: `${colors.primary}15` }]}>
+                        <Icon name="add" size={14} color={colors.primary} />
+                        <Text style={[styles.addPillBtnText, { color: colors.primary }]}>Add</Text>
+                      </View>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+
+              {/* Add Custom Ingredient */}
+              <View style={[styles.card, { backgroundColor: colors.bgSurface, borderColor: colors.borderLight, ...shadows.card }]}>
+                <Text style={[styles.cardTitle, { color: colors.textPrimary, marginBottom: 8 }]}>
+                  Add Custom Produce / Grocery
+                </Text>
+
+                <View style={styles.addCustomIngRow}>
+                  <TextInput
+                    style={[styles.input, { flex: 2, backgroundColor: colors.bgSubtle, borderColor: colors.border, color: colors.textPrimary }]}
+                    placeholder="Produce name (e.g. Kashmiri Chillies)"
+                    placeholderTextColor={colors.textMuted}
+                    value={newIngName}
+                    onChangeText={setNewIngName}
+                  />
+
+                  <TextInput
+                    style={[styles.input, { flex: 1, backgroundColor: colors.bgSubtle, borderColor: colors.border, color: colors.textPrimary }]}
+                    placeholder="250"
+                    placeholderTextColor={colors.textMuted}
+                    keyboardType="numeric"
+                    value={newIngAmount}
+                    onChangeText={setNewIngAmount}
+                  />
+
+                  <View style={styles.unitPickerWrap}>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                      {VALID_UNITS.map((u) => (
+                        <TouchableOpacity
+                          key={u}
+                          onPress={() => setNewIngUnit(u)}
+                          style={[
+                            styles.unitPill,
+                            {
+                              backgroundColor: newIngUnit === u ? colors.primary : colors.bgSubtle,
+                              borderColor: newIngUnit === u ? colors.primary : colors.borderLight,
+                            },
+                          ]}
+                        >
+                          <Text style={{ fontSize: 11, fontWeight: '700', color: newIngUnit === u ? '#fff' : colors.textPrimary }}>
+                            {u}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </ScrollView>
+                  </View>
+
                   <TouchableOpacity
-                    style={{
-                      backgroundColor: colors.primary,
-                      paddingHorizontal: 14,
-                      paddingVertical: 10,
-                      borderRadius: 8,
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                    }}
-                    onPress={() => {
-                      const trimmed = customAllergenInput.trim();
-                      if (trimmed && !selectedAllergens.includes(trimmed)) {
-                        setSelectedAllergens((prev) => [...prev, trimmed]);
-                      }
-                      setCustomAllergenInput('');
-                    }}
+                    onPress={handleAddIngredient}
+                    style={[styles.addBtnIcon, { backgroundColor: colors.primary }]}
                   >
                     <Icon name="add" size={18} color="#fff" />
                   </TouchableOpacity>
                 </View>
+              </View>
 
-                {selectedAllergens.length > 0 && (
-                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 10 }}>
-                    <Text
-                      style={{
-                        fontSize: 11,
-                        color: colors.textMuted,
-                        width: '100%',
-                        marginBottom: 2,
-                      }}
+              {/* Added Ingredients List */}
+              <View style={[styles.card, { backgroundColor: colors.bgSurface, borderColor: colors.borderLight, ...shadows.card }]}>
+                <Text style={[styles.cardTitle, { color: colors.textPrimary, marginBottom: 10 }]}>
+                  Recipe Ingredients ({ingredients.length})
+                </Text>
+
+                {ingredients.map((ing, idx) => (
+                  <View
+                    key={ing.id}
+                    style={[styles.ingredientItemRow, { backgroundColor: colors.bgSubtle, borderColor: colors.borderLight }]}
+                  >
+                    <View style={styles.ingNumBadge}>
+                      <Text style={styles.ingNumBadgeText}>{idx + 1}</Text>
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.ingItemTitle, { color: colors.textPrimary }]}>{ing.name}</Text>
+                      <Text style={[styles.ingItemQty, { color: colors.textMuted }]}>{ing.quantity}</Text>
+                    </View>
+                    <TouchableOpacity
+                      onPress={() => handleRemoveIngredient(ing.id)}
+                      style={styles.ingRemoveBtn}
                     >
-                      Active Advisory Disclosures:
-                    </Text>
-                    {selectedAllergens.map((alg) => (
-                      <TouchableOpacity
-                        key={alg}
-                        onPress={() =>
-                          setSelectedAllergens((prev) => prev.filter((a) => a !== alg))
-                        }
-                        style={{
-                          flexDirection: 'row',
-                          alignItems: 'center',
-                          gap: 4,
-                          backgroundColor: '#ef444420',
-                          borderColor: '#ef444460',
-                          borderWidth: 1,
-                          paddingHorizontal: 8,
-                          paddingVertical: 3,
-                          borderRadius: radii.pill,
-                        }}
-                      >
-                        <Text style={{ fontSize: 11, fontWeight: '700', color: '#ef4444' }}>
-                          {alg}
-                        </Text>
-                        <Icon name="close-circle" size={13} color="#ef4444" />
-                      </TouchableOpacity>
-                    ))}
+                      <Icon name="trash" size={16} color={colors.danger} />
+                    </TouchableOpacity>
                   </View>
+                ))}
+
+                {ingredients.length === 0 && (
+                  <Text style={[styles.emptyPrompt, { color: colors.textMuted }]}>
+                    No ingredients added yet. Search inventory above or enter custom items.
+                  </Text>
                 )}
               </View>
 
-              {/* Categorized Meal Kit Tags */}
-              <View
-                style={[styles.card, { backgroundColor: colors.bgSurface, borderRadius: radii.xl }]}
-              >
-                <View
-                  style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 }}
-                >
-                  <Icon name="tag" size={18} color={colors.primary} />
-                  <Text
-                    style={[styles.sectionHeading, { color: colors.textPrimary, marginBottom: 0 }]}
-                  >
-                    Categorized Meal Kit Tags
-                  </Text>
-                </View>
-                <Text style={[styles.sectionHint, { color: colors.textSecondary }]}>
-                  Tags are automatically generated across Diet Type, Cuisine Type, Dish Type,
-                  Region, and Allergens. Add custom specialty tags below.
+              {/* Master Spices Catalog */}
+              <View style={[styles.card, { backgroundColor: colors.bgSurface, borderColor: colors.borderLight, ...shadows.card }]}>
+                <Text style={[styles.cardTitle, { color: colors.textPrimary, marginBottom: 4 }]}>
+                  Quick Masala & Whole Spices Catalog
+                </Text>
+                <Text style={[styles.cardSubtitle, { color: colors.textMuted, marginBottom: 10 }]}>
+                  Tap any spice to automatically add it to your recipe ingredients.
                 </Text>
 
-                {/* Auto-compiled tags preview */}
-                <View style={{ marginTop: 10 }}>
-                  <Text
-                    style={{
-                      fontSize: 11,
-                      fontWeight: '700',
-                      color: colors.textSecondary,
-                      marginBottom: 6,
-                    }}
-                  >
-                    Live Auto-Generated Tags:
-                  </Text>
-                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
-                    {parseCategorizedTags(
-                      compileMealKitTags({
-                        diet,
-                        cuisine,
-                        dishCategory,
-                        availableRegions: selectedRegions,
-                        availableStorageCentres: selectedStorageCentres,
-                        allergens: selectedAllergens,
-                        isTrending,
-                        dietaryTags: [diet, ...(customTags as any)],
-                      }),
-                    ).map((t, idx) => (
-                      <Badge
-                        key={`${t.category}-${idx}`}
-                        label={t.label}
-                        variant={t.variant}
-                        size="sm"
-                      />
-                    ))}
-                  </View>
-                </View>
-
-                {/* Custom Tags adder */}
-                <View style={{ marginTop: 14 }}>
-                  <Text
-                    style={{
-                      fontSize: 11,
-                      fontWeight: '700',
-                      color: colors.textSecondary,
-                      marginBottom: 6,
-                    }}
-                  >
-                    Custom Specialty Tags (Optional):
-                  </Text>
-                  <View style={{ flexDirection: 'row', gap: 8 }}>
-                    <TextInput
-                      style={[
-                        styles.textInput,
-                        {
-                          flex: 1,
-                          backgroundColor: colors.bgSubtle,
-                          borderColor: colors.border,
-                          color: colors.textPrimary,
-                        },
-                      ]}
-                      placeholder="Add tag (e.g. High Protein, Fast Cooking, Festival Special)"
-                      placeholderTextColor={colors.textMuted}
-                      value={customTagInput}
-                      onChangeText={setCustomTagInput}
-                      onSubmitEditing={() => {
-                        const trimmed = customTagInput.trim();
-                        if (trimmed && !customTags.includes(trimmed)) {
-                          setCustomTags((prev) => [...prev, trimmed]);
-                        }
-                        setCustomTagInput('');
-                      }}
-                      returnKeyType="done"
-                    />
+                <View style={styles.spiceCatalogGrid}>
+                  {MASTER_SPICE_CATALOG.map((sp) => (
                     <TouchableOpacity
-                      style={{
-                        backgroundColor: colors.primary,
-                        paddingHorizontal: 14,
-                        paddingVertical: 10,
-                        borderRadius: 8,
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                      }}
+                      key={sp.name}
                       onPress={() => {
-                        const trimmed = customTagInput.trim();
-                        if (trimmed && !customTags.includes(trimmed)) {
-                          setCustomTags((prev) => [...prev, trimmed]);
-                        }
-                        setCustomTagInput('');
-                      }}
-                    >
-                      <Icon name="add" size={18} color="#fff" />
-                    </TouchableOpacity>
-                  </View>
-
-                  {customTags.length > 0 && (
-                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
-                      {customTags.map((ct) => (
-                        <TouchableOpacity
-                          key={ct}
-                          onPress={() => setCustomTags((prev) => prev.filter((t) => t !== ct))}
-                          style={{
-                            flexDirection: 'row',
-                            alignItems: 'center',
-                            gap: 4,
-                            backgroundColor: colors.primary + '18',
-                            borderColor: colors.primary + '40',
-                            borderWidth: 1,
-                            paddingHorizontal: 8,
-                            paddingVertical: 3,
-                            borderRadius: radii.pill,
-                          }}
-                        >
-                          <Text style={{ fontSize: 11, fontWeight: '700', color: colors.primary }}>
-                            {ct}
-                          </Text>
-                          <Icon name="close-circle" size={13} color={colors.primary} />
-                        </TouchableOpacity>
-                      ))}
-                    </View>
-                  )}
-                </View>
-              </View>
-
-              {step1Error ? (
-                <View style={styles.errorAlertBox}>
-                  <Icon name="alert-circle" size={16} color="#ef4444" />
-                  <Text style={styles.errorAlertText}>{step1Error}</Text>
-                </View>
-              ) : null}
-
-              <Button
-                title="Next: Add Ingredients"
-                size="lg"
-                onPress={() => {
-                  if (!name.trim()) {
-                    setStep1Error('Please enter a dish name before proceeding.');
-                    showWebSafeAlert('Dish Name Required', 'Please enter a name for the dish.');
-                    return;
-                  }
-                  setStep1Error(null);
-                  setCurrentStep(2);
-                }}
-                style={{ marginTop: 16 }}
-              />
-            </View>
-          )}
-
-          {/* STEP 2: INGREDIENTS & MASALA SACHETS */}
-          {currentStep === 2 && (
-            <View style={styles.stepContent}>
-              {/* SECTION 1: FRESH PRODUCE & GROCERIES */}
-              <View
-                style={[
-                  styles.card,
-                  { backgroundColor: colors.bgSurface, borderRadius: radii.xl, marginBottom: 16 },
-                ]}
-              >
-                <View
-                  style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 }}
-                >
-                  <Icon name="basket" size={20} color={colors.primary} />
-                  <Text
-                    style={[styles.sectionHeading, { color: colors.textPrimary, marginBottom: 0 }]}
-                  >
-                    1. Fresh Produce & Main Ingredients
-                  </Text>
-                </View>
-                <Text style={[styles.sectionHint, { color: colors.textSecondary }]}>
-                  List all fresh vegetables, dairy, grains, and proteins packed into this kit box.
-                </Text>
-
-                {/* Add Fresh Produce Input Form */}
-                <View
-                  style={[
-                    styles.customIngBox,
-                    { backgroundColor: colors.bgSubtle, borderRadius: radii.lg, marginTop: 10 },
-                  ]}
-                >
-                  <Text style={[styles.inputLabel, { color: colors.textPrimary, marginBottom: 8 }]}>
-                    Add Produce or Base Ingredient:
-                  </Text>
-                  <View style={{ flexDirection: 'row', gap: 8 }}>
-                    <TextInput
-                      style={[
-                        styles.textInput,
-                        { flex: 2, backgroundColor: colors.bgSurface, borderColor: colors.border },
-                      ]}
-                      placeholder="Item Name (e.g. Fresh Malai Paneer)"
-                      placeholderTextColor={colors.textMuted}
-                      value={newFreshName}
-                      onChangeText={setNewFreshName}
-                    />
-                    <TextInput
-                      style={[
-                        styles.textInput,
-                        { flex: 1, backgroundColor: colors.bgSurface, borderColor: colors.border },
-                      ]}
-                      placeholder="Qty (e.g. 250g)"
-                      placeholderTextColor={colors.textMuted}
-                      value={newFreshQty}
-                      onChangeText={setNewFreshQty}
-                    />
-                  </View>
-                  <View style={{ alignItems: 'flex-end', marginTop: 8 }}>
-                    <Button
-                      title="+ Add Produce Item"
-                      size="sm"
-                      onPress={handleAddFreshIngredient}
-                    />
-                  </View>
-                </View>
-
-                {/* Fresh Produce Items List */}
-                <Text style={[styles.inputLabel, { color: colors.textPrimary, marginTop: 14 }]}>
-                  Fresh Produce in Kit ({ingredients.length} items):
-                </Text>
-                {ingredients.length === 0 ? (
-                  <View
-                    style={{
-                      padding: 14,
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      backgroundColor: colors.bgSubtle,
-                      borderRadius: radii.md,
-                      marginTop: 6,
-                      borderWidth: 1,
-                      borderColor: colors.borderLight,
-                      borderStyle: 'dashed',
-                    }}
-                  >
-                    <Text style={{ fontSize: 13, color: colors.textMuted }}>
-                      No fresh produce added yet. Type an item above to add.
-                    </Text>
-                  </View>
-                ) : (
-                  ingredients.map((ing, idx) => (
-                    <View
-                      key={idx}
-                      style={[
-                        styles.ingItemRow,
-                        { backgroundColor: colors.bgSubtle, borderColor: colors.borderLight },
-                      ]}
-                    >
-                      <View style={{ flex: 1 }}>
-                        <Text style={[styles.ingItemName, { color: colors.textPrimary }]}>
-                          {ing.name}
-                        </Text>
-                        <Text style={{ fontSize: 11, color: colors.textMuted }}>
-                          Fresh Base Ingredient
-                        </Text>
-                      </View>
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                        <TextInput
-                          style={[
-                            styles.textInput,
-                            {
-                              backgroundColor: colors.bgSurface,
-                              borderColor: colors.border,
-                              width: 85,
-                              height: 32,
-                              paddingVertical: 2,
-                              paddingHorizontal: 8,
-                              fontSize: 12,
-                              fontWeight: '800',
-                              textAlign: 'center',
-                              color: colors.primary,
-                            },
-                          ]}
-                          value={ing.quantity}
-                          onChangeText={(newQty) => handleUpdateFreshIngredientQty(idx, newQty)}
-                          placeholder="Qty"
-                          placeholderTextColor={colors.textMuted}
-                        />
-                        <TouchableOpacity
-                          onPress={() => handleRemoveFreshIngredient(idx)}
-                          style={styles.deleteIngBtn}
-                        >
-                          <Icon name="close" size={14} color={colors.danger} />
-                        </TouchableOpacity>
-                      </View>
-                    </View>
-                  ))
-                )}
-              </View>
-
-              {/* SECTION 2: SEPARATE MASALA SACHETS MIXER */}
-              <View
-                style={[styles.card, { backgroundColor: colors.bgSurface, borderRadius: radii.xl }]}
-              >
-                <View
-                  style={{
-                    flexDirection: 'row',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    marginBottom: 4,
-                  }}
-                >
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                    <Icon name="sparkles" size={20} color={colors.primary} />
-                    <Text
-                      style={[
-                        styles.sectionHeading,
-                        { color: colors.textPrimary, marginBottom: 0 },
-                      ]}
-                    >
-                      2. Pre-Portioned Masala Sachets
-                    </Text>
-                  </View>
-                  <Button
-                    title="+ New Sachet"
-                    size="sm"
-                    variant="outline"
-                    onPress={handleAddSachet}
-                  />
-                </View>
-
-                <Text
-                  style={[styles.sectionHint, { color: colors.textSecondary, marginBottom: 12 }]}
-                >
-                  Curate custom spice sachets. Enter exactly how much of each masala is to be mixed
-                  together inside each sachet (multiple sachets supported per dish).
-                </Text>
-
-                {sachets.length === 0 ? (
-                  <View
-                    style={{
-                      padding: 16,
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      backgroundColor: colors.bgSubtle,
-                      borderRadius: radii.md,
-                      borderWidth: 1,
-                      borderColor: colors.borderLight,
-                      borderStyle: 'dashed',
-                    }}
-                  >
-                    <Icon name="cube" size={24} color={colors.textMuted} />
-                    <Text
-                      style={{
-                        fontSize: 13,
-                        color: colors.textMuted,
-                        marginTop: 6,
-                        textAlign: 'center',
-                      }}
-                    >
-                      No masala sachets created yet. Tap "+ New Sachet" above to add your first
-                      spice blend sachet.
-                    </Text>
-                  </View>
-                ) : (
-                  sachets.map((sachet) => {
-                    const draft = sachetDrafts[sachet.id] || {
-                      spiceName: '',
-                      quantity: '1 tsp',
-                      searchQuery: '',
-                    };
-                    return (
-                      <View
-                        key={sachet.id}
-                        style={{
-                          backgroundColor: colors.bgSubtle,
-                          borderRadius: radii.lg,
-                          padding: 12,
-                          marginBottom: 14,
-                          borderWidth: 1.5,
-                          borderColor: colors.borderLight,
-                        }}
-                      >
-                        {/* Sachet Header with Name Edit and Delete */}
-                        <View
-                          style={{
-                            flexDirection: 'row',
-                            alignItems: 'center',
-                            justifyContent: 'space-between',
-                            marginBottom: 8,
-                            gap: 8,
-                          }}
-                        >
-                          <TextInput
-                            style={[
-                              styles.textInput,
-                              {
-                                flex: 1,
-                                fontWeight: '800',
-                                fontSize: 14,
-                                backgroundColor: colors.bgSurface,
-                                borderColor: colors.border,
-                                paddingVertical: 6,
-                              },
-                            ]}
-                            value={sachet.name}
-                            onChangeText={(text) => handleUpdateSachetName(sachet.id, text)}
-                            placeholder="Sachet Name (e.g. Sachet 1: Whole Khada Masala)"
-                            placeholderTextColor={colors.textMuted}
-                          />
-                          <TouchableOpacity
-                            onPress={() => handleRemoveSachet(sachet.id)}
-                            style={{ padding: 6 }}
-                          >
-                            <Icon name="trash" size={16} color={colors.danger} />
-                          </TouchableOpacity>
-                        </View>
-
-                        {/* List of Mixed Spices in this Sachet */}
-                        <Text
-                          style={{
-                            fontSize: 11,
-                            fontWeight: '700',
-                            color: colors.primary,
-                            marginBottom: 6,
-                          }}
-                        >
-                          Mixed Inside ({sachet.spices.length} masala
-                          {sachet.spices.length !== 1 ? 's' : ''}):
-                        </Text>
-                        {sachet.spices.length === 0 ? (
-                          <Text
-                            style={{
-                              fontSize: 11,
-                              color: colors.textMuted,
-                              fontStyle: 'italic',
-                              marginBottom: 8,
-                            }}
-                          >
-                            No masalas mixed yet. Select spices and amounts below to blend into this
-                            sachet.
-                          </Text>
-                        ) : (
-                          <View
-                            style={{
-                              flexDirection: 'row',
-                              flexWrap: 'wrap',
-                              gap: 6,
-                              marginBottom: 10,
-                            }}
-                          >
-                            {sachet.spices.map((spice, spIdx) => (
-                              <View
-                                key={spIdx}
-                                style={{
-                                  flexDirection: 'row',
-                                  alignItems: 'center',
-                                  backgroundColor: colors.bgSurface,
-                                  borderColor: colors.primary,
-                                  borderWidth: 1,
-                                  borderRadius: 14,
-                                  paddingVertical: 3,
-                                  paddingHorizontal: 8,
-                                  gap: 6,
-                                }}
-                              >
-                                <Text
-                                  style={{
-                                    fontSize: 11,
-                                    fontWeight: '800',
-                                    color: colors.textPrimary,
-                                  }}
-                                >
-                                  {spice.name}:
-                                </Text>
-                                <Text
-                                  style={{
-                                    fontSize: 11,
-                                    fontWeight: '700',
-                                    color: colors.primary,
-                                  }}
-                                >
-                                  {spice.quantity}
-                                </Text>
-                                <TouchableOpacity
-                                  onPress={() => handleRemoveSpiceFromSachet(sachet.id, spIdx)}
-                                >
-                                  <Icon name="close" size={12} color={colors.danger} />
-                                </TouchableOpacity>
-                              </View>
-                            ))}
-                          </View>
-                        )}
-
-                        {/* Spice Search & Exact Quantity Selector inside this sachet */}
-                        {(() => {
-                          const query = (draft.searchQuery || '').trim().toLowerCase();
-                          const filteredSpices = query
-                            ? MASTER_SPICE_CATALOG.filter(
-                                (sp) =>
-                                  sp.name.toLowerCase().includes(query) ||
-                                  (sp.hindi && sp.hindi.toLowerCase().includes(query)) ||
-                                  sp.category.toLowerCase().includes(query),
-                              ).slice(0, 12)
-                            : [];
-
-                          const exactMatchExists = query
-                            ? MASTER_SPICE_CATALOG.some((sp) => sp.name.toLowerCase() === query)
-                            : false;
-
-                          return (
-                            <View
-                              style={{
-                                backgroundColor: colors.bgSurface,
-                                padding: 12,
-                                borderRadius: radii.md,
-                                borderWidth: 1,
-                                borderColor: colors.borderLight,
-                              }}
-                            >
-                              <Text
-                                style={{
-                                  fontSize: 11,
-                                  fontWeight: '700',
-                                  color: colors.textPrimary,
-                                  marginBottom: 6,
-                                }}
-                              >
-                                Search Spice to Add:
-                              </Text>
-
-                              {/* Search Bar Input */}
-                              <View
-                                style={{
-                                  flexDirection: 'row',
-                                  alignItems: 'center',
-                                  backgroundColor: colors.bgSubtle,
-                                  borderRadius: radii.md,
-                                  borderWidth: 1,
-                                  borderColor: draft.spiceName ? colors.primary : colors.border,
-                                  paddingHorizontal: 10,
-                                  paddingVertical: Platform.OS === 'ios' ? 8 : 4,
-                                  marginBottom: 8,
-                                }}
-                              >
-                                <Icon name="search" size={16} color={colors.textMuted} />
-                                <TextInput
-                                  style={{
-                                    flex: 1,
-                                    fontSize: 12,
-                                    color: colors.textPrimary,
-                                    marginLeft: 8,
-                                    paddingVertical: 4,
-                                  }}
-                                  placeholder="Search spice by English or Hindi name (e.g. Cumin, Haldi, Cardamom)..."
-                                  placeholderTextColor={colors.textMuted}
-                                  value={
-                                    draft.searchQuery !== undefined
-                                      ? draft.searchQuery
-                                      : draft.spiceName
-                                  }
-                                  onChangeText={(text) =>
-                                    handleUpdateSachetDraft(sachet.id, {
-                                      searchQuery: text,
-                                      spiceName: text.trim() === '' ? '' : draft.spiceName,
-                                    })
-                                  }
-                                />
-                                {draft.searchQuery || draft.spiceName ? (
-                                  <TouchableOpacity
-                                    onPress={() =>
-                                      handleUpdateSachetDraft(sachet.id, {
-                                        searchQuery: '',
-                                        spiceName: '',
-                                      })
-                                    }
-                                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                                    style={{ padding: 2 }}
-                                  >
-                                    <Icon name="close" size={14} color={colors.textMuted} />
-                                  </TouchableOpacity>
-                                ) : null}
-                              </View>
-
-                              {/* Filtered Spice Suggestions (when typing in search bar) */}
-                              {query.length > 0 && (
-                                <View
-                                  style={{
-                                    backgroundColor: colors.bgSubtle,
-                                    borderRadius: radii.sm,
-                                    padding: 8,
-                                    marginBottom: 8,
-                                    borderWidth: 1,
-                                    borderColor: colors.borderLight,
-                                  }}
-                                >
-                                  <Text
-                                    style={{
-                                      fontSize: 10,
-                                      fontWeight: '700',
-                                      color: colors.textSecondary,
-                                      marginBottom: 6,
-                                    }}
-                                  >
-                                    Found Spices ({filteredSpices.length}):
-                                  </Text>
-                                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
-                                    {filteredSpices.map((spice, spIdx) => {
-                                      const isSelected = draft.spiceName === spice.name;
-                                      return (
-                                        <TouchableOpacity
-                                          key={spIdx}
-                                          onPress={() =>
-                                            handleUpdateSachetDraft(sachet.id, {
-                                              spiceName: spice.name,
-                                              searchQuery: spice.name,
-                                              quantity:
-                                                draft.quantity || spice.defaultQty || '1 tsp',
-                                            })
-                                          }
-                                          style={{
-                                            flexDirection: 'row',
-                                            alignItems: 'center',
-                                            backgroundColor: isSelected
-                                              ? colors.primary
-                                              : colors.bgSurface,
-                                            borderColor: isSelected
-                                              ? colors.primary
-                                              : colors.border,
-                                            borderWidth: 1,
-                                            borderRadius: 12,
-                                            paddingVertical: 4,
-                                            paddingHorizontal: 8,
-                                            gap: 4,
-                                          }}
-                                        >
-                                          <Text
-                                            style={{
-                                              fontSize: 10,
-                                              fontWeight: '700',
-                                              color: isSelected ? '#FFFFFF' : colors.textPrimary,
-                                            }}
-                                          >
-                                            {spice.name}
-                                          </Text>
-                                          {spice.hindi && (
-                                            <Text
-                                              style={{
-                                                fontSize: 9,
-                                                color: isSelected
-                                                  ? 'rgba(255,255,255,0.85)'
-                                                  : colors.textMuted,
-                                              }}
-                                            >
-                                              ({spice.hindi})
-                                            </Text>
-                                          )}
-                                          <View
-                                            style={{
-                                              backgroundColor: isSelected
-                                                ? 'rgba(255,255,255,0.25)'
-                                                : colors.bgSubtle,
-                                              borderRadius: 4,
-                                              paddingHorizontal: 4,
-                                              paddingVertical: 1,
-                                            }}
-                                          >
-                                            <Text
-                                              style={{
-                                                fontSize: 8,
-                                                fontWeight: '700',
-                                                color: isSelected
-                                                  ? '#FFFFFF'
-                                                  : colors.textSecondary,
-                                              }}
-                                            >
-                                              {spice.category}
-                                            </Text>
-                                          </View>
-                                        </TouchableOpacity>
-                                      );
-                                    })}
-
-                                    {/* Custom spice button if no exact match */}
-                                    {!exactMatchExists && draft.searchQuery.trim().length > 0 && (
-                                      <TouchableOpacity
-                                        onPress={() =>
-                                          handleUpdateSachetDraft(sachet.id, {
-                                            spiceName: draft.searchQuery.trim(),
-                                            searchQuery: draft.searchQuery.trim(),
-                                          })
-                                        }
-                                        style={{
-                                          flexDirection: 'row',
-                                          alignItems: 'center',
-                                          backgroundColor: colors.primary + '15',
-                                          borderColor: colors.primary,
-                                          borderWidth: 1,
-                                          borderRadius: 12,
-                                          paddingVertical: 4,
-                                          paddingHorizontal: 8,
-                                          gap: 4,
-                                        }}
-                                      >
-                                        <Text
-                                          style={{
-                                            fontSize: 10,
-                                            fontWeight: '700',
-                                            color: colors.primary,
-                                          }}
-                                        >
-                                          + Use custom spice: "{draft.searchQuery.trim()}"
-                                        </Text>
-                                      </TouchableOpacity>
-                                    )}
-                                  </View>
-                                </View>
-                              )}
-
-                              {/* Popular Quick Suggestions when search is empty and nothing selected */}
-                              {!query && !draft.spiceName && (
-                                <View style={{ marginBottom: 8 }}>
-                                  <Text
-                                    style={{
-                                      fontSize: 9,
-                                      fontWeight: '600',
-                                      color: colors.textMuted,
-                                      marginBottom: 4,
-                                    }}
-                                  >
-                                    Popular staples (or search 40+ spices above):
-                                  </Text>
-                                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 4 }}>
-                                    {[
-                                      'Jeera (Cumin Seeds)',
-                                      'Haldi (Turmeric Powder)',
-                                      'Kashmiri Red Chilli Powder',
-                                      'Garam Masala (Chef Blend)',
-                                      'Dhaniya Powder (Coriander)',
-                                      'Kasuri Methi (Fenugreek Leaves)',
-                                    ].map((popName, pIdx) => {
-                                      const found = MASTER_SPICE_CATALOG.find(
-                                        (s) => s.name === popName,
-                                      );
-                                      return (
-                                        <TouchableOpacity
-                                          key={pIdx}
-                                          onPress={() =>
-                                            handleUpdateSachetDraft(sachet.id, {
-                                              spiceName: popName,
-                                              searchQuery: popName,
-                                              quantity:
-                                                draft.quantity || found?.defaultQty || '1 tsp',
-                                            })
-                                          }
-                                          style={{
-                                            paddingVertical: 2,
-                                            paddingHorizontal: 6,
-                                            borderRadius: 8,
-                                            backgroundColor: colors.bgSubtle,
-                                            borderWidth: 1,
-                                            borderColor: colors.borderLight,
-                                          }}
-                                        >
-                                          <Text
-                                            style={{
-                                              fontSize: 9,
-                                              fontWeight: '600',
-                                              color: colors.textSecondary,
-                                            }}
-                                          >
-                                            + {(popName.split('(')[0] || popName).trim()}
-                                          </Text>
-                                        </TouchableOpacity>
-                                      );
-                                    })}
-                                  </View>
-                                </View>
-                              )}
-
-                              {/* Selected Spice Indicator Badge */}
-                              {draft.spiceName ? (
-                                <View
-                                  style={{
-                                    flexDirection: 'row',
-                                    alignItems: 'center',
-                                    justifyContent: 'space-between',
-                                    backgroundColor: colors.primary + '12',
-                                    borderColor: colors.primary,
-                                    borderWidth: 1,
-                                    borderRadius: radii.sm,
-                                    paddingVertical: 6,
-                                    paddingHorizontal: 10,
-                                    marginBottom: 8,
-                                  }}
-                                >
-                                  <View
-                                    style={{
-                                      flexDirection: 'row',
-                                      alignItems: 'center',
-                                      gap: 6,
-                                      flex: 1,
-                                    }}
-                                  >
-                                    <Icon name="restaurant" size={13} color={colors.primary} />
-                                    <Text
-                                      style={{
-                                        fontSize: 11,
-                                        fontWeight: '700',
-                                        color: colors.primary,
-                                      }}
-                                    >
-                                      Selected Spice:
-                                    </Text>
-                                    <Text
-                                      style={{
-                                        fontSize: 11,
-                                        fontWeight: '800',
-                                        color: colors.textPrimary,
-                                        flexShrink: 1,
-                                      }}
-                                    >
-                                      {draft.spiceName}
-                                    </Text>
-                                  </View>
-                                  <TouchableOpacity
-                                    onPress={() =>
-                                      handleUpdateSachetDraft(sachet.id, {
-                                        spiceName: '',
-                                        searchQuery: '',
-                                      })
-                                    }
-                                  >
-                                    <Text
-                                      style={{
-                                        fontSize: 10,
-                                        fontWeight: '700',
-                                        color: colors.danger,
-                                      }}
-                                    >
-                                      Change
-                                    </Text>
-                                  </TouchableOpacity>
-                                </View>
-                              ) : null}
-
-                              {/* Exact Quantity Selection */}
-                              <View style={{ marginBottom: 6 }}>
-                                <View
-                                  style={{
-                                    flexDirection: 'row',
-                                    justifyContent: 'space-between',
-                                    alignItems: 'center',
-                                    marginBottom: 4,
-                                  }}
-                                >
-                                  <Text
-                                    style={{
-                                      fontSize: 10,
-                                      fontWeight: '700',
-                                      color: colors.textSecondary,
-                                    }}
-                                  >
-                                    Select Exact Quantity:
-                                  </Text>
-                                  <Text style={{ fontSize: 9, color: colors.textMuted }}>
-                                    Tap pill or type custom
-                                  </Text>
-                                </View>
-
-                                {/* Quantity Input */}
-                                <TextInput
-                                  style={[
-                                    styles.textInput,
-                                    {
-                                      backgroundColor: colors.bgSubtle,
-                                      borderColor: colors.border,
-                                      paddingVertical: 6,
-                                      fontSize: 11,
-                                      marginBottom: 6,
-                                    },
-                                  ]}
-                                  placeholder="Exact Quantity (e.g. 0.5 tsp, 1.5 tsp, 5g, 2 pieces)"
-                                  placeholderTextColor={colors.textMuted}
-                                  value={draft.quantity}
-                                  onChangeText={(quantity) =>
-                                    handleUpdateSachetDraft(sachet.id, { quantity })
-                                  }
-                                />
-
-                                {/* Exact Quantity Preset Pills */}
-                                <View style={{ flexDirection: 'row', gap: 4, flexWrap: 'wrap' }}>
-                                  {SPICE_QUANTITY_PRESETS.map((qtyOption, qIdx) => {
-                                    const isQtySelected = draft.quantity === qtyOption;
-                                    return (
-                                      <TouchableOpacity
-                                        key={qIdx}
-                                        onPress={() =>
-                                          handleUpdateSachetDraft(sachet.id, {
-                                            quantity: qtyOption,
-                                          })
-                                        }
-                                        style={{
-                                          paddingVertical: 3,
-                                          paddingHorizontal: 7,
-                                          borderRadius: 6,
-                                          backgroundColor: isQtySelected
-                                            ? colors.primary
-                                            : colors.bgSubtle,
-                                          borderWidth: 1,
-                                          borderColor: isQtySelected
-                                            ? colors.primary
-                                            : colors.borderLight,
-                                        }}
-                                      >
-                                        <Text
-                                          style={{
-                                            fontSize: 9,
-                                            fontWeight: isQtySelected ? '800' : '600',
-                                            color: isQtySelected ? '#FFFFFF' : colors.textSecondary,
-                                          }}
-                                        >
-                                          {qtyOption}
-                                        </Text>
-                                      </TouchableOpacity>
-                                    );
-                                  })}
-                                </View>
-                              </View>
-
-                              {/* Action Buttons */}
-                              <View
-                                style={{
-                                  flexDirection: 'row',
-                                  justifyContent: 'flex-end',
-                                  alignItems: 'center',
-                                  marginTop: 8,
-                                  gap: 8,
-                                }}
-                              >
-                                <Button
-                                  title={
-                                    draft.spiceName
-                                      ? `+ Add ${(draft.spiceName.split('(')[0] || draft.spiceName).trim()} (${draft.quantity || '1 tsp'})`
-                                      : draft.searchQuery.trim()
-                                        ? `+ Add "${draft.searchQuery.trim()}" (${draft.quantity || '1 tsp'})`
-                                        : '+ Mix into Sachet'
-                                  }
-                                  size="sm"
-                                  onPress={() => handleAddSpiceToSachet(sachet.id)}
-                                />
-                              </View>
-                            </View>
-                          );
-                        })()}
-                      </View>
-                    );
-                  })
-                )}
-              </View>
-
-              {/* LIVE REAL-TIME NUTRITIONAL STATUS HUD IN STEP 2 */}
-              <View
-                style={[
-                  styles.liveNutritionHud,
-                  {
-                    backgroundColor: colors.bgSurface,
-                    borderRadius: radii.xl,
-                    borderColor: colors.borderLight,
-                    borderWidth: 1,
-                    marginTop: 14,
-                  },
-                ]}
-              >
-                <View
-                  style={{
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    marginBottom: 10,
-                  }}
-                >
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                    <Icon name="sparkles" size={16} color={colors.primary} />
-                    <Text
-                      style={{
-                        fontSize: 13,
-                        fontWeight: '800',
-                        color: colors.textPrimary,
-                      }}
-                    >
-                      Live Total Recipe Nutrition
-                    </Text>
-                  </View>
-                  <View
-                    style={{
-                      flexDirection: 'row',
-                      alignItems: 'center',
-                      backgroundColor: '#DCFCE7',
-                      paddingVertical: 2,
-                      paddingHorizontal: 8,
-                      borderRadius: 10,
-                      gap: 4,
-                    }}
-                  >
-                    <View
-                      style={{
-                        width: 6,
-                        height: 6,
-                        borderRadius: 3,
-                        backgroundColor: '#16A34A',
-                      }}
-                    />
-                    <Text
-                      style={{
-                        fontSize: 10,
-                        fontWeight: '800',
-                        color: '#15803D',
-                        textTransform: 'uppercase',
-                      }}
-                    >
-                      Live Synced
-                    </Text>
-                  </View>
-                </View>
-
-                <View
-                  style={{
-                    flexDirection: 'row',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    backgroundColor: colors.bgSubtle,
-                    borderRadius: radii.lg,
-                    paddingVertical: 8,
-                    paddingHorizontal: 12,
-                  }}
-                >
-                  <View style={{ alignItems: 'center', flex: 1 }}>
-                    <Text style={{ fontSize: 16, fontWeight: '900', color: colors.primary }}>
-                      {aiBreakdown?.totalRecipe.calories ?? nutrition.calories}
-                    </Text>
-                    <Text style={{ fontSize: 10, color: colors.textMuted, fontWeight: '700' }}>
-                      kcal
-                    </Text>
-                  </View>
-                  <View style={{ width: 1, height: 24, backgroundColor: colors.borderLight }} />
-                  <View style={{ alignItems: 'center', flex: 1 }}>
-                    <Text style={{ fontSize: 14, fontWeight: '800', color: colors.textPrimary }}>
-                      {aiBreakdown?.totalRecipe.protein ?? nutrition.protein}g
-                    </Text>
-                    <Text style={{ fontSize: 10, color: colors.textMuted }}>Protein</Text>
-                  </View>
-                  <View style={{ width: 1, height: 24, backgroundColor: colors.borderLight }} />
-                  <View style={{ alignItems: 'center', flex: 1 }}>
-                    <Text style={{ fontSize: 14, fontWeight: '800', color: colors.textPrimary }}>
-                      {aiBreakdown?.totalRecipe.carbs ?? nutrition.carbs}g
-                    </Text>
-                    <Text style={{ fontSize: 10, color: colors.textMuted }}>Carbs</Text>
-                  </View>
-                  <View style={{ width: 1, height: 24, backgroundColor: colors.borderLight }} />
-                  <View style={{ alignItems: 'center', flex: 1 }}>
-                    <Text style={{ fontSize: 14, fontWeight: '800', color: colors.textPrimary }}>
-                      {aiBreakdown?.totalRecipe.fat ?? nutrition.fat}g
-                    </Text>
-                    <Text style={{ fontSize: 10, color: colors.textMuted }}>Fats</Text>
-                  </View>
-                  <View style={{ width: 1, height: 24, backgroundColor: colors.borderLight }} />
-                  <View style={{ alignItems: 'center', flex: 1 }}>
-                    <Text style={{ fontSize: 14, fontWeight: '800', color: colors.textPrimary }}>
-                      {aiBreakdown?.totalRecipe.fiber ?? nutrition.fiber}g
-                    </Text>
-                    <Text style={{ fontSize: 10, color: colors.textMuted }}>Fiber</Text>
-                  </View>
-                </View>
-
-                {aiBreakdown?.keyHighlights ? (
-                  <Text
-                    style={{
-                      fontSize: 11,
-                      color: colors.primary,
-                      fontWeight: '700',
-                      marginTop: 8,
-                      textAlign: 'center',
-                    }}
-                  >
-                    {aiBreakdown.keyHighlights}
-                  </Text>
-                ) : null}
-              </View>
-
-              {/* Navigation Buttons */}
-              <View style={[styles.navBtnRow, { marginTop: 16 }]}>
-                <Button
-                  title="← Back"
-                  variant="secondary"
-                  style={{ flex: 1 }}
-                  onPress={() => setCurrentStep(1)}
-                />
-                <Button
-                  title="Next: Recipe Steps"
-                  style={{ flex: 2 }}
-                  onPress={() => setCurrentStep(3)}
-                />
-              </View>
-            </View>
-          )}
-
-          {/* STEP 3: STEP-BY-STEP RECIPE INSTRUCTIONS */}
-          {currentStep === 3 && (
-            <View style={styles.stepContent}>
-              <View
-                style={[styles.card, { backgroundColor: colors.bgSurface, borderRadius: radii.xl }]}
-              >
-                <Text style={[styles.sectionHeading, { color: colors.textPrimary }]}>
-                  Recipe Instructions For Home Cooks
-                </Text>
-                <Text style={[styles.sectionHint, { color: colors.textSecondary }]}>
-                  Guide your customers step-by-step to cook like a master chef. Add reference photos
-                  to each step or generate them using AI.
-                </Text>
-
-                {/* Existing Steps with Photos */}
-                <Text style={[styles.inputLabel, { color: colors.textPrimary, marginTop: 10 }]}>
-                  Steps In This Recipe ({recipeSteps.length} steps):
-                </Text>
-
-                {recipeSteps.length === 0 ? (
-                  <View
-                    style={{
-                      padding: 16,
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      backgroundColor: colors.bgSubtle,
-                      borderRadius: radii.md,
-                      marginTop: 8,
-                      borderWidth: 1,
-                      borderColor: colors.borderLight,
-                      borderStyle: 'dashed',
-                    }}
-                  >
-                    <Icon name="document-text" size={24} color={colors.textMuted} />
-                    <Text style={{ fontSize: 13, color: colors.textMuted, marginTop: 6 }}>
-                      No recipe steps added yet. Use the form below to add cooking steps.
-                    </Text>
-                  </View>
-                ) : (
-                  recipeSteps.map((step) => (
-                    <View
-                      key={step.stepNumber}
-                      style={[
-                        styles.recipeStepCard,
-                        { backgroundColor: colors.bgSubtle, borderColor: colors.borderLight },
-                      ]}
-                    >
-                      <View style={styles.recipeStepHeader}>
-                        <View style={[styles.stepNumBadge, { backgroundColor: colors.primary }]}>
-                          <Text style={styles.stepNumBadgeText}>{step.stepNumber}</Text>
-                        </View>
-                        <Text
-                          style={[styles.recipeStepTitle, { color: colors.textPrimary }]}
-                          numberOfLines={1}
-                        >
-                          {step.title}
-                        </Text>
-                        <TouchableOpacity onPress={() => handleRemoveStep(step.stepNumber)}>
-                          <Icon name="close" size={16} color={colors.danger} />
-                        </TouchableOpacity>
-                      </View>
-
-                      {/* Step Photo & Details Split */}
-                      <View style={{ flexDirection: 'row', gap: 10, marginVertical: 6 }}>
-                        {step.imageUrl ? (
-                          <View style={styles.stepPhotoThumbWrapper}>
-                            <Image
-                              source={{ uri: step.imageUrl }}
-                              style={styles.stepPhotoThumb}
-                              resizeMode="cover"
-                            />
-                            <View style={styles.stepPhotoBadge}>
-                              <Text style={styles.stepPhotoBadgeText}>Step Photo</Text>
-                            </View>
-                          </View>
-                        ) : null}
-
-                        <View style={{ flex: 1 }}>
-                          <Text style={[styles.recipeStepText, { color: colors.textSecondary }]}>
-                            {step.instruction}
-                          </Text>
-
-                          {step.tip ? (
-                            <View style={styles.tipBox}>
-                              <Text
-                                style={{
-                                  fontSize: 11,
-                                  color: colors.primaryDark,
-                                  fontWeight: '600',
-                                }}
-                              >
-                                Chef Tip: {step.tip}
-                              </Text>
-                            </View>
-                          ) : null}
-
-                          <View
-                            style={{
-                              flexDirection: 'row',
-                              justifyContent: 'space-between',
-                              alignItems: 'center',
-                              marginTop: 6,
-                            }}
-                          >
-                            {step.timerSeconds ? (
-                              <Text
-                                style={{
-                                  fontSize: 11,
-                                  fontWeight: '700',
-                                  color: colors.primary,
-                                }}
-                              >
-                                Timer: {Math.round(step.timerSeconds / 60)} mins
-                              </Text>
-                            ) : (
-                              <View />
-                            )}
-
-                            <TouchableOpacity
-                              onPress={() => handleRegenerateExistingStepPhoto(step.stepNumber)}
-                              style={{
-                                paddingHorizontal: 8,
-                                paddingVertical: 3,
-                                borderRadius: 6,
-                                backgroundColor: colors.bgSurface,
-                                borderWidth: 1,
-                                borderColor: colors.borderLight,
-                              }}
-                            >
-                              <Text
-                                style={{ fontSize: 10, fontWeight: '700', color: colors.primary }}
-                              >
-                                Regenerate AI Photo
-                              </Text>
-                            </TouchableOpacity>
-                          </View>
-                        </View>
-                      </View>
-                    </View>
-                  ))
-                )}
-
-                {/* Add Step Card */}
-                <View
-                  style={[
-                    styles.addStepBox,
-                    { backgroundColor: colors.bgSubtle, borderRadius: radii.lg, marginTop: 14 },
-                  ]}
-                >
-                  <Text style={[styles.inputLabel, { color: colors.textPrimary, marginBottom: 8 }]}>
-                    + Add New Step {recipeSteps.length + 1}:
-                  </Text>
-                  <TextInput
-                    style={[
-                      styles.textInput,
-                      { backgroundColor: colors.bgSurface, borderColor: colors.border },
-                    ]}
-                    placeholder="Step Title (e.g. Sauté Onion & Tomato Base)"
-                    placeholderTextColor={colors.textMuted}
-                    value={newStepTitle}
-                    onChangeText={setNewStepTitle}
-                  />
-                  <TextInput
-                    style={[
-                      styles.textInput,
-                      {
-                        backgroundColor: colors.bgSurface,
-                        borderColor: colors.border,
-                        height: 70,
-                        textAlignVertical: 'top',
-                        marginTop: 8,
-                      },
-                    ]}
-                    multiline
-                    placeholder="What should the home cook do? (e.g. Heat oil, empty Sachet 1, simmer for 3 mins until fragrant)"
-                    placeholderTextColor={colors.textMuted}
-                    value={newStepInstruction}
-                    onChangeText={setNewStepInstruction}
-                  />
-
-                  <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
-                    <TextInput
-                      style={[
-                        styles.textInput,
-                        { flex: 1, backgroundColor: colors.bgSurface, borderColor: colors.border },
-                      ]}
-                      placeholder="Timer (mins)"
-                      placeholderTextColor={colors.textMuted}
-                      value={newStepMinutes}
-                      onChangeText={setNewStepMinutes}
-                      keyboardType="numeric"
-                    />
-                    <TextInput
-                      style={[
-                        styles.textInput,
-                        { flex: 2, backgroundColor: colors.bgSurface, borderColor: colors.border },
-                      ]}
-                      placeholder="Chef Pro-Tip (optional)"
-                      placeholderTextColor={colors.textMuted}
-                      value={newStepTip}
-                      onChangeText={setNewStepTip}
-                    />
-                  </View>
-
-                  {/* Step Photo Selection (AI, Upload, Presets) */}
-                  <View
-                    style={{
-                      marginTop: 12,
-                      padding: 10,
-                      backgroundColor: colors.bgSurface,
-                      borderRadius: radii.md,
-                      borderWidth: 1,
-                      borderColor: colors.borderLight,
-                    }}
-                  >
-                    <View
-                      style={{
-                        flexDirection: 'row',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                        marginBottom: 6,
-                      }}
-                    >
-                      <Text style={{ fontSize: 12, fontWeight: '800', color: colors.textPrimary }}>
-                        Step Preparation Reference Photo:
-                      </Text>
-                      {stepAiBadge ? (
-                        <Badge label={stepAiBadge} variant="accent" size="sm" />
-                      ) : null}
-                    </View>
-
-                    {/* Mode Tabs */}
-                    <View style={styles.photoModeTabs}>
-                      <TouchableOpacity
-                        onPress={() => setNewStepPhotoMode('ai')}
-                        style={[
-                          styles.photoModeTab,
-                          newStepPhotoMode === 'ai' && {
-                            backgroundColor: colors.primary,
-                            borderColor: colors.primary,
+                        setIngredients((prev) => [
+                          ...prev,
+                          {
+                            id: `spice-${Date.now()}`,
+                            name: sp.name,
+                            amount: 1,
+                            unit: 'sachet',
+                            quantity: sp.defaultQty || '1 sachet',
                           },
-                        ]}
-                      >
-                        <Text
-                          style={[
-                            styles.photoModeTabText,
-                            { color: newStepPhotoMode === 'ai' ? '#fff' : colors.textPrimary },
-                          ]}
-                        >
-                          Generate with AI
-                        </Text>
-                      </TouchableOpacity>
-
-                      <TouchableOpacity
-                        onPress={() => setNewStepPhotoMode('upload')}
-                        style={[
-                          styles.photoModeTab,
-                          newStepPhotoMode === 'upload' && {
-                            backgroundColor: colors.primary,
-                            borderColor: colors.primary,
-                          },
-                        ]}
-                      >
-                        <Text
-                          style={[
-                            styles.photoModeTabText,
-                            { color: newStepPhotoMode === 'upload' ? '#fff' : colors.textPrimary },
-                          ]}
-                        >
-                          Upload / URL
-                        </Text>
-                      </TouchableOpacity>
-
-                      <TouchableOpacity
-                        onPress={() => setNewStepPhotoMode('presets')}
-                        style={[
-                          styles.photoModeTab,
-                          newStepPhotoMode === 'presets' && {
-                            backgroundColor: colors.primary,
-                            borderColor: colors.primary,
-                          },
-                        ]}
-                      >
-                        <Text
-                          style={[
-                            styles.photoModeTabText,
-                            { color: newStepPhotoMode === 'presets' ? '#fff' : colors.textPrimary },
-                          ]}
-                        >
-                          Presets
-                        </Text>
-                      </TouchableOpacity>
-                    </View>
-
-                    {/* TAB 1: AI GENERATION */}
-                    {newStepPhotoMode === 'ai' && (
-                      <View style={{ paddingVertical: 4 }}>
-                        <Text
-                          style={{ fontSize: 11, color: colors.textSecondary, marginBottom: 8 }}
-                        >
-                          AI analyzes all ingredients ({ingredients.length} items), previous steps (
-                          {recipeSteps.length} steps), and this instruction to generate the most
-                          realistic preparation photo.
-                        </Text>
-
-                        <TouchableOpacity
-                          activeOpacity={0.85}
-                          onPress={handleGenerateStepAiPhoto}
-                          style={[styles.aiGenerateBtn, { backgroundColor: colors.primary }]}
-                        >
-                          {isGeneratingStepPhoto ? (
-                            <ActivityIndicator color="#fff" />
-                          ) : (
-                            <Text style={styles.aiGenerateBtnText}>
-                              Generate Step Photo with AI
-                            </Text>
-                          )}
-                        </TouchableOpacity>
-                      </View>
-                    )}
-
-                    {/* TAB 2: UPLOAD / URL */}
-                    {newStepPhotoMode === 'upload' && (
-                      <View style={{ paddingVertical: 4 }}>
-                        <TouchableOpacity
-                          activeOpacity={0.8}
-                          onPress={handleUploadStepPhoto}
-                          style={[
-                            styles.deviceUploadButton,
-                            {
-                              borderColor: colors.primary,
-                              backgroundColor: colors.bgSubtle,
-                              paddingVertical: 10,
-                            },
-                          ]}
-                        >
-                          <View style={{ marginBottom: 2 }}>
-                            <Icon name="folder" size={18} color={colors.primary} />
-                          </View>
-                          <Text
-                            style={[
-                              styles.deviceUploadText,
-                              { color: colors.primary, fontSize: 12 },
-                            ]}
-                          >
-                            Upload from Device / Files
-                          </Text>
-                        </TouchableOpacity>
-
-                        <View style={{ flexDirection: 'row', gap: 6, marginTop: 8 }}>
-                          <TextInput
-                            style={[
-                              styles.textInput,
-                              {
-                                flex: 1,
-                                backgroundColor: colors.bgSubtle,
-                                borderColor: colors.border,
-                              },
-                            ]}
-                            placeholder="Or paste photo URL (https://...)"
-                            placeholderTextColor={colors.textMuted}
-                            value={customStepPhotoUrl}
-                            onChangeText={setCustomStepPhotoUrl}
-                          />
-                          <Button title="Apply" size="sm" onPress={handleApplyCustomStepUrl} />
-                        </View>
-                      </View>
-                    )}
-
-                    {/* TAB 3: PRESETS */}
-                    {newStepPhotoMode === 'presets' && (
-                      <ScrollView
-                        horizontal
-                        showsHorizontalScrollIndicator={false}
-                        style={{ marginVertical: 6 }}
-                      >
-                        {AI_STEP_PREPARATION_PRESETS.map((p, idx) => (
-                          <TouchableOpacity
-                            key={idx}
-                            onPress={() => {
-                              setNewStepPhotoUrl(p.url);
-                              setStepAiBadge(p.phase);
-                            }}
-                            style={{
-                              marginRight: 8,
-                              width: 100,
-                              borderRadius: 6,
-                              overflow: 'hidden',
-                              borderWidth: newStepPhotoUrl === p.url ? 2 : 1,
-                              borderColor:
-                                newStepPhotoUrl === p.url ? colors.primary : colors.borderLight,
-                            }}
-                          >
-                            <Image
-                              source={{ uri: p.url }}
-                              style={{ width: 100, height: 60 }}
-                              resizeMode="cover"
-                            />
-                            <Text
-                              style={{
-                                fontSize: 9,
-                                fontWeight: '700',
-                                padding: 3,
-                                color: colors.textPrimary,
-                              }}
-                              numberOfLines={1}
-                            >
-                              {p.phase}
-                            </Text>
-                          </TouchableOpacity>
-                        ))}
-                      </ScrollView>
-                    )}
-
-                    {/* Attached Photo Preview */}
-                    {newStepPhotoUrl ? (
-                      <View
-                        style={{
-                          flexDirection: 'row',
-                          alignItems: 'center',
-                          backgroundColor: colors.bgSubtle,
-                          padding: 8,
-                          borderRadius: radii.md,
-                          marginTop: 8,
-                          borderWidth: 1,
-                          borderColor: colors.borderLight,
-                        }}
-                      >
-                        <Image
-                          source={{ uri: newStepPhotoUrl }}
-                          style={{ width: 60, height: 45, borderRadius: 6, marginRight: 10 }}
-                        />
-                        <View style={{ flex: 1 }}>
-                          <Text
-                            style={{ fontSize: 12, fontWeight: '800', color: colors.textPrimary }}
-                          >
-                            Photo Attached
-                          </Text>
-                          <Text style={{ fontSize: 10, color: colors.textMuted }} numberOfLines={1}>
-                            {stepAiBadge || 'Reference cooking stage photo'}
-                          </Text>
-                        </View>
-                        <TouchableOpacity
-                          onPress={() => {
-                            setNewStepPhotoUrl('');
-                            setStepAiBadge('');
-                          }}
-                          style={{ padding: 6 }}
-                        >
-                          <Text style={{ color: colors.danger, fontWeight: '800', fontSize: 12 }}>
-                            Clear
-                          </Text>
-                        </TouchableOpacity>
-                      </View>
-                    ) : null}
-                  </View>
-
-                  <Button
-                    title="+ Append Cooking Step"
-                    variant="outline"
-                    size="sm"
-                    onPress={handleAddStep}
-                    style={{ marginTop: 10 }}
-                  />
-                </View>
-
-                {/* LIVE RECIPE CARD PREVIEW (ON INSTRUCTIONS PAGE) */}
-                <View
-                  style={{
-                    marginTop: 24,
-                    padding: 14,
-                    backgroundColor: colors.bgSubtle,
-                    borderRadius: radii.xl,
-                    borderWidth: 1.5,
-                    borderColor: colors.borderLight,
-                  }}
-                >
-                  <View
-                    style={{
-                      flexDirection: 'row',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                      marginBottom: 10,
-                      flexWrap: 'wrap',
-                      gap: 8,
-                    }}
-                  >
-                    <View>
-                      <Text style={{ fontSize: 15, fontWeight: '900', color: colors.textPrimary }}>
-                        Customer Recipe Card Preview
-                      </Text>
-                      <Text style={{ fontSize: 11, color: colors.textSecondary }}>
-                        Real-time preview of the printed card that will come with the meal kit
-                        package.
-                      </Text>
-                    </View>
-
-                    <Button
-                      title="Print Test Card"
-                      variant="primary"
-                      size="sm"
-                      onPress={() => setPrintModalVisible(true)}
-                    />
-                  </View>
-
-                  {/* Front / Back Toggle Buttons */}
-                  <View style={{ flexDirection: 'row', gap: 8, marginBottom: 12 }}>
-                    <TouchableOpacity
-                      onPress={() => setCardPreviewSide('front')}
-                      style={{
-                        flex: 1,
-                        paddingVertical: 8,
-                        borderRadius: 8,
-                        backgroundColor:
-                          cardPreviewSide === 'front' ? colors.primary : colors.bgSurface,
-                        borderWidth: 1,
-                        borderColor:
-                          cardPreviewSide === 'front' ? colors.primary : colors.borderLight,
-                        alignItems: 'center',
+                        ]);
                       }}
+                      style={[styles.spiceCatalogPill, { backgroundColor: colors.bgSubtle, borderColor: colors.borderLight }]}
                     >
-                      <Text
-                        style={{
-                          fontSize: 12,
-                          fontWeight: '800',
-                          color: cardPreviewSide === 'front' ? '#fff' : colors.textPrimary,
-                        }}
-                      >
-                        Front Side (Ingredients & Nutrition)
+                      <Icon name="leaf-outline" size={13} color={colors.primary} />
+                      <Text style={[styles.spiceCatalogPillText, { color: colors.textPrimary }]}>
+                        {sp.name}
                       </Text>
                     </TouchableOpacity>
-
-                    <TouchableOpacity
-                      onPress={() => setCardPreviewSide('back')}
-                      style={{
-                        flex: 1,
-                        paddingVertical: 8,
-                        borderRadius: 8,
-                        backgroundColor:
-                          cardPreviewSide === 'back' ? colors.primary : colors.bgSurface,
-                        borderWidth: 1,
-                        borderColor:
-                          cardPreviewSide === 'back' ? colors.primary : colors.borderLight,
-                        alignItems: 'center',
-                      }}
-                    >
-                      <Text
-                        style={{
-                          fontSize: 12,
-                          fontWeight: '800',
-                          color: cardPreviewSide === 'back' ? '#fff' : colors.textPrimary,
-                        }}
-                      >
-                        Back Side (Steps & Photos)
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-
-                  {/* Visual Card View */}
-                  {cardPreviewSide === 'front' ? (
-                    <RecipeCardFrontView kit={currentKitForPreview} />
-                  ) : (
-                    <RecipeCardBackView kit={currentKitForPreview} />
-                  )}
+                  ))}
                 </View>
-              </View>
-
-              <View style={styles.navBtnRow}>
-                <Button
-                  title="← Back"
-                  variant="secondary"
-                  style={{ flex: 1 }}
-                  onPress={() => setCurrentStep(2)}
-                />
-                <Button
-                  title="Next: AI Nutrition"
-                  style={{ flex: 2 }}
-                  onPress={() => setCurrentStep(4)}
-                />
               </View>
             </View>
           )}
 
-          {/* STEP 4: AI NUTRITIONAL ESTIMATION */}
-          {currentStep === 4 && (
-            <View style={styles.stepContent}>
-              <View
-                style={[styles.card, { backgroundColor: colors.bgSurface, borderRadius: radii.xl }]}
-              >
-                <Text style={[styles.sectionHeading, { color: colors.textPrimary }]}>
-                  Live Nutritional Information
-                </Text>
-                <Text style={[styles.sectionHint, { color: colors.textSecondary }]}>
-                  Updates in real time automatically based on all ingredients, portions, and sachet
-                  spices.
-                </Text>
-
-                {/* AI Calculation Trigger Button */}
-                <TouchableOpacity
-                  activeOpacity={0.85}
-                  onPress={handleRunAiNutrition}
-                  style={[styles.aiActionButton, { backgroundColor: colors.primary }]}
-                >
-                  {isEstimatingAI ? (
-                    <ActivityIndicator color="#fff" />
-                  ) : (
-                    <>
-                      <Icon name="sparkles" size={16} color="#FFFFFF" />
-                      <Text style={styles.aiActionText}>Recalculate Real-Time Nutrition</Text>
-                    </>
-                  )}
-                </TouchableOpacity>
-
-                {/* Macro Results Display */}
-                <View
-                  style={{
-                    flexDirection: 'row',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    marginBottom: 6,
-                  }}
-                >
-                  <Text
-                    style={[
-                      styles.inputLabel,
-                      { color: colors.textPrimary, marginTop: 8, marginBottom: 0 },
-                    ]}
-                  >
-                    Total Recipe Nutrition
-                  </Text>
-                  {aiBreakdown && (
-                    <Text style={{ fontSize: 11, color: colors.textMuted }}>
-                      ÷{parseInt(servings) || 2} servings = per serving below
-                    </Text>
-                  )}
-                </View>
-                <View style={styles.macroCardsGrid}>
-                  <View
-                    style={[
-                      styles.macroCard,
-                      { backgroundColor: colors.bgSubtle, borderRadius: radii.lg },
-                    ]}
-                  >
-                    <Text style={[styles.macroNumber, { color: colors.primary }]}>
-                      {aiBreakdown?.totalRecipe.calories ?? nutrition.calories}
-                    </Text>
-                    <Text style={[styles.macroLabel, { color: colors.textMuted }]}>Calories</Text>
-                    <Text style={[styles.macroSub, { color: colors.textSecondary }]}>
-                      kcal total
-                    </Text>
+          {/* ════════════════ STAGE 3: COOKING STEPS ════════════════ */}
+          {currentStage === 'steps' && (
+            <View style={styles.stageWrap}>
+              <View style={[styles.card, { backgroundColor: colors.bgSurface, borderColor: colors.borderLight, ...shadows.card }]}>
+                <View style={styles.cardHeaderRow}>
+                  <View style={styles.cardHeaderIconCol}>
+                    <Icon name="restaurant-outline" size={20} color={colors.primary} />
                   </View>
-
-                  <View
-                    style={[
-                      styles.macroCard,
-                      { backgroundColor: colors.bgSubtle, borderRadius: radii.lg },
-                    ]}
-                  >
-                    <Text style={[styles.macroNumber, { color: colors.textPrimary }]}>
-                      {aiBreakdown?.totalRecipe.protein ?? nutrition.protein}g
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.cardTitle, { color: colors.textPrimary }]}>
+                      Step-by-Step Cooking Guide ({recipeSteps.length} Steps)
                     </Text>
-                    <Text style={[styles.macroLabel, { color: colors.textMuted }]}>Protein</Text>
-                    <Text style={[styles.macroSub, { color: colors.textSecondary }]}>
-                      total recipe
-                    </Text>
-                  </View>
-
-                  <View
-                    style={[
-                      styles.macroCard,
-                      { backgroundColor: colors.bgSubtle, borderRadius: radii.lg },
-                    ]}
-                  >
-                    <Text style={[styles.macroNumber, { color: colors.textPrimary }]}>
-                      {aiBreakdown?.totalRecipe.carbs ?? nutrition.carbs}g
-                    </Text>
-                    <Text style={[styles.macroLabel, { color: colors.textMuted }]}>Carbs</Text>
-                    <Text style={[styles.macroSub, { color: colors.textSecondary }]}>
-                      total recipe
-                    </Text>
-                  </View>
-
-                  <View
-                    style={[
-                      styles.macroCard,
-                      { backgroundColor: colors.bgSubtle, borderRadius: radii.lg },
-                    ]}
-                  >
-                    <Text style={[styles.macroNumber, { color: colors.textPrimary }]}>
-                      {aiBreakdown?.totalRecipe.fat ?? nutrition.fat}g
-                    </Text>
-                    <Text style={[styles.macroLabel, { color: colors.textMuted }]}>Fats</Text>
-                    <Text style={[styles.macroSub, { color: colors.textSecondary }]}>
-                      total recipe
-                    </Text>
-                  </View>
-
-                  <View
-                    style={[
-                      styles.macroCard,
-                      { backgroundColor: colors.bgSubtle, borderRadius: radii.lg },
-                    ]}
-                  >
-                    <Text style={[styles.macroNumber, { color: colors.textPrimary }]}>
-                      {aiBreakdown?.totalRecipe.fiber ?? nutrition.fiber}g
-                    </Text>
-                    <Text style={[styles.macroLabel, { color: colors.textMuted }]}>Fiber</Text>
-                    <Text style={[styles.macroSub, { color: colors.textSecondary }]}>
-                      total recipe
+                    <Text style={[styles.cardSubtitle, { color: colors.textMuted }]}>
+                      Clear instructions for the customer with step title, timing, and step photos.
                     </Text>
                   </View>
                 </View>
 
-                {/* Per-Serving Summary Row */}
-                {aiBreakdown && (
+                {recipeSteps.map((step, idx) => (
                   <View
-                    style={{
-                      flexDirection: 'row',
-                      justifyContent: 'space-around',
-                      backgroundColor: colors.bgSubtle,
-                      borderRadius: radii.lg,
-                      paddingVertical: 10,
-                      paddingHorizontal: 8,
-                      marginTop: 10,
-                      marginBottom: 4,
-                      borderWidth: 1,
-                      borderColor: colors.borderLight,
-                    }}
+                    key={idx}
+                    style={[styles.stepCardItem, { backgroundColor: colors.bgSubtle, borderColor: colors.borderLight }]}
                   >
-                    <View style={{ alignItems: 'center' }}>
-                      <Text style={{ fontSize: 13, fontWeight: '800', color: colors.primary }}>
-                        {nutrition.calories}
-                      </Text>
-                      <Text style={{ fontSize: 10, color: colors.textMuted }}>kcal</Text>
-                    </View>
-                    <View style={{ width: 1, backgroundColor: colors.borderLight }} />
-                    <View style={{ alignItems: 'center' }}>
-                      <Text style={{ fontSize: 13, fontWeight: '700', color: colors.textPrimary }}>
-                        {nutrition.protein}g
-                      </Text>
-                      <Text style={{ fontSize: 10, color: colors.textMuted }}>protein</Text>
-                    </View>
-                    <View style={{ width: 1, backgroundColor: colors.borderLight }} />
-                    <View style={{ alignItems: 'center' }}>
-                      <Text style={{ fontSize: 13, fontWeight: '700', color: colors.textPrimary }}>
-                        {nutrition.carbs}g
-                      </Text>
-                      <Text style={{ fontSize: 10, color: colors.textMuted }}>carbs</Text>
-                    </View>
-                    <View style={{ width: 1, backgroundColor: colors.borderLight }} />
-                    <View style={{ alignItems: 'center' }}>
-                      <Text style={{ fontSize: 13, fontWeight: '700', color: colors.textPrimary }}>
-                        {nutrition.fat}g
-                      </Text>
-                      <Text style={{ fontSize: 10, color: colors.textMuted }}>fat</Text>
-                    </View>
-                    <View style={{ width: 1, backgroundColor: colors.borderLight }} />
-                    <View style={{ alignItems: 'center' }}>
-                      <Text style={{ fontSize: 13, fontWeight: '700', color: colors.textPrimary }}>
-                        {nutrition.fiber}g
-                      </Text>
-                      <Text style={{ fontSize: 10, color: colors.textMuted }}>fiber</Text>
-                    </View>
-                    <View style={{ alignItems: 'center', justifyContent: 'center' }}>
-                      <Text style={{ fontSize: 9, color: colors.textMuted, fontStyle: 'italic' }}>
-                        per serving
-                      </Text>
-                      <Text style={{ fontSize: 9, color: colors.textMuted, fontStyle: 'italic' }}>
-                        (saved to kit)
-                      </Text>
-                    </View>
-                  </View>
-                )}
-
-                {/* Chef Manual Adjustments */}
-                <Text style={[styles.inputLabel, { color: colors.textPrimary, marginTop: 14 }]}>
-                  Chef Manual Adjustments (Optional)
-                </Text>
-                <Text
-                  style={[styles.sectionHint, { color: colors.textSecondary, marginBottom: 10 }]}
-                >
-                  Override any value calculated above. Changes are reflected instantly in the live
-                  cards.
-                </Text>
-                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
-                  {/* Calories */}
-                  <View style={{ flexBasis: '47%', flexGrow: 1 }}>
-                    <Text style={[styles.fieldLabel, { color: colors.textSecondary }]}>
-                      Calories (kcal)
-                    </Text>
-                    <TextInput
-                      style={[
-                        styles.textInput,
-                        { backgroundColor: colors.bgSubtle, borderColor: colors.border },
-                      ]}
-                      placeholder="e.g. 420"
-                      placeholderTextColor={colors.textMuted}
-                      value={nutrition.calories ? String(nutrition.calories) : ''}
-                      onChangeText={(t) =>
-                        setNutrition((prev) => ({ ...prev, calories: parseInt(t) || 0 }))
-                      }
-                      keyboardType="numeric"
-                    />
-                  </View>
-
-                  {/* Protein */}
-                  <View style={{ flexBasis: '47%', flexGrow: 1 }}>
-                    <Text style={[styles.fieldLabel, { color: colors.textSecondary }]}>
-                      Protein (g)
-                    </Text>
-                    <TextInput
-                      style={[
-                        styles.textInput,
-                        { backgroundColor: colors.bgSubtle, borderColor: colors.border },
-                      ]}
-                      placeholder="e.g. 18"
-                      placeholderTextColor={colors.textMuted}
-                      value={nutrition.protein ? String(nutrition.protein) : ''}
-                      onChangeText={(t) =>
-                        setNutrition((prev) => ({ ...prev, protein: parseFloat(t) || 0 }))
-                      }
-                      keyboardType="numeric"
-                    />
-                  </View>
-
-                  {/* Carbohydrates */}
-                  <View style={{ flexBasis: '47%', flexGrow: 1 }}>
-                    <Text style={[styles.fieldLabel, { color: colors.textSecondary }]}>
-                      Carbohydrates (g)
-                    </Text>
-                    <TextInput
-                      style={[
-                        styles.textInput,
-                        { backgroundColor: colors.bgSubtle, borderColor: colors.border },
-                      ]}
-                      placeholder="e.g. 35"
-                      placeholderTextColor={colors.textMuted}
-                      value={nutrition.carbs ? String(nutrition.carbs) : ''}
-                      onChangeText={(t) =>
-                        setNutrition((prev) => ({ ...prev, carbs: parseFloat(t) || 0 }))
-                      }
-                      keyboardType="numeric"
-                    />
-                  </View>
-
-                  {/* Fat */}
-                  <View style={{ flexBasis: '47%', flexGrow: 1 }}>
-                    <Text style={[styles.fieldLabel, { color: colors.textSecondary }]}>
-                      Fat (g)
-                    </Text>
-                    <TextInput
-                      style={[
-                        styles.textInput,
-                        { backgroundColor: colors.bgSubtle, borderColor: colors.border },
-                      ]}
-                      placeholder="e.g. 12"
-                      placeholderTextColor={colors.textMuted}
-                      value={nutrition.fat ? String(nutrition.fat) : ''}
-                      onChangeText={(t) =>
-                        setNutrition((prev) => ({ ...prev, fat: parseFloat(t) || 0 }))
-                      }
-                      keyboardType="numeric"
-                    />
-                  </View>
-
-                  {/* Fiber */}
-                  <View style={{ flexBasis: '47%', flexGrow: 1 }}>
-                    <Text style={[styles.fieldLabel, { color: colors.textSecondary }]}>
-                      Fiber (g)
-                    </Text>
-                    <TextInput
-                      style={[
-                        styles.textInput,
-                        { backgroundColor: colors.bgSubtle, borderColor: colors.border },
-                      ]}
-                      placeholder="e.g. 5"
-                      placeholderTextColor={colors.textMuted}
-                      value={nutrition.fiber ? String(nutrition.fiber) : ''}
-                      onChangeText={(t) =>
-                        setNutrition((prev) => ({ ...prev, fiber: parseFloat(t) || 0 }))
-                      }
-                      keyboardType="numeric"
-                    />
-                  </View>
-                </View>
-              </View>
-
-              <View style={styles.navBtnRow}>
-                <Button
-                  title="← Back"
-                  variant="secondary"
-                  style={{ flex: 1 }}
-                  onPress={() => setCurrentStep(3)}
-                />
-                <Button
-                  title="Next: Preview & Save"
-                  style={{ flex: 2 }}
-                  onPress={() => setCurrentStep(5)}
-                />
-              </View>
-            </View>
-          )}
-
-          {/* STEP 5: PREVIEW & PUBLISH */}
-          {currentStep === 5 && (
-            <View style={styles.stepContent}>
-              <View
-                style={[styles.card, { backgroundColor: colors.bgSurface, borderRadius: radii.xl }]}
-              >
-                <Text style={[styles.sectionHeading, { color: colors.textPrimary }]}>
-                  Customer Preview
-                </Text>
-                <Text style={[styles.sectionHint, { color: colors.textSecondary }]}>
-                  Here is how your meal kit will look to home cooks in the app catalog.
-                </Text>
-
-                {/* Preview Meal Kit Card */}
-                <View
-                  style={[
-                    styles.previewCard,
-                    { backgroundColor: colors.bgSubtle, borderColor: colors.borderLight },
-                  ]}
-                >
-                  {heroImage ? (
-                    <Image source={{ uri: heroImage }} style={styles.previewHeroImg} />
-                  ) : (
-                    <View
-                      style={[
-                        styles.previewHeroImg,
-                        {
-                          backgroundColor: colors.bgSurface,
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                        },
-                      ]}
-                    >
-                      <Icon name="image" size={36} color={colors.textMuted} />
-                      <Text style={{ fontSize: 11, color: colors.textMuted, marginTop: 4 }}>
-                        No image selected
-                      </Text>
-                    </View>
-                  )}
-                  <View style={styles.previewContent}>
-                    <View
-                      style={{
-                        flexDirection: 'row',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                      }}
-                    >
-                      <Text style={[styles.previewKitName, { color: colors.textPrimary }]}>
-                        {name || 'Your Recipe Title'}
-                      </Text>
-                      <Text style={[styles.previewPrice, { color: colors.primary }]}>
-                        ₹{price.replace(/[^0-9.]/g, '') || '299'}
-                      </Text>
-                    </View>
-
-                    {hindiName ? (
-                      <Text style={{ fontSize: 13, color: colors.primary, fontWeight: '700' }}>
-                        {hindiName}
-                      </Text>
-                    ) : null}
-
-                    {tagline ? (
-                      <Text style={[styles.previewTagline, { color: colors.textSecondary }]}>
-                        {tagline}
-                      </Text>
-                    ) : null}
-
-                    <View style={styles.previewPillsRow}>
-                      <Badge label={`${servings || '2'} Servings`} variant="neutral" />
-                      <Badge label={`${cookTime || '20'} mins`} variant="neutral" />
-                      {(() => {
-                        const badge = getDietBadgeInfo(diet);
-                        return <Badge label={badge.label} variant={badge.variant} />;
-                      })()}
-                    </View>
-
-                    {/* Masala Sachets Detailed Breakdown */}
-                    {sachets.length > 0 && (
-                      <View
-                        style={{
-                          marginTop: 10,
-                          padding: 10,
-                          backgroundColor: colors.bgSurface,
-                          borderRadius: radii.md,
-                          borderWidth: 1,
-                          borderColor: colors.borderLight,
-                        }}
-                      >
-                        <Text
-                          style={{
-                            fontSize: 12,
-                            fontWeight: '800',
-                            color: colors.primary,
-                            marginBottom: 4,
-                          }}
-                        >
-                          {sachets.length} Pre-Portioned Masala Sachet
-                          {sachets.length > 1 ? 's' : ''} Included:
-                        </Text>
-                        {sachets.map((s, idx) => (
-                          <View key={s.id || idx} style={{ marginTop: 4 }}>
-                            <Text
-                              style={{
-                                fontSize: 12,
-                                fontWeight: '700',
-                                color: colors.textPrimary,
-                              }}
-                            >
-                              • {s.name}
-                            </Text>
-                            {s.spices.length > 0 ? (
-                              <Text
-                                style={{
-                                  fontSize: 11,
-                                  color: colors.textSecondary,
-                                  marginLeft: 10,
-                                }}
-                              >
-                                Mixed Masalas:{' '}
-                                {s.spices.map((sp) => `${sp.name} (${sp.quantity})`).join(', ')}
-                              </Text>
-                            ) : (
-                              <Text
-                                style={{
-                                  fontSize: 11,
-                                  color: colors.textMuted,
-                                  marginLeft: 10,
-                                  fontStyle: 'italic',
-                                }}
-                              >
-                                Chef custom blend
-                              </Text>
-                            )}
-                          </View>
-                        ))}
-                      </View>
-                    )}
-
-                    {/* Fresh Produce Summary in Preview */}
-                    {ingredients.length > 0 && (
-                      <View style={{ marginTop: 8 }}>
-                        <Text style={{ fontSize: 11, fontWeight: '700', color: colors.textMuted }}>
-                          Fresh Base:{' '}
-                          {ingredients.map((i) => `${i.name} (${i.quantity})`).join(', ')}
-                        </Text>
-                      </View>
-                    )}
-
-                    {/* Live Real-Time Nutrition Banner */}
-                    <View style={styles.previewNutritionRow}>
-                      <Text
-                        style={{ fontSize: 12, fontWeight: '700', color: colors.textSecondary }}
-                      >
-                        {nutrition.calories > 0
-                          ? `Live Real-Time Nutrition: ${nutrition.calories} kcal • ${nutrition.protein}g protein • ${nutrition.carbs}g carbs • ${nutrition.fat}g fat`
-                          : 'Nutrition: 0 kcal (Add produce or spices to calculate in real time)'}
-                      </Text>
-                    </View>
-
-                    {/* Kit Price Direct Adjustment */}
-                    <View
-                      style={{
-                        flexDirection: 'row',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        marginTop: 10,
-                        paddingTop: 8,
-                        borderTopWidth: 1,
-                        borderTopColor: colors.borderLight,
-                      }}
-                    >
-                      <View>
-                        <Text
-                          style={{ fontSize: 12, fontWeight: '700', color: colors.textPrimary }}
-                        >
-                          Selling Price (₹)
-                        </Text>
-                        <Text style={{ fontSize: 10, color: colors.textMuted }}>Default: ₹299</Text>
+                    {/* Step Card Header */}
+                    <View style={styles.stepCardHeader}>
+                      <View style={[styles.stepCircle, { backgroundColor: colors.primary }]}>
+                        <Text style={styles.stepCircleText}>{step.stepNumber}</Text>
                       </View>
                       <TextInput
-                        style={[
-                          styles.textInput,
-                          {
-                            backgroundColor: colors.bgSurface,
-                            borderColor: colors.border,
-                            width: 100,
-                            height: 36,
-                            paddingVertical: 4,
-                            paddingHorizontal: 10,
-                            textAlign: 'center',
-                            fontWeight: '800',
-                            fontSize: 14,
-                            color: colors.primary,
-                          },
-                        ]}
-                        placeholder="299"
+                        style={[styles.stepTitleInput, { color: colors.textPrimary }]}
+                        placeholder="Step Title (e.g. Temper Spices & Sauté)"
                         placeholderTextColor={colors.textMuted}
-                        value={price}
-                        onChangeText={(val) => setPrice(val.replace(/[^0-9.]/g, ''))}
-                        keyboardType="numeric"
+                        value={step.title}
+                        onChangeText={(txt) => {
+                          setRecipeSteps((prev) => {
+                            const copy = [...prev];
+                            copy[idx]!.title = txt;
+                            return copy;
+                          });
+                        }}
                       />
+                      <View style={styles.stepOrderActions}>
+                        <TouchableOpacity
+                          disabled={idx === 0}
+                          onPress={() => handleMoveStep(idx, 'up')}
+                          style={[styles.orderBtn, { opacity: idx === 0 ? 0.3 : 1 }]}
+                        >
+                          <Icon name="arrow-up" size={14} color={colors.textPrimary} />
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          disabled={idx === recipeSteps.length - 1}
+                          onPress={() => handleMoveStep(idx, 'down')}
+                          style={[styles.orderBtn, { opacity: idx === recipeSteps.length - 1 ? 0.3 : 1 }]}
+                        >
+                          <Icon name="arrow-down" size={14} color={colors.textPrimary} />
+                        </TouchableOpacity>
+                        <TouchableOpacity onPress={() => handleRemoveStep(idx)} style={styles.orderBtn}>
+                          <Icon name="trash" size={14} color={colors.danger} />
+                        </TouchableOpacity>
+                      </View>
                     </View>
+
+                    {/* Step Instruction */}
+                    <TextInput
+                      style={[styles.stepInstructionInput, { backgroundColor: colors.bgSurface, borderColor: colors.borderLight, color: colors.textPrimary }]}
+                      placeholder="Enter detailed cooking instructions for this phase..."
+                      placeholderTextColor={colors.textMuted}
+                      multiline
+                      numberOfLines={3}
+                      value={step.instruction}
+                      onChangeText={(txt) => {
+                        setRecipeSteps((prev) => {
+                          const copy = [...prev];
+                          copy[idx]!.instruction = txt;
+                          return copy;
+                        });
+                      }}
+                    />
+
+                    {/* Step Photo Preview & Controls */}
+                    <View style={styles.stepPhotoRow}>
+                      {step.imageUrl ? (
+                        <Image source={{ uri: step.imageUrl }} style={styles.stepPhotoThumb} resizeMode="cover" />
+                      ) : (
+                        <View style={[styles.stepPhotoPlaceholder, { backgroundColor: colors.bgSurface, borderColor: colors.borderLight }]}>
+                          <Icon name="camera-outline" size={16} color={colors.textMuted} />
+                        </View>
+                      )}
+
+                      <View style={styles.stepPhotoOptions}>
+                        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                          {SAMPLE_STEP_IMAGES.map((sImg) => (
+                            <TouchableOpacity
+                              key={sImg.id}
+                              onPress={() => {
+                                setRecipeSteps((prev) => {
+                                  const copy = [...prev];
+                                  copy[idx]!.imageUrl = sImg.url;
+                                  return copy;
+                                });
+                              }}
+                              style={[
+                                styles.stepSampleChip,
+                                {
+                                  borderColor: step.imageUrl === sImg.url ? colors.primary : colors.borderLight,
+                                },
+                              ]}
+                            >
+                              <Image source={{ uri: sImg.url }} style={styles.stepSampleChipImg} />
+                              <Text style={[styles.stepSampleChipText, { color: colors.textPrimary }]}>
+                                {sImg.label}
+                              </Text>
+                            </TouchableOpacity>
+                          ))}
+                        </ScrollView>
+                      </View>
+                    </View>
+                  </View>
+                ))}
+
+                <TouchableOpacity
+                  onPress={handleAddStep}
+                  style={[styles.addStepBtn, { borderColor: colors.primary, backgroundColor: `${colors.primary}0D` }]}
+                >
+                  <Icon name="add-circle-outline" size={18} color={colors.primary} />
+                  <Text style={[styles.addStepBtnText, { color: colors.primary }]}>
+                    + Add Next Cooking Step
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
+
+          {/* ════════════════ STAGE 4: REVIEW & FULFILMENT ════════════════ */}
+          {currentStage === 'review' && (
+            <View style={styles.stageWrap}>
+              {/* Visual Customer Preview Card */}
+              <View style={[styles.card, { backgroundColor: colors.bgSurface, borderColor: colors.borderLight, ...shadows.card }]}>
+                <Text style={[styles.cardTitle, { color: colors.textPrimary, marginBottom: 8 }]}>
+                  Customer Catalog Card Preview
+                </Text>
+                <View style={[styles.previewCardWrap, { backgroundColor: colors.bgSubtle, borderColor: colors.borderLight }]}>
+                  <Image source={{ uri: heroImage }} style={styles.previewHeroImg} resizeMode="cover" />
+                  <View style={styles.previewCardBody}>
+                    <View style={styles.previewTopRow}>
+                      <Badge label={diet.toUpperCase()} variant={diet === 'veg' ? 'success' : 'danger'} size="sm" />
+                      <Text style={[styles.previewPriceText, { color: colors.primary }]}>₹{price}</Text>
+                    </View>
+                    <Text style={[styles.previewTitle, { color: colors.textPrimary }]}>{name || 'Recipe Name'}</Text>
+                    <Text style={[styles.previewTagline, { color: colors.textSecondary }]}>{tagline || 'Appetizing tagline'}</Text>
+                    <Text style={[styles.previewMeta, { color: colors.textMuted }]}>
+                      {cuisine} • {dishCategory} • {servings} Servings • {prepTimeMinutes}m prep • {cookTimeMinutes}m cook
+                    </Text>
                   </View>
                 </View>
               </View>
 
-              {step5Error ? (
-                <View style={styles.errorAlertBox}>
-                  <Icon name="alert-circle" size={18} color="#ef4444" />
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.errorAlertText}>{step5Error}</Text>
+              {/* ── DELIVERY COVERAGE & AREA FULFILMENT (MULTI-CITY SELECT) ── */}
+              <View style={[styles.card, { backgroundColor: colors.bgSurface, borderColor: colors.borderLight, ...shadows.card }]}>
+                <View style={styles.cardHeaderRow}>
+                  <View style={styles.cardHeaderIconCol}>
+                    <Icon name="map-outline" size={20} color={colors.primary} />
                   </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.cardTitle, { color: colors.textPrimary }]}>
+                      Delivery Coverage & Area Fulfilment *
+                    </Text>
+                    <Text style={[styles.cardSubtitle, { color: colors.textMuted }]}>
+                      Select operational cities and check applicable sub-areas or neighbourhoods where this kit is fulfilled.
+                    </Text>
+                  </View>
+                </View>
+
+                {/* 1. Target Cities Dropdown Menu */}
+                <View style={styles.dropdownSectionWrap}>
+                  <View style={styles.dropdownSectionHeader}>
+                    <Text style={[styles.subDropdownLabel, { color: colors.textSecondary }]}>
+                      1. TARGET CITIES (SELECT APPLICABLE) *
+                    </Text>
+                    <View style={styles.headerQuickActions}>
+                      <TouchableOpacity onPress={selectTopHubs}>
+                        <Text style={[styles.quickActionText, { color: colors.primary }]}>Top Hubs</Text>
+                      </TouchableOpacity>
+                      <Text style={{ color: colors.textMuted }}>•</Text>
+                      <TouchableOpacity onPress={clearAllCities}>
+                        <Text style={[styles.quickActionText, { color: colors.danger }]}>Clear All</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+
                   <TouchableOpacity
                     onPress={() => {
-                      setStep5Error(null);
-                      setCurrentStep(1);
+                      setIsCityDropdownOpen(!isCityDropdownOpen);
+                      setIsAreaDropdownOpen(false);
                     }}
-                    style={styles.errorFixBtn}
+                    style={[
+                      styles.dropdownTrigger,
+                      {
+                        backgroundColor: colors.bgSubtle,
+                        borderColor: isCityDropdownOpen ? colors.primary : colors.borderLight,
+                      },
+                    ]}
                   >
-                    <Text style={styles.errorFixBtnText}>Edit in Step 1</Text>
+                    <View style={styles.dropdownTriggerLeft}>
+                      <Icon name="business-outline" size={18} color={colors.primary} />
+                      <View style={{ flex: 1 }}>
+                        <Text style={[styles.dropdownTriggerTitle, { color: colors.textPrimary }]} numberOfLines={1}>
+                          {selectedCities.length === 0
+                            ? 'No Cities Selected (Click to Select)'
+                            : selectedCities.length === 1
+                            ? `${selectedCities[0]}${getStateForCity(selectedCities[0] ?? '') ? `, ${getStateForCity(selectedCities[0] ?? '')}` : ''}`
+                            : `${selectedCities.length} Cities Selected: ${selectedCities.join(', ')}`}
+                        </Text>
+                        <Text style={[styles.dropdownTriggerSub, { color: colors.textMuted }]}>
+                          {availableSubRegions.length} deliverable sub-areas available • Click to toggle
+                        </Text>
+                      </View>
+                    </View>
+                    <Icon name={isCityDropdownOpen ? 'chevron-up' : 'chevron-down'} size={18} color={colors.textSecondary} />
+                  </TouchableOpacity>
+
+                  {/* City Menu Content */}
+                  {isCityDropdownOpen && (
+                    <View style={[styles.dropdownMenuBox, { backgroundColor: colors.bgSurface, borderColor: colors.borderLight }]}>
+                      {/* Search */}
+                      <View style={[styles.dropdownSearchWrap, { backgroundColor: colors.bgSubtle, borderColor: colors.borderLight }]}>
+                        <Icon name="search" size={15} color={colors.textMuted} />
+                        <TextInput
+                          style={[styles.dropdownSearchInput, { color: colors.textPrimary }]}
+                          placeholder="Search Indian operational cities..."
+                          placeholderTextColor={colors.textMuted}
+                          value={citySearch}
+                          onChangeText={setCitySearch}
+                        />
+                      </View>
+
+                      {/* Quick City Pills */}
+                      <View style={[styles.quickCitiesBar, { borderBottomColor: colors.borderLight }]}>
+                        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                          {POPULAR_CITIES.map((popCity: string) => {
+                            const isCurrent = selectedCities.some((c) => c.toLowerCase() === popCity.toLowerCase());
+                            return (
+                              <TouchableOpacity
+                                key={popCity}
+                                onPress={() => toggleCity(popCity)}
+                                style={[
+                                  styles.quickCityPill,
+                                  {
+                                    backgroundColor: isCurrent ? colors.primary : colors.bgSubtle,
+                                    borderColor: isCurrent ? colors.primary : colors.borderLight,
+                                  },
+                                ]}
+                              >
+                                <Text style={{ fontSize: 11, fontWeight: '700', color: isCurrent ? '#fff' : colors.textPrimary }}>
+                                  {popCity}
+                                </Text>
+                              </TouchableOpacity>
+                            );
+                          })}
+                        </ScrollView>
+                      </View>
+
+                      {/* Scrollable list */}
+                      <ScrollView style={styles.dropdownScrollList} nestedScrollEnabled>
+                        {filteredCities.map((c: GeoCityOption) => {
+                          const isSelected = selectedCities.some((sc) => sc.toLowerCase() === c.name.toLowerCase());
+                          return (
+                            <TouchableOpacity
+                              key={`${c.name}-${c.state}`}
+                              onPress={() => toggleCity(c.name)}
+                              style={[
+                                styles.dropdownOptionRow,
+                                {
+                                  backgroundColor: isSelected ? `${colors.primary}0E` : 'transparent',
+                                  borderColor: isSelected ? colors.primary : colors.borderLight,
+                                },
+                              ]}
+                            >
+                              <View style={styles.optionLeft}>
+                                <View
+                                  style={[
+                                    styles.checkboxBox,
+                                    {
+                                      borderColor: isSelected ? colors.primary : colors.border,
+                                      backgroundColor: isSelected ? colors.primary : 'transparent',
+                                    },
+                                  ]}
+                                >
+                                  {isSelected && <Icon name="check" size={12} color="#fff" />}
+                                </View>
+                                <View>
+                                  <Text style={[styles.cityNameText, { color: colors.textPrimary, fontWeight: isSelected ? '700' : '600' }]}>
+                                    {c.name} <Text style={{ fontSize: 11, color: colors.textMuted }}>({c.state})</Text>
+                                  </Text>
+                                  <Text style={[styles.cityCountText, { color: colors.textMuted }]}>
+                                    {c.subRegionCount} sub-areas available
+                                  </Text>
+                                </View>
+                              </View>
+                              {isSelected && (
+                                <View style={styles.activePillBadge}>
+                                  <Text style={styles.activePillBadgeText}>Selected ✓</Text>
+                                </View>
+                              )}
+                            </TouchableOpacity>
+                          );
+                        })}
+                      </ScrollView>
+
+                      <View style={[styles.dropdownFooter, { backgroundColor: colors.bgSubtle, borderTopColor: colors.borderLight }]}>
+                        <Text style={[styles.dropdownFooterText, { color: colors.textMuted }]}>
+                          {selectedCities.length} of {filteredCities.length} cities selected
+                        </Text>
+                        <TouchableOpacity
+                          onPress={() => setIsCityDropdownOpen(false)}
+                          style={[styles.dropdownDoneBtn, { backgroundColor: colors.primary }]}
+                        >
+                          <Text style={styles.dropdownDoneBtnText}>Done</Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  )}
+                </View>
+
+                {/* 2. Sub-Areas Checklist (Grouped by City, No redundant green tags!) */}
+                <View style={[styles.dropdownSectionWrap, { marginTop: 14 }]}>
+                  <View style={styles.dropdownSectionHeader}>
+                    <Text style={[styles.subDropdownLabel, { color: colors.textSecondary }]}>
+                      2. SUB-AREAS & NEIGHBOURHOODS (CHECK APPLICABLE) *
+                    </Text>
+                    <View style={styles.headerQuickActions}>
+                      <TouchableOpacity onPress={selectAllSubAreas}>
+                        <Text style={[styles.quickActionText, { color: colors.primary }]}>
+                          Check All ({availableSubRegions.length})
+                        </Text>
+                      </TouchableOpacity>
+                      <Text style={{ color: colors.textMuted }}>•</Text>
+                      <TouchableOpacity onPress={clearAllSubAreas}>
+                        <Text style={[styles.quickActionText, { color: colors.danger }]}>Clear All</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+
+                  <TouchableOpacity
+                    onPress={() => {
+                      setIsAreaDropdownOpen(!isAreaDropdownOpen);
+                      setIsCityDropdownOpen(false);
+                    }}
+                    style={[
+                      styles.dropdownTrigger,
+                      {
+                        backgroundColor: colors.bgSubtle,
+                        borderColor: isAreaDropdownOpen ? colors.primary : colors.borderLight,
+                      },
+                    ]}
+                  >
+                    <View style={styles.dropdownTriggerLeft}>
+                      <Icon name="map-outline" size={18} color={colors.primary} />
+                      <View style={{ flex: 1 }}>
+                        <Text style={[styles.dropdownTriggerTitle, { color: colors.textPrimary }]} numberOfLines={1}>
+                          {selectedSubAreas.length === availableSubRegions.length && availableSubRegions.length > 0
+                            ? `All ${availableSubRegions.length} Sub-Areas Selected across ${selectedCities.length} Cities`
+                            : selectedSubAreas.length > 0
+                            ? `${selectedSubAreas.length} of ${availableSubRegions.length} Sub-Areas Selected`
+                            : selectedCities.length === 0
+                            ? 'Select operational cities above first'
+                            : 'No Sub-Areas Selected (Click to Check)'}
+                        </Text>
+                        <Text style={[styles.dropdownTriggerSub, { color: colors.textMuted }]}>
+                          {isAreaDropdownOpen ? 'Click to close checklist' : 'Click to manually check or uncheck individual areas'}
+                        </Text>
+                      </View>
+                    </View>
+                    <Icon name={isAreaDropdownOpen ? 'chevron-up' : 'chevron-down'} size={18} color={colors.textSecondary} />
+                  </TouchableOpacity>
+
+                  {/* Area Checklist Card */}
+                  {isAreaDropdownOpen && (
+                    <View style={[styles.dropdownMenuBox, { backgroundColor: colors.bgSurface, borderColor: colors.borderLight }]}>
+                      <View style={[styles.dropdownSearchWrap, { backgroundColor: colors.bgSubtle, borderColor: colors.borderLight }]}>
+                        <Icon name="search" size={15} color={colors.textMuted} />
+                        <TextInput
+                          style={[styles.dropdownSearchInput, { color: colors.textPrimary }]}
+                          placeholder="Search sub-areas or pincodes..."
+                          placeholderTextColor={colors.textMuted}
+                          value={areaSearch}
+                          onChangeText={setAreaSearch}
+                        />
+                      </View>
+
+                      <ScrollView style={styles.dropdownScrollList} nestedScrollEnabled>
+                        {selectedCities.length === 0 ? (
+                          <View style={styles.emptyListWrap}>
+                            <Text style={[styles.emptyListText, { color: colors.textMuted }]}>
+                              Please select at least one city above first.
+                            </Text>
+                          </View>
+                        ) : subRegionsByCity.length === 0 ? (
+                          <View style={styles.emptyListWrap}>
+                            <Text style={[styles.emptyListText, { color: colors.textMuted }]}>
+                              No sub-areas match "{areaSearch}"
+                            </Text>
+                          </View>
+                        ) : (
+                          subRegionsByCity.map(({ city, subRegions: citySubs }) => {
+                            const citySubIds = citySubs.map((sr) => sr.id);
+                            const allCityChecked =
+                              citySubIds.length > 0 && citySubIds.every((id) => selectedSubAreas.includes(id));
+                            const checkedCount = citySubIds.filter((id) => selectedSubAreas.includes(id)).length;
+
+                            return (
+                              <View key={city} style={styles.cityGroupWrap}>
+                                <View style={[styles.cityGroupHeader, { backgroundColor: colors.bgSubtle, borderColor: colors.borderLight }]}>
+                                  <View style={{ flex: 1 }}>
+                                    <Text style={[styles.cityGroupTitle, { color: colors.textPrimary }]}>
+                                      {city.toUpperCase()}
+                                    </Text>
+                                    <Text style={[styles.cityGroupSub, { color: colors.textMuted }]}>
+                                      {checkedCount} of {citySubs.length} areas active
+                                    </Text>
+                                  </View>
+                                  <TouchableOpacity
+                                    onPress={() => toggleCitySubAreas(city)}
+                                    style={styles.cityGroupToggleBtn}
+                                  >
+                                    <Text style={[styles.cityGroupToggleBtnText, { color: colors.primary }]}>
+                                      {allCityChecked ? 'Uncheck All' : 'Check All'}
+                                    </Text>
+                                  </TouchableOpacity>
+                                </View>
+
+                                {citySubs.map((sub) => {
+                                  const isChecked = selectedSubAreas.includes(sub.id);
+                                  return (
+                                    <TouchableOpacity
+                                      key={sub.id}
+                                      onPress={() => toggleSubArea(sub.id)}
+                                      style={[
+                                        styles.dropdownOptionRow,
+                                        {
+                                          backgroundColor: isChecked ? `${colors.primary}0D` : 'transparent',
+                                          borderColor: isChecked ? colors.primary : colors.borderLight,
+                                          marginBottom: 4,
+                                        },
+                                      ]}
+                                    >
+                                      <View style={styles.optionLeft}>
+                                        <View
+                                          style={[
+                                            styles.checkboxBox,
+                                            {
+                                              backgroundColor: isChecked ? colors.primary : colors.bgSurface,
+                                              borderColor: isChecked ? colors.primary : colors.border,
+                                            },
+                                          ]}
+                                        >
+                                          {isChecked && <Icon name="check" size={12} color="#fff" />}
+                                        </View>
+                                        <View>
+                                          <Text style={[styles.cityNameText, { color: colors.textPrimary, fontWeight: isChecked ? '700' : '600' }]}>
+                                            {sub.name}
+                                          </Text>
+                                          <Text style={[styles.cityCountText, { color: colors.textMuted }]}>
+                                            {sub.pincodes && sub.pincodes.length > 0
+                                              ? `Pincodes: ${sub.pincodes.join(', ')}`
+                                              : 'Standard Hub'}
+                                          </Text>
+                                        </View>
+                                      </View>
+                                      {isChecked && (
+                                        <View style={styles.activePillBadge}>
+                                          <Text style={styles.activePillBadgeText}>Deliverable ✓</Text>
+                                        </View>
+                                      )}
+                                    </TouchableOpacity>
+                                  );
+                                })}
+                              </View>
+                            );
+                          })
+                        )}
+                      </ScrollView>
+
+                      <View style={[styles.dropdownFooter, { backgroundColor: colors.bgSubtle, borderTopColor: colors.borderLight }]}>
+                        <Text style={[styles.dropdownFooterText, { color: colors.textMuted }]}>
+                          {selectedSubAreas.length} sub-areas activated across {selectedCities.length} cities
+                        </Text>
+                        <TouchableOpacity
+                          onPress={() => setIsAreaDropdownOpen(false)}
+                          style={[styles.dropdownDoneBtn, { backgroundColor: colors.primary }]}
+                        >
+                          <Text style={styles.dropdownDoneBtnText}>Done</Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  )}
+                </View>
+              </View>
+
+              {/* Shelf-Life & Nutrition */}
+              <View style={[styles.card, { backgroundColor: colors.bgSurface, borderColor: colors.borderLight, ...shadows.card }]}>
+                <Text style={[styles.cardTitle, { color: colors.textPrimary, marginBottom: 8 }]}>
+                  Shelf-Life & Storage Conditions
+                </Text>
+
+                <View style={styles.formRow2}>
+                  <View style={styles.formCol}>
+                    <Text style={[styles.fieldLabel, { color: colors.textPrimary }]}>SHELF LIFE (DAYS)</Text>
+                    <TextInput
+                      style={[styles.input, { backgroundColor: colors.bgSubtle, borderColor: colors.border, color: colors.textPrimary }]}
+                      keyboardType="numeric"
+                      value={shelfLifeDays}
+                      onChangeText={setShelfLifeDays}
+                    />
+                  </View>
+
+                  <View style={styles.formCol}>
+                    <Text style={[styles.fieldLabel, { color: colors.textPrimary }]}>STORAGE CONDITION</Text>
+                    <TextInput
+                      style={[styles.input, { backgroundColor: colors.bgSubtle, borderColor: colors.border, color: colors.textPrimary }]}
+                      value={storageCondition}
+                      onChangeText={setStorageCondition}
+                    />
+                  </View>
+                </View>
+
+                {/* Nutrition Estimator */}
+                <View style={styles.nutritionRow}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.cardTitle, { color: colors.textPrimary, fontSize: 13 }]}>
+                      Nutrition Facts (Per Serving)
+                    </Text>
+                    <Text style={[styles.cardSubtitle, { color: colors.textMuted }]}>
+                      {nutrition.calories} kcal • {nutrition.protein}g Protein • {nutrition.carbs}g Carbs • {nutrition.fat}g Fat
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    onPress={handleEstimateNutrition}
+                    disabled={isEstimatingNutrition}
+                    style={[styles.estimateBtn, { backgroundColor: `${colors.primary}12`, borderColor: colors.primary }]}
+                  >
+                    {isEstimatingNutrition ? (
+                      <ActivityIndicator size="small" color={colors.primary} />
+                    ) : (
+                      <>
+                        <Icon name="sparkles" size={14} color={colors.primary} />
+                        <Text style={[styles.estimateBtnText, { color: colors.primary }]}>AI Estimator</Text>
+                      </>
+                    )}
                   </TouchableOpacity>
                 </View>
-              ) : null}
+              </View>
 
-              <View style={styles.navBtnRow}>
-                <Button
-                  title="Back"
-                  variant="secondary"
-                  style={{ flex: 1 }}
-                  onPress={() => setCurrentStep(4)}
-                />
-                <Button
-                  title="Print Card"
-                  variant="outline"
-                  size="lg"
-                  style={{ flex: 1 }}
-                  onPress={() => setPrintModalVisible(true)}
-                />
-                <Button
-                  title={isPublishing ? 'Publishing...' : 'Publish Kit'}
-                  size="lg"
-                  style={{ flex: 2 }}
-                  disabled={isPublishing}
-                  onPress={handleFinalPublish}
-                />
+              {/* 12-Item Quality Readiness Checklist */}
+              <View style={[styles.card, { backgroundColor: colors.bgSurface, borderColor: colors.borderLight, ...shadows.card }]}>
+                <View style={styles.cardHeaderRow}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.cardTitle, { color: colors.textPrimary }]}>
+                      12-Item Quality Readiness Checklist
+                    </Text>
+                    <Text style={[styles.cardSubtitle, { color: colors.textMuted }]}>
+                      Validates recipe completeness and operational requirements before publishing.
+                    </Text>
+                  </View>
+                  <View
+                    style={[
+                      styles.checklistCountBadge,
+                      { backgroundColor: allChecksPassed ? '#ECFDF5' : '#FEF3C7', borderColor: allChecksPassed ? '#A7F3D0' : '#FDE68A' },
+                    ]}
+                  >
+                    <Text style={{ fontSize: 11, fontWeight: '800', color: allChecksPassed ? '#065F46' : '#92400E' }}>
+                      {passedChecksCount} / {readinessChecks.length} Passed
+                    </Text>
+                  </View>
+                </View>
+
+                <View style={styles.checksList}>
+                  {readinessChecks.map((check) => (
+                    <View key={check.key} style={styles.checkItemRow}>
+                      <Icon
+                        name={check.isValid ? 'checkmark-circle' : 'close-circle'}
+                        size={16}
+                        color={check.isValid ? '#10B981' : '#EF4444'}
+                      />
+                      <Text style={[styles.checkItemLabel, { color: colors.textPrimary }]}>{check.label}</Text>
+                    </View>
+                  ))}
+                </View>
               </View>
             </View>
           )}
         </ScrollView>
 
-        {/* 2-Sided Recipe Card Print Modal */}
-        <RecipeCardPrintModal
-          visible={printModalVisible}
-          onClose={() => setPrintModalVisible(false)}
-          kit={currentKitForPreview}
-        />
+        {/* ── 4. STICKY BOTTOM BAR (MATCHING CHEF STUDIO) ── */}
+        <View style={[styles.bottomBar, { backgroundColor: colors.bgSurface, borderTopColor: colors.borderLight }]}>
+          <View style={styles.bottomBarLeft}>
+            {currentStageIndex > 0 ? (
+              <TouchableOpacity
+                onPress={() => setCurrentStage(STAGE_CONFIGS[currentStageIndex - 1]!.key)}
+                style={[styles.bottomNavBtn, { backgroundColor: colors.bgSubtle, borderColor: colors.borderLight }]}
+              >
+                <Icon name="arrow-back" size={16} color={colors.textPrimary} />
+                <Text style={[styles.bottomNavBtnText, { color: colors.textPrimary }]}>Previous</Text>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                onPress={onClose}
+                style={[styles.bottomNavBtn, { backgroundColor: colors.bgSubtle, borderColor: colors.borderLight }]}
+              >
+                <Text style={[styles.bottomNavBtnText, { color: colors.textSecondary }]}>Cancel</Text>
+              </TouchableOpacity>
+            )}
+
+            <Text style={[styles.stageProgressText, { color: colors.textMuted }]}>
+              Stage {currentStageIndex + 1} of 4 • {STAGE_CONFIGS[currentStageIndex]!.label}
+            </Text>
+          </View>
+
+          <View style={styles.bottomBarRight}>
+            {currentStageIndex < STAGE_CONFIGS.length - 1 ? (
+              <TouchableOpacity
+                onPress={() => setCurrentStage(STAGE_CONFIGS[currentStageIndex + 1]!.key)}
+                style={[styles.bottomNextBtn, { backgroundColor: colors.primary }]}
+              >
+                <Text style={styles.bottomNextBtnText}>Next Stage</Text>
+                <Icon name="arrow-forward" size={16} color="#fff" />
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                onPress={handleSaveMealKit}
+                disabled={isSaving}
+                style={[styles.bottomNextBtn, { backgroundColor: colors.primary }]}
+              >
+                {isSaving ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <>
+                    <Icon name="checkmark" size={16} color="#fff" />
+                    <Text style={styles.bottomNextBtnText}>
+                      {isEditing ? 'Save & Update Meal Kit' : 'Publish to Catalog'}
+                    </Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            )}
+          </View>
+        </View>
+
+        {/* Preset Photos Modal */}
+        {showPhotoPickerModal && (
+          <Modal transparent visible={showPhotoPickerModal} animationType="fade" onRequestClose={() => setShowPhotoPickerModal(false)}>
+            <View style={styles.modalBackdrop}>
+              <View style={[styles.presetModalBox, { backgroundColor: colors.bgSurface, borderColor: colors.borderLight }]}>
+                <View style={styles.presetModalHeader}>
+                  <Text style={[styles.cardTitle, { color: colors.textPrimary }]}>Choose Preset Food Photo</Text>
+                  <TouchableOpacity onPress={() => setShowPhotoPickerModal(false)}>
+                    <Icon name="close" size={20} color={colors.textPrimary} />
+                  </TouchableOpacity>
+                </View>
+
+                <ScrollView style={{ maxHeight: 380 }}>
+                  <View style={styles.presetGrid}>
+                    {SAMPLE_RECIPE_THUMBNAILS.map((thumb) => (
+                      <TouchableOpacity
+                        key={thumb.id}
+                        onPress={() => {
+                          setHeroImage(thumb.url);
+                          setShowPhotoPickerModal(false);
+                        }}
+                        style={[styles.presetThumbItem, { borderColor: heroImage === thumb.url ? colors.primary : colors.borderLight }]}
+                      >
+                        <Image source={{ uri: thumb.url }} style={styles.presetThumbImg} resizeMode="cover" />
+                        <Text style={[styles.presetThumbLabel, { color: colors.textPrimary }]}>{thumb.label}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </ScrollView>
+              </View>
+            </View>
+          </Modal>
+        )}
       </View>
     </Modal>
   );
@@ -4535,451 +2305,909 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  headerBar: {
+  header: {
+    height: 64,
+    borderBottomWidth: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingTop: 45,
-    paddingBottom: 12,
-    borderBottomWidth: 1,
   },
-  closeBtn: {
-    padding: 8,
+  headerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    flex: 1,
+    marginRight: 10,
   },
-  closeBtnText: {
-    fontSize: 14,
+  backBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 8,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerTitleWrap: {
+    flex: 1,
+  },
+  breadcrumbRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    marginBottom: 2,
+  },
+  breadcrumbText: {
+    fontSize: 11,
+  },
+  breadcrumbDivider: {
+    fontSize: 11,
+  },
+  breadcrumbCurrent: {
+    fontSize: 11,
     fontWeight: '700',
   },
   headerTitle: {
     fontSize: 16,
-    fontWeight: '900',
+    fontWeight: '800',
   },
-  headerSubtitle: {
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  statusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 20,
+    borderWidth: 1,
+  },
+  statusBadgeText: {
     fontSize: 11,
     fontWeight: '700',
   },
-  publishHeaderBtn: {
-    paddingVertical: 6,
+  headerQuickSaveBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
     paddingHorizontal: 14,
+    paddingVertical: 7,
     borderRadius: 8,
   },
-  publishHeaderBtnText: {
+  headerQuickSaveBtnText: {
     color: '#fff',
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '800',
   },
   stepNavBar: {
-    flexDirection: 'row',
     borderBottomWidth: 1,
-    borderBottomColor: '#E2E8F0',
+    height: 62,
+    justifyContent: 'center',
   },
-  stepTab: {
-    flex: 1,
+  stepNavScroll: {
+    flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 10,
+    paddingHorizontal: 16,
+    gap: 10,
   },
-  stepTabIcon: {
-    fontSize: 14,
-    marginBottom: 2,
+  stepNavItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 6,
   },
-  stepTabLabel: {
+  stepConnector: {
+    width: 24,
+    height: 2,
+    marginHorizontal: 4,
+  },
+  stepBadge: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    borderWidth: 1.5,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stepBadgeNum: {
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  stepNavTextCol: {},
+  stepNavLabel: {
+    fontSize: 12,
+  },
+  stepNavSubtitle: {
     fontSize: 10,
-    letterSpacing: 0.2,
   },
-  scrollContainer: {
+  mainScroll: {
+    flex: 1,
+  },
+  mainScrollContent: {
     padding: 16,
-    paddingBottom: 60,
+    paddingBottom: 40,
   },
-  stepContent: {
+  stageWrap: {
+    gap: 16,
+    maxWidth: 900,
     width: '100%',
-    maxWidth: 600,
     alignSelf: 'center',
   },
   card: {
-    padding: 18,
+    borderRadius: 14,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
-    marginBottom: 16,
+    padding: 16,
   },
-  sectionHeading: {
-    fontSize: 17,
+  cardHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+    marginBottom: 14,
+  },
+  cardHeaderIconCol: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: '#EEF2FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cardTitle: {
+    fontSize: 15,
     fontWeight: '800',
-    marginBottom: 4,
   },
-  sectionHint: {
-    fontSize: 13,
-    lineHeight: 18,
-    marginBottom: 16,
+  cardSubtitle: {
+    fontSize: 12,
+    marginTop: 2,
   },
-  inputLabel: {
+  heroPhotoRow: {
+    flexDirection: 'row',
+    gap: 14,
+    alignItems: 'flex-start',
+  },
+  heroPhotoPreview: {
+    width: 120,
+    height: 100,
+    borderRadius: 10,
+  },
+  heroPhotoControls: {
+    flex: 1,
+    gap: 10,
+  },
+  photoActionsGrid: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  photoActionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  photoActionBtnText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  photoUrlInputRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  applyUrlBtn: {
+    paddingHorizontal: 14,
+    justifyContent: 'center',
+    borderRadius: 8,
+  },
+  applyUrlBtnText: {
+    color: '#fff',
     fontSize: 12,
     fontWeight: '700',
-    marginBottom: 5,
-    marginTop: 10,
+  },
+  formRow2: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 12,
+  },
+  formRow3: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  formCol: {
+    flex: 1,
+  },
+  formGroup: {
+    marginBottom: 12,
   },
   fieldLabel: {
     fontSize: 11,
-    fontWeight: '600',
-    marginBottom: 4,
-    marginTop: 2,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+    marginBottom: 6,
   },
-  textInput: {
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+  input: {
     borderRadius: 8,
     borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    fontSize: 13,
+  },
+  textArea: {
+    borderRadius: 8,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    fontSize: 13,
+    minHeight: 70,
+    textAlignVertical: 'top',
+  },
+  currencyInputWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    position: 'relative',
+  },
+  currencyPrefix: {
+    position: 'absolute',
+    left: 10,
+    zIndex: 1,
+    fontWeight: '800',
     fontSize: 14,
   },
-  rowTwoCol: {
+  inputWithPrefix: {
+    flex: 1,
+    borderRadius: 8,
+    borderWidth: 1,
+    paddingLeft: 26,
+    paddingRight: 10,
+    paddingVertical: 8,
+    fontSize: 13,
+  },
+  dietGrid: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 10,
+  },
+  dietCard: {
+    width: '31%',
+    minWidth: 140,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    padding: 10,
+  },
+  dietCardTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  dietIconCircle: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dietCardTitle: {
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  dietCardDesc: {
+    fontSize: 10,
+    marginTop: 2,
+  },
+  pillRowScroll: {
+    flexDirection: 'row',
+    marginBottom: 4,
+  },
+  selectionPill: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+    marginRight: 8,
+  },
+  selectionPillText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  spiceRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  spicePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  spicePillText: {
+    fontSize: 12,
+    fontWeight: '700',
   },
   chipsWrap: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 6,
-    marginTop: 4,
+    gap: 8,
   },
-  chip: {
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    borderRadius: 20,
-    borderWidth: 1,
-  },
-  photoPresetCard: {
-    marginRight: 10,
-    borderRadius: 10,
-    overflow: 'hidden',
-    width: 105,
-  },
-  photoPresetImg: {
-    width: 105,
-    height: 70,
-  },
-  photoPresetText: {
-    fontSize: 10,
-    fontWeight: '700',
-    padding: 4,
-    backgroundColor: '#fff',
-    textAlign: 'center',
-  },
-  staplesRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 6,
-    marginBottom: 14,
-  },
-  stapleChip: {
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    borderRadius: 16,
-    borderWidth: 1,
-  },
-  customIngBox: {
-    padding: 12,
-    marginBottom: 14,
-  },
-  ingItemRow: {
+  filterCheckPill: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 14,
+    borderWidth: 1,
+  },
+  filterCheckPillText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  searchBarWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    marginBottom: 10,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 13,
+  },
+  inventorySuggestionsList: {
+    gap: 6,
+  },
+  inventorySuggestionRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 6,
+    borderBottomWidth: 1,
+  },
+  inventoryItemName: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  inventoryItemSub: {
+    fontSize: 11,
+    marginTop: 1,
+  },
+  addPillBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  addPillBtnText: {
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  addCustomIngRow: {
+    flexDirection: 'row',
+    gap: 8,
+    alignItems: 'center',
+  },
+  unitPickerWrap: {
+    maxWidth: 160,
+  },
+  unitPill: {
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    borderRadius: 6,
+    borderWidth: 1,
+    marginRight: 4,
+  },
+  addBtnIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  ingredientItemRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
     padding: 10,
     borderRadius: 8,
     borderWidth: 1,
     marginBottom: 6,
-    gap: 8,
   },
-  ingItemName: {
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  deleteIngBtn: {
-    padding: 6,
-  },
-  navBtnRow: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  recipeStepCard: {
-    padding: 12,
-    borderRadius: 10,
-    borderWidth: 1,
-    marginBottom: 10,
-  },
-  recipeStepHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 6,
-    gap: 8,
-  },
-  stepNumBadge: {
+  ingNumBadge: {
     width: 22,
     height: 22,
     borderRadius: 11,
+    backgroundColor: '#EEF2FF',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  stepNumBadgeText: {
-    color: '#fff',
-    fontSize: 12,
+  ingNumBadgeText: {
+    fontSize: 11,
     fontWeight: '800',
+    color: '#4F46E5',
   },
-  recipeStepTitle: {
-    fontSize: 14,
-    fontWeight: '800',
-    flex: 1,
-  },
-  recipeStepText: {
+  ingItemTitle: {
     fontSize: 13,
-    lineHeight: 18,
+    fontWeight: '700',
   },
-  tipBox: {
-    backgroundColor: '#FEF3C7',
-    padding: 6,
-    borderRadius: 6,
-    marginTop: 6,
+  ingItemQty: {
+    fontSize: 11,
   },
-  addStepBox: {
-    padding: 12,
-    marginTop: 10,
+  ingRemoveBtn: {
+    padding: 4,
   },
-  aiActionButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 14,
-    borderRadius: 12,
-    marginVertical: 14,
-    gap: 8,
+  emptyPrompt: {
+    fontSize: 12,
+    fontStyle: 'italic',
+    paddingVertical: 10,
+    textAlign: 'center',
   },
-  aiActionIcon: {
-    fontSize: 18,
-  },
-  aiActionText: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '800',
-  },
-  macroCardsGrid: {
+  spiceCatalogGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 6,
-    marginBottom: 14,
   },
-  macroCard: {
-    flex: 1,
-    minWidth: 56,
-    paddingVertical: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-    overflow: 'hidden',
-  },
-  macroNumber: {
-    fontSize: 16,
-    fontWeight: '900',
-  },
-  macroLabel: {
-    fontSize: 10,
-    fontWeight: '700',
-    marginTop: 2,
-  },
-  macroSub: {
-    fontSize: 8,
-    fontWeight: '500',
-  },
-  aiBreakdownBox: {
-    padding: 12,
-    borderRadius: 10,
-    borderWidth: 1,
-    marginBottom: 14,
-  },
-  liveNutritionHud: {
-    padding: 12,
-    marginTop: 14,
-  },
-  previewCard: {
-    borderRadius: 14,
-    overflow: 'hidden',
-    borderWidth: 1,
-  },
-  previewHeroImg: {
-    width: '100%',
-    height: 180,
-  },
-  previewContent: {
-    padding: 14,
-  },
-  previewKitName: {
-    fontSize: 18,
-    fontWeight: '900',
-  },
-  previewPrice: {
-    fontSize: 20,
-    fontWeight: '900',
-  },
-  previewTagline: {
-    fontSize: 13,
-    marginVertical: 6,
-  },
-  previewPillsRow: {
+  spiceCatalogPill: {
     flexDirection: 'row',
-    gap: 6,
-    marginVertical: 6,
-  },
-  previewSachetsBanner: {
-    backgroundColor: '#FFF7ED',
-    padding: 8,
-    borderRadius: 8,
-    marginVertical: 6,
-  },
-  previewNutritionRow: {
-    marginTop: 4,
-  },
-  photoSectionWrapper: {
-    padding: 12,
-    marginTop: 14,
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+    borderRadius: 6,
     borderWidth: 1,
   },
-  photoHeaderRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 10,
-  },
-  photoModeTabs: {
-    flexDirection: 'row',
-    gap: 6,
-    marginBottom: 10,
-  },
-  photoModeTab: {
-    flex: 1,
-    paddingVertical: 7,
-    paddingHorizontal: 6,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#CBD5E1',
-    backgroundColor: '#FFFFFF',
-    alignItems: 'center',
-  },
-  photoModeTabText: {
+  spiceCatalogPillText: {
     fontSize: 11,
-    fontWeight: '700',
+    fontWeight: '600',
   },
-  aiPhotoPanel: {
-    paddingVertical: 4,
-  },
-  aiStyleChip: {
-    flex: 1,
-    paddingVertical: 6,
-    paddingHorizontal: 4,
-    borderRadius: 6,
-    borderWidth: 1,
-    alignItems: 'center',
-  },
-  aiGenerateBtn: {
-    paddingVertical: 11,
-    borderRadius: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 4,
-  },
-  aiGenerateBtnText: {
-    color: '#fff',
-    fontSize: 13,
-    fontWeight: '800',
-  },
-  uploadPhotoPanel: {
-    paddingVertical: 4,
-  },
-  deviceUploadButton: {
-    borderWidth: 1.5,
-    borderStyle: 'dashed',
+  stepCardItem: {
     borderRadius: 10,
-    paddingVertical: 14,
-    paddingHorizontal: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
+    borderWidth: 1,
+    padding: 12,
+    marginBottom: 12,
   },
-  deviceUploadText: {
-    fontSize: 13,
-    fontWeight: '800',
-    marginBottom: 2,
-  },
-  activePhotoCard: {
+  stepCardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 8,
-    borderRadius: 10,
-    borderWidth: 1,
-    marginTop: 10,
+    gap: 10,
+    marginBottom: 8,
   },
-  activePhotoImg: {
-    width: 60,
-    height: 48,
-    borderRadius: 6,
-    marginRight: 10,
+  stepCircle: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  activePhotoInfo: {
-    flex: 1,
-  },
-  activePhotoTitle: {
+  stepCircleText: {
+    color: '#fff',
     fontSize: 12,
     fontWeight: '800',
   },
-  stepPhotoThumbWrapper: {
-    position: 'relative',
-    width: 85,
-    height: 65,
-    borderRadius: 8,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-  },
-  stepPhotoThumb: {
-    width: '100%',
-    height: '100%',
-  },
-  stepPhotoBadge: {
-    position: 'absolute',
-    bottom: 2,
-    left: 2,
-    right: 2,
-    backgroundColor: 'rgba(0,0,0,0.65)',
-    borderRadius: 3,
-    paddingVertical: 1,
-    alignItems: 'center',
-  },
-  stepPhotoBadgeText: {
-    color: '#fff',
-    fontSize: 8,
+  stepTitleInput: {
+    flex: 1,
+    fontSize: 13,
     fontWeight: '700',
   },
-  errorAlertBox: {
+  stepOrderActions: {
+    flexDirection: 'row',
+    gap: 6,
+  },
+  orderBtn: {
+    padding: 4,
+  },
+  stepInstructionInput: {
+    borderRadius: 8,
+    borderWidth: 1,
+    padding: 10,
+    fontSize: 12,
+    minHeight: 56,
+    textAlignVertical: 'top',
+    marginBottom: 8,
+  },
+  stepPhotoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  stepPhotoThumb: {
+    width: 50,
+    height: 50,
+    borderRadius: 6,
+  },
+  stepPhotoPlaceholder: {
+    width: 50,
+    height: 50,
+    borderRadius: 6,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stepPhotoOptions: {
+    flex: 1,
+  },
+  stepSampleChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    padding: 4,
+    borderRadius: 6,
+    borderWidth: 1,
+    marginRight: 6,
+  },
+  stepSampleChipImg: {
+    width: 24,
+    height: 24,
+    borderRadius: 4,
+  },
+  stepSampleChipText: {
+    fontSize: 10,
+    fontWeight: '600',
+    paddingRight: 4,
+  },
+  addStepBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderStyle: 'dashed',
+    marginTop: 4,
+  },
+  addStepBtnText: {
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  previewCardWrap: {
+    borderRadius: 10,
+    borderWidth: 1,
+    overflow: 'hidden',
+  },
+  previewHeroImg: {
+    width: '100%',
+    height: 140,
+  },
+  previewCardBody: {
+    padding: 12,
+  },
+  previewTopRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  previewPriceText: {
+    fontSize: 16,
+    fontWeight: '900',
+  },
+  previewTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  previewTagline: {
+    fontSize: 12,
+    marginTop: 2,
+    marginBottom: 4,
+  },
+  previewMeta: {
+    fontSize: 11,
+  },
+  dropdownSectionWrap: {
+    marginTop: 6,
+  },
+  dropdownSectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  subDropdownLabel: {
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
+  headerQuickActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  quickActionText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  dropdownTrigger: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
+  dropdownTriggerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    flex: 1,
+    marginRight: 10,
+  },
+  dropdownTriggerTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  dropdownTriggerSub: {
+    fontSize: 11,
+    marginTop: 1,
+  },
+  dropdownMenuBox: {
+    borderRadius: 12,
+    borderWidth: 1,
+    overflow: 'hidden',
+    marginTop: 6,
+  },
+  dropdownSearchWrap: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    backgroundColor: '#FEF2F2',
-    borderWidth: 1,
-    borderColor: '#F87171',
-    borderRadius: 8,
     paddingHorizontal: 12,
-    paddingVertical: 10,
-    marginTop: 12,
+    paddingVertical: 8,
+    borderBottomWidth: 1,
   },
-  errorAlertText: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#B91C1C',
+  dropdownSearchInput: {
+    flex: 1,
+    fontSize: 12,
   },
-  errorFixBtn: {
-    backgroundColor: '#EF4444',
+  quickCitiesBar: {
     paddingHorizontal: 10,
-    paddingVertical: 5,
+    paddingVertical: 6,
+    borderBottomWidth: 1,
+  },
+  quickCityPill: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 12,
+    borderWidth: 1,
+    marginRight: 6,
+  },
+  dropdownScrollList: {
+    maxHeight: 240,
+    padding: 8,
+  },
+  dropdownOptionRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    marginBottom: 4,
+  },
+  optionLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    flex: 1,
+  },
+  checkboxBox: {
+    width: 18,
+    height: 18,
+    borderRadius: 4,
+    borderWidth: 1.5,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cityNameText: {
+    fontSize: 12,
+  },
+  cityCountText: {
+    fontSize: 10,
+  },
+  activePillBadge: {
+    backgroundColor: '#DCFCE7',
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: 4,
+  },
+  activePillBadgeText: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: '#166534',
+  },
+  dropdownFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderTopWidth: 1,
+  },
+  dropdownFooterText: {
+    fontSize: 11,
+  },
+  dropdownDoneBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 4,
     borderRadius: 6,
   },
-  errorFixBtnText: {
-    color: '#FFFFFF',
+  dropdownDoneBtnText: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  emptyListWrap: {
+    padding: 16,
+    alignItems: 'center',
+  },
+  emptyListText: {
+    fontSize: 12,
+    fontStyle: 'italic',
+  },
+  cityGroupWrap: {
+    marginBottom: 8,
+  },
+  cityGroupHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 6,
+    borderWidth: 1,
+    marginBottom: 4,
+  },
+  cityGroupTitle: {
     fontSize: 11,
     fontWeight: '800',
+  },
+  cityGroupSub: {
+    fontSize: 10,
+  },
+  cityGroupToggleBtn: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 4,
+    backgroundColor: '#EEF2FF',
+  },
+  cityGroupToggleBtnText: {
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  nutritionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 10,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#E5E7EB',
+  },
+  estimateBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  estimateBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  checklistCountBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 14,
+    borderWidth: 1,
+  },
+  checksList: {
+    gap: 6,
+  },
+  checkItemRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  checkItemLabel: {
+    fontSize: 12,
+  },
+  bottomBar: {
+    borderTopWidth: 1,
+    height: 60,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+  },
+  bottomBarLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  bottomNavBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  bottomNavBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  stageProgressText: {
+    fontSize: 12,
+  },
+  bottomBarRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  bottomNextBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 16,
+    paddingVertical: 9,
+    borderRadius: 8,
+  },
+  bottomNextBtnText: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  presetModalBox: {
+    width: '100%',
+    maxWidth: 520,
+    borderRadius: 14,
+    borderWidth: 1,
+    padding: 16,
+  },
+  presetModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  presetGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  presetThumbItem: {
+    width: '48%',
+    borderRadius: 8,
+    borderWidth: 1.5,
+    overflow: 'hidden',
+  },
+  presetThumbImg: {
+    width: '100%',
+    height: 80,
+  },
+  presetThumbLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    padding: 6,
+    textAlign: 'center',
   },
 });

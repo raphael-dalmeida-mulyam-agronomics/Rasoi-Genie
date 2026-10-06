@@ -162,7 +162,7 @@ describe('walletService', () => {
       expect(res.success).toBe(true);
       expect(Array.isArray(res.data)).toBe(true);
       expect(res.data?.length).toBeGreaterThan(0);
-      expect(res.data?.[0].amount).toBe(200);
+      expect(res.data?.[0]?.amount).toBe(200);
     });
 
     it('credits wallet successfully', async () => {

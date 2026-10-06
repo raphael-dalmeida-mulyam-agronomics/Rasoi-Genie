@@ -50,6 +50,13 @@ export class ChefStudioPage {
       await qty0.fill(ingredients[0].qty);
     }
 
+    // If there is an intermediate button to navigate to steps, click it
+    const nextStepsBtn = this.page.getByTestId('chef-next-steps-btn');
+    if (await nextStepsBtn.isVisible()) {
+      await nextStepsBtn.click();
+      await this.page.waitForTimeout(400);
+    }
+
     // Fill first step
     if (steps.length > 0 && steps[0]) {
       const step0 = this.page.getByTestId('chef-step-instruction-0');

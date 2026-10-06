@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   View,
   Text,
@@ -15,6 +15,9 @@ import { useCart } from '../../framework/context/CartContext';
 import { useWishlist } from '../../framework/context/WishlistContext';
 import {
   searchAndFilterMealKits,
+  getMealKits,
+  subscribeToMealKits,
+  syncMealKitsWithSupabase,
   MealKit,
   CuisineType,
   SpiceLevel,
@@ -97,6 +100,24 @@ export const SearchView: React.FC = () => {
   const [selectedKit, setSelectedKit] = useState<MealKit | null>(null);
   const [detailModalVisible, setDetailModalVisible] = useState(false);
 
+  const [allKits, setAllKits] = useState<MealKit[]>(() => getMealKits());
+
+  useEffect(() => {
+    syncMealKitsWithSupabase()
+      .then((kits) => {
+        if (kits && kits.length > 0) {
+          setAllKits(kits);
+        }
+      })
+      .catch(() => {});
+
+    const unsubscribe = subscribeToMealKits((updated) => {
+      setAllKits(updated);
+    });
+
+    return unsubscribe;
+  }, []);
+
   const results = useMemo(() => {
     return searchAndFilterMealKits({
       searchQuery,
@@ -105,7 +126,7 @@ export const SearchView: React.FC = () => {
       spiceLevel: selectedSpice,
       sortBy,
     });
-  }, [searchQuery, dietFilter, selectedCuisine, selectedSpice, sortBy]);
+  }, [searchQuery, dietFilter, selectedCuisine, selectedSpice, sortBy, allKits]);
 
   const hasActiveFilters =
     dietFilter !== 'all' ||

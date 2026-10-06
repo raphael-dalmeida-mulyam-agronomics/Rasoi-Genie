@@ -59,6 +59,8 @@ export interface ChefSubmissionRecord extends ChefRecipeSubmission {
   availableRegions?: string[];
   availableStorageCentres?: string[];
   cities?: string[];
+  subRegions?: string[];
+  originCity?: string;
 }
 
 // ─── Local in-memory and persistent fallback store ────────────────────────────
@@ -433,6 +435,7 @@ export async function createChefSubmission(
     availableStorageCentres: string[],
     cities: string[],
     adminNotes?: string,
+    subRegions?: string[],
   ): Promise<{ success: boolean; kit?: MealKit; error?: string }> {
     const now = new Date().toISOString();
 
@@ -466,6 +469,8 @@ export async function createChefSubmission(
         availableRegions,
         availableStorageCentres,
         cities,
+        subRegions,
+        originCity: cities && cities.length > 0 ? cities[0] : submissionStore[idx]?.originCity,
       };
       record = submissionStore[idx];
     }
@@ -536,6 +541,8 @@ export async function createChefSubmission(
       availableRegions: finalRegions,
       availableStorageCentres: availableStorageCentres || [],
       cities: cities || [],
+      subRegions: subRegions || [],
+      originCity: (cities && cities.length > 0 ? cities[0] : undefined),
       stockByRegion: { North: 99, South: 99, West: 99, East: 99 },
       isChefSpecial: true,
       chefId: record.chefId,

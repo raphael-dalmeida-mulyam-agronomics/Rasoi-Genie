@@ -26,7 +26,7 @@ describe('Actual Customer Accounts Discovery & Wallet Credit Issuing', () => {
     // Staff admin exists
     const staffAdmins = users.filter((u) => u.role === 'admin');
     expect(staffAdmins.length).toBeGreaterThanOrEqual(1);
-    expect(staffAdmins[0].email).toContain('@mulyam.in');
+    expect(staffAdmins[0]?.email).toContain('@mulyam.in');
 
     // Real customer account is categorized under customer role
     const realCustomer = users.find((u) => u.id === 'EElqxIIgpehuPHtIIRVzLybIwos1');

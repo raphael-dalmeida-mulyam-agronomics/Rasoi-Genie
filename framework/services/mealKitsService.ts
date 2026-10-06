@@ -1,4 +1,4 @@
-﻿export type DietTag = 'veg' | 'nonveg' | 'jain' | 'vegan' | 'keto' | 'gluten-free';
+export type DietTag = 'veg' | 'nonveg' | 'jain' | 'vegan' | 'keto' | 'gluten-free';
 export type CuisineType =
   | 'North Indian'
   | 'South Indian'
@@ -3734,6 +3734,107 @@ export function searchAndFilterMealKits(options: FilterOptions): MealKit[] {
 // Admin Catalog Operations
 const mealKitsListeners = new Set<() => void>();
 
+const CUSTOM_MEAL_KITS_KEY = '@rasoi_custom_meal_kits_v1';
+const CHEF_SUBMISSIONS_STORAGE_KEY = '@rasoi_genie_chef_submissions_v1';
+
+function persistCustomKits(): void {
+  try {
+    const initialIds = new Set(INITIAL_MEAL_KITS.map((k) => k.id));
+    const custom = catalogStore.filter((k) => !initialIds.has(k.id) || k.isChefSpecial || k.chefId);
+    const json = JSON.stringify(custom);
+    if (typeof window !== 'undefined' && window.localStorage) {
+      window.localStorage.setItem(CUSTOM_MEAL_KITS_KEY, json);
+    }
+  } catch (e) {
+    console.warn('[MealKitsService] Error persisting custom kits:', e);
+  }
+}
+
+function loadCustomKitsSync(): void {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      // 1. Load directly saved custom meal kits
+      const rawCustom = window.localStorage.getItem(CUSTOM_MEAL_KITS_KEY);
+      if (rawCustom) {
+        const parsed: MealKit[] = JSON.parse(rawCustom);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const map = new Map<string, MealKit>();
+          for (const k of catalogStore) map.set(k.id, k);
+          for (const k of parsed) map.set(k.id, k);
+          catalogStore = Array.from(map.values());
+        }
+      }
+
+      // 2. Also check published chef submissions
+      const rawChefSubs = window.localStorage.getItem(CHEF_SUBMISSIONS_STORAGE_KEY);
+      if (rawChefSubs) {
+        const subs = JSON.parse(rawChefSubs);
+        if (Array.isArray(subs)) {
+          const published = subs.filter((s: any) => s.submissionStatus === 'published');
+          for (const s of published) {
+            if (!catalogStore.some((k) => k.id === s.id)) {
+              const heroImg =
+                s.heroImage ||
+                'https://images.unsplash.com/photo-1546833999-b9f581a1996d?auto=format&fit=crop&w=1000&q=80';
+              const kit: MealKit = {
+                id: s.id,
+                name: s.name,
+                slug: s.slug || s.name.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+                tagline: s.tagline || '',
+                description: s.description || '',
+                heroImage: heroImg,
+                galleryImages:
+                  s.galleryImages && s.galleryImages.length > 0
+                    ? s.galleryImages
+                    : [heroImg],
+                price: s.price || 299,
+                originalPrice: s.price || 299,
+                servings: s.servings || 2,
+                prepTimeMinutes: s.prepTimeMinutes || 15,
+                cookTimeMinutes: s.cookTimeMinutes || 30,
+                diet: s.diet || 'veg',
+                cuisine: s.cuisine || 'North Indian',
+                dishCategory: s.dishCategory || 'Curries & Gravies',
+                spiceLevel: s.spiceLevel || 'Medium',
+                difficulty: 'Chef Special',
+                dietaryTags:
+                  s.dietaryTags && s.dietaryTags.length > 0
+                    ? s.dietaryTags
+                    : [s.diet || 'veg'],
+                allergens: s.allergens || [],
+                ingredients: s.ingredients || [],
+                recipeSteps: s.recipeSteps || [],
+                availableRegions: (s.availableRegions && s.availableRegions.length > 0
+                  ? s.availableRegions
+                  : ['North', 'South', 'West', 'East']) as RegionHub[],
+                availableStorageCentres: s.availableStorageCentres || [],
+                cities: s.cities || [],
+                stockByRegion: { North: 99, South: 99, West: 99, East: 99 },
+                isChefSpecial: true,
+                chefId: s.chefId,
+                chefName: s.chefName,
+                submissionStatus: 'published',
+                rating: 5.0,
+                reviewCount: 0,
+                nutrition: { calories: 450, protein: 15, carbs: 40, fat: 12, fiber: 5 },
+                masalaSachets: [],
+                reviews: [],
+                salesByRegion: { North: 0, South: 0, West: 0, East: 0 },
+              };
+              catalogStore.unshift(kit);
+            }
+          }
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('[MealKitsService] Error loading custom kits sync:', e);
+  }
+}
+
+// Hydrate custom kits immediately
+loadCustomKitsSync();
+
 export function subscribeToMealKits(listener: (kits: MealKit[]) => void): () => void {
   mealKitsListeners.add(listener as any);
   return () => {
@@ -3754,10 +3855,23 @@ export function notifyMealKitsChanged(): void {
 
 export async function syncMealKitsWithSupabase(): Promise<MealKit[]> {
   try {
+    if (typeof process !== 'undefined' && process.env?.NODE_ENV === 'test') {
+      return [...catalogStore];
+    }
     const { fetchPublishedMealKitsFromSupabase } = await import('./supabaseMealKitsService');
     const liveKits = await fetchPublishedMealKitsFromSupabase();
     if (liveKits && liveKits.length > 0) {
-      catalogStore = liveKits;
+      // Merge liveKits with any locally stored custom / chef kits that might not yet be in remote DB
+      const initialIds = new Set(INITIAL_MEAL_KITS.map((k) => k.id));
+      const customLocal = catalogStore.filter((k) => !initialIds.has(k.id) || k.isChefSpecial || k.chefId);
+
+      const map = new Map<string, MealKit>();
+      for (const k of liveKits) map.set(k.id, k);
+      for (const k of customLocal) {
+        if (!map.has(k.id)) map.set(k.id, k);
+      }
+      catalogStore = Array.from(map.values());
+      persistCustomKits();
       notifyMealKitsChanged();
     }
     return [...catalogStore];
@@ -3767,8 +3881,8 @@ export async function syncMealKitsWithSupabase(): Promise<MealKit[]> {
   }
 }
 
-// Auto-sync in background on module load
-if (typeof setTimeout !== 'undefined') {
+// Auto-sync in background on module load (skip in unit test runner)
+if (typeof setTimeout !== 'undefined' && (typeof process === 'undefined' || process.env?.NODE_ENV !== 'test')) {
   setTimeout(() => {
     syncMealKitsWithSupabase().catch(() => {});
   }, 100);
@@ -3776,16 +3890,19 @@ if (typeof setTimeout !== 'undefined') {
 
 export function addMealKit(newKit: MealKit): void {
   catalogStore = [newKit, ...catalogStore.filter((k) => k.id !== newKit.id)];
+  persistCustomKits();
   notifyMealKitsChanged();
 }
 
 export function updateMealKit(id: string, updatedFields: Partial<MealKit>): void {
   catalogStore = catalogStore.map((kit) => (kit.id === id ? { ...kit, ...updatedFields } : kit));
+  persistCustomKits();
   notifyMealKitsChanged();
 }
 
 export function deleteMealKit(id: string): void {
   catalogStore = catalogStore.filter((kit) => kit.id !== id);
+  persistCustomKits();
   notifyMealKitsChanged();
 }
 

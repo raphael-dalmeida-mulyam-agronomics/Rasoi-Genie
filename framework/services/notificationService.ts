@@ -1,4 +1,4 @@
-﻿import { Platform } from 'react-native';
+import { Platform } from 'react-native';
 
 export interface OrderNotificationPayload {
   orderId: string;
@@ -177,8 +177,9 @@ export function subscribeToOutOfStockAlerts(listener: OutOfStockAlertListener): 
 export function dismissOutOfStockAlert(kitId: string, region?: string): void {
   const initialLen = activeOutOfStockAlerts.length;
   for (let i = activeOutOfStockAlerts.length - 1; i >= 0; i--) {
-    if (activeOutOfStockAlerts[i].kitId === kitId) {
-      if (!region || activeOutOfStockAlerts[i].region === region) {
+    const alert = activeOutOfStockAlerts[i];
+    if (alert && alert.kitId === kitId) {
+      if (!region || alert.region === region) {
         activeOutOfStockAlerts.splice(i, 1);
       }
     }

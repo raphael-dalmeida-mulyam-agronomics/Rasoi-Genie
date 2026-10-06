@@ -1,4 +1,4 @@
-﻿// framework/services/inventoryService.ts
+// framework/services/inventoryService.ts
 
 export type InventorySection = 'raw_ingredients' | 'packaging' | 'seasonings';
 
@@ -240,6 +240,7 @@ function seedInventory(): void {
       unit: 'liters',
       shelfLifeDays: 30,
       thresholdLow: 5,
+      region: 'West',
       lastRestocked: new Date().toISOString(),
       expiryDate: addDays(new Date(), 30).toISOString(),
       storageCondition: 'Refrigerated at 2-5°C',
@@ -255,6 +256,7 @@ function seedInventory(): void {
       unit: 'liters',
       shelfLifeDays: 180,
       thresholdLow: 2,
+      region: 'West',
       lastRestocked: new Date().toISOString(),
       expiryDate: new Date().toISOString(),
       storageCondition: 'Room temperature, sealed',
@@ -270,6 +272,7 @@ function seedInventory(): void {
       unit: 'g',
       shelfLifeDays: 180,
       thresholdLow: 20,
+      region: 'West',
       lastRestocked: new Date().toISOString(),
       expiryDate: addDays(new Date(), 180).toISOString(),
       storageCondition: 'Airtight, cool & dry',
@@ -285,6 +288,7 @@ function seedInventory(): void {
       unit: 'kg',
       shelfLifeDays: 180,
       thresholdLow: 2,
+      region: 'West',
       lastRestocked: new Date().toISOString(),
       expiryDate: addDays(new Date(), 180).toISOString(),
       storageCondition: 'Refrigerated, sealed',
@@ -300,6 +304,7 @@ function seedInventory(): void {
       unit: 'liters',
       shelfLifeDays: 365,
       thresholdLow: 3,
+      region: 'West',
       lastRestocked: new Date().toISOString(),
       expiryDate: addDays(new Date(), 365).toISOString(),
       storageCondition: 'Cool & dark place',
@@ -315,6 +320,7 @@ function seedInventory(): void {
       unit: 'kg',
       shelfLifeDays: 120,
       thresholdLow: 1,
+      region: 'West',
       lastRestocked: new Date().toISOString(),
       expiryDate: addDays(new Date(), 120).toISOString(),
       storageCondition: 'Airtight container',
@@ -526,7 +532,7 @@ export async function syncInventoryToSupabase(region?: string): Promise<void> {
         storage_condition: item.storageCondition,
         supplier: item.supplier,
         updated_at: new Date().toISOString(),
-      }, { onConflict: 'id' }).catch(() => {});
+      }, { onConflict: 'id' });
     }
   } catch {}
 }

@@ -130,6 +130,7 @@ import { AdminReferralsManagementView } from './AdminReferralsManagementView';
 import { AdminWalletsManagementView } from './AdminWalletsManagementView';
 import { InventoryManagementView } from './InventoryManagementView';
 import { RecipeCardPrintModal } from './RecipeCardPrintModal';
+import { ChefSubmissionApprovalView } from './ChefSubmissionApprovalView';
 
 const STATUS_FILTERS: (OrderStatus | 'All')[] = [
   'All',
@@ -2602,8 +2603,14 @@ const analyticsMenuStyle = {
             ) : (
               <View style={styles.kitsCardsListContainer}>
                 {filteredKits.map((kit) => (
-                  <View
+                  <TouchableOpacity
                     key={kit.id}
+                    testID={`admin-meal-kit-card-${kit.id}`}
+                    activeOpacity={0.88}
+                    onPress={() => {
+                      setEditingKit(kit);
+                      setKitModalVisible(true);
+                    }}
                     style={[
                       styles.adminKitCard,
                       {
@@ -2616,14 +2623,22 @@ const analyticsMenuStyle = {
                   >
                     <View style={styles.kitCardTop}>
                       <View style={{ flex: 1 }}>
-                        <Text style={[styles.kitCardName, { color: colors.textPrimary }]}>
-                          {kit.name}
-                        </Text>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                          <Text style={[styles.kitCardName, { color: colors.textPrimary }]}>
+                            {kit.name}
+                          </Text>
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                            <Text style={{ fontSize: 11, fontWeight: '700', color: colors.primary }}>
+                              Edit Details
+                            </Text>
+                            <Icon name="chevron-right" size={12} color={colors.primary} />
+                          </View>
+                        </View>
                         <Text style={[styles.kitCardTag, { color: colors.textSecondary }]}>
                           {kit.tagline}
                         </Text>
 
-                        {/* Categorized Meal Kit Tags: Diet, Cuisine, Dish Type, Region, Allergens */}
+                        {/* Categorized Meal Kit Tags: Diet, Cuisine, Dish Type, Allergens (Excluding region and subregion tags) */}
                         <View
                           style={{
                             flexDirection: 'row',
@@ -2635,21 +2650,29 @@ const analyticsMenuStyle = {
                         >
                           {parseCategorizedTags(
                             kit.tags && kit.tags.length > 0 ? kit.tags : compileMealKitTags(kit),
-                          ).map((tag, idx) => (
-                            <Badge
-                              key={`${kit.id}-tag-${tag.category}-${idx}`}
-                              label={tag.label}
-                              variant={tag.variant}
-                              size="sm"
-                            />
-                          ))}
+                          )
+                            .filter(
+                              (tag) =>
+                                tag.category !== 'region' &&
+                                !tag.label.toLowerCase().startsWith('region:') &&
+                                !tag.label.toLowerCase().startsWith('subregion:') &&
+                                !tag.label.toLowerCase().startsWith('state:'),
+                            )
+                            .map((tag, idx) => (
+                              <Badge
+                                key={`${kit.id}-tag-${tag.category}-${idx}`}
+                                label={tag.label}
+                                variant={tag.variant}
+                                size="sm"
+                              />
+                            ))}
                         </View>
 
                         <Text style={[styles.kitCardMeta, { color: colors.textMuted }]}>
                           {kit.spiceLevel} Spice • ₹{kit.price} • {kit.prepTimeMinutes || 15}m prep
                         </Text>
                       </View>
-                      <View style={{ alignItems: 'flex-end', gap: 4 }}>
+                      <View style={{ alignItems: 'flex-end', gap: 4, marginLeft: 8 }}>
                         {kit.isTrending ? (
                           <Badge label="TRENDING" variant="warning" size="sm" />
                         ) : null}
@@ -2702,7 +2725,7 @@ const analyticsMenuStyle = {
                         onPress={() => handleRequestDeleteKit(kit)}
                       />
                     </View>
-                  </View>
+                  </TouchableOpacity>
                 ))}
               </View>
             )}
@@ -4090,8 +4113,8 @@ const analyticsMenuStyle = {
                     ))}
                   </View>
 
-                  {/* Admin actions for pending */}
-                  {sub.submissionStatus === 'pending_review' && (
+                  {/* Admin actions */}
+                  {sub.submissionStatus === 'pending_review' ? (
                     <TouchableOpacity
                       testID={`admin-review-chef-btn-${sub.id}`}
                       style={[
@@ -4104,15 +4127,34 @@ const analyticsMenuStyle = {
                       ]}
                       onPress={() => {
                         setSelectedChefSubmission(sub);
-                        setChefPublishPrice('');
-                        setChefPublishStorageCentres([]);
-                        setChefPublishCities([]);
-                        setChefRejectNotes('');
                         setChefSubmissionModalVisible(true);
                       }}
                     >
                       <Text style={{ color: '#fff', fontWeight: '700', fontSize: 14 }}>
                         Review & Publish / Reject
+                      </Text>
+                    </TouchableOpacity>
+                  ) : (
+                    <TouchableOpacity
+                      testID={`admin-review-chef-btn-${sub.id}`}
+                      style={[
+                        {
+                          backgroundColor: colors.bgSubtle,
+                          borderColor: colors.borderLight,
+                          borderWidth: 1,
+                          borderRadius: radii.md,
+                          paddingVertical: 9,
+                          alignItems: 'center',
+                          marginTop: 6,
+                        },
+                      ]}
+                      onPress={() => {
+                        setSelectedChefSubmission(sub);
+                        setChefSubmissionModalVisible(true);
+                      }}
+                    >
+                      <Text style={{ color: colors.textPrimary, fontWeight: '700', fontSize: 13 }}>
+                        View Recipe Details & Quality Check →
                       </Text>
                     </TouchableOpacity>
                   )}
@@ -4152,329 +4194,83 @@ const analyticsMenuStyle = {
               ))
             )}
 
-            {/* Review Modal */}
+            {/* Review Submission Modal (Matches Chef Studio full authoring experience) */}
             <Modal
               visible={chefSubmissionModalVisible}
               animationType="slide"
-              presentationStyle="pageSheet"
-              onRequestClose={() => setChefSubmissionModalVisible(false)}
+              presentationStyle="fullScreen"
+              onRequestClose={() => {
+                setChefSubmissionModalVisible(false);
+                setSelectedChefSubmission(null);
+              }}
             >
-              <ScrollView
-                style={{ flex: 1, backgroundColor: colors.bgSurface }}
-                keyboardShouldPersistTaps="handled"
-              >
-                <View
-                  style={{
-                    flexDirection: 'row',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    padding: 20,
-                    borderBottomWidth: 1,
-                    borderBottomColor: colors.borderLight,
+              {selectedChefSubmission && (
+                <ChefSubmissionApprovalView
+                  submission={selectedChefSubmission}
+                  isProcessing={isProcessingChefSubmission}
+                  onClose={() => {
+                    setChefSubmissionModalVisible(false);
+                    setSelectedChefSubmission(null);
                   }}
-                >
-                  <Text style={{ fontSize: 18, fontWeight: '800', color: colors.textPrimary }}>
-                    Review Submission
-                  </Text>
-                  <TouchableOpacity onPress={() => setChefSubmissionModalVisible(false)}>
-                    <Icon name="close" size={22} color={colors.textMuted} />
-                  </TouchableOpacity>
-                </View>
-
-                {selectedChefSubmission && (
-                  <View style={{ padding: 20 }}>
-                    <Text
-                      style={{
-                        fontSize: 20,
-                        fontWeight: '800',
-                        color: colors.textPrimary,
-                        marginBottom: 4,
-                      }}
-                    >
-                      {selectedChefSubmission.name}
-                    </Text>
-                    <Text style={{ fontSize: 13, color: colors.textSecondary, marginBottom: 16 }}>
-                      by {selectedChefSubmission.chefName} • {selectedChefSubmission.cuisine}
-                    </Text>
-                    <Text
-                      style={{
-                        fontSize: 14,
-                        color: colors.textPrimary,
-                        marginBottom: 16,
-                        lineHeight: 22,
-                      }}
-                    >
-                      {selectedChefSubmission.description}
-                    </Text>
-
-                    {/* Ingredients */}
-                    <Text
-                      style={{
-                        fontSize: 13,
-                        fontWeight: '700',
-                        color: colors.textSecondary,
-                        marginBottom: 8,
-                        letterSpacing: 0.5,
-                      }}
-                    >
-                      INGREDIENTS ({selectedChefSubmission.ingredients.length})
-                    </Text>
-                    {selectedChefSubmission.ingredients.map((ing, i) => (
-                      <Text
-                        key={i}
-                        style={{ fontSize: 13, color: colors.textPrimary, marginBottom: 4 }}
-                      >
-                        • {ing.name}
-                        {ing.quantity ? ` — ${ing.quantity}` : ''}
-                      </Text>
-                    ))}
-
-                    {/* Steps */}
-                    <Text
-                      style={{
-                        fontSize: 13,
-                        fontWeight: '700',
-                        color: colors.textSecondary,
-                        marginTop: 16,
-                        marginBottom: 8,
-                        letterSpacing: 0.5,
-                      }}
-                    >
-                      RECIPE STEPS ({selectedChefSubmission.recipeSteps.length})
-                    </Text>
-                    {selectedChefSubmission.recipeSteps.map((step) => (
-                      <View key={step.stepNumber} style={{ marginBottom: 10 }}>
-                        <Text style={{ fontSize: 12, fontWeight: '700', color: colors.primary }}>
-                          Step {step.stepNumber}
-                          {step.title ? `: ${step.title}` : ''}
-                        </Text>
-                        <Text style={{ fontSize: 13, color: colors.textPrimary, lineHeight: 20 }}>
-                          {step.instruction}
-                        </Text>
-                      </View>
-                    ))}
-
-                    {/* Admin: Set Price */}
-                    <Text
-                      style={{
-                        fontSize: 13,
-                        fontWeight: '700',
-                        color: colors.textSecondary,
-                        marginTop: 20,
-                        marginBottom: 8,
-                      }}
-                    >
-                      SET PRICE (Rs.) *
-                    </Text>
-                    <TextInput
-                      testID="admin-chef-price-input"
-                      style={[
-                        {
-                          backgroundColor: colors.bgSubtle,
-                          borderRadius: radii.md,
-                          padding: 14,
-                          fontSize: 15,
-                          color: colors.textPrimary,
-                          borderWidth: 1,
-                          borderColor: colors.border,
-                          marginBottom: 16,
-                        },
-                      ]}
-                      placeholder="e.g. 299"
-                      placeholderTextColor={colors.textMuted}
-                      keyboardType="number-pad"
-                      value={chefPublishPrice}
-                      onChangeText={setChefPublishPrice}
-                    />
-
-                    {/* Admin: Select Storage Centres */}
-                    <Text
-                      style={{
-                        fontSize: 13,
-                        fontWeight: '700',
-                        color: colors.textSecondary,
-                        marginBottom: 8,
-                      }}
-                    >
-                      AVAILABILITY REGIONS
-                    </Text>
-                    <Text style={{ fontSize: 12, color: colors.textMuted, marginBottom: 10 }}>
-                      Select which storage centres will fulfil this kit. Leave empty to make it
-                      pan-India.
-                    </Text>
-                    <View
-                      style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}
-                    >
-                      {STORAGE_CENTRE_REGIONS.map((sc) => {
-                        const sel = chefPublishStorageCentres.includes(sc.id);
-                        return (
-                          <TouchableOpacity
-                            key={sc.id}
-                            onPress={() =>
-                              setChefPublishStorageCentres((prev) =>
-                                sel ? prev.filter((x) => x !== sc.id) : [...prev, sc.id],
-                              )
-                            }
-                            style={[
-                              {
-                                paddingHorizontal: 12,
-                                paddingVertical: 6,
-                                borderRadius: radii.pill,
-                                backgroundColor: sel ? colors.primary : colors.bgSubtle,
-                                borderWidth: 1,
-                                borderColor: sel ? colors.primary : colors.border,
-                              },
-                            ]}
-                          >
-                            <Text
-                              style={{
-                                fontSize: 11,
-                                fontWeight: '700',
-                                color: sel ? '#fff' : colors.textSecondary,
-                              }}
-                            >
-                              {sc.name} ({sc.city})
-                            </Text>
-                          </TouchableOpacity>
-                        );
-                      })}
-                    </View>
-
-                    {/* Rejection notes field */}
-                    <Text
-                      style={{
-                        fontSize: 13,
-                        fontWeight: '700',
-                        color: colors.textSecondary,
-                        marginBottom: 8,
-                      }}
-                    >
-                      REJECTION NOTES (if rejecting)
-                    </Text>
-                    <TextInput
-                      testID="admin-chef-reject-notes"
-                      style={[
-                        {
-                          backgroundColor: colors.bgSubtle,
-                          borderRadius: radii.md,
-                          padding: 14,
-                          fontSize: 14,
-                          color: colors.textPrimary,
-                          borderWidth: 1,
-                          borderColor: colors.border,
-                          minHeight: 80,
-                          textAlignVertical: 'top',
-                          marginBottom: 24,
-                        },
-                      ]}
-                      placeholder="Explain why the recipe was rejected (optional for publishing)"
-                      placeholderTextColor={colors.textMuted}
-                      value={chefRejectNotes}
-                      onChangeText={setChefRejectNotes}
-                      multiline
-                    />
-
-                    {/* Action buttons */}
-                    <View style={{ flexDirection: 'row', gap: 12 }}>
-                      <TouchableOpacity
-                        testID="admin-chef-reject-btn"
-                        style={[
-                          {
-                            flex: 1,
-                            padding: 14,
-                            borderRadius: radii.lg,
-                            alignItems: 'center',
-                            backgroundColor: colors.danger,
-                            opacity: isProcessingChefSubmission ? 0.5 : 1,
-                          },
-                        ]}
-                        disabled={isProcessingChefSubmission}
-                        onPress={async () => {
-                          if (!selectedChefSubmission) return;
-                          if (!chefRejectNotes.trim()) {
-                            Alert.alert('Required', 'Please enter a reason for rejection.');
-                            return;
-                          }
-                          setIsProcessingChefSubmission(true);
-                          await rejectChefSubmission(
-                            selectedChefSubmission.id,
-                            chefRejectNotes.trim(),
-                          );
-                          await reloadChefData();
-                          setIsProcessingChefSubmission(false);
-                          setChefSubmissionModalVisible(false);
-                          setSelectedChefSubmission(null);
-                          showInAppAlert(
-                            'Recipe Rejected',
-                            `"${selectedChefSubmission.name}" has been rejected with feedback sent to ${selectedChefSubmission.chefName}.`,
-                          );
-                        }}
-                      >
-                        <Text style={{ color: '#fff', fontWeight: '700', fontSize: 14 }}>
-                          Reject
-                        </Text>
-                      </TouchableOpacity>
-
-                      <TouchableOpacity
-                        testID="admin-chef-publish-btn"
-                        style={[
-                          {
-                            flex: 2,
-                            padding: 14,
-                            borderRadius: radii.lg,
-                            alignItems: 'center',
-                            backgroundColor: colors.primary,
-                            opacity: isProcessingChefSubmission ? 0.5 : 1,
-                          },
-                        ]}
-                        disabled={isProcessingChefSubmission}
-                        onPress={async () => {
-                          if (!selectedChefSubmission) return;
-                          const price = parseFloat(chefPublishPrice);
-                          if (!chefPublishPrice || isNaN(price) || price <= 0) {
-                            Alert.alert('Required', 'Please set a valid price before publishing.');
-                            return;
-                          }
-                          setIsProcessingChefSubmission(true);
-                          const regions =
-                            chefPublishStorageCentres.length > 0
-                              ? [
-                                  ...new Set(
-                                    STORAGE_CENTRE_REGIONS.filter((r) =>
-                                      chefPublishStorageCentres.includes(r.id),
-                                    ).map((r) => r.zone),
-                                  ),
-                                ]
-                              : ['North', 'South', 'West', 'East'];
-                          const res = await publishChefSubmission(
-                            selectedChefSubmission.id,
-                            price,
-                            regions,
-                            chefPublishStorageCentres,
-                            chefPublishCities,
-                          );
-                          if (res.kit) {
-                            addMealKit(res.kit as MealKit);
-                          }
-                          setKits(getMealKits());
-                          await reloadChefData();
-                          setIsProcessingChefSubmission(false);
-                          setChefSubmissionModalVisible(false);
-                          setSelectedChefSubmission(null);
-                          showInAppAlert(
-                            'Recipe Published',
-                            `"${selectedChefSubmission.name}" by ${selectedChefSubmission.chefName} is now live at Rs. ${price} and added to the meal kit database.`,
-                          );
-                        }}
-                      >
-                        <Text style={{ color: '#fff', fontWeight: '700', fontSize: 14 }}>
-                          Publish at Rs. {chefPublishPrice || '—'}
-                        </Text>
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-                )}
-              </ScrollView>
+                  onReject={async (notes) => {
+                    if (!selectedChefSubmission) return;
+                    setIsProcessingChefSubmission(true);
+                    await rejectChefSubmission(
+                      selectedChefSubmission.id,
+                      notes,
+                    );
+                    await reloadChefData();
+                    setIsProcessingChefSubmission(false);
+                    const subName = selectedChefSubmission.name;
+                    const cName = selectedChefSubmission.chefName;
+                    setChefSubmissionModalVisible(false);
+                    setSelectedChefSubmission(null);
+                    showInAppAlert(
+                      'Recipe Rejected',
+                      `"${subName}" has been rejected with feedback sent to ${cName}.`,
+                    );
+                  }}
+                  onPublish={async (pubPrice, storageCentres, cities, customRegions, subRegions) => {
+                    if (!selectedChefSubmission) return;
+                    setIsProcessingChefSubmission(true);
+                    const regions =
+                      customRegions && customRegions.length > 0
+                        ? customRegions
+                        : storageCentres.length > 0
+                        ? [
+                            ...new Set(
+                              STORAGE_CENTRE_REGIONS.filter((r) =>
+                                storageCentres.includes(r.id),
+                              ).map((r) => r.zone),
+                            ),
+                          ]
+                        : ['North', 'South', 'West', 'East'];
+                    const res = await publishChefSubmission(
+                      selectedChefSubmission.id,
+                      pubPrice,
+                      regions,
+                      storageCentres,
+                      cities,
+                      undefined,
+                      subRegions,
+                    );
+                    if (res.kit) {
+                      addMealKit(res.kit as MealKit);
+                    }
+                    setKits(getMealKits());
+                    await reloadChefData();
+                    setIsProcessingChefSubmission(false);
+                    const subName = selectedChefSubmission.name;
+                    const cName = selectedChefSubmission.chefName;
+                    setChefSubmissionModalVisible(false);
+                    setSelectedChefSubmission(null);
+                    showInAppAlert(
+                      'Recipe Published',
+                      `"${subName}" by ${cName} is now live at Rs. ${pubPrice} and added to the meal kit database.`,
+                    );
+                  }}
+                />
+              )}
             </Modal>
 
             {/* Grant Chef Role Modal */}

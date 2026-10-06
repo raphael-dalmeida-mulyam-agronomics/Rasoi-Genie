@@ -1,4 +1,4 @@
-﻿import {
+import {
   getMealKits,
   getMealKitById,
   updateMealKit,
@@ -197,9 +197,10 @@ describe('Real-Time Inventory Updates, Admin Order Cancellation Reversion & Shel
 
       // Verify regional admin alert was broadcasted
       expect(capturedAlert).not.toBeNull();
-      expect(capturedAlert?.kitId).toBe(TEST_KIT_ID);
-      expect(capturedAlert?.region).toBe('West');
-      expect(capturedAlert?.remainingStock).toBe(0);
+      const alert = capturedAlert as unknown as OutOfStockAlertPayload;
+      expect(alert?.kitId).toBe(TEST_KIT_ID);
+      expect(alert?.region).toBe('West');
+      expect(alert?.remainingStock).toBe(0);
 
       unsub();
     });
