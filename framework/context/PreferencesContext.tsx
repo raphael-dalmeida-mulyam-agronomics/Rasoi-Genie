@@ -1,14 +1,19 @@
-﻿import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useState } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { CuisineType, DietTag, RegionHub, SpiceLevel } from '../services/mealKitsService';
 import { legacyHubForCity } from '../services/regionService';
 import {
-    clearAllLegacyUserData,
-    getUserProfileFromSupabase,
-    saveUserProfileToSupabase,
-    UserProfileData,
+  clearAllLegacyUserData,
+  getUserProfileFromSupabase,
+  saveUserProfileToSupabase,
+  UserProfileData,
 } from '../services/supabaseUserService';
 import { useAuth } from './AuthContext';
 import { PaymentMethod } from './CartContext';
+import { getStoredUserLocation, saveStoredUserLocation } from '../services/locationService';
+import { hubForCity, canonicalCityName } from '../../features/admin/cityKitsSeederService';
+
+const GUEST_PREFS_KEY = '@rasoi_guest_preferences_v1';
 
 export interface AddressItem {
   id: string;
@@ -28,9 +33,9 @@ export interface UserDietaryPreferences {
   spiceTolerance: SpiceLevel;
   preferredCuisines: CuisineType[];
   // ── Location hierarchy (replaces old single RegionHub) ─────────────────────
-  state: string;        // e.g. 'Maharashtra'
-  city: string;         // e.g. 'Pune'
-  subRegion: string;    // sub-region id, e.g. 'pune-koregaon-park' (empty = all sub-regions)
+  state: string; // e.g. 'Maharashtra'
+  city: string; // e.g. 'Pune'
+  subRegion: string; // sub-region id, e.g. 'pune-koregaon-park' (empty = all sub-regions)
   // Legacy alias — kept for backwards-compat with Supabase schema & admin RBAC; derived from city
   regionHub: RegionHub;
   /** @deprecated Use city instead */
@@ -88,7 +93,7 @@ export const DEFAULT_PREFERENCES: UserDietaryPreferences = {
   state: 'Karnataka',
   city: 'Bengaluru',
   subRegion: '',
-  regionHub: 'South',   // derived: legacyHubForCity('Bengaluru')
+  regionHub: 'South', // derived: legacyHubForCity('Bengaluru')
   currentCity: 'Bengaluru',
   isOnboarded: false,
 };
@@ -129,11 +134,46 @@ export const PreferencesProvider: React.FC<{ children: React.ReactNode }> = ({ c
     let isMounted = true;
 
     if (!authUser || !authUser.uid) {
-      // User logged out: clear active state from memory so no previous data leaks
-      setPreferences(DEFAULT_PREFERENCES);
-      setAddresses([]);
-      setPreferredPaymentMethodState('UPI');
-      return;
+      // Guest user: load preferences and location from local storage
+      const loadGuest = async () => {
+        setIsLoadingProfile(true);
+        try {
+          const storedLoc = await getStoredUserLocation();
+          const storedGuestRaw = await AsyncStorage.getItem(GUEST_PREFS_KEY);
+          let guestPrefs = { ...DEFAULT_PREFERENCES };
+          if (storedGuestRaw) {
+            try {
+              guestPrefs = { ...DEFAULT_PREFERENCES, ...JSON.parse(storedGuestRaw) };
+            } catch {}
+          }
+          if (storedLoc) {
+            const canonical = canonicalCityName(storedLoc.city);
+            const hub = storedLoc.hub || hubForCity(canonical);
+            guestPrefs = {
+              ...guestPrefs,
+              city: canonical,
+              currentCity: canonical,
+              regionHub: hub,
+              state: storedLoc.state || guestPrefs.state || '',
+            };
+          }
+          if (isMounted) {
+            setPreferences(guestPrefs);
+            setAddresses([]);
+            setPreferredPaymentMethodState('UPI');
+          }
+        } catch (err) {
+          console.warn('[PreferencesContext] Error loading guest preferences:', err);
+        } finally {
+          if (isMounted) {
+            setIsLoadingProfile(false);
+          }
+        }
+      };
+      loadGuest();
+      return () => {
+        isMounted = false;
+      };
     }
 
     const load = async () => {
@@ -188,7 +228,21 @@ export const PreferencesProvider: React.FC<{ children: React.ReactNode }> = ({ c
     newAddrs: AddressItem[],
     newPayment: PaymentMethod,
   ) => {
-    if (!authUser?.uid) return;
+    if (newPrefs.city) {
+      const hub = newPrefs.regionHub || hubForCity(newPrefs.city);
+      const canonical = canonicalCityName(newPrefs.city);
+      saveStoredUserLocation({
+        city: canonical,
+        pincode: '',
+        hub,
+        state: newPrefs.state,
+      }).catch(() => {});
+    }
+
+    if (!authUser?.uid) {
+      AsyncStorage.setItem(GUEST_PREFS_KEY, JSON.stringify(newPrefs)).catch(() => {});
+      return;
+    }
 
     const payload: UserProfileData = {
       uid: authUser.uid,

@@ -24,6 +24,7 @@ import { QuantityStepper } from '../../framework/ui/QuantityStepper';
 import { Icon } from '../../framework/ui/Icon';
 import { CheckoutView } from '../checkout/CheckoutView';
 import { OrderConfirmationView } from '../checkout/OrderConfirmationView';
+import { getOrCreateGuestId } from '../../framework/services/guestService';
 
 const DELIVERY_SLOTS = [
   { id: 'slot-1', title: '6:00 PM - 8:00 PM (Dinner)', tag: 'Fastest' },
@@ -120,9 +121,10 @@ export const CartView: React.FC = () => {
 
     setIsCheckingOut(true);
     try {
+      const stableGuestId = await getOrCreateGuestId();
       const sharedTxnId = `TXN-${Math.random().toString(36).substring(2, 10).toUpperCase()}`;
       const orderData = {
-        userId: user?.uid || 'guest_user_' + Date.now(),
+        userId: user?.uid || stableGuestId,
         customerPhone: user?.phoneNumber || activeAddress.phone || '+91 9876543210',
         customerName: user?.displayName || activeAddress.name || 'Valued Chef',
         customerEmail: user?.email || undefined,
@@ -438,6 +440,32 @@ export const CartView: React.FC = () => {
               </Text>
             </TouchableOpacity>
           </View>
+
+          {!user && (
+            <View
+              testID="cart-guest-wallet-notice"
+              style={{
+                marginTop: 12,
+                padding: 10,
+                backgroundColor: colors.bgSubtle,
+                borderRadius: radii.md,
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: 8,
+              }}
+            >
+              <Icon name="wallet" size={16} color={colors.textSecondary} />
+              <Text style={{ fontSize: 12, color: colors.textSecondary, flex: 1 }}>
+                Wallet credits & referrals:{' '}
+                <Text
+                  style={{ color: colors.primary, fontWeight: '700' }}
+                  onPress={() => router.push('/login' as any)}
+                >
+                  Sign in to use
+                </Text>
+              </Text>
+            </View>
+          )}
         </View>
 
         {/* DELIVERY ADDRESS SELECTION */}
@@ -651,7 +679,9 @@ export const CartView: React.FC = () => {
 
           <View style={styles.summaryLineTotal}>
             <Text style={[styles.totalText, { color: colors.textPrimary }]}>Grand Total</Text>
-            <Text testID="cart-grand-total" style={[styles.totalAmount, { color: colors.primary }]}>₹{total}</Text>
+            <Text testID="cart-grand-total" style={[styles.totalAmount, { color: colors.primary }]}>
+              ₹{total}
+            </Text>
           </View>
         </View>
       </ScrollView>

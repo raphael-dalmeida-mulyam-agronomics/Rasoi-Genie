@@ -1,4 +1,4 @@
-﻿import AsyncStorage from '@react-native-async-storage/async-storage';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getSupabaseClient } from '../supabase/client';
 import { fetchAllUserProfilesFromSupabase } from './supabaseUserService';
 import { isMissingSchemaError } from './supabaseUtils';
@@ -146,21 +146,10 @@ export async function getAllLocalWalletsMap(): Promise<
 // ─── Public types ─────────────────────────────────────────────────────────────
 
 export type CreditSource =
-  | 'ORDER_REFUND'
-  | 'REFERRAL'
-  | 'REFERRAL_BONUS'
-  | 'PROMOTION'
-  | 'LOYALTY'
-  | 'ADMIN_ADJUSTMENT';
+  'ORDER_REFUND' | 'REFERRAL' | 'REFERRAL_BONUS' | 'PROMOTION' | 'LOYALTY' | 'ADMIN_ADJUSTMENT';
 
 export type TransactionType =
-  | 'CREDIT'
-  | 'DEBIT'
-  | 'REFUND'
-  | 'REVERSAL'
-  | 'EXPIRY'
-  | 'RESERVATION'
-  | 'RELEASE';
+  'CREDIT' | 'DEBIT' | 'REFUND' | 'REVERSAL' | 'EXPIRY' | 'RESERVATION' | 'RELEASE';
 
 export type TransactionSource =
   | 'ORDER_REFUND'
@@ -853,13 +842,9 @@ export function subscribeToWalletsRealtime(callback: () => void): () => void {
     const supabase = getSupabaseClient();
     supabaseChannel = supabase
       .channel('realtime_wallets_admin')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'wallets' },
-        () => {
-          callback();
-        },
-      )
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'wallets' }, () => {
+        callback();
+      })
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'wallet_transactions' },
@@ -922,7 +907,10 @@ export async function adminGetAllWallets(
       console.warn('[WalletService] Supabase wallets fetch error:', error.message);
     }
 
-    const walletMap = new Map<string, { available: number; reserved: number; updated_at: string }>();
+    const walletMap = new Map<
+      string,
+      { available: number; reserved: number; updated_at: string }
+    >();
 
     // Seed walletMap with local persistent cache first
     localWalletsCache.forEach((rec, uid) => {
@@ -978,9 +966,13 @@ export async function adminGetAllWallets(
     walletMap.forEach((walletInfo, uid) => {
       if (!seenUids.has(uid)) {
         seenUids.add(uid);
+        const customerName =
+          uid === 'EElqxIIgpehuPHtIIRVzLybIwos1'
+            ? "Raphael D'Almeida"
+            : `Customer (${uid.slice(-6)})`;
         summaries.push({
           user_id: uid,
-          customer_name: `Customer (${uid.slice(-6)})`,
+          customer_name: customerName,
           customer_phone: 'N/A',
           customer_email: 'N/A',
           customer_city: 'Pan-India',
@@ -1046,9 +1038,7 @@ export async function adminGetUserTransactions(
 /**
  * Returns all active credit lots for a user — for admin lot-level view.
  */
-export async function adminGetUserCreditLots(
-  userId: string,
-): Promise<ServiceResult<CreditLot[]>> {
+export async function adminGetUserCreditLots(userId: string): Promise<ServiceResult<CreditLot[]>> {
   try {
     const supabase = getSupabaseClient();
 

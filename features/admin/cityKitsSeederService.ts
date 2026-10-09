@@ -1,4 +1,4 @@
-﻿/**
+/**
  * cityKitsSeederService.ts
  *
  * Generates and seeds city-specific meal kit stubs when a city has no kits.
@@ -27,7 +27,9 @@ import { estimateNutritionWithAI } from './nutritionEstimatorService';
 
 // ─── City → RegionHub mapping ────────────────────────────────────────────────
 // Maps normalised city names to their RegionHub. Unrecognised cities default to 'North'.
-const CITY_HUB_MAP: Record<string, RegionHub> = {
+// ─── City → RegionHub mapping ────────────────────────────────────────────────
+// Maps normalised city names to their RegionHub. Unrecognised cities default to 'North'.
+export const CITY_HUB_MAP: Record<string, RegionHub> = {
   // South
   bengaluru: 'South',
   bangalore: 'South',
@@ -64,6 +66,279 @@ const CITY_HUB_MAP: Record<string, RegionHub> = {
   ranchi: 'East',
   guwahati: 'East',
 };
+
+export interface ServiceableCityItem {
+  id: string;
+  name: string;
+  hub: RegionHub;
+  state: string;
+  aliases: string[];
+  defaultPincode: string;
+  pincodePrefixes: string[];
+}
+
+export const SERVICEABLE_CITIES: ServiceableCityItem[] = [
+  // South Hub
+  {
+    id: 'bengaluru',
+    name: 'Bengaluru',
+    hub: 'South',
+    state: 'Karnataka',
+    aliases: ['bangalore'],
+    defaultPincode: '560001',
+    pincodePrefixes: ['560', '561', '562'],
+  },
+  {
+    id: 'hyderabad',
+    name: 'Hyderabad',
+    hub: 'South',
+    state: 'Telangana',
+    aliases: [],
+    defaultPincode: '500001',
+    pincodePrefixes: ['500', '501', '502'],
+  },
+  {
+    id: 'chennai',
+    name: 'Chennai',
+    hub: 'South',
+    state: 'Tamil Nadu',
+    aliases: ['madras'],
+    defaultPincode: '600001',
+    pincodePrefixes: ['600', '601', '602', '603'],
+  },
+  {
+    id: 'kochi',
+    name: 'Kochi',
+    hub: 'South',
+    state: 'Kerala',
+    aliases: ['cochin', 'ernakulam'],
+    defaultPincode: '682001',
+    pincodePrefixes: ['682', '683'],
+  },
+  {
+    id: 'thiruvananthapuram',
+    name: 'Thiruvananthapuram',
+    hub: 'South',
+    state: 'Kerala',
+    aliases: ['trivandrum'],
+    defaultPincode: '695001',
+    pincodePrefixes: ['695'],
+  },
+  {
+    id: 'coimbatore',
+    name: 'Coimbatore',
+    hub: 'South',
+    state: 'Tamil Nadu',
+    aliases: [],
+    defaultPincode: '641001',
+    pincodePrefixes: ['641'],
+  },
+  {
+    id: 'mysuru',
+    name: 'Mysuru',
+    hub: 'South',
+    state: 'Karnataka',
+    aliases: ['mysore'],
+    defaultPincode: '570001',
+    pincodePrefixes: ['570'],
+  },
+  {
+    id: 'visakhapatnam',
+    name: 'Visakhapatnam',
+    hub: 'South',
+    state: 'Andhra Pradesh',
+    aliases: ['vizag'],
+    defaultPincode: '530001',
+    pincodePrefixes: ['530', '531'],
+  },
+  // West Hub
+  {
+    id: 'mumbai',
+    name: 'Mumbai',
+    hub: 'West',
+    state: 'Maharashtra',
+    aliases: ['bombay', 'mumbai suburban'],
+    defaultPincode: '400001',
+    pincodePrefixes: ['400', '401'],
+  },
+  {
+    id: 'pune',
+    name: 'Pune',
+    hub: 'West',
+    state: 'Maharashtra',
+    aliases: ['poona'],
+    defaultPincode: '411001',
+    pincodePrefixes: ['411', '412'],
+  },
+  {
+    id: 'ahmedabad',
+    name: 'Ahmedabad',
+    hub: 'West',
+    state: 'Gujarat',
+    aliases: [],
+    defaultPincode: '380001',
+    pincodePrefixes: ['380', '382'],
+  },
+  {
+    id: 'surat',
+    name: 'Surat',
+    hub: 'West',
+    state: 'Gujarat',
+    aliases: [],
+    defaultPincode: '395001',
+    pincodePrefixes: ['395', '394'],
+  },
+  {
+    id: 'nagpur',
+    name: 'Nagpur',
+    hub: 'West',
+    state: 'Maharashtra',
+    aliases: [],
+    defaultPincode: '440001',
+    pincodePrefixes: ['440', '441'],
+  },
+  {
+    id: 'nashik',
+    name: 'Nashik',
+    hub: 'West',
+    state: 'Maharashtra',
+    aliases: ['nasik'],
+    defaultPincode: '422001',
+    pincodePrefixes: ['422'],
+  },
+  // North Hub
+  {
+    id: 'delhi',
+    name: 'Delhi NCR',
+    hub: 'North',
+    state: 'Delhi',
+    aliases: ['delhi', 'new delhi', 'delhi ncr'],
+    defaultPincode: '110001',
+    pincodePrefixes: ['110'],
+  },
+  {
+    id: 'noida',
+    name: 'Noida',
+    hub: 'North',
+    state: 'Uttar Pradesh',
+    aliases: ['greater noida'],
+    defaultPincode: '201301',
+    pincodePrefixes: ['201'],
+  },
+  {
+    id: 'gurugram',
+    name: 'Gurugram',
+    hub: 'North',
+    state: 'Haryana',
+    aliases: ['gurgaon'],
+    defaultPincode: '122001',
+    pincodePrefixes: ['122'],
+  },
+  {
+    id: 'chandigarh',
+    name: 'Chandigarh',
+    hub: 'North',
+    state: 'Punjab',
+    aliases: ['mohali', 'panchkula'],
+    defaultPincode: '160001',
+    pincodePrefixes: ['160'],
+  },
+  {
+    id: 'jaipur',
+    name: 'Jaipur',
+    hub: 'North',
+    state: 'Rajasthan',
+    aliases: [],
+    defaultPincode: '302001',
+    pincodePrefixes: ['302', '303'],
+  },
+  {
+    id: 'lucknow',
+    name: 'Lucknow',
+    hub: 'North',
+    state: 'Uttar Pradesh',
+    aliases: [],
+    defaultPincode: '226001',
+    pincodePrefixes: ['226'],
+  },
+  {
+    id: 'agra',
+    name: 'Agra',
+    hub: 'North',
+    state: 'Uttar Pradesh',
+    aliases: [],
+    defaultPincode: '282001',
+    pincodePrefixes: ['282'],
+  },
+  // East Hub
+  {
+    id: 'kolkata',
+    name: 'Kolkata',
+    hub: 'East',
+    state: 'West Bengal',
+    aliases: ['calcutta'],
+    defaultPincode: '700001',
+    pincodePrefixes: ['700', '711', '712'],
+  },
+  {
+    id: 'bhubaneswar',
+    name: 'Bhubaneswar',
+    hub: 'East',
+    state: 'Odisha',
+    aliases: ['bhubaneshwar'],
+    defaultPincode: '751001',
+    pincodePrefixes: ['751', '752'],
+  },
+  {
+    id: 'patna',
+    name: 'Patna',
+    hub: 'East',
+    state: 'Bihar',
+    aliases: [],
+    defaultPincode: '800001',
+    pincodePrefixes: ['800'],
+  },
+  {
+    id: 'ranchi',
+    name: 'Ranchi',
+    hub: 'East',
+    state: 'Jharkhand',
+    aliases: [],
+    defaultPincode: '834001',
+    pincodePrefixes: ['834'],
+  },
+  {
+    id: 'guwahati',
+    name: 'Guwahati',
+    hub: 'East',
+    state: 'Assam',
+    aliases: ['gauhati'],
+    defaultPincode: '781001',
+    pincodePrefixes: ['781'],
+  },
+];
+
+/**
+ * Strict helper to check if a city is serviceable.
+ * Do NOT use hubForCity() for serviceability checks as hubForCity defaults to 'North'.
+ */
+export function isServiceableCity(city?: string | null): boolean {
+  if (!city || typeof city !== 'string') return false;
+  const normalized = city.trim().toLowerCase();
+  return Boolean(CITY_HUB_MAP[normalized]);
+}
+
+/**
+ * Returns canonical city display name.
+ */
+export function canonicalCityName(city: string): string {
+  if (!city) return '';
+  const norm = city.trim().toLowerCase();
+  const match = SERVICEABLE_CITIES.find(
+    (c) => c.name.toLowerCase() === norm || c.id === norm || c.aliases.includes(norm),
+  );
+  return match ? match.name : city.trim();
+}
 
 export function hubForCity(city: string): RegionHub {
   return CITY_HUB_MAP[city.trim().toLowerCase()] ?? 'North';
@@ -631,7 +906,7 @@ export function hasCitySpecificKits(city: string): boolean {
 function buildKitForCity(template: KitTemplate, city: string, index: number): MealKit {
   const hub = hubForCity(city);
   const capitalCity = city.trim().charAt(0).toUpperCase() + city.trim().slice(1).toLowerCase();
-  const id = `city-${city.trim().toLowerCase().replace(/\s+/g, '-')}-${Date.now()}-${index}`;
+  const id = `city-${city.trim().toLowerCase().replace(/\s+/g, '-')}-${index}`;
   const slug = `${template.baseName.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${city.trim().toLowerCase().replace(/\s+/g, '-')}`;
 
   // Compute nutrition from ingredients
@@ -700,19 +975,7 @@ function buildKitForCity(template: KitTemplate, city: string, index: number): Me
  */
 export async function seedKitsForCityIfNeeded(city: string): Promise<MealKit[]> {
   if (!city || !city.trim()) return [];
-  if (hasCitySpecificKits(city)) return []; // already seeded
-
-  const newKits: MealKit[] = CITY_KIT_TEMPLATES.map((template, idx) =>
-    buildKitForCity(template, city, idx),
-  );
-
-  // Add to in-memory store first so the UI updates immediately
-  newKits.forEach((kit) => addMealKit(kit));
-
-  // Persist to Supabase in parallel (fire-and-forget; UI already has them)
-  await Promise.allSettled(newKits.map((kit) => saveMealKitToSupabase(kit, true)));
-
-  console.log(`[CitySeeder] Seeded ${newKits.length} kits for city "${city.trim()}"`);
-
-  return newKits;
+  // Authentic meal kits in INITIAL_MEAL_KITS already cover all hubs and cities.
+  // No duplicate filler kits should be injected into the catalog.
+  return [];
 }

@@ -4,8 +4,19 @@ import { AdminDashboardPage } from '../pages/admin-dashboard.page';
 import { HomePage } from '../pages/home.page';
 import { TEST_USERS } from '../fixtures/test-data';
 import { seedBrowserSession } from '../fixtures/auth.fixtures';
+import { testSupabase } from '../fixtures/test-helpers';
 
 test.describe('Flow 3: Chef Studio Meal Kit Lifecycle & Admin Moderation', () => {
+  test.afterEach(async () => {
+    await testSupabase
+      .from('meal_kits')
+      .delete()
+      .or('name.ilike.Kashmiri Rogan Josh%,name.ilike.Experimental Spicy Dish%');
+    await testSupabase
+      .from('chef_submissions')
+      .delete()
+      .or('name.ilike.Kashmiri Rogan Josh%,name.ilike.Experimental Spicy Dish%');
+  });
   test('Happy Path: Chef submits recipe -> Admin reviews & publishes with pricing -> Meal kit goes live', async ({
     browser,
   }) => {
@@ -67,6 +78,10 @@ test.describe('Flow 3: Chef Studio Meal Kit Lifecycle & Admin Moderation', () =>
     // Verify recipe title appears in the catalog
     await expect(customerPage.getByText(recipeName).first()).toBeVisible({ timeout: 10000 });
 
+    // 4. Cleanup: Delete created meal kit and chef submission
+    await testSupabase.from('meal_kits').delete().eq('name', recipeName);
+    await testSupabase.from('chef_submissions').delete().eq('name', recipeName);
+
     await chefContext.close();
     await adminContext.close();
     await customerContext.close();
@@ -124,6 +139,9 @@ test.describe('Flow 3: Chef Studio Meal Kit Lifecycle & Admin Moderation', () =>
 
     const rejectedBadge = chefPage.getByText('Rejected').first();
     await expect(rejectedBadge).toBeVisible({ timeout: 10000 });
+
+    // Cleanup: Delete rejected chef submission
+    await testSupabase.from('chef_submissions').delete().eq('name', rejectRecipeName);
 
     await chefContext.close();
     await adminContext.close();

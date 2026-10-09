@@ -1,5 +1,12 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  ActivityIndicator,
+  Platform,
+} from 'react-native';
 import { useTheme } from '../../../framework/theme/ThemeContext';
 import { Icon } from '../../../framework/ui/Icon';
 import { ChefStudioStage } from '../types';
@@ -39,7 +46,10 @@ export function StickyBottomBar({
         {/* Back / Previous Button */}
         <TouchableOpacity
           onPress={onBack}
-          style={[styles.backBtn, { borderColor: colors.borderLight, backgroundColor: colors.bgSubtle }]}
+          style={[
+            styles.backBtn,
+            { borderColor: colors.borderLight, backgroundColor: colors.bgSubtle },
+          ]}
           activeOpacity={0.8}
         >
           <Icon name="arrow-back" size={16} color={colors.textPrimary} />
@@ -142,11 +152,18 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     paddingHorizontal: 24,
     paddingVertical: 14,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 6,
-    elevation: 8,
+    ...Platform.select({
+      web: {
+        boxShadow: '0px -2px 6px rgba(0, 0, 0, 0.05)',
+      },
+      default: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: -2 },
+        shadowOpacity: 0.05,
+        shadowRadius: 6,
+        elevation: 8,
+      },
+    }),
   },
   contentWrap: {
     flexDirection: 'row',

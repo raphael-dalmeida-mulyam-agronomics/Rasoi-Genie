@@ -1,4 +1,4 @@
-﻿import {
+import {
   createOrderInSupabase,
   approveOrderInSupabase,
   updateOrderStatusInSupabase,
@@ -14,6 +14,7 @@ import {
 import {
   saveMealKitToSupabase,
   fetchPublishedMealKitsFromSupabase,
+  deleteMealKitFromSupabase,
 } from '../services/supabaseMealKitsService';
 import { seedSupabaseDatabase } from '../services/supabaseSeedService';
 import { INITIAL_MEAL_KITS } from '../services/mealKitsService';
@@ -134,14 +135,29 @@ describe('Supabase Backend & End-to-End Order Flow', () => {
     expect(orders.find((o) => o.id === createRes.orderId)?.status).toBe('Delivered');
   });
 
-  it('should handle meal kit saving and publishing to Supabase gracefully', async () => {
-    const newKit = INITIAL_MEAL_KITS[0]!;
+  afterAll(async () => {
+    await deleteMealKitFromSupabase('kit-test-supabase-spec');
+  });
+
+  it('should handle meal kit saving and publishing to Supabase gracefully, and delete it afterwards', async () => {
+    const tempKitId = 'kit-test-supabase-spec';
+    const newKit = {
+      ...INITIAL_MEAL_KITS[0]!,
+      id: tempKitId,
+      name: 'Temp Spec Meal Kit',
+    };
     const saveRes = await saveMealKitToSupabase(newKit, true);
     expect(typeof saveRes.success).toBe('boolean');
 
     const publishedKits = await fetchPublishedMealKitsFromSupabase();
     expect(Array.isArray(publishedKits)).toBe(true);
     expect(publishedKits.length).toBeGreaterThan(0);
+
+    const deleteRes = await deleteMealKitFromSupabase(tempKitId);
+    expect(typeof deleteRes.success).toBe('boolean');
+
+    const afterKits = await fetchPublishedMealKitsFromSupabase();
+    expect(afterKits.find((k) => k.id === tempKitId)).toBeUndefined();
   });
 
   it('should run seedSupabaseDatabase without throwing errors', async () => {

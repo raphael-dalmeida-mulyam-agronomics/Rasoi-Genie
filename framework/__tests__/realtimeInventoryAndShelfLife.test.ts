@@ -291,5 +291,20 @@ describe('Real-Time Inventory Updates, Admin Order Cancellation Reversion & Shel
       expect(backInStockKit?.stockByRegion['West']).toBe(2);
       expect(backInStockKit?.isOutOfStock).toBe(false);
     });
+
+    it('deletes the test meal kit after completion of integration tests', async () => {
+      const { deleteMealKit, getMealKitById } = require('../services/mealKitsService');
+      const { deleteMealKitFromSupabase } = require('../services/supabaseMealKitsService');
+      deleteMealKit(TEST_KIT_ID);
+      await deleteMealKitFromSupabase(TEST_KIT_ID);
+      expect(getMealKitById(TEST_KIT_ID)).toBeUndefined();
+    });
+  });
+
+  afterAll(async () => {
+    const { deleteMealKit } = require('../services/mealKitsService');
+    const { deleteMealKitFromSupabase } = require('../services/supabaseMealKitsService');
+    deleteMealKit(TEST_KIT_ID);
+    await deleteMealKitFromSupabase(TEST_KIT_ID);
   });
 });

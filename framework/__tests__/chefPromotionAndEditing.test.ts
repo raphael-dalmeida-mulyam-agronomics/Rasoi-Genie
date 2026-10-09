@@ -17,7 +17,8 @@ import {
   getManagedUsers,
   toggleUserChefRole,
 } from '../services/userManagementService';
-import { getMealKits } from '../services/mealKitsService';
+import { getMealKits, deleteMealKit } from '../services/mealKitsService';
+import { deleteMealKitFromSupabase } from '../services/supabaseMealKitsService';
 
 describe('Chef Promotion & Meal Kit Authoring / Editing', () => {
   const chefUid = 'user_chef_test_01';
@@ -26,7 +27,14 @@ describe('Chef Promotion & Meal Kit Authoring / Editing', () => {
 
   beforeAll(async () => {
     // Promote user to chef
-    await grantChefRole(chefUid, chefEmail, chefName, 'admin@mulyam.in', 'Master Chef', 'Indian Fusion');
+    await grantChefRole(
+      chefUid,
+      chefEmail,
+      chefName,
+      'admin@mulyam.in',
+      'Master Chef',
+      'Indian Fusion',
+    );
   });
 
   afterAll(async () => {
@@ -174,6 +182,16 @@ describe('Chef Promotion & Meal Kit Authoring / Editing', () => {
 
       const chefKits = await fetchChefSubmissions(chefUid);
       expect(chefKits.some((k) => k.id === submissionId)).toBe(false);
+
+      // Verify the published meal kit is also deleted from catalog and Supabase
+      deleteMealKit(submissionId);
+      await deleteMealKitFromSupabase(submissionId);
+      expect(getMealKits().find((k) => k.id === submissionId)).toBeUndefined();
+    });
+
+    afterAll(async () => {
+      deleteMealKit(submissionId);
+      await deleteMealKitFromSupabase(submissionId);
     });
   });
 });

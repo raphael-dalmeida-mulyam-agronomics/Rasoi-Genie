@@ -1,4 +1,4 @@
-﻿import {
+import {
   getMealKits,
   searchAndFilterMealKits,
   updateMealKitStock,
@@ -191,5 +191,12 @@ describe('mealKitsService', () => {
     );
     expect(combined.length).toBeGreaterThan(0);
     expect(combined.some((k) => k.name.includes('Paneer'))).toBe(true);
+  });
+
+  afterAll(async () => {
+    const { deleteMealKit } = require('../services/mealKitsService');
+    const { deleteMealKitFromSupabase } = require('../services/supabaseMealKitsService');
+    deleteMealKit('kit-custom-zafrani');
+    await deleteMealKitFromSupabase('kit-custom-zafrani');
   });
 });

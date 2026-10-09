@@ -131,6 +131,8 @@ export interface MealKit {
   submittedAt?: string; // ISO timestamp when chef submitted for review
   reviewedAt?: string; // ISO timestamp when admin acted on the submission
   reviewNotes?: string; // Admin feedback to the chef (e.g. reason for rejection)
+  createdAt?: string; // ISO timestamp when meal kit was created
+  updatedAt?: string; // ISO timestamp when meal kit was last updated
 }
 
 export const COMMON_ALLERGENS = [
@@ -3549,9 +3551,7 @@ export const INITIAL_MEAL_KITS: MealKit[] = BASE_INITIAL_MEAL_KITS.map((kit) => 
     shelfLife,
     storageCondition,
     tags:
-      kit.tags && kit.tags.length > 0
-        ? kit.tags
-        : compileMealKitTags({ ...kit, shelfLifeDays }),
+      kit.tags && kit.tags.length > 0 ? kit.tags : compileMealKitTags({ ...kit, shelfLifeDays }),
   };
 });
 
@@ -3750,27 +3750,56 @@ function persistCustomKits(): void {
   }
 }
 
+export function isFillerMealKit(kit: MealKit | { id: string; name?: string }): boolean {
+  const id = kit.id || '';
+  const name = (kit.name || '').toLowerCase();
+
+  // Generated city templates and test kits
+  if (id.startsWith('city-')) return true;
+  if (id.startsWith('pune-spec-')) return true;
+  if (id.startsWith('kit-test-')) return true;
+  if (id.startsWith('e2e-kit-')) return true;
+  if (id.startsWith('temp-')) return true;
+  if (id.startsWith('test-')) return true;
+  if (id.startsWith('chef-submission-')) return true;
+  if (id.startsWith('kit-custom-zafrani')) return true;
+
+  // Junk test recipe names
+  if (name.includes('experimental spicy dish')) return true;
+  if (name.includes('kashmiri rogan josh special')) return true;
+  if (name.includes('dummy') || name.startsWith('test ') || name === 'test' || name === 'temp')
+    return true;
+  if (name.includes('dwqd dsadas')) return true;
+
+  return false;
+}
+
 function loadCustomKitsSync(): void {
   try {
     if (typeof window !== 'undefined' && window.localStorage) {
-      // 1. Load directly saved custom meal kits
+      // 1. Load directly saved custom meal kits (filtering out any filler kits)
       const rawCustom = window.localStorage.getItem(CUSTOM_MEAL_KITS_KEY);
       if (rawCustom) {
         const parsed: MealKit[] = JSON.parse(rawCustom);
         if (Array.isArray(parsed) && parsed.length > 0) {
+          const cleanCustom = parsed.filter((k) => !isFillerMealKit(k));
+          window.localStorage.setItem(CUSTOM_MEAL_KITS_KEY, JSON.stringify(cleanCustom));
+
           const map = new Map<string, MealKit>();
           for (const k of catalogStore) map.set(k.id, k);
-          for (const k of parsed) map.set(k.id, k);
+          for (const k of cleanCustom) map.set(k.id, k);
           catalogStore = Array.from(map.values());
         }
       }
 
-      // 2. Also check published chef submissions
+      // 2. Also check published chef submissions (filtering out test submissions)
       const rawChefSubs = window.localStorage.getItem(CHEF_SUBMISSIONS_STORAGE_KEY);
       if (rawChefSubs) {
         const subs = JSON.parse(rawChefSubs);
         if (Array.isArray(subs)) {
-          const published = subs.filter((s: any) => s.submissionStatus === 'published');
+          const published = subs.filter(
+            (s: any) => s.submissionStatus === 'published' && !isFillerMealKit(s),
+          );
           for (const s of published) {
             if (!catalogStore.some((k) => k.id === s.id)) {
               const heroImg =
@@ -3784,9 +3813,7 @@ function loadCustomKitsSync(): void {
                 description: s.description || '',
                 heroImage: heroImg,
                 galleryImages:
-                  s.galleryImages && s.galleryImages.length > 0
-                    ? s.galleryImages
-                    : [heroImg],
+                  s.galleryImages && s.galleryImages.length > 0 ? s.galleryImages : [heroImg],
                 price: s.price || 299,
                 originalPrice: s.price || 299,
                 servings: s.servings || 2,
@@ -3798,9 +3825,7 @@ function loadCustomKitsSync(): void {
                 spiceLevel: s.spiceLevel || 'Medium',
                 difficulty: 'Chef Special',
                 dietaryTags:
-                  s.dietaryTags && s.dietaryTags.length > 0
-                    ? s.dietaryTags
-                    : [s.diet || 'veg'],
+                  s.dietaryTags && s.dietaryTags.length > 0 ? s.dietaryTags : [s.diet || 'veg'],
                 allergens: s.allergens || [],
                 ingredients: s.ingredients || [],
                 recipeSteps: s.recipeSteps || [],
@@ -3832,8 +3857,45 @@ function loadCustomKitsSync(): void {
   }
 }
 
-// Hydrate custom kits immediately
+/**
+ * Purges all junk/filler meal kits from memory catalogStore and local device storage.
+ * Leaves authentic meal kits (kit-101..312 and authentic chef submissions) intact.
+ */
+export function purgeFillerMealKits(): number {
+  const initialLength = catalogStore.length;
+  catalogStore = catalogStore.filter((kit) => !isFillerMealKit(kit));
+  const purgedCount = initialLength - catalogStore.length;
+
+  if (typeof window !== 'undefined' && window.localStorage) {
+    try {
+      const rawCustom = window.localStorage.getItem(CUSTOM_MEAL_KITS_KEY);
+      if (rawCustom) {
+        const parsed: MealKit[] = JSON.parse(rawCustom);
+        const cleaned = (Array.isArray(parsed) ? parsed : []).filter((k) => !isFillerMealKit(k));
+        window.localStorage.setItem(CUSTOM_MEAL_KITS_KEY, JSON.stringify(cleaned));
+      }
+
+      const rawChef = window.localStorage.getItem(CHEF_SUBMISSIONS_STORAGE_KEY);
+      if (rawChef) {
+        const parsedSubs = JSON.parse(rawChef);
+        const cleanedSubs = (Array.isArray(parsedSubs) ? parsedSubs : []).filter(
+          (s) => !isFillerMealKit(s),
+        );
+        window.localStorage.setItem(CHEF_SUBMISSIONS_STORAGE_KEY, JSON.stringify(cleanedSubs));
+      }
+    } catch (e) {
+      console.warn('[MealKitsService] Error purging storage:', e);
+    }
+  }
+
+  persistCustomKits();
+  notifyMealKitsChanged();
+  return purgedCount;
+}
+
+// Hydrate and sanitize custom kits immediately
 loadCustomKitsSync();
+purgeFillerMealKits();
 
 export function subscribeToMealKits(listener: (kits: MealKit[]) => void): () => void {
   mealKitsListeners.add(listener as any);
@@ -3863,7 +3925,9 @@ export async function syncMealKitsWithSupabase(): Promise<MealKit[]> {
     if (liveKits && liveKits.length > 0) {
       // Merge liveKits with any locally stored custom / chef kits that might not yet be in remote DB
       const initialIds = new Set(INITIAL_MEAL_KITS.map((k) => k.id));
-      const customLocal = catalogStore.filter((k) => !initialIds.has(k.id) || k.isChefSpecial || k.chefId);
+      const customLocal = catalogStore.filter(
+        (k) => !initialIds.has(k.id) || k.isChefSpecial || k.chefId,
+      );
 
       const map = new Map<string, MealKit>();
       for (const k of liveKits) map.set(k.id, k);
@@ -3882,14 +3946,22 @@ export async function syncMealKitsWithSupabase(): Promise<MealKit[]> {
 }
 
 // Auto-sync in background on module load (skip in unit test runner)
-if (typeof setTimeout !== 'undefined' && (typeof process === 'undefined' || process.env?.NODE_ENV !== 'test')) {
+if (
+  typeof setTimeout !== 'undefined' &&
+  (typeof process === 'undefined' || process.env?.NODE_ENV !== 'test')
+) {
   setTimeout(() => {
     syncMealKitsWithSupabase().catch(() => {});
   }, 100);
 }
 
 export function addMealKit(newKit: MealKit): void {
-  catalogStore = [newKit, ...catalogStore.filter((k) => k.id !== newKit.id)];
+  const kitWithDates: MealKit = {
+    ...newKit,
+    createdAt: newKit.createdAt || new Date().toISOString(),
+    updatedAt: newKit.updatedAt || new Date().toISOString(),
+  };
+  catalogStore = [kitWithDates, ...catalogStore.filter((k) => k.id !== kitWithDates.id)];
   persistCustomKits();
   notifyMealKitsChanged();
 }
@@ -3901,6 +3973,28 @@ export function updateMealKit(id: string, updatedFields: Partial<MealKit>): void
 }
 
 export function deleteMealKit(id: string): void {
+  catalogStore = catalogStore.filter((kit) => kit.id !== id);
+  persistCustomKits();
+  notifyMealKitsChanged();
+}
+
+/**
+ * Realtime synchronization helpers that update the in-memory catalog store
+ * WITHOUT any write-back to Supabase (preventing echo loops).
+ */
+export function applyRealtimeMealKitInsert(kit: MealKit): void {
+  catalogStore = [kit, ...catalogStore.filter((k) => k.id !== kit.id)];
+  persistCustomKits();
+  notifyMealKitsChanged();
+}
+
+export function applyRealtimeMealKitUpdate(id: string, updatedFields: Partial<MealKit>): void {
+  catalogStore = catalogStore.map((kit) => (kit.id === id ? { ...kit, ...updatedFields } : kit));
+  persistCustomKits();
+  notifyMealKitsChanged();
+}
+
+export function applyRealtimeMealKitDelete(id: string): void {
   catalogStore = catalogStore.filter((kit) => kit.id !== id);
   persistCustomKits();
   notifyMealKitsChanged();

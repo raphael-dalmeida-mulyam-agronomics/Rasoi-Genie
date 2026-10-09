@@ -1,4 +1,5 @@
-﻿import React, { createContext, useContext, useState } from 'react';
+import React, { createContext, useContext, useState, useEffect } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export interface WishlistContextValue {
   wishlistIds: string[];
@@ -9,10 +10,41 @@ export interface WishlistContextValue {
   wishlistCount: number;
 }
 
+const WISHLIST_STORAGE_KEY = '@rasoi_wishlist_ids_v1';
+
 const WishlistContext = createContext<WishlistContextValue | undefined>(undefined);
 
 export const WishlistProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [wishlistIds, setWishlistIds] = useState<string[]>(['kit-101', 'kit-104']);
+  const [isLoaded, setIsLoaded] = useState(false);
+
+  useEffect(() => {
+    let mounted = true;
+    AsyncStorage.getItem(WISHLIST_STORAGE_KEY)
+      .then((saved) => {
+        if (mounted && saved) {
+          try {
+            const parsed = JSON.parse(saved);
+            if (Array.isArray(parsed)) {
+              setWishlistIds(parsed);
+            }
+          } catch {}
+        }
+      })
+      .finally(() => {
+        if (mounted) setIsLoaded(true);
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (isLoaded) {
+      AsyncStorage.setItem(WISHLIST_STORAGE_KEY, JSON.stringify(wishlistIds)).catch(() => {});
+    }
+  }, [wishlistIds, isLoaded]);
 
   const addToWishlist = (kitId: string) => {
     setWishlistIds((prev) => (prev.includes(kitId) ? prev : [...prev, kitId]));

@@ -4,10 +4,10 @@ import {
   Dimensions,
   Modal,
   Platform,
+  Pressable,
   StyleSheet,
   Text,
   TouchableOpacity,
-  TouchableWithoutFeedback,
   View,
 } from 'react-native';
 import { useTheme } from '../theme/ThemeContext';
@@ -312,9 +312,12 @@ export const InAppDialogProvider: React.FC<{ children: React.ReactNode }> = ({ c
         animationType="fade"
         onRequestClose={activeDialog?.cancelable ? handleClose : undefined}
       >
-        <TouchableWithoutFeedback onPress={activeDialog?.cancelable ? handleClose : undefined}>
+        <Pressable
+          style={StyleSheet.absoluteFill}
+          onPress={activeDialog?.cancelable ? handleClose : undefined}
+        >
           <View style={styles.backdrop}>
-            <TouchableWithoutFeedback onPress={(e) => e.stopPropagation()}>
+            <Pressable onPress={(e) => e.stopPropagation()}>
               <View
                 testID="in-app-dialog-card"
                 style={[
@@ -385,9 +388,9 @@ export const InAppDialogProvider: React.FC<{ children: React.ReactNode }> = ({ c
                   })}
                 </View>
               </View>
-            </TouchableWithoutFeedback>
+            </Pressable>
           </View>
-        </TouchableWithoutFeedback>
+        </Pressable>
       </Modal>
     </InAppDialogContext.Provider>
   );

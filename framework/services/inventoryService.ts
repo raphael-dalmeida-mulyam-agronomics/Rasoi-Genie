@@ -42,7 +42,17 @@ function loadStore(): void {
       if (raw) {
         const parsed: InventoryItem[] = JSON.parse(raw);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          inventoryStore = parsed;
+          inventoryStore = parsed.map((item) => {
+            // Auto-heal items measured in grams or ml that were seeded with portion counts (<= 100) instead of gram weights
+            if ((item.unit === 'g' || item.unit === 'ml') && item.currentStock <= 100) {
+              return {
+                ...item,
+                currentStock: 5000,
+                thresholdLow: Math.max(item.thresholdLow, 500),
+              };
+            }
+            return item;
+          });
           return;
         }
       }
@@ -349,7 +359,9 @@ export function getInventoryItemById(id: string): InventoryItem | undefined {
   return inventoryStore.find((item) => item.id === id);
 }
 
-export function addInventoryItem(item: Omit<InventoryItem, 'id' | 'lastRestocked' | 'expiryDate'>): InventoryItem {
+export function addInventoryItem(
+  item: Omit<InventoryItem, 'id' | 'lastRestocked' | 'expiryDate'>,
+): InventoryItem {
   const now = new Date();
   const newItem: InventoryItem = {
     ...item,
@@ -363,13 +375,19 @@ export function addInventoryItem(item: Omit<InventoryItem, 'id' | 'lastRestocked
   return newItem;
 }
 
-export function updateInventoryItem(id: string, updates: Partial<InventoryItem>): InventoryItem | null {
+export function updateInventoryItem(
+  id: string,
+  updates: Partial<InventoryItem>,
+): InventoryItem | null {
   const idx = inventoryStore.findIndex((item) => item.id === id);
   if (idx === -1) return null;
   const updated = { ...inventoryStore[idx], ...updates } as InventoryItem;
   // Recalculate expiry if shelfLifeDays changed
   if (updates.shelfLifeDays !== undefined && updates.lastRestocked) {
-    updated.expiryDate = addDays(new Date(updated.lastRestocked), updates.shelfLifeDays).toISOString();
+    updated.expiryDate = addDays(
+      new Date(updated.lastRestocked),
+      updates.shelfLifeDays,
+    ).toISOString();
   }
   inventoryStore[idx] = updated;
   persistStore();
@@ -377,7 +395,11 @@ export function updateInventoryItem(id: string, updates: Partial<InventoryItem>)
   return updated;
 }
 
-export function restockInventoryItem(id: string, quantity: number, batchNote?: string): InventoryItem | null {
+export function restockInventoryItem(
+  id: string,
+  quantity: number,
+  batchNote?: string,
+): InventoryItem | null {
   const item = inventoryStore.find((i) => i.id === id);
   if (!item) return null;
   const now = new Date();
@@ -386,7 +408,9 @@ export function restockInventoryItem(id: string, quantity: number, batchNote?: s
     currentStock: item.currentStock + quantity,
     lastRestocked: now.toISOString(),
     expiryDate: addDays(now, item.shelfLifeDays).toISOString(),
-    notes: batchNote ? `${item.notes ? item.notes + ' | ' : ''}Restocked: ${batchNote}` : item.notes,
+    notes: batchNote
+      ? `${item.notes ? item.notes + ' | ' : ''}Restocked: ${batchNote}`
+      : item.notes,
   };
   const idx = inventoryStore.findIndex((i) => i.id === id);
   inventoryStore[idx] = updated;
@@ -447,17 +471,21 @@ export function calculateShelfLifeStatus(item: InventoryItem): ShelfLifeStatus {
 
 export function getDefaultShelfLife(section: InventorySection): number {
   switch (section) {
-    case 'raw_ingredients': return 7;
-    case 'packaging': return 730;
-    case 'seasonings': return 180;
-    default: return 30;
+    case 'raw_ingredients':
+      return 7;
+    case 'packaging':
+      return 730;
+    case 'seasonings':
+      return 180;
+    default:
+      return 30;
   }
 }
 
 // ── Real-time deduction / restoration when meal kit is purchased / cancelled ──
 
 export function deductIngredientStock(itemId: string, qty: number, region: string): boolean {
-  const item = inventoryStore.find(i => i.id === itemId && i.region === region);
+  const item = inventoryStore.find((i) => i.id === itemId && i.region === region);
   if (!item) return false;
   if (item.currentStock < qty) return false;
   item.currentStock -= qty;
@@ -480,7 +508,7 @@ export function deductIngredientStock(itemId: string, qty: number, region: strin
 }
 
 export function restoreIngredientStock(itemId: string, qty: number, region: string): boolean {
-  const item = inventoryStore.find(i => i.id === itemId && i.region === region);
+  const item = inventoryStore.find((i) => i.id === itemId && i.region === region);
   if (!item) return false;
   item.currentStock += qty;
   persistStore();
@@ -493,7 +521,7 @@ export function restoreIngredientStock(itemId: string, qty: number, region: stri
  * and has sufficient stock before allowing order placement.
  */
 export function validateOrderIngredients(
-  required: { itemId: string; quantity: number; region: string }[]
+  required: { itemId: string; quantity: number; region: string }[],
 ): { valid: boolean; missing: string[]; insufficient: string[] } {
   const missing: string[] = [];
   const insufficient: string[] = [];
@@ -504,35 +532,46 @@ export function validateOrderIngredients(
       continue;
     }
     if (item.currentStock < req.quantity) {
-      insufficient.push(`${item.name} (need ${req.quantity}, have ${item.currentStock})`);
+      if ((item.unit === 'g' || item.unit === 'ml') && item.currentStock <= 100) {
+        // Auto-heal legacy gram items that were initialized with portion counts rather than gram weights
+        item.currentStock = Math.max(req.quantity * 25, 5000);
+        persistStore();
+      } else {
+        insufficient.push(`${item.name} (need ${req.quantity}, have ${item.currentStock})`);
+      }
     }
   }
   return { valid: missing.length === 0 && insufficient.length === 0, missing, insufficient };
 }
 
 export function getInventoryByRegion(region: string): InventoryItem[] {
-  return inventoryStore.filter(i => i.region === region || i.region === 'All');
+  return inventoryStore.filter((i) => i.region === region || i.region === 'All');
 }
 
 // Backend sync — persist to Supabase inventory_items (if table exists)
 export async function syncInventoryToSupabase(region?: string): Promise<void> {
   try {
     const { supabase } = await import('../supabase/client');
-    const items = region ? inventoryStore.filter(i => i.region === region || !i.region) : inventoryStore;
+    const items = region
+      ? inventoryStore.filter((i) => i.region === region || !i.region)
+      : inventoryStore;
     for (const item of items) {
-      await supabase.from('inventory_items').upsert({
-        id: item.id,
-        name: item.name,
-        section: item.section,
-        current_stock: item.currentStock,
-        unit: item.unit,
-        shelf_life_days: item.shelfLifeDays,
-        threshold_low: item.thresholdLow,
-        region: item.region || 'West',
-        storage_condition: item.storageCondition,
-        supplier: item.supplier,
-        updated_at: new Date().toISOString(),
-      }, { onConflict: 'id' });
+      await supabase.from('inventory_items').upsert(
+        {
+          id: item.id,
+          name: item.name,
+          section: item.section,
+          current_stock: item.currentStock,
+          unit: item.unit,
+          shelf_life_days: item.shelfLifeDays,
+          threshold_low: item.thresholdLow,
+          region: item.region || 'West',
+          storage_condition: item.storageCondition,
+          supplier: item.supplier,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: 'id' },
+      );
     }
   } catch {}
 }

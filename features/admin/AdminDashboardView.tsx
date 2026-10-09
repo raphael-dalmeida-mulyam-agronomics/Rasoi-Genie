@@ -1,122 +1,131 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-    Alert,
-    Modal,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  Alert,
+  AppState,
+  Modal,
+  Platform,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import { useAuth } from '../../framework/context/AuthContext';
-import { showInAppAlert, showInAppConfirm } from '../../framework/context/InAppDialogContext';
+import {
+  hideInAppDialog,
+  showInAppAlert,
+  showInAppConfirm,
+} from '../../framework/context/InAppDialogContext';
 import { validateAdminEmail } from '../../framework/firebase/authService';
 import {
-    MOCK_ORDER_IDS,
-    Order,
-    OrderStatus,
-    generateInvoiceText,
-    isOrderApproved,
-    issueRefund,
-    subscribeToOrders,
-    updateOrderStatus,
+  MOCK_ORDER_IDS,
+  Order,
+  OrderStatus,
+  generateInvoiceText,
+  isOrderApproved,
+  issueRefund,
+  subscribeToOrders,
+  updateOrderStatus,
 } from '../../framework/firebase/ordersService';
 import {
-    ALL_REGIONS,
-    AdminProfile,
-    AdminRole,
-    ChefProfile,
-    STORAGE_CENTRE_REGIONS,
-    SUPER_ADMIN_EMAIL,
-    assignAdminRegions,
-    deleteAdminProfile,
-    fetchAllAdminProfiles,
-    fetchAllChefProfiles,
-    grantChefRole,
-    resolveStorageCentre,
-    revokeChefRole
+  ALL_REGIONS,
+  AdminProfile,
+  AdminRole,
+  ChefProfile,
+  STORAGE_CENTRE_REGIONS,
+  SUPER_ADMIN_EMAIL,
+  assignAdminRegions,
+  deleteAdminProfile,
+  fetchAllAdminProfiles,
+  fetchAllChefProfiles,
+  grantChefRole,
+  resolveStorageCentre,
+  revokeChefRole,
 } from '../../framework/services/adminRbacService';
 import {
-    ChefSubmissionRecord,
-    fetchAllChefSubmissions,
-    publishChefSubmission,
-    rejectChefSubmission
+  ChefSubmissionRecord,
+  fetchAllChefSubmissions,
+  publishChefSubmission,
+  rejectChefSubmission,
 } from '../../framework/services/chefMealKitsService';
 import {
-    Coupon,
-    addCoupon,
-    deleteCoupon,
-    getCoupons,
-    toggleCouponActive,
+  Coupon,
+  addCoupon,
+  deleteCoupon,
+  getCoupons,
+  toggleCouponActive,
 } from '../../framework/services/couponsService';
 import {
-    CuisineType,
-    DietTag,
-    DishCategory,
-    MealKit,
-    RegionHub,
-    addMealKit,
-    compileMealKitTags,
-    deleteMealKit,
-    getMealKits,
-    parseCategorizedTags,
-    subscribeToMealKits,
-    syncMealKitsWithSupabase,
-    toggleMealKitTrending,
-    updateMealKit,
-    updateMealKitShelfLife,
-    updateMealKitStock
+  CuisineType,
+  DietTag,
+  DishCategory,
+  MealKit,
+  RegionHub,
+  addMealKit,
+  compileMealKitTags,
+  deleteMealKit,
+  getMealKits,
+  parseCategorizedTags,
+  purgeFillerMealKits,
+  subscribeToMealKits,
+  syncMealKitsWithSupabase,
+  toggleMealKitTrending,
+  updateMealKit,
+  updateMealKitShelfLife,
+  updateMealKitStock,
 } from '../../framework/services/mealKitsService';
 import {
-    OutOfStockAlertPayload,
-    dismissOutOfStockAlert,
-    notifyRegionalAdminsOutOfStock,
-    subscribeToOutOfStockAlerts,
-    subscribeToPendingApprovalCount
+  OutOfStockAlertPayload,
+  dismissOutOfStockAlert,
+  notifyRegionalAdminsOutOfStock,
+  subscribeToOutOfStockAlerts,
+  subscribeToPendingApprovalCount,
 } from '../../framework/services/notificationService';
 import {
-    MONTHLY_TRENDS,
-    generateRegionalCSV,
-    getCrossTabAnalytics,
-    getFilteredStateAnalytics
+  MONTHLY_TRENDS,
+  generateRegionalCSV,
+  getCrossTabAnalytics,
+  getFilteredStateAnalytics,
 } from '../../framework/services/regionalAnalyticsService';
+import { getCitiesForState, getSubRegionsForCity } from '../../framework/services/regionService';
 import {
-    getCitiesForState,
-    getSubRegionsForCity,
-} from '../../framework/services/regionService';
-import {
-    ExtendedReview,
-    getAllReviewsForModeration,
-    moderateReview,
+  ExtendedReview,
+  getAllReviewsForModeration,
+  moderateReview,
 } from '../../framework/services/reviewsService';
 import {
-    deleteMealKitFromSupabase,
-    filterMealKitsByAdminRegions,
-    saveMealKitToSupabase,
-    toggleMealKitOutOfStockStatus,
-    toggleMealKitPublishStatus,
-    toggleMealKitTrendingStatus,
-    updateMealKitShelfLifeInSupabase,
+  deleteMealKitFromSupabase,
+  filterMealKitsByAdminRegions,
+  saveMealKitToSupabase,
+  subscribeToMealKits as subscribeToMealKitsSupabase,
+  toggleMealKitOutOfStockStatus,
+  toggleMealKitPublishStatus,
+  toggleMealKitTrendingStatus,
+  updateMealKitShelfLifeInSupabase,
 } from '../../framework/services/supabaseMealKitsService';
 import {
-    approveOrderInSupabase,
-    clearAllOrdersFromSupabase,
-    fetchAllOrdersFromSupabase,
-    processOrderRefund,
-    refreshPendingApprovalCount,
-    subscribeToOrdersRealtime,
-    updateOrderStatusInSupabase,
+  approveOrderInSupabase,
+  clearAllOrdersFromSupabase,
+  fetchAllOrdersFromSupabase,
+  filterOrdersByAdminRegions,
+  processOrderRefund,
+  recordInitialOrderIds,
+  refreshPendingApprovalCount,
+  subscribeToOrders as subscribeToOrdersSupabase,
+  subscribeToOrdersRealtime,
+  updateOrderStatusInSupabase,
 } from '../../framework/services/supabaseOrdersService';
+import { RealtimeConnectionStatus } from '../../framework/services/realtimeService';
 import {
-    ManagedUser,
-    fetchLiveManagedUsers,
-    getManagedUsers,
-    subscribeToManagedUsers,
-    toggleUserAdminRole,
-    toggleUserStatus,
-    updateUserWalletBalance,
+  ManagedUser,
+  fetchLiveManagedUsers,
+  getManagedUsers,
+  subscribeToManagedUsers,
+  toggleUserAdminRole,
+  toggleUserStatus,
+  updateUserWalletBalance,
 } from '../../framework/services/userManagementService';
 import { adminIssueCredits } from '../../framework/services/walletService';
 import { useTheme } from '../../framework/theme/ThemeContext';
@@ -216,7 +225,6 @@ const ThinScrollView: React.FC<{
       </ScrollView>
       {scrollable && (
         <View
-          pointerEvents="none"
           style={{
             position: 'absolute',
             right: 2,
@@ -225,6 +233,7 @@ const ThinScrollView: React.FC<{
             height: thumbH,
             borderRadius: 1,
             backgroundColor: '#000000',
+            pointerEvents: 'none',
           }}
         />
       )}
@@ -241,6 +250,18 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
   const [orders, setOrders] = useState<Order[]>([]);
   const [selectedStatusFilter, setSelectedStatusFilter] = useState<OrderStatus | 'All'>('All');
   const [updatingOrderId, setUpdatingOrderId] = useState<string | null>(null);
+
+  // Realtime Status & Resync State
+  const [realtimeStatus, setRealtimeStatus] = useState<RealtimeConnectionStatus>('connecting');
+  const [isResyncing, setIsResyncing] = useState<boolean>(false);
+  const [recentOrderIds, setRecentOrderIds] = useState<Set<string>>(new Set());
+
+  const lastLiveTimestampRef = useRef<number>(Date.now());
+  const pendingOrderBatchRef = useRef<
+    Array<{ type: 'insert' | 'update' | 'delete'; order?: Order; orderId?: string }>
+  >([]);
+  const batchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const activeTimeoutsRef = useRef<ReturnType<typeof setTimeout>[]>([]);
 
   // Refund Modal State
   const [refundModalVisible, setRefundModalVisible] = useState(false);
@@ -269,6 +290,7 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
     'All',
   );
   const [selectedKitDishFilter, setSelectedKitDishFilter] = useState<'All' | DishCategory>('All');
+  const [sortByRecentlyCreated, setSortByRecentlyCreated] = useState<boolean>(false);
   const [openDropdown, setOpenDropdown] = useState<'diet' | 'cuisine' | 'dish' | null>(null);
   const [kitModalVisible, setKitModalVisible] = useState(false);
   const [editingKit, setEditingKit] = useState<MealKit | null>(null);
@@ -325,54 +347,58 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
   const availableSubRegions = selectedCity ? getSubRegionsForCity(selectedCity) : [];
 
   const filteredAnalyticsCities = analyticsCitySearch
-    ? availableCities.filter((c: string) => c.toLowerCase().includes(analyticsCitySearch.toLowerCase()))
+    ? availableCities.filter((c: string) =>
+        c.toLowerCase().includes(analyticsCitySearch.toLowerCase()),
+      )
     : availableCities;
 
-    const stateInputRef = useRef<TextInput>(null);
-const cityInputRef = useRef<TextInput>(null);
+  const stateInputRef = useRef<TextInput>(null);
+  const cityInputRef = useRef<TextInput>(null);
 
-// Taller, fully tappable field wrapper (the whole box is the touch target)
-const analyticsFieldStyle = (open: boolean, disabled = false) => ({
-  flexDirection: 'row' as const,
-  alignItems: 'center' as const,
-  borderWidth: 1.5,
-  borderColor: open ? colors.primary : colors.borderLight,
-  borderRadius: radii.lg,
-  backgroundColor: disabled ? colors.bgSubtle : colors.bgSurface,
-  paddingHorizontal: 12,
-  height: 52,
-  opacity: disabled ? 0.6 : 1,
-});
+  // Taller, fully tappable field wrapper (the whole box is the touch target)
+  const analyticsFieldStyle = (open: boolean, disabled = false) => ({
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    borderWidth: 1.5,
+    borderColor: open ? colors.primary : colors.borderLight,
+    borderRadius: radii.lg,
+    backgroundColor: disabled ? colors.bgSubtle : colors.bgSurface,
+    paddingHorizontal: 12,
+    height: 52,
+    opacity: disabled ? 0.6 : 1,
+  });
 
-const analyticsLabelStyle = {
-  fontSize: 11,
-  fontWeight: '700' as const,
-  color: colors.textMuted,
-  marginBottom: 4,
-  textTransform: 'uppercase' as const,
-  letterSpacing: 0.5,
-};
+  const analyticsLabelStyle = {
+    fontSize: 11,
+    fontWeight: '700' as const,
+    color: colors.textMuted,
+    marginBottom: 4,
+    textTransform: 'uppercase' as const,
+    letterSpacing: 0.5,
+  };
 
-const analyticsMenuStyle = {
-  position: 'absolute' as const,
-  top: '100%' as const,
-  left: 0,
-  right: 0,
-  marginTop: 2,
-  borderWidth: 1,
-  borderColor: colors.borderLight,
-  borderRadius: radii.lg,
-  backgroundColor: colors.bgSurface,
-  maxHeight: 200,
-  overflow: 'hidden' as const,
-  ...shadows.card,
-  zIndex: 99999,
-  elevation: 99999,
-};
+  const analyticsMenuStyle = {
+    position: 'absolute' as const,
+    top: '100%' as const,
+    left: 0,
+    right: 0,
+    marginTop: 2,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+    borderRadius: radii.lg,
+    backgroundColor: colors.bgSurface,
+    maxHeight: 200,
+    overflow: 'hidden' as const,
+    ...shadows.card,
+    zIndex: 99999,
+    elevation: 99999,
+  };
 
   // Inventory & Shelf Life State
   const [outOfStockAlerts, setOutOfStockAlerts] = useState<OutOfStockAlertPayload[]>([]);
-  const [inventoryFilter, setInventoryFilter] = useState<'all' | 'low' | 'out' | 'short_shelf'>('all');
+  const [inventoryFilter, setInventoryFilter] = useState<'all' | 'low' | 'out' | 'short_shelf'>(
+    'all',
+  );
 
   // Coupons State
   const [coupons, setCoupons] = useState<Coupon[]>(getCoupons());
@@ -390,8 +416,12 @@ const analyticsMenuStyle = {
   const [sendCreditsModalVisible, setSendCreditsModalVisible] = useState(false);
   const [selectedCreditCustomer, setSelectedCreditCustomer] = useState<ManagedUser | null>(null);
   const [creditSendAmount, setCreditSendAmount] = useState('150');
-  const [creditSendSource, setCreditSendSource] = useState<'PROMOTION' | 'ADMIN_ADJUSTMENT' | 'LOYALTY'>('PROMOTION');
-  const [creditSendDescription, setCreditSendDescription] = useState('Customer appreciation promotion');
+  const [creditSendSource, setCreditSendSource] = useState<
+    'PROMOTION' | 'ADMIN_ADJUSTMENT' | 'LOYALTY'
+  >('PROMOTION');
+  const [creditSendDescription, setCreditSendDescription] = useState(
+    'Customer appreciation promotion',
+  );
   const [isSubmittingCreditSend, setIsSubmittingCreditSend] = useState(false);
 
   const reloadLiveUsers = async () => {
@@ -441,7 +471,7 @@ const analyticsMenuStyle = {
 
       if (res.success) {
         const newBalance =
-          res.data?.newBalance ?? ((selectedCreditCustomer.walletBalance || 0) + amount);
+          res.data?.newBalance ?? (selectedCreditCustomer.walletBalance || 0) + amount;
 
         // Immediate responsive UI update
         updateUserWalletBalance(selectedCreditCustomer.id, newBalance);
@@ -524,14 +554,96 @@ const analyticsMenuStyle = {
     }
   };
 
+  const scheduleOrderBatch = () => {
+    if (batchTimerRef.current) return;
+    batchTimerRef.current = setTimeout(() => {
+      batchTimerRef.current = null;
+      const batch = [...pendingOrderBatchRef.current];
+      pendingOrderBatchRef.current = [];
+      if (batch.length === 0) return;
+
+      setOrders((prev) => {
+        let nextOrders = [...prev];
+        for (const ev of batch) {
+          if (ev.type === 'insert' && ev.order) {
+            const idx = nextOrders.findIndex((o) => o.id === ev.order!.id);
+            if (idx !== -1) {
+              nextOrders[idx] = { ...nextOrders[idx], ...ev.order };
+            } else {
+              nextOrders = [ev.order, ...nextOrders];
+              const newId = ev.order.id;
+              setRecentOrderIds((curr) => new Set([...curr, newId]));
+              const t = setTimeout(() => {
+                setRecentOrderIds((curr) => {
+                  const updated = new Set(curr);
+                  updated.delete(newId);
+                  return updated;
+                });
+              }, 6000);
+              activeTimeoutsRef.current.push(t);
+            }
+          } else if (ev.type === 'update' && ev.order) {
+            const idx = nextOrders.findIndex((o) => o.id === ev.order!.id);
+            if (idx !== -1) {
+              nextOrders[idx] = { ...nextOrders[idx], ...ev.order };
+            } else {
+              nextOrders = [ev.order, ...nextOrders];
+            }
+          } else if (ev.type === 'delete' && ev.orderId) {
+            nextOrders = nextOrders.filter((o) => o.id !== ev.orderId);
+          }
+        }
+        return nextOrders;
+      });
+    }, 100);
+  };
+
   const reloadSupabaseOrders = async () => {
     try {
       const sbOrders = await fetchAllOrdersFromSupabase();
       if (sbOrders) {
-        setOrders(sbOrders.filter((o) => !MOCK_ORDER_IDS.has(o.id)));
+        const filtered = sbOrders.filter((o) => !MOCK_ORDER_IDS.has(o.id));
+        recordInitialOrderIds(filtered.map((o) => o.id));
+        setOrders(filtered);
+        setOrderToCancel((currentCancelId) => {
+          if (currentCancelId) {
+            const match = filtered.find((o) => o.id === currentCancelId);
+            if (match && match.status === 'Cancelled') {
+              setCancelOrderModalVisible(false);
+              return null;
+            }
+          }
+          return currentCancelId;
+        });
+        setInspectOrder((currentInspect) => {
+          if (currentInspect) {
+            const match = filtered.find((o) => o.id === currentInspect.id);
+            if (match && match.status === 'Cancelled') {
+              setInspectModalVisible(false);
+              return null;
+            }
+          }
+          return currentInspect;
+        });
       }
     } catch (err) {
       console.warn('[AdminDashboard] Error loading Supabase orders:', err);
+    }
+  };
+
+  const handleFullResync = async () => {
+    setIsResyncing(true);
+    try {
+      await Promise.all([
+        reloadSupabaseOrders(),
+        refreshPendingApprovalCount(),
+        syncMealKitsWithSupabase(),
+        reloadLiveUsers(),
+      ]);
+    } catch (err) {
+      console.warn('[AdminDashboard] Error during full resync:', err);
+    } finally {
+      setIsResyncing(false);
     }
   };
 
@@ -543,16 +655,45 @@ const analyticsMenuStyle = {
     syncMealKitsWithSupabase();
     reloadAdminProfiles();
     reloadChefData();
-
     reloadLiveUsers();
 
     const unsubscribeUsers = subscribeToManagedUsers(() => {
       reloadLiveUsers();
     });
 
-    const unsubscribeRealtime = subscribeToOrdersRealtime(() => {
-      reloadSupabaseOrders();
-      refreshPendingApprovalCount();
+    const unsubscribeOrdersSb = subscribeToOrdersSupabase({
+      onInsert: (order) => {
+        pendingOrderBatchRef.current.push({ type: 'insert', order });
+        scheduleOrderBatch();
+      },
+      onUpdate: (order) => {
+        pendingOrderBatchRef.current.push({ type: 'update', order });
+        scheduleOrderBatch();
+      },
+      onDelete: (orderId) => {
+        pendingOrderBatchRef.current.push({ type: 'delete', orderId });
+        scheduleOrderBatch();
+      },
+      onStatusChange: (status) => {
+        setRealtimeStatus(status);
+        if (status === 'live') {
+          lastLiveTimestampRef.current = Date.now();
+        }
+      },
+      onResync: () => {
+        handleFullResync();
+      },
+    });
+
+    const unsubscribeMealKitsSb = subscribeToMealKitsSupabase({
+      onStatusChange: (status) => {
+        if (status === 'live') {
+          lastLiveTimestampRef.current = Date.now();
+        }
+      },
+      onResync: () => {
+        syncMealKitsWithSupabase();
+      },
     });
 
     const unsubscribeCount = subscribeToPendingApprovalCount((cnt) => {
@@ -560,8 +701,11 @@ const analyticsMenuStyle = {
     });
 
     const unsubscribeFb = subscribeToOrders((updatedOrders) => {
-      setOrders(updatedOrders.filter((o) => !MOCK_ORDER_IDS.has(o.id)));
+      const filtered = updatedOrders.filter((o) => !MOCK_ORDER_IDS.has(o.id));
+      setOrders(filtered);
     });
+
+    purgeFillerMealKits();
 
     const unsubscribeKits = subscribeToMealKits((updatedKits) => {
       setKits(updatedKits);
@@ -581,26 +725,61 @@ const analyticsMenuStyle = {
       window.addEventListener('storage', handleStorageChange);
     }
 
-    // Poll users + orders every 10s to catch new sign-ups discovered via
+    // AppState listener (React Native foreground resync)
+    const appStateSub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') {
+        handleFullResync();
+      }
+    });
+
+    // Web visibilitychange listener (Browser tab active resync)
+    const handleVisibilityChange = () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        handleFullResync();
+      }
+    };
+    if (typeof document !== 'undefined' && document.addEventListener) {
+      document.addEventListener('visibilitychange', handleVisibilityChange);
+    }
+
+    // Poll users every 10s to catch new sign-ups discovered via
     // Firestore/orders that don't trigger the Supabase user_profiles channel.
     const usersInterval = setInterval(() => {
       reloadLiveUsers();
     }, 10000);
 
-    const ordersInterval = setInterval(() => {
-      reloadSupabaseOrders();
-      refreshPendingApprovalCount();
-    }, 15000);
+    // Fallback polling: if channel is not live for > 60s, poll every 30s until it recovers
+    const fallbackPollingInterval = setInterval(() => {
+      const timeSinceLive = Date.now() - lastLiveTimestampRef.current;
+      if (timeSinceLive > 60000) {
+        console.warn('[AdminDashboard] Channel offline > 60s, performing fallback 30s poll');
+        reloadSupabaseOrders();
+        syncMealKitsWithSupabase();
+      }
+    }, 30000);
 
     return () => {
-      unsubscribeRealtime();
+      unsubscribeOrdersSb();
+      unsubscribeMealKitsSb();
       unsubscribeCount();
       unsubscribeFb();
       unsubscribeKits();
       unsubscribeOos();
       unsubscribeUsers();
+      appStateSub.remove();
       clearInterval(usersInterval);
-      clearInterval(ordersInterval);
+      clearInterval(fallbackPollingInterval);
+      if (batchTimerRef.current) {
+        clearTimeout(batchTimerRef.current);
+        batchTimerRef.current = null;
+      }
+      for (const t of activeTimeoutsRef.current) {
+        clearTimeout(t);
+      }
+      activeTimeoutsRef.current = [];
+      if (typeof document !== 'undefined' && document.removeEventListener) {
+        document.removeEventListener('visibilitychange', handleVisibilityChange);
+      }
       if (typeof window !== 'undefined' && window.removeEventListener) {
         window.removeEventListener('storage', handleStorageChange);
       }
@@ -639,6 +818,15 @@ const analyticsMenuStyle = {
   const handleConfirmCancelOrder = async () => {
     if (!orderToCancel) return;
     const targetId = orderToCancel;
+    const reason = cancelReason || 'Cancelled by Admin';
+
+    // Immediately dismiss all popups/modals asking whether the order should be accepted or cancelled
+    setCancelOrderModalVisible(false);
+    setOrderToCancel(null);
+    setInspectModalVisible(false);
+    setInspectOrder(null);
+    hideInAppDialog();
+
     setUpdatingOrderId(targetId);
     setOrders((prevOrders) =>
       prevOrders.map((o) =>
@@ -647,25 +835,19 @@ const analyticsMenuStyle = {
               ...o,
               status: 'Cancelled',
               isApproved: false,
-              cancellationReason: cancelReason,
-              adminNotes: cancelReason,
+              cancellationReason: reason,
+              adminNotes: reason,
             }
           : o,
       ),
     );
     try {
-      await updateOrderStatusInSupabase(targetId, 'Cancelled', cancelReason);
-      await updateOrderStatus(targetId, 'Cancelled', cancelReason);
+      await updateOrderStatusInSupabase(targetId, 'Cancelled', reason);
+      await updateOrderStatus(targetId, 'Cancelled', reason);
       await reloadSupabaseOrders();
       await refreshPendingApprovalCount();
-      setCancelOrderModalVisible(false);
-      setOrderToCancel(null);
-      showInAppAlert(
-        'Order Cancelled',
-        `Order ${targetId} cancelled. Inventory stock has been automatically reverted to pre-order levels.`,
-      );
     } catch (err: any) {
-      showInAppAlert('Error', err?.message || 'Could not cancel order.');
+      console.warn('[AdminDashboard] Error cancelling order:', err);
     } finally {
       setUpdatingOrderId(null);
     }
@@ -831,16 +1013,19 @@ const analyticsMenuStyle = {
     if (!kitToDelete) return;
     const targetKit = kitToDelete;
     setIsDeletingKit(true);
+
+    // Immediately dismiss delete confirmation modal and clear selection
+    setDeleteModalVisible(false);
+    setKitToDelete(null);
+
+    // Immediately delete from local state for instant UI update
+    deleteMealKit(targetKit.id);
+    setKits(getMealKits());
+
     try {
-      deleteMealKit(targetKit.id);
       await deleteMealKitFromSupabase(targetKit.id);
-      await toggleMealKitPublishStatus(targetKit.id, false);
-      setKits(getMealKits());
-      setDeleteModalVisible(false);
-      setKitToDelete(null);
-      Alert.alert('Kit Deleted', `${targetKit.name} was successfully deleted.`);
     } catch (err: any) {
-      Alert.alert('Error', err?.message || 'Could not delete meal kit.');
+      console.warn('[Admin] Error deleting meal kit from Supabase:', err);
     } finally {
       setIsDeletingKit(false);
     }
@@ -871,7 +1056,7 @@ const analyticsMenuStyle = {
   }, [kits, assignedRegions, isSuperAdmin]);
 
   const filteredKits = useMemo(() => {
-    return scopedKits.filter((kit) => {
+    const filtered = scopedKits.filter((kit) => {
       // 0. Super Admin Region Hub view filter
       if (isSuperAdmin && superAdminRegionFilter !== 'All') {
         const matchesHub =
@@ -945,6 +1130,35 @@ const analyticsMenuStyle = {
 
       return true;
     });
+
+    if (sortByRecentlyCreated) {
+      return [...filtered].sort((a, b) => {
+        const getTime = (k: MealKit): number => {
+          if (k.createdAt) {
+            const t = new Date(k.createdAt).getTime();
+            if (!isNaN(t)) return t;
+          }
+          if (k.submittedAt) {
+            const t = new Date(k.submittedAt).getTime();
+            if (!isNaN(t)) return t;
+          }
+          if (k.updatedAt) {
+            const t = new Date(k.updatedAt).getTime();
+            if (!isNaN(t)) return t;
+          }
+          const matchNum = k.id.match(/\d+/g);
+          if (matchNum && matchNum.length > 0) {
+            const lastNum = parseInt(matchNum[matchNum.length - 1]!, 10);
+            if (lastNum > 1000000000) return lastNum;
+            return lastNum;
+          }
+          return 0;
+        };
+        return getTime(b) - getTime(a);
+      });
+    }
+
+    return filtered;
   }, [
     scopedKits,
     isSuperAdmin,
@@ -953,6 +1167,7 @@ const analyticsMenuStyle = {
     selectedKitDietFilter,
     selectedKitCuisineFilter,
     selectedKitDishFilter,
+    sortByRecentlyCreated,
   ]);
 
   // Regional Analytics Scope: Regional admins ONLY see statistics for their assigned regions. Super admin sees all.
@@ -992,7 +1207,11 @@ const analyticsMenuStyle = {
 
   const handleSaveAdmin = async () => {
     const emailLower = adminFormEmail.trim().toLowerCase();
-    if (!emailLower || !emailLower.endsWith('@mulyam.in') || emailLower === 'raphdesantos@gmail.com') {
+    if (
+      !emailLower ||
+      !emailLower.endsWith('@mulyam.in') ||
+      emailLower === 'raphdesantos@gmail.com'
+    ) {
       showInAppAlert(
         'Invalid Domain',
         'Staff Admin privileges can strictly only be granted to email addresses ending with @mulyam.in.',
@@ -1055,14 +1274,22 @@ const analyticsMenuStyle = {
     if (selectedKitDietFilter !== 'All') count++;
     if (selectedKitCuisineFilter !== 'All') count++;
     if (selectedKitDishFilter !== 'All') count++;
+    if (sortByRecentlyCreated) count++;
     return count;
-  }, [kitSearchQuery, selectedKitDietFilter, selectedKitCuisineFilter, selectedKitDishFilter]);
+  }, [
+    kitSearchQuery,
+    selectedKitDietFilter,
+    selectedKitCuisineFilter,
+    selectedKitDishFilter,
+    sortByRecentlyCreated,
+  ]);
 
   const handleClearKitFilters = () => {
     setKitSearchQuery('');
     setSelectedKitDietFilter('All');
     setSelectedKitCuisineFilter('All');
     setSelectedKitDishFilter('All');
+    setSortByRecentlyCreated(false);
     setOpenDropdown(null);
   };
 
@@ -1085,8 +1312,17 @@ const analyticsMenuStyle = {
     }
   };
 
+  const scopedOrders = useMemo(() => {
+    return filterOrdersByAdminRegions(orders, assignedRegions, isSuperAdmin);
+  }, [orders, assignedRegions, isSuperAdmin]);
+
+  const effectivePendingApprovalCount = useMemo(() => {
+    if (isSuperAdmin) return pendingApprovalCount;
+    return scopedOrders.filter((o) => o.status === 'Placed' && !o.isApproved).length;
+  }, [isSuperAdmin, pendingApprovalCount, scopedOrders]);
+
   const filteredOrders = useMemo(() => {
-    const cleanOrders = orders
+    const cleanOrders = scopedOrders
       .filter((o) => !MOCK_ORDER_IDS.has(o.id) && o.id.startsWith('ORD-'))
       .map((o) => {
         if ((isOrderApproved(o.id) || o.isApproved) && o.status === 'Placed') {
@@ -1109,7 +1345,7 @@ const analyticsMenuStyle = {
 
     if (selectedStatusFilter === 'All') return deduped;
     return deduped.filter((o) => o.status === selectedStatusFilter);
-  }, [orders, selectedStatusFilter]);
+  }, [scopedOrders, selectedStatusFilter]);
 
   const crossTabResult = useMemo(() => {
     return getCrossTabAnalytics({
@@ -1166,6 +1402,62 @@ const analyticsMenuStyle = {
         </View>
 
         <View style={styles.headerRightActions}>
+          {/* Supabase Realtime Connection Indicator Pill */}
+          <View
+            style={[
+              styles.connectionPill,
+              {
+                backgroundColor:
+                  realtimeStatus === 'live'
+                    ? '#ECFDF5'
+                    : realtimeStatus === 'reconnecting' || realtimeStatus === 'connecting'
+                      ? '#FFFBEB'
+                      : '#F3F4F6',
+                borderColor:
+                  realtimeStatus === 'live'
+                    ? '#10B98160'
+                    : realtimeStatus === 'reconnecting' || realtimeStatus === 'connecting'
+                      ? '#F59E0B60'
+                      : '#9CA3AF60',
+              },
+            ]}
+          >
+            <View
+              style={[
+                styles.connectionDot,
+                {
+                  backgroundColor:
+                    realtimeStatus === 'live'
+                      ? '#10B981'
+                      : realtimeStatus === 'reconnecting' || realtimeStatus === 'connecting'
+                        ? '#F59E0B'
+                        : '#9CA3AF',
+                },
+              ]}
+            />
+            <Text
+              style={[
+                styles.connectionText,
+                {
+                  color:
+                    realtimeStatus === 'live'
+                      ? '#047857'
+                      : realtimeStatus === 'reconnecting' || realtimeStatus === 'connecting'
+                        ? '#B45309'
+                        : '#4B5563',
+                },
+              ]}
+            >
+              {realtimeStatus === 'live'
+                ? 'Live'
+                : realtimeStatus === 'reconnecting'
+                  ? 'Reconnecting'
+                  : realtimeStatus === 'connecting'
+                    ? 'Connecting'
+                    : 'Offline'}
+            </Text>
+          </View>
+
           <View
             style={[
               styles.adminPill,
@@ -1174,20 +1466,11 @@ const analyticsMenuStyle = {
                 borderColor: isSuperAdmin ? '#F59E0B' : colors.primary + '40',
                 flexDirection: 'row',
                 alignItems: 'center',
-                gap: 6,
                 paddingHorizontal: 10,
                 paddingVertical: 5,
               },
             ]}
           >
-            <View
-              style={{
-                width: 7,
-                height: 7,
-                borderRadius: 4,
-                backgroundColor: isSuperAdmin ? '#D97706' : colors.primary,
-              }}
-            />
             <Text
               style={[
                 styles.adminPillText,
@@ -1217,8 +1500,8 @@ const analyticsMenuStyle = {
       <AdminNavigationMenu
         activeTab={activeTab}
         onTabChange={setActiveTab}
-        ordersCount={orders.length}
-        pendingApprovalCount={pendingApprovalCount}
+        ordersCount={scopedOrders.length}
+        pendingApprovalCount={effectivePendingApprovalCount}
         kitsCount={scopedKits.length}
         usersCount={users.length}
         customersCount={users.filter((u) => u.role !== 'admin').length}
@@ -1231,7 +1514,11 @@ const analyticsMenuStyle = {
         reviewsCount={moderationReviews.length}
       />
 
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={isResyncing} onRefresh={handleFullResync} />}
+      >
         {/* MODULE 0: OVERVIEW HOME */}
         {activeTab === 'overview' && (
           <View>
@@ -1557,13 +1844,13 @@ const analyticsMenuStyle = {
             >
               <View>
                 <Text style={[styles.moduleTitle, { color: colors.textPrimary }]}>
-                  Customer Orders ({orders.length})
+                  Customer Orders ({scopedOrders.length})
                 </Text>
                 <Text style={[styles.moduleSubtitle, { color: colors.textSecondary }]}>
                   Live kitchen order flow & fulfillment
                 </Text>
               </View>
-              {orders.length > 0 && (
+              {scopedOrders.length > 0 && (
                 <Button
                   title={isClearingOrders ? 'Clearing...' : 'Clear All Orders'}
                   variant="outline"
@@ -1577,7 +1864,7 @@ const analyticsMenuStyle = {
             </View>
 
             {/* Realtime Pending Approval Alert Banner */}
-            {pendingApprovalCount > 0 && (
+            {effectivePendingApprovalCount > 0 && (
               <View
                 style={{
                   backgroundColor: '#FEF2F2',
@@ -1597,7 +1884,7 @@ const analyticsMenuStyle = {
                   >
                     <Icon name="alert" size={16} color="#DC2626" />
                     <Text style={{ color: '#991B1B', fontWeight: '800', fontSize: 13 }}>
-                      {pendingApprovalCount} New Order(s) Awaiting Approval!
+                      {effectivePendingApprovalCount} New Order(s) Awaiting Approval!
                     </Text>
                   </View>
                   <Text style={{ color: '#B91C1C', fontSize: 11, marginTop: 2 }}>
@@ -1710,6 +1997,11 @@ const analyticsMenuStyle = {
                           <Text style={[styles.adminOrderId, { color: colors.textPrimary }]}>
                             {order.id}
                           </Text>
+                          {recentOrderIds.has(order.id) && (
+                            <View style={styles.newOrderTag}>
+                              <Text style={styles.newOrderTagText}>NEW</Text>
+                            </View>
+                          )}
                           <Text style={{ fontSize: 11, color: colors.primary, fontWeight: '700' }}>
                             View Details
                           </Text>
@@ -2527,17 +2819,96 @@ const analyticsMenuStyle = {
                     </View>
                   )}
                 </View>
+
+                {/* 4. Most Recently Created Filter Button */}
+                <View
+                  style={[
+                    styles.dropdownContainer,
+                    {
+                      zIndex: 1,
+                      elevation: 1,
+                    },
+                  ]}
+                >
+                  <Text style={[styles.dropdownLabel, { color: colors.textSecondary }]}>
+                    SORT / RECENCY
+                  </Text>
+                  <TouchableOpacity
+                    testID="admin-filter-recently-created-btn"
+                    style={[
+                      styles.dropdownTrigger,
+                      {
+                        backgroundColor: sortByRecentlyCreated
+                          ? colors.primary + '18'
+                          : colors.bgSubtle,
+                        borderColor: sortByRecentlyCreated ? colors.primary : colors.border,
+                        borderRadius: radii.md,
+                      },
+                    ]}
+                    onPress={() => setSortByRecentlyCreated((prev) => !prev)}
+                    activeOpacity={0.8}
+                  >
+                    <View style={styles.dropdownTriggerContent}>
+                      <Icon
+                        name="time"
+                        size={14}
+                        color={sortByRecentlyCreated ? colors.primary : colors.textSecondary}
+                      />
+                      <Text
+                        style={[
+                          styles.dropdownTriggerText,
+                          {
+                            color: sortByRecentlyCreated ? colors.primary : colors.textPrimary,
+                            fontWeight: sortByRecentlyCreated ? '700' : '500',
+                          },
+                        ]}
+                        numberOfLines={1}
+                      >
+                        Most Recent
+                      </Text>
+                    </View>
+                    <Icon
+                      name={sortByRecentlyCreated ? 'check' : 'filter'}
+                      size={14}
+                      color={sortByRecentlyCreated ? colors.primary : colors.textMuted}
+                    />
+                  </TouchableOpacity>
+                </View>
               </View>
 
               {/* Active Filter Counter & Quick Reset Bar */}
               <View style={[styles.filterStatsBar, { borderTopColor: colors.borderLight }]}>
-                <Text style={[styles.filterStatsText, { color: colors.textSecondary }]}>
-                  Showing{' '}
-                  <Text style={{ fontWeight: '800', color: colors.textPrimary }}>
-                    {filteredKits.length}
-                  </Text>{' '}
-                  of {kits.length} meal kits
-                </Text>
+                <View
+                  style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}
+                >
+                  <Text style={[styles.filterStatsText, { color: colors.textSecondary }]}>
+                    Showing{' '}
+                    <Text style={{ fontWeight: '800', color: colors.textPrimary }}>
+                      {filteredKits.length}
+                    </Text>{' '}
+                    of {kits.length} meal kits
+                  </Text>
+                  {sortByRecentlyCreated && (
+                    <View
+                      style={{
+                        backgroundColor: colors.primary + '18',
+                        paddingHorizontal: 8,
+                        paddingVertical: 2,
+                        borderRadius: radii.pill,
+                        borderWidth: 1,
+                        borderColor: colors.primary + '35',
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        gap: 4,
+                      }}
+                    >
+                      <Icon name="time" size={11} color={colors.primary} />
+                      <Text style={{ fontSize: 11, fontWeight: '700', color: colors.primary }}>
+                        Most Recent First
+                      </Text>
+                    </View>
+                  )}
+                </View>
                 {activeKitFilterCount > 0 && (
                   <TouchableOpacity style={styles.clearAllBtn} onPress={handleClearKitFilters}>
                     <Icon name="close-circle" size={14} color="#DC2626" />
@@ -2623,12 +2994,20 @@ const analyticsMenuStyle = {
                   >
                     <View style={styles.kitCardTop}>
                       <View style={{ flex: 1 }}>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <View
+                          style={{
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                          }}
+                        >
                           <Text style={[styles.kitCardName, { color: colors.textPrimary }]}>
                             {kit.name}
                           </Text>
                           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                            <Text style={{ fontSize: 11, fontWeight: '700', color: colors.primary }}>
+                            <Text
+                              style={{ fontSize: 11, fontWeight: '700', color: colors.primary }}
+                            >
                               Edit Details
                             </Text>
                             <Icon name="chevron-right" size={12} color={colors.primary} />
@@ -2673,6 +3052,13 @@ const analyticsMenuStyle = {
                         </Text>
                       </View>
                       <View style={{ alignItems: 'flex-end', gap: 4, marginLeft: 8 }}>
+                        {kit.createdAt ? (
+                          <Badge
+                            label={`Added ${new Date(kit.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`}
+                            variant="neutral"
+                            size="sm"
+                          />
+                        ) : null}
                         {kit.isTrending ? (
                           <Badge label="TRENDING" variant="warning" size="sm" />
                         ) : null}
@@ -2732,7 +3118,6 @@ const analyticsMenuStyle = {
           </View>
         )}
 
-
         {/* MODULE 3: INVENTORY & STOCK MANAGEMENT */}
         {activeTab === 'inventory' && <InventoryManagementView />}
 
@@ -2741,20 +3126,27 @@ const analyticsMenuStyle = {
           <View>
             <View style={styles.moduleHeaderRow}>
               <View style={{ marginBottom: 14 }}>
-              <Text style={[styles.moduleTitle, { color: colors.textPrimary }]}>
-                {isSuperAdmin
-                  ? 'Pan-India Regional Analytics (Super Admin View)'
-                  : 'Regional Analytics (' + (assignedRegions && assignedRegions.length > 0 ? assignedRegions.map(formatRegionName).join(', ') : 'Pune City (Pune)') + ')'}
-              </Text>
-              <Text style={[styles.moduleSubtitle, { color: colors.textSecondary }]}>
-                {isSuperAdmin
-                  ? 'Complete sales data, growth metrics & dietary split across all India operating regions'
-                  : 'State & fulfillment metrics strictly restricted to your assigned jurisdiction: ' + (assignedRegions && assignedRegions.length > 0 ? assignedRegions.map(formatRegionName).join(', ') : 'Pune City (Pune)')}
-              </Text>
-              <View style={{ marginTop: 10, alignSelf: 'flex-start' }}>
-                <Button title="Export CSV" size="sm" onPress={handleExportCSV} />
+                <Text style={[styles.moduleTitle, { color: colors.textPrimary }]}>
+                  {isSuperAdmin
+                    ? 'Pan-India Regional Analytics (Super Admin View)'
+                    : 'Regional Analytics (' +
+                      (assignedRegions && assignedRegions.length > 0
+                        ? assignedRegions.map(formatRegionName).join(', ')
+                        : 'Pune City (Pune)') +
+                      ')'}
+                </Text>
+                <Text style={[styles.moduleSubtitle, { color: colors.textSecondary }]}>
+                  {isSuperAdmin
+                    ? 'Complete sales data, growth metrics & dietary split across all India operating regions'
+                    : 'State & fulfillment metrics strictly restricted to your assigned jurisdiction: ' +
+                      (assignedRegions && assignedRegions.length > 0
+                        ? assignedRegions.map(formatRegionName).join(', ')
+                        : 'Pune City (Pune)')}
+                </Text>
+                <View style={{ marginTop: 10, alignSelf: 'flex-start' }}>
+                  <Button title="Export CSV" size="sm" onPress={handleExportCSV} />
+                </View>
               </View>
-            </View>
             </View>
 
             {/* RLS Status Badge Banner */}
@@ -2786,7 +3178,10 @@ const analyticsMenuStyle = {
                 >
                   {isSuperAdmin
                     ? 'Super Admin: Full visibility across North, South, West & East Regions'
-                    : 'Row Level Security (RLS) Active: Showing statistics only for ' + (assignedRegions && assignedRegions.length > 0 ? assignedRegions.map(formatRegionName).join(', ') : 'Pune City (Pune)')}
+                    : 'Row Level Security (RLS) Active: Showing statistics only for ' +
+                      (assignedRegions && assignedRegions.length > 0
+                        ? assignedRegions.map(formatRegionName).join(', ')
+                        : 'Pune City (Pune)')}
                 </Text>
               </View>
               <Badge
@@ -2796,175 +3191,267 @@ const analyticsMenuStyle = {
               />
             </View>
 
-          {/* Region Filters: State | City | Area in one horizontal row */}
-          <View style={{ flexDirection: 'row', gap: 10, marginBottom: 14, zIndex: 1000, elevation: 1000 }}>
-            {/* STATE */}
-            <View style={{ flex: 1, position: 'relative', zIndex: showAnalyticsStateDD ? 3000 : 1 }}>
-              <Text style={analyticsLabelStyle}>State</Text>
-              <TouchableOpacity
-                activeOpacity={1}
-                style={analyticsFieldStyle(showAnalyticsStateDD)}
-                onPress={() => {
-                  setShowAnalyticsStateDD(true);
-                  stateInputRef.current?.focus();
-                }}
+            {/* Region Filters: State | City | Area in one horizontal row */}
+            <View
+              style={{
+                flexDirection: 'row',
+                gap: 10,
+                marginBottom: 14,
+                zIndex: 1000,
+                elevation: 1000,
+              }}
+            >
+              {/* STATE */}
+              <View
+                style={{ flex: 1, position: 'relative', zIndex: showAnalyticsStateDD ? 3000 : 1 }}
               >
-                <TextInput
-                  ref={stateInputRef}
-                  style={{ flex: 1, height: '100%', fontSize: 14, color: colors.textPrimary, paddingVertical: 0 }}
-                  placeholder="Search state..."
-                  placeholderTextColor={colors.textMuted}
-                  value={selectedState || analyticsStateSearch}
-                  onChangeText={(t) => {
-                    setAnalyticsStateSearch(t);
-                    setSelectedState('');
-                    setSelectedCity('');
-                    setSelectedSubRegion('');
-                    if (t) setShowAnalyticsStateDD(true);
+                <Text style={analyticsLabelStyle}>State</Text>
+                <TouchableOpacity
+                  activeOpacity={1}
+                  style={analyticsFieldStyle(showAnalyticsStateDD)}
+                  onPress={() => {
+                    setShowAnalyticsStateDD(true);
+                    stateInputRef.current?.focus();
                   }}
-                  onFocus={() => setShowAnalyticsStateDD(true)}
-                  onBlur={() => setTimeout(() => setShowAnalyticsStateDD(false), 200)}
-                />
-              </TouchableOpacity>
+                >
+                  <TextInput
+                    ref={stateInputRef}
+                    style={{
+                      flex: 1,
+                      height: '100%',
+                      fontSize: 14,
+                      color: colors.textPrimary,
+                      paddingVertical: 0,
+                    }}
+                    placeholder="Search state..."
+                    placeholderTextColor={colors.textMuted}
+                    value={selectedState || analyticsStateSearch}
+                    onChangeText={(t) => {
+                      setAnalyticsStateSearch(t);
+                      setSelectedState('');
+                      setSelectedCity('');
+                      setSelectedSubRegion('');
+                      if (t) setShowAnalyticsStateDD(true);
+                    }}
+                    onFocus={() => setShowAnalyticsStateDD(true)}
+                    onBlur={() => setTimeout(() => setShowAnalyticsStateDD(false), 200)}
+                  />
+                </TouchableOpacity>
 
-              {showAnalyticsStateDD && (() => {
-                const filtered = analyticsStateSearch
-                  ? accessibleStates.filter((s) => s.stateName.toLowerCase().includes(analyticsStateSearch.toLowerCase()))
-                  : accessibleStates;
-                return filtered.length > 0 ? (
+                {showAnalyticsStateDD &&
+                  (() => {
+                    const filtered = analyticsStateSearch
+                      ? accessibleStates.filter((s) =>
+                          s.stateName.toLowerCase().includes(analyticsStateSearch.toLowerCase()),
+                        )
+                      : accessibleStates;
+                    return filtered.length > 0 ? (
+                      <View style={analyticsMenuStyle}>
+                        <ThinScrollView maxHeight={200} keyboardShouldPersistTaps="handled">
+                          {filtered.map((st) => (
+                            <TouchableOpacity
+                              key={st.stateCode}
+                              style={{
+                                paddingVertical: 12,
+                                paddingHorizontal: 14,
+                                backgroundColor:
+                                  selectedState === st.stateName
+                                    ? colors.primaryLight
+                                    : 'transparent',
+                              }}
+                              onPress={() => {
+                                setSelectedState(st.stateName);
+                                setSelectedCity('');
+                                setSelectedSubRegion('');
+                                setShowAnalyticsStateDD(false);
+                                setAnalyticsStateSearch('');
+                              }}
+                            >
+                              <Text
+                                style={{
+                                  fontSize: 14,
+                                  color:
+                                    selectedState === st.stateName
+                                      ? colors.primary
+                                      : colors.textPrimary,
+                                  fontWeight: selectedState === st.stateName ? '700' : '400',
+                                }}
+                              >
+                                {st.stateName}
+                              </Text>
+                            </TouchableOpacity>
+                          ))}
+                        </ThinScrollView>
+                      </View>
+                    ) : null;
+                  })()}
+              </View>
+
+              {/* CITY */}
+              <View
+                style={{ flex: 1, position: 'relative', zIndex: showAnalyticsCityDD ? 3000 : 1 }}
+              >
+                <Text style={analyticsLabelStyle}>City</Text>
+                <TouchableOpacity
+                  activeOpacity={1}
+                  disabled={availableCities.length === 0}
+                  style={analyticsFieldStyle(showAnalyticsCityDD, availableCities.length === 0)}
+                  onPress={() => {
+                    setShowAnalyticsCityDD(true);
+                    cityInputRef.current?.focus();
+                  }}
+                >
+                  <TextInput
+                    ref={cityInputRef}
+                    editable={availableCities.length > 0}
+                    style={{
+                      flex: 1,
+                      height: '100%',
+                      fontSize: 14,
+                      color: colors.textPrimary,
+                      paddingVertical: 0,
+                    }}
+                    placeholder="All cities"
+                    placeholderTextColor={colors.textMuted}
+                    value={selectedCity || analyticsCitySearch}
+                    onChangeText={(t) => {
+                      setAnalyticsCitySearch(t);
+                      setSelectedCity('');
+                      setSelectedSubRegion('');
+                      if (t) setShowAnalyticsCityDD(true);
+                    }}
+                    onFocus={() => setShowAnalyticsCityDD(true)}
+                    onBlur={() => setTimeout(() => setShowAnalyticsCityDD(false), 200)}
+                  />
+                  {!!selectedCity && (
+                    <TouchableOpacity
+                      onPress={() => {
+                        setSelectedCity('');
+                        setSelectedSubRegion('');
+                        setAnalyticsCitySearch('');
+                      }}
+                      hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                    >
+                      <Icon name="close" size={14} color={colors.textMuted} />
+                    </TouchableOpacity>
+                  )}
+                </TouchableOpacity>
+
+                {showAnalyticsCityDD && filteredAnalyticsCities.length > 0 && (
                   <View style={analyticsMenuStyle}>
                     <ThinScrollView maxHeight={200} keyboardShouldPersistTaps="handled">
-                      {filtered.map((st) => (
+                      {filteredAnalyticsCities.map((city: string) => (
                         <TouchableOpacity
-                          key={st.stateCode}
-                          style={{ paddingVertical: 12, paddingHorizontal: 14, backgroundColor: selectedState === st.stateName ? colors.primaryLight : 'transparent' }}
+                          key={city}
+                          style={{
+                            paddingVertical: 12,
+                            paddingHorizontal: 14,
+                            backgroundColor:
+                              selectedCity === city ? colors.primaryLight : 'transparent',
+                          }}
                           onPress={() => {
-                            setSelectedState(st.stateName);
-                            setSelectedCity('');
+                            setSelectedCity(city);
                             setSelectedSubRegion('');
-                            setShowAnalyticsStateDD(false);
-                            setAnalyticsStateSearch('');
+                            setShowAnalyticsCityDD(false);
+                            setAnalyticsCitySearch('');
                           }}
                         >
-                          <Text style={{ fontSize: 14, color: selectedState === st.stateName ? colors.primary : colors.textPrimary, fontWeight: selectedState === st.stateName ? '700' : '400' }}>
-                            {st.stateName}
+                          <Text
+                            style={{
+                              fontSize: 14,
+                              color: selectedCity === city ? colors.primary : colors.textPrimary,
+                              fontWeight: selectedCity === city ? '700' : '400',
+                            }}
+                          >
+                            {city}
                           </Text>
                         </TouchableOpacity>
                       ))}
                     </ThinScrollView>
                   </View>
-                ) : null;
-              })()}
-            </View>
+                )}
+              </View>
 
-            {/* CITY */}
-            <View style={{ flex: 1, position: 'relative', zIndex: showAnalyticsCityDD ? 3000 : 1 }}>
-              <Text style={analyticsLabelStyle}>City</Text>
-              <TouchableOpacity
-                activeOpacity={1}
-                disabled={availableCities.length === 0}
-                style={analyticsFieldStyle(showAnalyticsCityDD, availableCities.length === 0)}
-                onPress={() => {
-                  setShowAnalyticsCityDD(true);
-                  cityInputRef.current?.focus();
+              {/* AREA / NEIGHBORHOOD */}
+              <View
+                style={{
+                  flex: 1,
+                  position: 'relative',
+                  zIndex: showAnalyticsSubRegionDD ? 3000 : 1,
                 }}
               >
-                <TextInput
-                  ref={cityInputRef}
-                  editable={availableCities.length > 0}
-                  style={{ flex: 1, height: '100%', fontSize: 14, color: colors.textPrimary, paddingVertical: 0 }}
-                  placeholder="All cities"
-                  placeholderTextColor={colors.textMuted}
-                  value={selectedCity || analyticsCitySearch}
-                  onChangeText={(t) => {
-                    setAnalyticsCitySearch(t);
-                    setSelectedCity('');
-                    setSelectedSubRegion('');
-                    if (t) setShowAnalyticsCityDD(true);
-                  }}
-                  onFocus={() => setShowAnalyticsCityDD(true)}
-                  onBlur={() => setTimeout(() => setShowAnalyticsCityDD(false), 200)}
-                />
-                {!!selectedCity && (
+                <Text style={analyticsLabelStyle}>Area</Text>
                 <TouchableOpacity
-                  onPress={() => { setSelectedCity(''); setSelectedSubRegion(''); setAnalyticsCitySearch(''); }}
-                  hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                  activeOpacity={0.8}
+                  disabled={!selectedCity || availableSubRegions.length === 0}
+                  style={analyticsFieldStyle(
+                    showAnalyticsSubRegionDD,
+                    !selectedCity || availableSubRegions.length === 0,
+                  )}
+                  onPress={() => setShowAnalyticsSubRegionDD((v) => !v)}
                 >
-                  <Icon name="close" size={14} color={colors.textMuted} />
+                  <Text
+                    numberOfLines={1}
+                    style={{
+                      flex: 1,
+                      fontSize: 14,
+                      color: selectedSubRegion ? colors.textPrimary : colors.textMuted,
+                    }}
+                  >
+                    {selectedSubRegion
+                      ? availableSubRegions.find((sr) => sr.id === selectedSubRegion)?.name ||
+                        'All areas'
+                      : selectedCity
+                        ? 'All areas'
+                        : 'Select city first'}
+                  </Text>
+                  {!!selectedSubRegion && (
+                    <TouchableOpacity
+                      onPress={() => {
+                        setSelectedSubRegion('');
+                        setShowAnalyticsSubRegionDD(false);
+                      }}
+                      hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                    >
+                      <Icon name="close" size={14} color={colors.textMuted} />
+                    </TouchableOpacity>
+                  )}
                 </TouchableOpacity>
-              )}
-              </TouchableOpacity>
 
-              {showAnalyticsCityDD && filteredAnalyticsCities.length > 0 && (
-                <View style={analyticsMenuStyle}>
-                  <ThinScrollView maxHeight={200} keyboardShouldPersistTaps="handled">
-                    {filteredAnalyticsCities.map((city: string) => (
-                      <TouchableOpacity
-                        key={city}
-                        style={{ paddingVertical: 12, paddingHorizontal: 14, backgroundColor: selectedCity === city ? colors.primaryLight : 'transparent' }}
-                        onPress={() => {
-                          setSelectedCity(city);
-                          setSelectedSubRegion('');
-                          setShowAnalyticsCityDD(false);
-                          setAnalyticsCitySearch('');
-                        }}
-                      >
-                        <Text style={{ fontSize: 14, color: selectedCity === city ? colors.primary : colors.textPrimary, fontWeight: selectedCity === city ? '700' : '400' }}>
-                          {city}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
-                  </ThinScrollView>
-                </View>
-              )}
+                {showAnalyticsSubRegionDD && availableSubRegions.length > 0 && (
+                  <View style={analyticsMenuStyle}>
+                    <ThinScrollView maxHeight={200}>
+                      {availableSubRegions.map((sr) => (
+                        <TouchableOpacity
+                          key={sr.id}
+                          style={{
+                            paddingVertical: 12,
+                            paddingHorizontal: 14,
+                            backgroundColor:
+                              selectedSubRegion === sr.id ? colors.primaryLight : 'transparent',
+                          }}
+                          onPress={() => {
+                            setSelectedSubRegion(sr.id);
+                            setShowAnalyticsSubRegionDD(false);
+                          }}
+                        >
+                          <Text
+                            style={{
+                              fontSize: 14,
+                              color:
+                                selectedSubRegion === sr.id ? colors.primary : colors.textPrimary,
+                              fontWeight: selectedSubRegion === sr.id ? '700' : '400',
+                            }}
+                          >
+                            {sr.name}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </ThinScrollView>
+                  </View>
+                )}
+              </View>
             </View>
-
-            {/* AREA / NEIGHBORHOOD */}
-            <View style={{ flex: 1, position: 'relative', zIndex: showAnalyticsSubRegionDD ? 3000 : 1 }}>
-              <Text style={analyticsLabelStyle}>Area</Text>
-              <TouchableOpacity
-                activeOpacity={0.8}
-                disabled={!selectedCity || availableSubRegions.length === 0}
-                style={analyticsFieldStyle(showAnalyticsSubRegionDD, !selectedCity || availableSubRegions.length === 0)}
-                onPress={() => setShowAnalyticsSubRegionDD((v) => !v)}
-              >
-                <Text
-                  numberOfLines={1}
-                  style={{ flex: 1, fontSize: 14, color: selectedSubRegion ? colors.textPrimary : colors.textMuted }}
-                >
-                  {selectedSubRegion
-                    ? availableSubRegions.find((sr) => sr.id === selectedSubRegion)?.name || 'All areas'
-                    : selectedCity ? 'All areas' : 'Select city first'}
-                </Text>
-                {!!selectedSubRegion && (
-                <TouchableOpacity
-                  onPress={() => { setSelectedSubRegion(''); setShowAnalyticsSubRegionDD(false); }}
-                  hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-                >
-                  <Icon name="close" size={14} color={colors.textMuted} />
-                </TouchableOpacity>
-              )}
-              </TouchableOpacity>
-
-              {showAnalyticsSubRegionDD && availableSubRegions.length > 0 && (
-                <View style={analyticsMenuStyle}>
-                  <ThinScrollView maxHeight={200}>
-                    {availableSubRegions.map((sr) => (
-                      <TouchableOpacity
-                        key={sr.id}
-                        style={{ paddingVertical: 12, paddingHorizontal: 14, backgroundColor: selectedSubRegion === sr.id ? colors.primaryLight : 'transparent' }}
-                        onPress={() => { setSelectedSubRegion(sr.id); setShowAnalyticsSubRegionDD(false); }}
-                      >
-                        <Text style={{ fontSize: 14, color: selectedSubRegion === sr.id ? colors.primary : colors.textPrimary, fontWeight: selectedSubRegion === sr.id ? '700' : '400' }}>
-                          {sr.name}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
-                  </ThinScrollView>
-                </View>
-              )}
-            </View>
-          </View>
 
             {/* State Deep-Dive Card */}
             {(() => {
@@ -3082,65 +3569,67 @@ const analyticsMenuStyle = {
                   borderRadius: radii.xl,
                   borderColor: colors.borderLight,
                   ...shadows.card,
-                },{ zIndex: showCrossTabDietDD ? 2000 : 1, elevation: showCrossTabDietDD ? 2000 : 1 }
+                },
+                { zIndex: showCrossTabDietDD ? 2000 : 1, elevation: showCrossTabDietDD ? 2000 : 1 },
               ]}
             >
               <Text style={[styles.crossTabTitle, { color: colors.textPrimary }]}>
                 Cross-Tab: Top Meals Among {crossTabDiet.toUpperCase()} in {selectedState}
               </Text>
               <View
-              style={{
-                position: 'relative',
-                zIndex: showCrossTabDietDD ? 3000 : 1,
-                marginBottom: 12,
-                maxWidth: 280,
-              }}
-            >
-              <Text style={analyticsLabelStyle}>Diet</Text>
-              <TouchableOpacity
-                activeOpacity={0.8}
-                style={analyticsFieldStyle(showCrossTabDietDD)}
-                onPress={() => setShowCrossTabDietDD((v) => !v)}
+                style={{
+                  position: 'relative',
+                  zIndex: showCrossTabDietDD ? 3000 : 1,
+                  marginBottom: 12,
+                  maxWidth: 280,
+                }}
               >
-                <Text
-                  numberOfLines={1}
-                  style={{ flex: 1, fontSize: 14, color: colors.textPrimary, fontWeight: '600' }}
+                <Text style={analyticsLabelStyle}>Diet</Text>
+                <TouchableOpacity
+                  activeOpacity={0.8}
+                  style={analyticsFieldStyle(showCrossTabDietDD)}
+                  onPress={() => setShowCrossTabDietDD((v) => !v)}
                 >
-                  {crossTabDietOptions.find((d) => d.id === crossTabDiet)?.label || 'All Diets'}
-                </Text>
-              </TouchableOpacity>
+                  <Text
+                    numberOfLines={1}
+                    style={{ flex: 1, fontSize: 14, color: colors.textPrimary, fontWeight: '600' }}
+                  >
+                    {crossTabDietOptions.find((d) => d.id === crossTabDiet)?.label || 'All Diets'}
+                  </Text>
+                </TouchableOpacity>
 
-              {showCrossTabDietDD && (
-                <View style={analyticsMenuStyle}>
-                  <ThinScrollView maxHeight={200}>
-                    {crossTabDietOptions.map((d) => (
-                      <TouchableOpacity
-                        key={d.id}
-                        style={{
-                          paddingVertical: 12,
-                          paddingHorizontal: 14,
-                          backgroundColor: crossTabDiet === d.id ? colors.primaryLight : 'transparent',
-                        }}
-                        onPress={() => {
-                          setCrossTabDiet(d.id);
-                          setShowCrossTabDietDD(false);
-                        }}
-                      >
-                        <Text
+                {showCrossTabDietDD && (
+                  <View style={analyticsMenuStyle}>
+                    <ThinScrollView maxHeight={200}>
+                      {crossTabDietOptions.map((d) => (
+                        <TouchableOpacity
+                          key={d.id}
                           style={{
-                            fontSize: 14,
-                            color: crossTabDiet === d.id ? colors.primary : colors.textPrimary,
-                            fontWeight: crossTabDiet === d.id ? '700' : '400',
+                            paddingVertical: 12,
+                            paddingHorizontal: 14,
+                            backgroundColor:
+                              crossTabDiet === d.id ? colors.primaryLight : 'transparent',
+                          }}
+                          onPress={() => {
+                            setCrossTabDiet(d.id);
+                            setShowCrossTabDietDD(false);
                           }}
                         >
-                          {d.label}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
-                  </ThinScrollView>
-                </View>
-              )}
-            </View>
+                          <Text
+                            style={{
+                              fontSize: 14,
+                              color: crossTabDiet === d.id ? colors.primary : colors.textPrimary,
+                              fontWeight: crossTabDiet === d.id ? '700' : '400',
+                            }}
+                          >
+                            {d.label}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </ThinScrollView>
+                  </View>
+                )}
+              </View>
 
               <View style={{ gap: 8 }}>
                 {crossTabResult.topItems.map((dish, idx) => (
@@ -3466,7 +3955,8 @@ const analyticsMenuStyle = {
                       No Customer Accounts Found
                     </Text>
                     <Text style={[styles.emptyStateSubtitle, { color: colors.textSecondary }]}>
-                      Registered customers will appear here automatically with their live Customer ID and wallet balance.
+                      Registered customers will appear here automatically with their live Customer
+                      ID and wallet balance.
                     </Text>
                   </View>
                 );
@@ -3489,16 +3979,18 @@ const analyticsMenuStyle = {
                   <View style={styles.userTopRow}>
                     <View style={{ flex: 1, marginRight: 8 }}>
                       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                        <Text style={[styles.userNameText, { color: colors.textPrimary, fontSize: 16 }]}>
+                        <Text
+                          style={[styles.userNameText, { color: colors.textPrimary, fontSize: 16 }]}
+                        >
                           {u.name}
                         </Text>
-                        {u.role === 'chef' && (
-                          <Badge label="CHEF" variant="warning" size="sm" />
-                        )}
+                        {u.role === 'chef' && <Badge label="CHEF" variant="warning" size="sm" />}
                       </View>
-                      
+
                       {/* Prominent Customer ID with 1-click Copy */}
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 }}>
+                      <View
+                        style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 }}
+                      >
                         <TouchableOpacity
                           onPress={() => handleCopyCustomerId(u.id)}
                           style={{
@@ -3515,10 +4007,22 @@ const analyticsMenuStyle = {
                           activeOpacity={0.7}
                         >
                           <Icon name="document" size={12} color={colors.primary} />
-                          <Text style={{ fontSize: 12, fontFamily: 'monospace', fontWeight: '700', color: colors.primary }}>
+                          <Text
+                            style={{
+                              fontSize: 12,
+                              fontFamily: 'monospace',
+                              fontWeight: '700',
+                              color: colors.primary,
+                            }}
+                          >
                             Customer ID: {u.id}
                           </Text>
-                          <Text style={{ fontSize: 11, color: copiedCustomerId === u.id ? '#10B981' : colors.textMuted }}>
+                          <Text
+                            style={{
+                              fontSize: 11,
+                              color: copiedCustomerId === u.id ? '#10B981' : colors.textMuted,
+                            }}
+                          >
                             {copiedCustomerId === u.id ? '✓ Copied!' : 'Copy'}
                           </Text>
                         </TouchableOpacity>
@@ -3535,7 +4039,8 @@ const analyticsMenuStyle = {
                   </Text>
 
                   <Text style={[styles.userStats, { color: colors.textMuted, marginTop: 2 }]}>
-                    Orders: {u.ordersCount} • Total Spent: ₹{Math.round(u.totalSpend).toLocaleString('en-IN')}
+                    Orders: {u.ordersCount} • Total Spent: ₹
+                    {Math.round(u.totalSpend).toLocaleString('en-IN')}
                   </Text>
 
                   {/* Live Wallet Balance Banner & Quick Credit Issue */}
@@ -3598,7 +4103,10 @@ const analyticsMenuStyle = {
                       onPress={async () => {
                         if (u.role === 'chef') {
                           await revokeChefRole(u.id, u.email);
-                          showInAppAlert('Chef Revoked', `${u.name} role reset to regular customer.`);
+                          showInAppAlert(
+                            'Chef Revoked',
+                            `${u.name} role reset to regular customer.`,
+                          );
                         } else {
                           await grantChefRole(u.id, u.email, u.name, user?.email || 'admin');
                           showInAppAlert(
@@ -3832,7 +4340,6 @@ const analyticsMenuStyle = {
                   Approved Chefs ({chefProfiles.length})
                 </Text>
                 <View style={{ flexDirection: 'row', gap: 8 }}>
-
                   <TouchableOpacity
                     style={[
                       {
@@ -3889,7 +4396,6 @@ const analyticsMenuStyle = {
                       )}
                     </View>
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-
                       <TouchableOpacity
                         onPress={() => {
                           Alert.alert(
@@ -4215,10 +4721,7 @@ const analyticsMenuStyle = {
                   onReject={async (notes) => {
                     if (!selectedChefSubmission) return;
                     setIsProcessingChefSubmission(true);
-                    await rejectChefSubmission(
-                      selectedChefSubmission.id,
-                      notes,
-                    );
+                    await rejectChefSubmission(selectedChefSubmission.id, notes);
                     await reloadChefData();
                     setIsProcessingChefSubmission(false);
                     const subName = selectedChefSubmission.name;
@@ -4230,21 +4733,27 @@ const analyticsMenuStyle = {
                       `"${subName}" has been rejected with feedback sent to ${cName}.`,
                     );
                   }}
-                  onPublish={async (pubPrice, storageCentres, cities, customRegions, subRegions) => {
+                  onPublish={async (
+                    pubPrice,
+                    storageCentres,
+                    cities,
+                    customRegions,
+                    subRegions,
+                  ) => {
                     if (!selectedChefSubmission) return;
                     setIsProcessingChefSubmission(true);
                     const regions =
                       customRegions && customRegions.length > 0
                         ? customRegions
                         : storageCentres.length > 0
-                        ? [
-                            ...new Set(
-                              STORAGE_CENTRE_REGIONS.filter((r) =>
-                                storageCentres.includes(r.id),
-                              ).map((r) => r.zone),
-                            ),
-                          ]
-                        : ['North', 'South', 'West', 'East'];
+                          ? [
+                              ...new Set(
+                                STORAGE_CENTRE_REGIONS.filter((r) =>
+                                  storageCentres.includes(r.id),
+                                ).map((r) => r.zone),
+                              ),
+                            ]
+                          : ['North', 'South', 'West', 'East'];
                     const res = await publishChefSubmission(
                       selectedChefSubmission.id,
                       pubPrice,
@@ -4558,13 +5067,20 @@ const analyticsMenuStyle = {
                     borderRadius: radii.md,
                     borderWidth: 1.5,
                     alignItems: 'center',
-                    backgroundColor: refundMethod === 'WALLET' ? colors.primaryLight + '30' : colors.bgSubtle,
+                    backgroundColor:
+                      refundMethod === 'WALLET' ? colors.primaryLight + '30' : colors.bgSubtle,
                     borderColor: refundMethod === 'WALLET' ? colors.primary : colors.borderLight,
                   },
                 ]}
                 onPress={() => setRefundMethod('WALLET')}
               >
-                <Text style={{ fontSize: 12, fontWeight: '700', color: refundMethod === 'WALLET' ? colors.primary : colors.textPrimary }}>
+                <Text
+                  style={{
+                    fontSize: 12,
+                    fontWeight: '700',
+                    color: refundMethod === 'WALLET' ? colors.primary : colors.textPrimary,
+                  }}
+                >
                   ⚡ Rasoi Wallet Credits
                 </Text>
                 <Text style={{ fontSize: 10, color: colors.textSecondary, marginTop: 2 }}>
@@ -4581,13 +5097,24 @@ const analyticsMenuStyle = {
                     borderRadius: radii.md,
                     borderWidth: 1.5,
                     alignItems: 'center',
-                    backgroundColor: refundMethod === 'ORIGINAL_PAYMENT' ? colors.primaryLight + '30' : colors.bgSubtle,
-                    borderColor: refundMethod === 'ORIGINAL_PAYMENT' ? colors.primary : colors.borderLight,
+                    backgroundColor:
+                      refundMethod === 'ORIGINAL_PAYMENT'
+                        ? colors.primaryLight + '30'
+                        : colors.bgSubtle,
+                    borderColor:
+                      refundMethod === 'ORIGINAL_PAYMENT' ? colors.primary : colors.borderLight,
                   },
                 ]}
                 onPress={() => setRefundMethod('ORIGINAL_PAYMENT')}
               >
-                <Text style={{ fontSize: 12, fontWeight: '700', color: refundMethod === 'ORIGINAL_PAYMENT' ? colors.primary : colors.textPrimary }}>
+                <Text
+                  style={{
+                    fontSize: 12,
+                    fontWeight: '700',
+                    color:
+                      refundMethod === 'ORIGINAL_PAYMENT' ? colors.primary : colors.textPrimary,
+                  }}
+                >
                   💳 Original Payment
                 </Text>
                 <Text style={{ fontSize: 10, color: colors.textSecondary, marginTop: 2 }}>
@@ -5371,6 +5898,7 @@ const analyticsMenuStyle = {
                       textStyle={{ color: '#DC2626' }}
                       onPress={() => {
                         setInspectModalVisible(false);
+                        setInspectOrder(null);
                         handleCancelOrder(inspectOrder.id);
                       }}
                     />
@@ -5413,6 +5941,7 @@ const analyticsMenuStyle = {
                           textStyle={{ color: '#DC2626' }}
                           onPress={() => {
                             setInspectModalVisible(false);
+                            setInspectOrder(null);
                             handleCancelOrder(inspectOrder.id);
                           }}
                         />
@@ -5941,12 +6470,20 @@ const analyticsMenuStyle = {
                   }}
                 >
                   <Icon name="document" size={12} color={colors.primary} />
-                  <Text style={{ fontSize: 12, fontFamily: 'monospace', fontWeight: '700', color: colors.primary }}>
+                  <Text
+                    style={{
+                      fontSize: 12,
+                      fontFamily: 'monospace',
+                      fontWeight: '700',
+                      color: colors.primary,
+                    }}
+                  >
                     Customer ID: {selectedCreditCustomer.id}
                   </Text>
                 </View>
                 <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 4 }}>
-                  Current Balance: ₹{Math.round(selectedCreditCustomer.walletBalance ?? 0).toLocaleString('en-IN')}
+                  Current Balance: ₹
+                  {Math.round(selectedCreditCustomer.walletBalance ?? 0).toLocaleString('en-IN')}
                 </Text>
               </View>
             )}
@@ -5983,7 +6520,8 @@ const analyticsMenuStyle = {
                     borderRadius: radii.md,
                     borderWidth: 1.5,
                     alignItems: 'center',
-                    backgroundColor: creditSendSource === src ? colors.primaryLight + '30' : colors.bgSubtle,
+                    backgroundColor:
+                      creditSendSource === src ? colors.primaryLight + '30' : colors.bgSubtle,
                     borderColor: creditSendSource === src ? colors.primary : colors.borderLight,
                   }}
                   onPress={() => setCreditSendSource(src)}
@@ -5995,7 +6533,11 @@ const analyticsMenuStyle = {
                       color: creditSendSource === src ? colors.primary : colors.textPrimary,
                     }}
                   >
-                    {src === 'PROMOTION' ? 'Promotion' : src === 'LOYALTY' ? 'Loyalty' : 'Adjustment'}
+                    {src === 'PROMOTION'
+                      ? 'Promotion'
+                      : src === 'LOYALTY'
+                        ? 'Loyalty'
+                        : 'Adjustment'}
                   </Text>
                 </TouchableOpacity>
               ))}
@@ -6100,6 +6642,38 @@ const styles = StyleSheet.create({
   adminPillText: {
     fontSize: 12,
     fontWeight: '700',
+  },
+  connectionPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 14,
+    borderWidth: 1,
+    gap: 5,
+  },
+  connectionDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  connectionText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  newOrderTag: {
+    backgroundColor: '#DCFCE7',
+    borderColor: '#16A34A',
+    borderWidth: 1,
+    borderRadius: 4,
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+  },
+  newOrderTagText: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: '#15803D',
+    letterSpacing: 0.5,
   },
   logoutBtn: {
     paddingHorizontal: 10,

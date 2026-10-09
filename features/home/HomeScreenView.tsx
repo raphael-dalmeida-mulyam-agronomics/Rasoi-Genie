@@ -1,34 +1,35 @@
 import { router } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-    ActivityIndicator,
-    Dimensions,
-    Image,
-    Modal,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  BackHandler,
+  Dimensions,
+  Image,
+  Modal,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import { useAuth } from '../../framework/context/AuthContext';
 import { useCart } from '../../framework/context/CartContext';
 import { usePreferences } from '../../framework/context/PreferencesContext';
 import { useWishlist } from '../../framework/context/WishlistContext';
 import {
-    ensureCitySpecialtiesSeeded,
-    isRegionalSpecialtyOfCity,
-    rankMealKitsForCityTrending,
+  ensureCitySpecialtiesSeeded,
+  isRegionalSpecialtyOfCity,
+  rankMealKitsForCityTrending,
 } from '../../framework/services/dishOriginService';
 import {
-    CuisineType,
-    DietTag,
-    DishCategory,
-    getMealKits,
-    MealKit,
-    SpiceLevel,
-    subscribeToMealKits,
-    syncMealKitsWithSupabase,
+  CuisineType,
+  DietTag,
+  DishCategory,
+  getMealKits,
+  MealKit,
+  SpiceLevel,
+  subscribeToMealKits,
+  syncMealKitsWithSupabase,
 } from '../../framework/services/mealKitsService';
 import { subscribeToMealKitsRealtime } from '../../framework/services/supabaseMealKitsService';
 import { useTheme } from '../../framework/theme/ThemeContext';
@@ -39,6 +40,10 @@ import { AppIconName, Icon } from '../../framework/ui/Icon';
 import { seedKitsForCityIfNeeded } from '../admin/cityKitsSeederService';
 import { MealDetailModal } from '../meal-detail/MealDetailModal';
 import { DietaryPreferencesModal } from '../onboarding/DietaryPreferencesModal';
+import { LocationPickerModal } from '../onboarding/LocationPickerModal';
+import { useCookMode } from '../../framework/context/CookModeContext';
+import { ResumeCookingBanner } from '../cook/components/ResumeCookingBanner';
+import { ActiveOrdersSelectorModal } from '../../framework/ui/ActiveOrdersSelectorModal';
 
 const { width } = Dimensions.get('window');
 
@@ -119,7 +124,7 @@ const SORT_OPTIONS: {
 ];
 
 // Reusable Meal Kit Vertical Grid Card
-function MealKitCard({
+const MealKitCard = React.memo(function MealKitCard({
   kit,
   onPress,
   onQuickAdd,
@@ -127,10 +132,10 @@ function MealKitCard({
   onToggleFavorite,
 }: {
   kit: MealKit;
-  onPress: () => void;
-  onQuickAdd: () => void;
+  onPress: (kit: MealKit) => void;
+  onQuickAdd: (kit: MealKit) => void;
   isFavorite: boolean;
-  onToggleFavorite: () => void;
+  onToggleFavorite: (id: string) => void;
 }) {
   const { colors, radii, shadows } = useTheme();
 
@@ -153,7 +158,7 @@ function MealKitCard({
           ...shadows.card,
         },
       ]}
-      onPress={onPress}
+      onPress={() => onPress(kit)}
       activeOpacity={0.9}
     >
       <View style={styles.cardImageContainer}>
@@ -170,7 +175,7 @@ function MealKitCard({
           </View>
           <TouchableOpacity
             style={styles.cardFavBtn}
-            onPress={onToggleFavorite}
+            onPress={() => onToggleFavorite(kit.id)}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
             <Icon
@@ -232,7 +237,7 @@ function MealKitCard({
             <Button
               title="+ Add"
               size="sm"
-              onPress={onQuickAdd}
+              onPress={() => onQuickAdd(kit)}
               style={{ paddingHorizontal: 16 }}
             />
           )}
@@ -240,10 +245,10 @@ function MealKitCard({
       </View>
     </TouchableOpacity>
   );
-}
+});
 
 // Reusable Meal Kit Horizontal Carousel Card
-function MealKitHorizontalCard({
+const MealKitHorizontalCard = React.memo(function MealKitHorizontalCard({
   kit,
   currentCity,
   onPress,
@@ -253,10 +258,10 @@ function MealKitHorizontalCard({
 }: {
   kit: MealKit;
   currentCity?: string;
-  onPress: () => void;
-  onQuickAdd: () => void;
+  onPress: (kit: MealKit) => void;
+  onQuickAdd: (kit: MealKit) => void;
   isFavorite: boolean;
-  onToggleFavorite: () => void;
+  onToggleFavorite: (id: string) => void;
 }) {
   const { colors, radii, shadows } = useTheme();
 
@@ -277,7 +282,7 @@ function MealKitHorizontalCard({
           ...shadows.card,
         },
       ]}
-      onPress={onPress}
+      onPress={() => onPress(kit)}
       activeOpacity={0.9}
     >
       <View style={styles.hCardImgContainer}>
@@ -324,13 +329,389 @@ function MealKitHorizontalCard({
               style={{ opacity: 0.6 }}
             />
           ) : (
-            <Button title="+ Add" size="sm" onPress={onQuickAdd} />
+            <Button title="+ Add" size="sm" onPress={() => onQuickAdd(kit)} />
           )}
         </View>
       </View>
     </TouchableOpacity>
   );
-}
+});
+
+// Memoized Catalog Sections to prevent re-rendering 600+ cards on filter modal state changes
+const CatalogSections = React.memo(function CatalogSections({
+  filteredKits,
+  trendingKits,
+  foreignKits,
+  recommendedKits,
+  dietFilterTags,
+  selectedCuisine,
+  selectedDishCategory,
+  currentCity,
+  isSeedingCity,
+  dietTypes,
+  preferredCuisines,
+  onOpenDetail,
+  onQuickAdd,
+  onToggleFavorite,
+  isInWishlist,
+  onOpenPreferencesModal,
+  onResetFilters,
+  onResetDishCategory,
+}: {
+  filteredKits: MealKit[];
+  trendingKits: MealKit[];
+  foreignKits: MealKit[];
+  recommendedKits: MealKit[];
+  dietFilterTags: Set<DietTag>;
+  selectedCuisine: CuisineType | 'All';
+  selectedDishCategory: DishCategory | 'All';
+  currentCity?: string;
+  isSeedingCity: boolean;
+  dietTypes?: string[];
+  preferredCuisines?: string[];
+  onOpenDetail: (kit: MealKit) => void;
+  onQuickAdd: (kit: MealKit) => void;
+  onToggleFavorite: (kitId: string) => void;
+  isInWishlist?: (id: string) => boolean;
+  onOpenPreferencesModal: () => void;
+  onResetFilters: () => void;
+  onResetDishCategory: () => void;
+}) {
+  const { colors, radii } = useTheme();
+  const [visibleCount, setVisibleCount] = useState(32);
+
+  // Reset visible count when filters change
+  useEffect(() => {
+    setVisibleCount(32);
+  }, [dietFilterTags, selectedCuisine, selectedDishCategory]);
+
+  const displayedKits = useMemo(() => {
+    return filteredKits.slice(0, visibleCount);
+  }, [filteredKits, visibleCount]);
+
+  const hasMore = filteredKits.length > visibleCount;
+
+  return (
+    <>
+      {/* SECTION 3 — PROMOTED: when a dish category is active, show the grid first */}
+      {selectedDishCategory !== 'All' && (
+        <View style={styles.catalogSection}>
+          <Text style={[styles.sectionHeading, { color: colors.textPrimary }]}>
+            {selectedDishCategory} {currentCity ? `in ${currentCity}` : ''}
+          </Text>
+          <Text style={[styles.sectionSubtitle, { color: colors.textSecondary }]}>
+            Includes fresh ingredients, whole spices & authentic masala sachets
+          </Text>
+
+          {filteredKits.length === 0 ? (
+            <View
+              style={[
+                styles.emptyKitsContainer,
+                { backgroundColor: colors.bgSurface, borderColor: colors.borderLight },
+              ]}
+            >
+              <View style={{ marginBottom: 12 }}>
+                <Icon name="restaurant" size={40} color={colors.textMuted} />
+              </View>
+              <Text style={[styles.emptyKitsTitle, { color: colors.textPrimary }]}>
+                No {selectedDishCategory} kits found
+              </Text>
+              <Text style={[styles.emptyKitsSubtitle, { color: colors.textSecondary }]}>
+                Try loosening your dietary filters or clearing allergen exclusions to see more
+                dishes.
+              </Text>
+              <TouchableOpacity
+                style={[styles.resetPrefBtn, { backgroundColor: colors.primary }]}
+                onPress={onResetDishCategory}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.resetPrefBtnText}>Show All Dishes</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <>
+              <View style={styles.kitsGrid}>
+                {displayedKits.map((kit) => (
+                  <MealKitCard
+                    key={kit.id}
+                    kit={kit}
+                    onPress={onOpenDetail}
+                    onQuickAdd={onQuickAdd}
+                    isFavorite={kit?.id ? (isInWishlist?.(kit.id) ?? false) : false}
+                    onToggleFavorite={onToggleFavorite}
+                  />
+                ))}
+              </View>
+              {hasMore && (
+                <TouchableOpacity
+                  style={[
+                    styles.showMoreBtn,
+                    { borderColor: colors.primary, backgroundColor: colors.primary + '12' },
+                  ]}
+                  onPress={() => setVisibleCount((prev) => prev + 32)}
+                  activeOpacity={0.8}
+                >
+                  <Text style={[styles.showMoreBtnText, { color: colors.primary }]}>
+                    Show More ({filteredKits.length - visibleCount} more dishes)
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </>
+          )}
+        </View>
+      )}
+
+      {/* CITY SEEDING INDICATOR */}
+      {isSeedingCity && currentCity ? (
+        <View
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 8,
+            paddingHorizontal: 16,
+            paddingVertical: 10,
+          }}
+        >
+          <ActivityIndicator size="small" color={colors.primary} />
+          <Text style={{ fontSize: 12, color: colors.textSecondary }}>
+            Discovering local recipes for {currentCity}…
+          </Text>
+        </View>
+      ) : null}
+
+      {/* SECTION 1: Trending in Your Region */}
+      {dietFilterTags.size === 0 && selectedCuisine === 'All' && (
+        <View style={styles.catalogSection}>
+          <View style={styles.sectionHeaderRow}>
+            <View>
+              <Text style={[styles.sectionHeading, { color: colors.textPrimary }]}>
+                Trending in {currentCity}
+              </Text>
+              <Text style={[styles.sectionSubtitle, { color: colors.textSecondary }]}>
+                {currentCity} regional specialties & popular kits in your area today
+              </Text>
+            </View>
+          </View>
+
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.horizontalCardRow}
+          >
+            {trendingKits
+              .filter((k): k is MealKit => Boolean(k && k.id))
+              .slice(0, 10)
+              .map((kit) => (
+                <MealKitHorizontalCard
+                  key={kit.id}
+                  kit={kit}
+                  currentCity={currentCity}
+                  onPress={onOpenDetail}
+                  onQuickAdd={onQuickAdd}
+                  isFavorite={kit?.id ? (isInWishlist?.(kit.id) ?? false) : false}
+                  onToggleFavorite={onToggleFavorite}
+                />
+              ))}
+          </ScrollView>
+        </View>
+      )}
+
+      {/* SECTION 1.5: Global Favorites & Foreign Specials */}
+      {dietFilterTags.size === 0 && selectedCuisine === 'All' && foreignKits.length > 0 && (
+        <View style={styles.catalogSection}>
+          <View style={styles.sectionHeaderRow}>
+            <View>
+              <Text style={[styles.sectionHeading, { color: colors.textPrimary }]}>
+                Global Street Eats & Foreign Specials
+              </Text>
+              <Text style={[styles.sectionSubtitle, { color: colors.textSecondary }]}>
+                Smash burgers, fermented sourdough pizzas, Birria tacos, burrito bowls, pastas,
+                European & Mediterranean classics
+              </Text>
+            </View>
+          </View>
+
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.horizontalCardRow}
+          >
+            {foreignKits
+              .filter((k): k is MealKit => Boolean(k && k.id))
+              .slice(0, 10)
+              .map((kit) => (
+                <MealKitHorizontalCard
+                  key={kit.id}
+                  kit={kit}
+                  currentCity={currentCity}
+                  onPress={onOpenDetail}
+                  onQuickAdd={onQuickAdd}
+                  isFavorite={kit?.id ? (isInWishlist?.(kit.id) ?? false) : false}
+                  onToggleFavorite={onToggleFavorite}
+                />
+              ))}
+          </ScrollView>
+        </View>
+      )}
+
+      {/* SECTION 2: Recommended for You */}
+      {dietFilterTags.size === 0 && selectedCuisine === 'All' && (
+        <View style={styles.catalogSection}>
+          <View style={styles.sectionHeaderRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.sectionHeading, { color: colors.textPrimary }]}>
+                Recommended for You
+              </Text>
+              <Text style={[styles.sectionSubtitle, { color: colors.textSecondary }]}>
+                {dietTypes && dietTypes.length > 0
+                  ? `Curated for your ${dietTypes.join(', ').toUpperCase()} profile`
+                  : 'Curated for your profile'}
+              </Text>
+            </View>
+            <TouchableOpacity onPress={onOpenPreferencesModal}>
+              <Text style={[styles.editPrefLink, { color: colors.primary }]}>Edit Profile</Text>
+            </TouchableOpacity>
+          </View>
+
+          {recommendedKits.length === 0 ? (
+            <View
+              style={{
+                padding: 20,
+                backgroundColor: colors.bgSurface,
+                borderRadius: radii.lg,
+                borderColor: colors.borderLight,
+                borderWidth: 1,
+                alignItems: 'center',
+                marginHorizontal: 16,
+                marginTop: 8,
+              }}
+            >
+              <Icon name="restaurant" size={28} color={colors.textMuted} />
+              <Text
+                style={{
+                  fontSize: 14,
+                  fontWeight: '700',
+                  color: colors.textPrimary,
+                  marginTop: 8,
+                }}
+              >
+                No Dishes in Preferred Categories
+              </Text>
+              <Text
+                style={{
+                  fontSize: 12,
+                  color: colors.textSecondary,
+                  textAlign: 'center',
+                  marginTop: 4,
+                  marginBottom: 12,
+                }}
+              >
+                {preferredCuisines && preferredCuisines.length > 0
+                  ? `No meal kits found matching your preferred cuisines in the ${(dietTypes || []).join(', ').toUpperCase()} category.`
+                  : 'Set your favorite cuisines in your profile to discover personalized chef recommendations.'}
+              </Text>
+              <Button
+                title="Update Taste Preferences"
+                variant="primary"
+                size="sm"
+                onPress={onOpenPreferencesModal}
+              />
+            </View>
+          ) : (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.horizontalCardRow}
+            >
+              {recommendedKits
+                .filter((k): k is MealKit => Boolean(k && k.id))
+                .slice(0, 10)
+                .map((kit) => (
+                  <MealKitHorizontalCard
+                    key={kit.id}
+                    kit={kit}
+                    currentCity={currentCity}
+                    onPress={onOpenDetail}
+                    onQuickAdd={onQuickAdd}
+                    isFavorite={kit?.id ? (isInWishlist?.(kit.id) ?? false) : false}
+                    onToggleFavorite={onToggleFavorite}
+                  />
+                ))}
+            </ScrollView>
+          )}
+        </View>
+      )}
+
+      {/* SECTION 3: All Available Kits Grid — shown at bottom when no dish category filter active */}
+      {selectedDishCategory === 'All' && (
+        <View style={styles.catalogSection}>
+          <Text style={[styles.sectionHeading, { color: colors.textPrimary }]}>
+            {currentCity ? `All Kits in ${currentCity}` : 'All Gourmet Meal Prep Kits'}
+          </Text>
+          <Text style={[styles.sectionSubtitle, { color: colors.textSecondary }]}>
+            Includes fresh ingredients, whole spices & authentic masala sachets
+          </Text>
+
+          {filteredKits.length === 0 ? (
+            <View
+              style={[
+                styles.emptyKitsContainer,
+                { backgroundColor: colors.bgSurface, borderColor: colors.borderLight },
+              ]}
+            >
+              <View style={{ marginBottom: 12 }}>
+                <Icon name="restaurant" size={40} color={colors.textMuted} />
+              </View>
+              <Text style={[styles.emptyKitsTitle, { color: colors.textPrimary }]}>
+                No dishes match your active filters
+              </Text>
+              <Text style={[styles.emptyKitsSubtitle, { color: colors.textSecondary }]}>
+                Try loosening your dietary filters or clearing allergen exclusions to see more
+                dishes.
+              </Text>
+              <TouchableOpacity
+                style={[styles.resetPrefBtn, { backgroundColor: colors.primary }]}
+                onPress={onResetFilters}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.resetPrefBtnText}>Show All Dishes</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <>
+              <View style={styles.kitsGrid}>
+                {displayedKits.map((kit) => (
+                  <MealKitCard
+                    key={kit.id}
+                    kit={kit}
+                    onPress={onOpenDetail}
+                    onQuickAdd={onQuickAdd}
+                    isFavorite={kit?.id ? (isInWishlist?.(kit.id) ?? false) : false}
+                    onToggleFavorite={onToggleFavorite}
+                  />
+                ))}
+              </View>
+              {hasMore && (
+                <TouchableOpacity
+                  style={[
+                    styles.showMoreBtn,
+                    { borderColor: colors.primary, backgroundColor: colors.primary + '12' },
+                  ]}
+                  onPress={() => setVisibleCount((prev) => prev + 32)}
+                  activeOpacity={0.8}
+                >
+                  <Text style={[styles.showMoreBtnText, { color: colors.primary }]}>
+                    Show More ({filteredKits.length - visibleCount} more dishes)
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </>
+          )}
+        </View>
+      )}
+    </>
+  );
+});
 
 export const HomeScreenView: React.FC = () => {
   const { user, isAdmin, isChef } = useAuth();
@@ -356,14 +737,28 @@ export const HomeScreenView: React.FC = () => {
   );
   const [isSortDropdownOpen, setIsSortDropdownOpen] = useState(false);
 
+  // Close filter overlay on Android back button press
+  useEffect(() => {
+    if (!activeFilterModal) return;
+    const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
+      setActiveFilterModal(null);
+      return true;
+    });
+    return () => backHandler.remove();
+  }, [activeFilterModal]);
+
   // Modals
   const [selectedKit, setSelectedKit] = useState<MealKit | null>(null);
   const [detailModalVisible, setDetailModalVisible] = useState(false);
   const [preferencesModalVisible, setPreferencesModalVisible] = useState(false);
+  const [locationModalVisible, setLocationModalVisible] = useState(false);
+  const [isDietPromptDismissed, setIsDietPromptDismissed] = useState(false);
   const [reviewKit, setReviewKit] = useState<MealKit | null>(null);
   const [reviewModalVisible, setReviewModalVisible] = useState(false);
   const [allKits, setAllKits] = useState<MealKit[]>(() => getMealKits());
   const [isSeedingCity, setIsSeedingCity] = useState(false);
+  const { activeOrders } = useCookMode();
+  const [activeOrdersSheetVisible, setActiveOrdersSheetVisible] = useState(false);
 
   // Seed city-specific kits when the user's city is known and no city kits exist yet
   const runCitySeederIfNeeded = useCallback(async (city: string) => {
@@ -606,15 +1001,37 @@ export const HomeScreenView: React.FC = () => {
       );
   }, [allKits]);
 
-  const handleOpenDetail = (kit: MealKit) => {
+  const handleOpenDetail = useCallback((kit: MealKit) => {
     setSelectedKit(kit);
     setDetailModalVisible(true);
-  };
+  }, []);
 
-  const handleQuickAdd = (kit: MealKit) => {
+  const handleQuickAdd = useCallback((kit: MealKit) => {
     // Open meal kit detail modal so user can customize servings, spice level, etc.
-    handleOpenDetail(kit);
-  };
+    setSelectedKit(kit);
+    setDetailModalVisible(true);
+  }, []);
+
+  const handleToggleFavorite = useCallback(
+    (kitId: string) => {
+      toggleWishlist?.(kitId);
+    },
+    [toggleWishlist],
+  );
+
+  const handleOpenPreferencesModal = useCallback(() => {
+    setPreferencesModalVisible(true);
+  }, []);
+
+  const handleResetFilters = useCallback(() => {
+    setDietFilterTags(new Set());
+    setSelectedCuisine('All');
+    setSelectedDishCategory('All');
+  }, []);
+
+  const handleResetDishCategory = useCallback(() => {
+    setSelectedDishCategory('All');
+  }, []);
 
   return (
     <View style={[styles.container, { backgroundColor: colors.bgPrimary }]}>
@@ -627,8 +1044,9 @@ export const HomeScreenView: React.FC = () => {
       >
         <View style={styles.headerLeft}>
           <TouchableOpacity
+            testID="explore-location-chip"
             style={styles.locationSelector}
-            onPress={() => setPreferencesModalVisible(true)}
+            onPress={() => setLocationModalVisible(true)}
             activeOpacity={0.8}
           >
             <View style={{ marginRight: 6 }}>
@@ -642,9 +1060,8 @@ export const HomeScreenView: React.FC = () => {
                 <Icon name="chevron-down" size={12} color={colors.primary} />
               </View>
               <Text style={[styles.locationCity, { color: colors.textPrimary }]}>
-                {preferences.city || preferences.currentCity}
-                {preferences.subRegion ? `, ${preferences.subRegion.split('-').pop()}` : ''}
-                {preferences.state ? `, ${preferences.state}` : ''}
+                {preferences.city || preferences.currentCity || 'Choose City'}
+                {preferences.regionHub ? ` (${preferences.regionHub} Hub)` : ''}
               </Text>
             </View>
           </TouchableOpacity>
@@ -665,6 +1082,31 @@ export const HomeScreenView: React.FC = () => {
                 : 'ALL DIETS'}
             </Text>
           </TouchableOpacity>
+
+          {/* Active Orders Chef Hat Button */}
+          {activeOrders.length > 0 && (
+            <TouchableOpacity
+              testID="explore-cook-mode-btn"
+              style={[styles.iconButton, { backgroundColor: colors.primaryLight }]}
+              onPress={() => {
+                if (activeOrders.length === 1 && activeOrders[0]) {
+                  router.push({
+                    pathname: '/cook/[orderId]' as any,
+                    params: { orderId: activeOrders[0].id },
+                  });
+                } else {
+                  setActiveOrdersSheetVisible(true);
+                }
+              }}
+              accessibilityRole="button"
+              accessibilityLabel={`Active cooking guide for ${activeOrders.length} orders`}
+            >
+              <Icon name="chef" size={18} color={colors.primary} />
+              <View style={[styles.counterBadge, { backgroundColor: colors.primary }]}>
+                <Text style={styles.counterBadgeText}>{activeOrders.length}</Text>
+              </View>
+            </TouchableOpacity>
+          )}
 
           <TouchableOpacity
             style={[styles.iconButton, { backgroundColor: colors.bgSubtle }]}
@@ -693,6 +1135,9 @@ export const HomeScreenView: React.FC = () => {
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollBody}>
+        {/* Resume Cooking Guide Banner if active undismissed order exists */}
+        <ResumeCookingBanner />
+
         {/* Search Bar Banner Link */}
         <View style={styles.searchBarWrapper}>
           <TouchableOpacity
@@ -812,6 +1257,56 @@ export const HomeScreenView: React.FC = () => {
           ))}
         </ScrollView>
 
+        {/* Optional Dismissible Dietary Preferences Prompt */}
+        {!isDietPromptDismissed && (
+          <View
+            testID="dietary-preferences-prompt"
+            style={[
+              styles.dietaryPromptCard,
+              {
+                backgroundColor: colors.bgSurface,
+                borderColor: colors.borderLight,
+                ...shadows.card,
+              },
+            ]}
+          >
+            <View style={styles.dietaryPromptLeft}>
+              <View
+                style={[styles.dietaryPromptIconWrap, { backgroundColor: colors.primaryLight }]}
+              >
+                <Icon name="leaf" size={20} color={colors.primary} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.dietaryPromptTitle, { color: colors.textPrimary }]}>
+                  Customize Your Kitchen Preferences
+                </Text>
+                <Text style={[styles.dietaryPromptSub, { color: colors.textSecondary }]}>
+                  Set veg, Jain, spice tolerance or allergy filters anytime.
+                </Text>
+              </View>
+            </View>
+            <View style={styles.dietaryPromptActions}>
+              <TouchableOpacity
+                testID="open-dietary-prefs-btn"
+                style={[styles.dietaryPromptBtn, { backgroundColor: colors.primaryLight }]}
+                onPress={() => setPreferencesModalVisible(true)}
+              >
+                <Text style={[styles.dietaryPromptBtnText, { color: colors.primary }]}>
+                  Personalize
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                testID="dismiss-dietary-prompt-btn"
+                style={styles.dietaryPromptDismissBtn}
+                onPress={() => setIsDietPromptDismissed(true)}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Icon name="close" size={18} color={colors.textMuted} />
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+
         {/* Minimalist 3-Filter Buttons Bar */}
         <View style={styles.minimalistFilterBar}>
           <TouchableOpacity
@@ -822,7 +1317,7 @@ export const HomeScreenView: React.FC = () => {
                 borderColor: dietFilterTags.size > 0 ? colors.primary : colors.borderLight,
               },
             ]}
-            onPress={() => setActiveFilterModal('diet')}
+            onPress={() => setActiveFilterModal((prev) => (prev === 'diet' ? null : 'diet'))}
             activeOpacity={0.7}
           >
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
@@ -859,7 +1354,7 @@ export const HomeScreenView: React.FC = () => {
                 borderColor: selectedCuisine !== 'All' ? colors.primary : colors.borderLight,
               },
             ]}
-            onPress={() => setActiveFilterModal('cuisine')}
+            onPress={() => setActiveFilterModal((prev) => (prev === 'cuisine' ? null : 'cuisine'))}
             activeOpacity={0.7}
           >
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
@@ -890,7 +1385,7 @@ export const HomeScreenView: React.FC = () => {
                 borderColor: selectedDishCategory !== 'All' ? colors.primary : colors.borderLight,
               },
             ]}
-            onPress={() => setActiveFilterModal('dish')}
+            onPress={() => setActiveFilterModal((prev) => (prev === 'dish' ? null : 'dish'))}
             activeOpacity={0.7}
           >
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
@@ -1008,299 +1503,27 @@ export const HomeScreenView: React.FC = () => {
           </View>
         </View>
 
-        {/* SECTION 3 — PROMOTED: when a dish category is active, show the grid first */}
-        {selectedDishCategory !== 'All' && (
-          <View style={styles.catalogSection}>
-            <Text style={[styles.sectionHeading, { color: colors.textPrimary }]}>
-              {selectedDishCategory}{' '}
-              {preferences.currentCity ? `in ${preferences.currentCity}` : ''}
-            </Text>
-            <Text style={[styles.sectionSubtitle, { color: colors.textSecondary }]}>
-              Includes fresh ingredients, whole spices & authentic masala sachets
-            </Text>
-
-            {filteredKits.length === 0 ? (
-              <View
-                style={[
-                  styles.emptyKitsContainer,
-                  { backgroundColor: colors.bgSurface, borderColor: colors.borderLight },
-                ]}
-              >
-                <View style={{ marginBottom: 12 }}>
-                  <Icon name="restaurant" size={40} color={colors.textMuted} />
-                </View>
-                <Text style={[styles.emptyKitsTitle, { color: colors.textPrimary }]}>
-                  No {selectedDishCategory} kits found
-                </Text>
-                <Text style={[styles.emptyKitsSubtitle, { color: colors.textSecondary }]}>
-                  Try loosening your dietary filters or clearing allergen exclusions to see more
-                  dishes.
-                </Text>
-                <TouchableOpacity
-                  style={[styles.resetPrefBtn, { backgroundColor: colors.primary }]}
-                  onPress={() => {
-                    setSelectedDishCategory('All');
-                  }}
-                  activeOpacity={0.8}
-                >
-                  <Text style={styles.resetPrefBtnText}>Show All Dishes</Text>
-                </TouchableOpacity>
-              </View>
-            ) : (
-              <View style={styles.kitsGrid}>
-                {filteredKits
-                  .filter((k): k is MealKit => Boolean(k && k.id))
-                  .map((kit) => (
-                    <MealKitCard
-                      key={kit.id}
-                      kit={kit}
-                      onPress={() => handleOpenDetail(kit)}
-                      onQuickAdd={() => handleQuickAdd(kit)}
-                      isFavorite={kit?.id ? (isInWishlist?.(kit.id) ?? false) : false}
-                      onToggleFavorite={() => kit?.id && toggleWishlist?.(kit.id)}
-                    />
-                  ))}
-              </View>
-            )}
-          </View>
-        )}
-
-        {/* CITY SEEDING INDICATOR */}
-        {isSeedingCity && preferences.currentCity ? (
-          <View
-            style={{
-              flexDirection: 'row',
-              alignItems: 'center',
-              gap: 8,
-              paddingHorizontal: 16,
-              paddingVertical: 10,
-            }}
-          >
-            <ActivityIndicator size="small" color={colors.primary} />
-            <Text style={{ fontSize: 12, color: colors.textSecondary }}>
-              Discovering local recipes for {preferences.currentCity}…
-            </Text>
-          </View>
-        ) : null}
-
-        {/* SECTION 1: Trending in Your Region */}
-        {dietFilterTags.size === 0 && selectedCuisine === 'All' && (
-          <View style={styles.catalogSection}>
-            <View style={styles.sectionHeaderRow}>
-              <View>
-                <Text style={[styles.sectionHeading, { color: colors.textPrimary }]}>
-                  Trending in {preferences.currentCity}
-                </Text>
-                <Text style={[styles.sectionSubtitle, { color: colors.textSecondary }]}>
-                  {preferences.currentCity} regional specialties & popular kits in your area today
-                </Text>
-              </View>
-            </View>
-
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.horizontalCardRow}
-            >
-              {trendingKits
-                .filter((k): k is MealKit => Boolean(k && k.id))
-                .map((kit) => (
-                  <MealKitHorizontalCard
-                    key={kit.id}
-                    kit={kit}
-                    currentCity={preferences.currentCity}
-                    onPress={() => handleOpenDetail(kit)}
-                    onQuickAdd={() => handleQuickAdd(kit)}
-                    isFavorite={kit?.id ? (isInWishlist?.(kit.id) ?? false) : false}
-                    onToggleFavorite={() => kit?.id && toggleWishlist?.(kit.id)}
-                  />
-                ))}
-            </ScrollView>
-          </View>
-        )}
-
-        {/* SECTION 1.5: Global Favorites & Foreign Specials (Burgers, Pizzas, Tacos, Burritos, Pastas) */}
-        {dietFilterTags.size === 0 && selectedCuisine === 'All' && foreignKits.length > 0 && (
-          <View style={styles.catalogSection}>
-            <View style={styles.sectionHeaderRow}>
-              <View>
-                <Text style={[styles.sectionHeading, { color: colors.textPrimary }]}>
-                  Global Street Eats & Foreign Specials
-                </Text>
-                <Text style={[styles.sectionSubtitle, { color: colors.textSecondary }]}>
-                  Smash burgers, fermented sourdough pizzas, Birria tacos, burrito bowls, pastas,
-                  European & Mediterranean classics
-                </Text>
-              </View>
-            </View>
-
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.horizontalCardRow}
-            >
-              {foreignKits
-                .filter((k): k is MealKit => Boolean(k && k.id))
-                .map((kit) => (
-                  <MealKitHorizontalCard
-                    key={kit.id}
-                    kit={kit}
-                    onPress={() => handleOpenDetail(kit)}
-                    onQuickAdd={() => handleQuickAdd(kit)}
-                    isFavorite={kit?.id ? (isInWishlist?.(kit.id) ?? false) : false}
-                    onToggleFavorite={() => kit?.id && toggleWishlist?.(kit.id)}
-                  />
-                ))}
-            </ScrollView>
-          </View>
-        )}
-
-        {/* SECTION 2: Recommended for You (Strictly from user's preferred categories & signup profile) */}
-        {dietFilterTags.size === 0 && selectedCuisine === 'All' && (
-          <View style={styles.catalogSection}>
-            <View style={styles.sectionHeaderRow}>
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.sectionHeading, { color: colors.textPrimary }]}>
-                  Recommended for You
-                </Text>
-                <Text style={[styles.sectionSubtitle, { color: colors.textSecondary }]}>
-                  {preferences.dietTypes && preferences.dietTypes.length > 0
-                    ? `Curated for your ${preferences.dietTypes.join(', ').toUpperCase()} profile`
-                    : 'Curated for your profile'}
-                </Text>
-              </View>
-              <TouchableOpacity onPress={() => setPreferencesModalVisible(true)}>
-                <Text style={[styles.editPrefLink, { color: colors.primary }]}>Edit Profile</Text>
-              </TouchableOpacity>
-            </View>
-
-            {recommendedKits.length === 0 ? (
-              <View
-                style={{
-                  padding: 20,
-                  backgroundColor: colors.bgSurface,
-                  borderRadius: radii.lg,
-                  borderColor: colors.borderLight,
-                  borderWidth: 1,
-                  alignItems: 'center',
-                  marginHorizontal: 16,
-                  marginTop: 8,
-                }}
-              >
-                <Icon name="restaurant" size={28} color={colors.textMuted} />
-                <Text
-                  style={{
-                    fontSize: 14,
-                    fontWeight: '700',
-                    color: colors.textPrimary,
-                    marginTop: 8,
-                  }}
-                >
-                  No Dishes in Preferred Categories
-                </Text>
-                <Text
-                  style={{
-                    fontSize: 12,
-                    color: colors.textSecondary,
-                    textAlign: 'center',
-                    marginTop: 4,
-                    marginBottom: 12,
-                  }}
-                >
-                  {preferences.preferredCuisines && preferences.preferredCuisines.length > 0
-                    ? `No meal kits found matching your preferred cuisines in the ${(preferences.dietTypes || []).join(', ').toUpperCase()} category.`
-                    : 'Set your favorite cuisines in your profile to discover personalized chef recommendations.'}
-                </Text>
-                <Button
-                  title="Update Taste Preferences"
-                  variant="primary"
-                  size="sm"
-                  onPress={() => setPreferencesModalVisible(true)}
-                />
-              </View>
-            ) : (
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.horizontalCardRow}
-              >
-                {recommendedKits
-                  .filter((k): k is MealKit => Boolean(k && k.id))
-                  .map((kit) => (
-                    <MealKitHorizontalCard
-                      key={kit.id}
-                      kit={kit}
-                      currentCity={preferences.currentCity}
-                      onPress={() => handleOpenDetail(kit)}
-                      onQuickAdd={() => handleQuickAdd(kit)}
-                      isFavorite={kit?.id ? (isInWishlist?.(kit.id) ?? false) : false}
-                      onToggleFavorite={() => kit?.id && toggleWishlist?.(kit.id)}
-                    />
-                  ))}
-              </ScrollView>
-            )}
-          </View>
-        )}
-
-        {/* SECTION 3: All Available Kits Grid — shown at bottom when no dish category filter active */}
-        {selectedDishCategory === 'All' && (
-          <View style={styles.catalogSection}>
-            <Text style={[styles.sectionHeading, { color: colors.textPrimary }]}>
-              {preferences.currentCity
-                ? `All Kits in ${preferences.currentCity}`
-                : 'All Gourmet Meal Prep Kits'}
-            </Text>
-            <Text style={[styles.sectionSubtitle, { color: colors.textSecondary }]}>
-              Includes fresh ingredients, whole spices & authentic masala sachets
-            </Text>
-
-            {filteredKits.length === 0 ? (
-              <View
-                style={[
-                  styles.emptyKitsContainer,
-                  { backgroundColor: colors.bgSurface, borderColor: colors.borderLight },
-                ]}
-              >
-                <View style={{ marginBottom: 12 }}>
-                  <Icon name="restaurant" size={40} color={colors.textMuted} />
-                </View>
-                <Text style={[styles.emptyKitsTitle, { color: colors.textPrimary }]}>
-                  No dishes match your active filters
-                </Text>
-                <Text style={[styles.emptyKitsSubtitle, { color: colors.textSecondary }]}>
-                  Try loosening your dietary filters or clearing allergen exclusions to see more
-                  dishes.
-                </Text>
-                <TouchableOpacity
-                  style={[styles.resetPrefBtn, { backgroundColor: colors.primary }]}
-                  onPress={() => {
-                    setDietFilterTags(new Set());
-                    setSelectedCuisine('All');
-                    setSelectedDishCategory('All');
-                  }}
-                  activeOpacity={0.8}
-                >
-                  <Text style={styles.resetPrefBtnText}>Show All Dishes</Text>
-                </TouchableOpacity>
-              </View>
-            ) : (
-              <View style={styles.kitsGrid}>
-                {filteredKits
-                  .filter((k): k is MealKit => Boolean(k && k.id))
-                  .map((kit) => (
-                    <MealKitCard
-                      key={kit.id}
-                      kit={kit}
-                      onPress={() => handleOpenDetail(kit)}
-                      onQuickAdd={() => handleQuickAdd(kit)}
-                      isFavorite={kit?.id ? (isInWishlist?.(kit.id) ?? false) : false}
-                      onToggleFavorite={() => kit?.id && toggleWishlist?.(kit.id)}
-                    />
-                  ))}
-              </View>
-            )}
-          </View>
-        )}
+        {/* Catalog Sections (Memoized to isolate catalog re-renders from filter menu states) */}
+        <CatalogSections
+          filteredKits={filteredKits}
+          trendingKits={trendingKits}
+          foreignKits={foreignKits}
+          recommendedKits={recommendedKits}
+          dietFilterTags={dietFilterTags}
+          selectedCuisine={selectedCuisine}
+          selectedDishCategory={selectedDishCategory}
+          currentCity={preferences.currentCity}
+          isSeedingCity={isSeedingCity}
+          dietTypes={preferences.dietTypes}
+          preferredCuisines={preferences.preferredCuisines}
+          onOpenDetail={handleOpenDetail}
+          onQuickAdd={handleQuickAdd}
+          onToggleFavorite={handleToggleFavorite}
+          isInWishlist={isInWishlist}
+          onOpenPreferencesModal={handleOpenPreferencesModal}
+          onResetFilters={handleResetFilters}
+          onResetDishCategory={handleResetDishCategory}
+        />
       </ScrollView>
 
       {/* Meal Detail Modal */}
@@ -1320,20 +1543,21 @@ export const HomeScreenView: React.FC = () => {
         onClose={() => setPreferencesModalVisible(false)}
       />
 
-      {/* Minimalist Filter Selection Modal (Diets / Cuisines / Dishes) */}
-      <Modal
-        visible={activeFilterModal !== null}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setActiveFilterModal(null)}
-      >
-        <View style={styles.filterModalOverlay}>
+      {/* Minimalist Filter Selection Overlay (Diets / Cuisines / Dishes) - Instant 0ms In-Tree Overlay */}
+      {activeFilterModal !== null && (
+        <View style={[StyleSheet.absoluteFill, styles.filterModalOverlay, { zIndex: 9999 }]}>
+          <TouchableOpacity
+            style={StyleSheet.absoluteFill}
+            activeOpacity={1}
+            onPress={() => setActiveFilterModal(null)}
+          />
           <View
             style={[
               styles.filterModalCard,
-              { backgroundColor: colors.bgSurface, borderColor: colors.borderLight },
+              { backgroundColor: colors.bgSurface, borderColor: colors.borderLight, zIndex: 10000 },
               shadows.card,
             ]}
+            onStartShouldSetResponder={() => true}
           >
             <View style={styles.filterModalHeader}>
               <Text style={[styles.filterModalTitle, { color: colors.textPrimary }]}>
@@ -1541,7 +1765,22 @@ export const HomeScreenView: React.FC = () => {
             </TouchableOpacity>
           </View>
         </View>
-      </Modal>
+      )}
+
+      {/* Tappable Location Picker Modal for Changing Location Anytime */}
+      <LocationPickerModal
+        visible={locationModalVisible}
+        onClose={() => setLocationModalVisible(false)}
+        onLocationChanged={(loc) => {
+          runCitySeederIfNeeded(loc.city);
+        }}
+      />
+
+      <ActiveOrdersSelectorModal
+        visible={activeOrdersSheetVisible}
+        onClose={() => setActiveOrdersSheetVisible(false)}
+        activeOrders={activeOrders}
+      />
     </View>
   );
 };
@@ -1549,6 +1788,55 @@ export const HomeScreenView: React.FC = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  dietaryPromptCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginHorizontal: 16,
+    marginBottom: 12,
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    gap: 10,
+  },
+  dietaryPromptLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    flex: 1,
+  },
+  dietaryPromptIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dietaryPromptTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  dietaryPromptSub: {
+    fontSize: 12,
+    marginTop: 2,
+  },
+  dietaryPromptActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  dietaryPromptBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  dietaryPromptBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  dietaryPromptDismissBtn: {
+    padding: 4,
   },
   topHeader: {
     flexDirection: 'row',
@@ -2053,5 +2341,20 @@ const styles = StyleSheet.create({
   cardOrigPrice: {
     fontSize: 11,
     textDecorationLine: 'line-through',
+  },
+  showMoreBtn: {
+    paddingVertical: 14,
+    paddingHorizontal: 24,
+    borderRadius: 14,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 16,
+    marginBottom: 8,
+    width: '100%',
+  },
+  showMoreBtnText: {
+    fontSize: 14,
+    fontWeight: '700',
   },
 });

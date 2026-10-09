@@ -1,24 +1,24 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import {
-    AUTH_STORAGE_KEY,
-    getStoredUser,
-    loginWithGoogle,
-    logoutUser,
-    saveStoredUser,
-    sendEmailOTP,
-    sendPhoneOTP,
-    subscribeToFirebaseAuthChanges,
-    UserProfile,
-    validateAdminEmail,
-    verifyEmailOTP,
-    verifyPhoneOTP,
+  AUTH_STORAGE_KEY,
+  getStoredUser,
+  loginWithGoogle,
+  logoutUser,
+  saveStoredUser,
+  sendEmailOTP,
+  sendPhoneOTP,
+  subscribeToFirebaseAuthChanges,
+  UserProfile,
+  validateAdminEmail,
+  verifyEmailOTP,
+  verifyPhoneOTP,
 } from '../firebase/authService';
 
 import {
-    AdminRole,
-    ALL_REGIONS,
-    fetchAdminProfile,
-    isSuperAdminEmail,
+  AdminRole,
+  ALL_REGIONS,
+  fetchAdminProfile,
+  isSuperAdminEmail,
 } from '../services/adminRbacService';
 import { RegionHub } from '../services/mealKitsService';
 
@@ -47,6 +47,11 @@ interface AuthContextType {
     phone: string,
   ) => Promise<{ success: boolean; error?: string; otpHint?: string }>;
   confirmPhoneOTP: (code: string) => Promise<{ success: boolean; error?: string }>;
+  updateUserContact: (contact: {
+    displayName?: string;
+    phoneNumber?: string;
+    email?: string;
+  }) => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -338,6 +343,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  const updateUserContact = async (contact: {
+    displayName?: string;
+    phoneNumber?: string;
+    email?: string;
+  }) => {
+    if (user) {
+      const updatedUser: UserProfile = {
+        ...user,
+        displayName: contact.displayName !== undefined ? contact.displayName : user.displayName,
+        phoneNumber: contact.phoneNumber !== undefined ? contact.phoneNumber : user.phoneNumber,
+        email: contact.email !== undefined ? contact.email : user.email,
+      };
+      setUser(updatedUser);
+      await saveStoredUser(updatedUser);
+    }
+  };
+
   const logout = async () => {
     setLoading(true);
     try {
@@ -375,6 +397,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         confirmEmailOTP,
         requestPhoneOTP,
         confirmPhoneOTP,
+        updateUserContact,
         logout,
       }}
     >

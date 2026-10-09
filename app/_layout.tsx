@@ -7,10 +7,12 @@ import {
 } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
+import { View } from 'react-native';
 import 'react-native-reanimated';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { useColorScheme } from '@/components/useColorScheme';
+import { AppLoadingCoverScreen } from '../features/splash/AppLoadingCoverScreen';
 import { AuthProvider } from '../framework/context/AuthContext';
 import { ThemeProvider as RasoiThemeProvider } from '../framework/theme/ThemeContext';
 import { PreferencesProvider } from '../framework/context/PreferencesContext';
@@ -18,6 +20,7 @@ import { WishlistProvider } from '../framework/context/WishlistContext';
 import { CartProvider } from '../framework/context/CartContext';
 import { InAppDialogProvider } from '../framework/context/InAppDialogContext';
 import { WalletProvider } from '../framework/context/WalletContext';
+import { CookModeProvider } from '../framework/context/CookModeContext';
 
 export {
   // Catch any errors thrown by the Layout component.
@@ -67,12 +70,23 @@ function RootLayoutNav() {
             <WalletProvider>
               <CartProvider>
                 <InAppDialogProvider>
-                  <NavigationThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-                    <Stack>
-                      <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-                      <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
-                    </Stack>
-                  </NavigationThemeProvider>
+                  <CookModeProvider>
+                    <NavigationThemeProvider
+                      value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}
+                    >
+                      <View style={{ flex: 1 }}>
+                        <Stack>
+                          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+                          <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
+                          <Stack.Screen
+                            name="cook/[orderId]"
+                            options={{ headerShown: false, animation: 'slide_from_bottom' }}
+                          />
+                        </Stack>
+                        <AppLoadingCoverScreen />
+                      </View>
+                    </NavigationThemeProvider>
+                  </CookModeProvider>
                 </InAppDialogProvider>
               </CartProvider>
             </WalletProvider>

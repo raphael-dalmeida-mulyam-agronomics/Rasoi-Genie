@@ -22,6 +22,7 @@ import { Button } from '../../framework/ui/Button';
 import { Icon } from '../../framework/ui/Icon';
 import { LiveTrackingModal } from './LiveTrackingModal';
 import { WishlistView } from '../wishlist/WishlistView';
+import { getGuestOrders } from '../../framework/services/guestService';
 
 export const OrderHistoryView: React.FC = () => {
   const { user } = useAuth();
@@ -30,11 +31,18 @@ export const OrderHistoryView: React.FC = () => {
 
   const [activeTab, setActiveTab] = useState<'active' | 'previous' | 'wishlist'>('active');
   const [orders, setOrders] = useState<Order[]>([]);
+  const [guestLocalOrders, setGuestLocalOrders] = useState<Order[]>([]);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [trackingModalVisible, setTrackingModalVisible] = useState(false);
   const [dismissedOrderIds, setDismissedOrderIds] = useState<Set<string>>(new Set());
   const [cancelledModalOrder, setCancelledModalOrder] = useState<Order | null>(null);
   const [cancellationModalVisible, setCancellationModalVisible] = useState(false);
+
+  useEffect(() => {
+    if (!user) {
+      getGuestOrders().then((ord) => setGuestLocalOrders(ord));
+    }
+  }, [user, orders]);
 
   useEffect(() => {
     let isMounted = true;
@@ -90,21 +98,35 @@ export const OrderHistoryView: React.FC = () => {
   // Filter orders relevant to current user and exclude mock filler data & duplicates
   const userOrders = useMemo(() => {
     const clean = orders.filter((o) => !MOCK_ORDER_IDS.has(o.id) && o.id.startsWith('ORD-'));
-    const filtered = !user
-      ? clean
-      : clean.filter(
-          (o) =>
-            o.userId === user.uid ||
-            (user.phoneNumber &&
-              o.customerPhone &&
-              o.customerPhone
-                .replace(/\D/g, '')
-                .endsWith(user.phoneNumber.replace(/\D/g, '').slice(-10))) ||
-            (user.email &&
-              o.customerEmail &&
-              o.customerEmail.trim().toLowerCase() === user.email.trim().toLowerCase()) ||
-            o.userId.startsWith('guest_user_'),
-        );
+    if (!user) {
+      // For guests: order history is LOCAL ONLY, merged with realtime status matching ID
+      const guestOrderMap = new Map<string, Order>();
+      for (const g of guestLocalOrders) {
+        guestOrderMap.set(g.id, g);
+      }
+      for (const o of clean) {
+        if (guestOrderMap.has(o.id)) {
+          guestOrderMap.set(o.id, { ...guestOrderMap.get(o.id)!, ...o });
+        }
+      }
+      return Array.from(guestOrderMap.values()).sort(
+        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+      );
+    }
+
+    const filtered = clean.filter(
+      (o) =>
+        o.userId === user.uid ||
+        (user.phoneNumber &&
+          o.customerPhone &&
+          o.customerPhone
+            .replace(/\D/g, '')
+            .endsWith(user.phoneNumber.replace(/\D/g, '').slice(-10))) ||
+        (user.email &&
+          o.customerEmail &&
+          o.customerEmail.trim().toLowerCase() === user.email.trim().toLowerCase()) ||
+        o.userId.startsWith('guest_user_'),
+    );
 
     // Strict deduplication by order ID and transaction ID
     const seenIds = new Set<string>();
@@ -118,7 +140,7 @@ export const OrderHistoryView: React.FC = () => {
       deduped.push(ord);
     }
     return deduped;
-  }, [orders, user]);
+  }, [orders, user, guestLocalOrders]);
 
   // Cancelled orders that the user has not dismissed yet
   const undismissedCancelledOrders = useMemo(() => {
@@ -361,6 +383,23 @@ export const OrderHistoryView: React.FC = () => {
               </>
             ) : (
               <>
+                {isActive && (
+                  <Button
+                    testID={`open-recipe-btn-${order.id}`}
+                    title="Open recipe"
+                    icon={<Icon name="restaurant" size={15} color="#FFFFFF" />}
+                    variant="primary"
+                    size="sm"
+                    style={{ marginRight: 8 }}
+                    onPress={() => {
+                      router.push({
+                        pathname: '/cook/[orderId]' as any,
+                        params: { orderId: order.id },
+                      });
+                    }}
+                    accessibilityLabel={`Open recipe for order ${order.id}`}
+                  />
+                )}
                 <Button
                   title="Reorder"
                   icon={<Icon name="refresh" size={14} color={colors.textPrimary} />}
@@ -474,6 +513,53 @@ export const OrderHistoryView: React.FC = () => {
           </TouchableOpacity>
         </View>
       </View>
+
+      {/* Guest Local History Notice */}
+      {!user && (
+        <View
+          testID="guest-order-history-notice"
+          style={{
+            marginHorizontal: 16,
+            marginTop: 10,
+            marginBottom: 4,
+            padding: 12,
+            backgroundColor: '#FEF3C7',
+            borderRadius: radii.md,
+            borderWidth: 1,
+            borderColor: '#F59E0B',
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+          }}
+        >
+          <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, marginRight: 8 }}>
+            <Icon name="information-circle" size={20} color="#D97706" style={{ marginRight: 8 }} />
+            <View style={{ flex: 1 }}>
+              <Text style={{ color: '#92400E', fontWeight: '700', fontSize: 12 }}>
+                Device Order History
+              </Text>
+              <Text style={{ color: '#B45309', fontSize: 11, marginTop: 2 }}>
+                Your order history is stored only on this device. Clearing app data or switching
+                devices loses it.
+              </Text>
+            </View>
+          </View>
+          <TouchableOpacity
+            testID="guest-create-account-btn"
+            onPress={() => router.push('/login' as any)}
+            style={{
+              backgroundColor: '#D97706',
+              paddingHorizontal: 10,
+              paddingVertical: 6,
+              borderRadius: radii.sm,
+            }}
+          >
+            <Text style={{ color: '#FFFFFF', fontWeight: '700', fontSize: 11 }}>
+              Create Account
+            </Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       {activeTab === 'wishlist' ? (
         <WishlistView />

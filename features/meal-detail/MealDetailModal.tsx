@@ -10,6 +10,7 @@ import {
   Dimensions,
   Animated,
   Easing,
+  Platform,
 } from 'react-native';
 import {
   MealKit,
@@ -71,7 +72,7 @@ export const MealDetailModal: React.FC<MealDetailModalProps> = ({
         toValue: 0,
         duration: 320,
         easing: Easing.out(Easing.cubic),
-        useNativeDriver: true,
+        useNativeDriver: Platform.OS !== 'web',
       }).start();
     } else {
       setModalVisible(false);
@@ -83,7 +84,7 @@ export const MealDetailModal: React.FC<MealDetailModalProps> = ({
       toValue: windowHeight,
       duration: 350,
       easing: Easing.in(Easing.cubic),
-      useNativeDriver: true,
+      useNativeDriver: Platform.OS !== 'web',
     }).start(() => {
       setModalVisible(false);
       onClose();
@@ -384,7 +385,10 @@ export const MealDetailModal: React.FC<MealDetailModalProps> = ({
               >
                 <Icon name="shield-checkmark" size={16} color="#059669" />
                 <Text style={{ fontSize: 12, color: '#065F46', flex: 1, fontWeight: '600' }}>
-                  Freshness Assured: Vacuum-packed fresh daily. {kit.shelfLife || `${kit.shelfLifeDays || 4} days shelf life (${kit.storageCondition || 'Keep refrigerated at 2-5°C'})`}.
+                  Freshness Assured: Vacuum-packed fresh daily.{' '}
+                  {kit.shelfLife ||
+                    `${kit.shelfLifeDays || 4} days shelf life (${kit.storageCondition || 'Keep refrigerated at 2-5°C'})`}
+                  .
                 </Text>
               </View>
 

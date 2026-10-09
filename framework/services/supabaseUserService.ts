@@ -1,4 +1,4 @@
-﻿import AsyncStorage from '@react-native-async-storage/async-storage';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { collection, doc, getDocs, setDoc } from 'firebase/firestore';
 import { PaymentMethod } from '../context/CartContext';
 import { AddressItem, UserDietaryPreferences } from '../context/PreferencesContext';
@@ -124,7 +124,10 @@ export async function saveUserProfileToSupabase(
     return { success: true };
   } catch (dbErr: any) {
     if (!isMissingSchemaError(dbErr)) {
-      console.warn('[UserService] Supabase exception (using local cache):', dbErr?.message || dbErr);
+      console.warn(
+        '[UserService] Supabase exception (using local cache):',
+        dbErr?.message || dbErr,
+      );
     }
     emitUserProfileUpdated();
     return { success: true };
@@ -291,7 +294,9 @@ export async function fetchAllUserProfilesFromSupabase(): Promise<UserProfileDat
     const supabase = getSupabaseClient();
     const { data: ordersData, error: ordersErr } = await supabase
       .from('orders')
-      .select('user_id, customer_name, customer_phone, customer_email, delivery_address, created_at')
+      .select(
+        'user_id, customer_name, customer_phone, customer_email, delivery_address, created_at',
+      )
       .order('created_at', { ascending: false });
 
     if (!ordersErr && Array.isArray(ordersData)) {
@@ -423,18 +428,18 @@ export function subscribeToUserProfilesRealtime(callback: () => void): () => voi
   let supabaseChannel: any = null;
   try {
     const supabase = getSupabaseClient();
+    const channelTopic = `realtime_user_profiles_admin_${Math.random().toString(36).substring(2, 9)}`;
     supabaseChannel = supabase
-      .channel('realtime_user_profiles_admin')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'user_profiles' },
-        () => {
-          callback();
-        },
-      )
+      .channel(channelTopic)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'user_profiles' }, () => {
+        callback();
+      })
       .subscribe();
   } catch (err) {
-    console.warn('[UserService] Could not initialize Supabase Realtime channel for user_profiles:', err);
+    console.warn(
+      '[UserService] Could not initialize Supabase Realtime channel for user_profiles:',
+      err,
+    );
   }
 
   return () => {
@@ -449,4 +454,3 @@ export function subscribeToUserProfilesRealtime(callback: () => void): () => voi
     }
   };
 }
-

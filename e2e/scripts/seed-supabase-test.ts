@@ -122,7 +122,8 @@ export async function seedSupabaseTest() {
         chef_email: TEST_USERS.chef.email,
         name: 'Royal Shahi Paneer Special',
         tagline: 'Creamy cashew and saffron royal curry',
-        description: 'Tender cottage cheese cooked in a rich, sweet and savory gravy of cashews, almonds and aromatic spices.',
+        description:
+          'Tender cottage cheese cooked in a rich, sweet and savory gravy of cashews, almonds and aromatic spices.',
         cuisine: 'North Indian',
         diet: 'veg',
         dish_category: 'Curries & Gravies',
@@ -136,9 +137,21 @@ export async function seedSupabaseTest() {
           { name: 'Whole Shahi Spices', quantity: '1 sachet' },
         ],
         recipe_steps: [
-          { step_number: 1, title: 'Saute spices', instruction: 'Heat ghee in a pan and lightly saute whole spices.' },
-          { step_number: 2, title: 'Simmer gravy', instruction: 'Add cashew paste and simmer on low flame for 8 minutes.' },
-          { step_number: 3, title: 'Add paneer', instruction: 'Gently add paneer cubes and garnish with crushed kasuri methi.' },
+          {
+            step_number: 1,
+            title: 'Saute spices',
+            instruction: 'Heat ghee in a pan and lightly saute whole spices.',
+          },
+          {
+            step_number: 2,
+            title: 'Simmer gravy',
+            instruction: 'Add cashew paste and simmer on low flame for 8 minutes.',
+          },
+          {
+            step_number: 3,
+            title: 'Add paneer',
+            instruction: 'Gently add paneer cubes and garnish with crushed kasuri methi.',
+          },
         ],
         submission_status: 'pending_review',
         submitted_at: new Date().toISOString(),
@@ -160,6 +173,18 @@ export async function cleanupSupabaseTest() {
   try {
     // Delete test orders created during tests
     await supabase.from('orders').delete().ilike('id', 'ORD-E2E%');
+    // Delete test meal kits created during tests
+    await supabase
+      .from('meal_kits')
+      .delete()
+      .or(
+        'id.ilike.e2e-%,name.ilike.Kashmiri Rogan Josh%,name.ilike.Experimental Spicy Dish%,id.ilike.city-%,id.ilike.kit-test-%',
+      );
+    // Delete test chef submissions created during tests
+    await supabase
+      .from('chef_submissions')
+      .delete()
+      .or('id.ilike.e2e-%,name.ilike.Kashmiri Rogan Josh%,name.ilike.Experimental Spicy Dish%');
     console.log('[Cleanup Supabase] Done cleanup.');
   } catch (err: any) {
     console.warn('[Cleanup Supabase] Error during cleanup:', err?.message || err);

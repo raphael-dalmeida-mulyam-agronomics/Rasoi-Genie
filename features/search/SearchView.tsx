@@ -9,6 +9,7 @@ import {
   Image,
   Modal,
   Alert,
+  BackHandler,
 } from 'react-native';
 import { useTheme } from '../../framework/theme/ThemeContext';
 import { useCart } from '../../framework/context/CartContext';
@@ -95,6 +96,16 @@ export const SearchView: React.FC = () => {
 
   // Active dropdown modal
   const [activeDropdown, setActiveDropdown] = useState<ActiveDropdownType>(null);
+
+  // Close dropdown overlay on Android back button press
+  useEffect(() => {
+    if (!activeDropdown) return;
+    const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
+      setActiveDropdown(null);
+      return true;
+    });
+    return () => backHandler.remove();
+  }, [activeDropdown]);
 
   // Modal
   const [selectedKit, setSelectedKit] = useState<MealKit | null>(null);
@@ -430,7 +441,7 @@ export const SearchView: React.FC = () => {
                 borderRadius: radii.pill,
               },
             ]}
-            onPress={() => setActiveDropdown('diet')}
+            onPress={() => setActiveDropdown((prev) => (prev === 'diet' ? null : 'diet'))}
             activeOpacity={0.75}
           >
             <Icon
@@ -467,7 +478,7 @@ export const SearchView: React.FC = () => {
                 borderRadius: radii.pill,
               },
             ]}
-            onPress={() => setActiveDropdown('cuisine')}
+            onPress={() => setActiveDropdown((prev) => (prev === 'cuisine' ? null : 'cuisine'))}
             activeOpacity={0.75}
           >
             <Icon
@@ -501,7 +512,7 @@ export const SearchView: React.FC = () => {
                 borderRadius: radii.pill,
               },
             ]}
-            onPress={() => setActiveDropdown('spice')}
+            onPress={() => setActiveDropdown((prev) => (prev === 'spice' ? null : 'spice'))}
             activeOpacity={0.75}
           >
             <Icon
@@ -535,7 +546,7 @@ export const SearchView: React.FC = () => {
                 borderRadius: radii.pill,
               },
             ]}
-            onPress={() => setActiveDropdown('sort')}
+            onPress={() => setActiveDropdown((prev) => (prev === 'sort' ? null : 'sort'))}
             activeOpacity={0.75}
           >
             <Icon
@@ -707,24 +718,21 @@ export const SearchView: React.FC = () => {
         </View>
       </ScrollView>
 
-      {/* Dropdown Options Modal Overlay */}
-      <Modal
-        visible={activeDropdown !== null}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setActiveDropdown(null)}
-      >
-        <TouchableOpacity
-          style={styles.modalOverlay}
-          activeOpacity={1}
-          onPress={() => setActiveDropdown(null)}
-        >
+      {/* Dropdown Options Overlay - Instant 0ms In-Tree Overlay */}
+      {activeDropdown !== null && (
+        <View style={[StyleSheet.absoluteFill, styles.modalOverlay, { zIndex: 9999 }]}>
+          <TouchableOpacity
+            style={StyleSheet.absoluteFill}
+            activeOpacity={1}
+            onPress={() => setActiveDropdown(null)}
+          />
           <View
             style={[
               styles.dropdownModalCard,
               {
                 backgroundColor: colors.bgSurface,
                 borderColor: colors.borderLight,
+                zIndex: 10000,
                 ...shadows.card,
               },
             ]}
@@ -759,8 +767,8 @@ export const SearchView: React.FC = () => {
               </Text>
             </TouchableOpacity>
           </View>
-        </TouchableOpacity>
-      </Modal>
+        </View>
+      )}
 
       {/* Detail Modal */}
       <MealDetailModal

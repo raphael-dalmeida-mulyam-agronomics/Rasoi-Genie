@@ -1,6 +1,160 @@
 import { supabase } from '../supabase/client';
-import { INITIAL_MEAL_KITS, MealKit, RegionHub, compileMealKitTags } from './mealKitsService';
+import {
+  INITIAL_MEAL_KITS,
+  MealKit,
+  RegionHub,
+  compileMealKitTags,
+  getMealKitById,
+  applyRealtimeMealKitInsert,
+  applyRealtimeMealKitUpdate,
+  applyRealtimeMealKitDelete,
+} from './mealKitsService';
+import { subscribeToTable, RealtimeConnectionStatus } from './realtimeService';
 import { STORAGE_CENTRE_REGIONS } from './adminRbacService';
+
+/**
+ * Maps a raw Supabase meal_kits row to our strongly typed MealKit model.
+ */
+export function mapSupabaseRowToMealKit(row: any): MealKit {
+  const existing = getMealKitById?.(row.id) || INITIAL_MEAL_KITS.find((k) => k.id === row.id);
+  return {
+    id: row.id,
+    name: row.name,
+    hindiName: row.hindi_name || existing?.hindiName,
+    slug: (row.name || '').toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+    tagline: row.tagline || existing?.tagline || '',
+    description: row.description || existing?.description || '',
+    heroImage:
+      row.hero_image ||
+      row.image_url ||
+      row.nutrition?.hero_image ||
+      existing?.heroImage ||
+      'https://images.unsplash.com/photo-1546833999-b9f581a1996d?auto=format&fit=crop&w=1000&q=80',
+    galleryImages: [
+      row.hero_image ||
+        row.image_url ||
+        row.nutrition?.hero_image ||
+        existing?.heroImage ||
+        'https://images.unsplash.com/photo-1546833999-b9f581a1996d?auto=format&fit=crop&w=1000&q=80',
+    ],
+    price: Number(row.price),
+    originalPrice: row.original_price ? Number(row.original_price) : Number(row.price),
+    servings: Number(row.servings) || 2,
+    prepTimeMinutes: Math.round((Number(row.prep_time_minutes) || 30) / 2),
+    cookTimeMinutes: Math.round((Number(row.prep_time_minutes) || 30) / 2),
+    diet: row.diet_type || 'veg',
+    cuisine: row.cuisine || 'North Indian',
+    dishCategory: row.category || 'Curries & Gravies',
+    spiceLevel: row.spice_level || 'Medium',
+    difficulty:
+      (row.difficulty as any) || row.nutrition?.difficulty || existing?.difficulty || 'Easy',
+    dietaryTags:
+      Array.isArray(row.dietary_tags) && row.dietary_tags.length > 0
+        ? row.dietary_tags
+        : Array.isArray(row.nutrition?.dietary_tags) && row.nutrition.dietary_tags.length > 0
+          ? row.nutrition.dietary_tags
+          : [row.diet_type || 'veg'],
+    isChefSpecial: Boolean(row.nutrition?.is_chef_special ?? existing?.isChefSpecial ?? false),
+    chefId: row.nutrition?.chef_id || existing?.chefId,
+    chefName: row.nutrition?.chef_name || existing?.chefName,
+    availableStorageCentres:
+      row.nutrition?.available_storage_centres || existing?.availableStorageCentres || [],
+    isTrending:
+      row.nutrition?.is_trending !== undefined
+        ? Boolean(row.nutrition.is_trending)
+        : row.is_trending !== undefined
+          ? Boolean(row.is_trending)
+          : (existing?.isTrending ?? false),
+    availableRegions:
+      Array.isArray(row.nutrition?.available_regions) && row.nutrition.available_regions.length > 0
+        ? row.nutrition.available_regions
+        : Array.isArray(row.available_regions) && row.available_regions.length > 0
+          ? row.available_regions
+          : existing?.availableRegions || ['North', 'South', 'West', 'East'],
+    cities: Array.isArray(row.nutrition?.cities)
+      ? row.nutrition.cities
+      : Array.isArray(row.cities)
+        ? row.cities
+        : existing?.cities || [],
+    subRegions: Array.isArray(row.nutrition?.sub_regions)
+      ? row.nutrition.sub_regions
+      : Array.isArray(row.sub_regions)
+        ? row.sub_regions
+        : existing?.subRegions || [],
+    originCity: row.nutrition?.origin_city || row.origin_city || existing?.originCity || null,
+    isOutOfStock: row.stock_status === 'out_of_stock' || Boolean(existing?.isOutOfStock),
+    stockByRegion: existing?.stockByRegion || {
+      North: 50,
+      South: 50,
+      West: 50,
+      East: 50,
+    },
+    shelfLifeDays:
+      Number(row.nutrition?.shelf_life_days) ||
+      Number(row.shelf_life_days) ||
+      existing?.shelfLifeDays ||
+      4,
+    shelfLife:
+      row.nutrition?.shelf_life ||
+      row.shelf_life ||
+      existing?.shelfLife ||
+      `${existing?.shelfLifeDays || 4} days (Keep refrigerated at 2°C - 5°C)`,
+    storageCondition:
+      row.nutrition?.storage_condition ||
+      row.storage_condition ||
+      existing?.storageCondition ||
+      'Refrigerated at 2°C - 5°C',
+    rating: Number(row.rating) || 5.0,
+    reviewCount: Number(row.reviews_count) || 0,
+    nutrition: row.nutrition || {
+      calories: row.calories || 350,
+      protein: 14,
+      carbs: 35,
+      fat: 10,
+      fiber: 4,
+    },
+    allergens: row.nutrition?.allergens || row.allergens || existing?.allergens || [],
+    tags:
+      row.nutrition?.tags ||
+      row.tags ||
+      existing?.tags ||
+      compileMealKitTags({
+        diet: row.diet_type || 'veg',
+        cuisine: row.cuisine || 'North Indian',
+        dishCategory: row.category || 'Curries & Gravies',
+        availableRegions: row.nutrition?.available_regions ||
+          row.available_regions || ['North', 'South', 'West', 'East'],
+        allergens: row.nutrition?.allergens || row.allergens || existing?.allergens || [],
+      }),
+    ingredients: row.ingredients || existing?.ingredients || [],
+    masalaSachets: (row.masala_sachets || existing?.masalaSachets || []).map((s: any) =>
+      typeof s === 'string' ? s : s.name || s.sachetName || 'Masala Sachet',
+    ),
+    sachets:
+      Array.isArray(row.masala_sachets) &&
+      row.masala_sachets.length > 0 &&
+      typeof row.masala_sachets[0] === 'object'
+        ? row.masala_sachets.map((s: any, idx: number) => ({
+            id: s.id || `sachet-${idx + 1}`,
+            name: s.name || s.sachetName || `Sachet ${idx + 1}`,
+            weight: s.weight,
+            spices: s.spices || [],
+          }))
+        : existing?.sachets,
+    recipeSteps: (row.instructions || []).map((ins: any, idx: number) => ({
+      stepNumber: ins.step || idx + 1,
+      title: ins.title || `Step ${idx + 1}`,
+      instruction: ins.instruction || '',
+      timerSeconds: ins.timerSeconds,
+      imageUrl: ins.imageUrl,
+      tip: ins.tip,
+    })),
+    reviews: existing?.reviews || [],
+    salesByRegion: existing?.salesByRegion || {},
+    createdAt: row.created_at || existing?.createdAt || existing?.submittedAt,
+    updatedAt: row.updated_at || existing?.updatedAt,
+  };
+}
 
 /**
  * Fetches published meal kits from Supabase.
@@ -18,146 +172,7 @@ export async function fetchPublishedMealKitsFromSupabase(): Promise<MealKit[]> {
       return INITIAL_MEAL_KITS;
     }
 
-    const mappedSupabaseKits: MealKit[] = data.map((row: any) => {
-      const existing = INITIAL_MEAL_KITS.find((k) => k.id === row.id);
-      return {
-        id: row.id,
-        name: row.name,
-        hindiName: row.hindi_name || existing?.hindiName,
-        slug: (row.name || '').toLowerCase().replace(/[^a-z0-9]+/g, '-'),
-        tagline: row.tagline || existing?.tagline || '',
-        description: row.description || existing?.description || '',
-        heroImage:
-          row.hero_image ||
-          row.image_url ||
-          row.nutrition?.hero_image ||
-          existing?.heroImage ||
-          'https://images.unsplash.com/photo-1546833999-b9f581a1996d?auto=format&fit=crop&w=1000&q=80',
-        galleryImages: [
-          row.hero_image ||
-            row.image_url ||
-            row.nutrition?.hero_image ||
-            existing?.heroImage ||
-            'https://images.unsplash.com/photo-1546833999-b9f581a1996d?auto=format&fit=crop&w=1000&q=80',
-        ],
-        price: Number(row.price),
-        originalPrice: row.original_price ? Number(row.original_price) : Number(row.price),
-        servings: Number(row.servings) || 2,
-        prepTimeMinutes: Math.round((Number(row.prep_time_minutes) || 30) / 2),
-        cookTimeMinutes: Math.round((Number(row.prep_time_minutes) || 30) / 2),
-        diet: row.diet_type || 'veg',
-        cuisine: row.cuisine || 'North Indian',
-        dishCategory: row.category || 'Curries & Gravies',
-        spiceLevel: row.spice_level || 'Medium',
-        difficulty: (row.difficulty as any) || row.nutrition?.difficulty || existing?.difficulty || 'Easy',
-        dietaryTags:
-          Array.isArray(row.dietary_tags) && row.dietary_tags.length > 0
-            ? row.dietary_tags
-            : Array.isArray(row.nutrition?.dietary_tags) && row.nutrition.dietary_tags.length > 0
-            ? row.nutrition.dietary_tags
-            : [row.diet_type || 'veg'],
-        isChefSpecial: Boolean(row.nutrition?.is_chef_special ?? existing?.isChefSpecial ?? false),
-        chefId: row.nutrition?.chef_id || existing?.chefId,
-        chefName: row.nutrition?.chef_name || existing?.chefName,
-        availableStorageCentres:
-          row.nutrition?.available_storage_centres ||
-          existing?.availableStorageCentres ||
-          [],
-        isTrending:
-          row.nutrition?.is_trending !== undefined
-            ? Boolean(row.nutrition.is_trending)
-            : row.is_trending !== undefined
-            ? Boolean(row.is_trending)
-            : (existing?.isTrending ?? false),
-        availableRegions:
-          Array.isArray(row.nutrition?.available_regions) && row.nutrition.available_regions.length > 0
-            ? row.nutrition.available_regions
-            : Array.isArray(row.available_regions) && row.available_regions.length > 0
-            ? row.available_regions
-            : existing?.availableRegions || ['North', 'South', 'West', 'East'],
-        cities:
-          Array.isArray(row.nutrition?.cities)
-            ? row.nutrition.cities
-            : Array.isArray(row.cities)
-            ? row.cities
-            : existing?.cities || [],
-        subRegions:
-          Array.isArray(row.nutrition?.sub_regions)
-            ? row.nutrition.sub_regions
-            : Array.isArray(row.sub_regions)
-            ? row.sub_regions
-            : existing?.subRegions || [],
-        originCity: row.nutrition?.origin_city || row.origin_city || existing?.originCity || null,
-        isOutOfStock: row.stock_status === 'out_of_stock' || Boolean(existing?.isOutOfStock),
-        stockByRegion: existing?.stockByRegion || {
-          North: 50,
-          South: 50,
-          West: 50,
-          East: 50,
-        },
-        shelfLifeDays:
-          Number(row.nutrition?.shelf_life_days) ||
-          Number(row.shelf_life_days) ||
-          existing?.shelfLifeDays ||
-          4,
-        shelfLife:
-          row.nutrition?.shelf_life ||
-          row.shelf_life ||
-          existing?.shelfLife ||
-          `${existing?.shelfLifeDays || 4} days (Keep refrigerated at 2°C - 5°C)`,
-        storageCondition:
-          row.nutrition?.storage_condition ||
-          row.storage_condition ||
-          existing?.storageCondition ||
-          'Refrigerated at 2°C - 5°C',
-        rating: Number(row.rating) || 5.0,
-        reviewCount: Number(row.reviews_count) || 0,
-        nutrition: row.nutrition || {
-          calories: row.calories || 350,
-          protein: 14,
-          carbs: 35,
-          fat: 10,
-          fiber: 4,
-        },
-        allergens: row.nutrition?.allergens || row.allergens || existing?.allergens || [],
-        tags:
-          row.nutrition?.tags ||
-          row.tags ||
-          existing?.tags ||
-          compileMealKitTags({
-            diet: row.diet_type || 'veg',
-            cuisine: row.cuisine || 'North Indian',
-            dishCategory: row.category || 'Curries & Gravies',
-            availableRegions: row.nutrition?.available_regions || row.available_regions || ['North', 'South', 'West', 'East'],
-            allergens: row.nutrition?.allergens || row.allergens || existing?.allergens || [],
-          }),
-        ingredients: row.ingredients || [],
-        masalaSachets: (row.masala_sachets || []).map((s: any) =>
-          typeof s === 'string' ? s : s.name || s.sachetName || 'Masala Sachet',
-        ),
-        sachets:
-          Array.isArray(row.masala_sachets) &&
-          row.masala_sachets.length > 0 &&
-          typeof row.masala_sachets[0] === 'object'
-            ? row.masala_sachets.map((s: any, idx: number) => ({
-                id: s.id || `sachet-${idx + 1}`,
-                name: s.name || s.sachetName || `Sachet ${idx + 1}`,
-                weight: s.weight,
-                spices: s.spices || [],
-              }))
-            : existing?.sachets,
-        recipeSteps: (row.instructions || []).map((ins: any, idx: number) => ({
-          stepNumber: ins.step || idx + 1,
-          title: ins.title || `Step ${idx + 1}`,
-          instruction: ins.instruction || '',
-          timerSeconds: ins.timerSeconds,
-          imageUrl: ins.imageUrl,
-          tip: ins.tip,
-        })),
-        reviews: existing?.reviews || [],
-        salesByRegion: existing?.salesByRegion || {},
-      };
-    });
+    const mappedSupabaseKits: MealKit[] = data.map((row: any) => mapSupabaseRowToMealKit(row));
 
     // Merge: custom Supabase kits appear first, followed by initial kits (omitting any overridden by ID)
     const supabaseKitIds = new Set(mappedSupabaseKits.map((k) => k.id));
@@ -181,7 +196,8 @@ export async function saveMealKitToSupabase(
     const augmentedNutrition = {
       ...existingNutrition,
       allergens: kit.allergens || existingNutrition.allergens || [],
-      available_regions: kit.availableRegions || existingNutrition.available_regions || ['North', 'South', 'West', 'East'],
+      available_regions: kit.availableRegions ||
+        existingNutrition.available_regions || ['North', 'South', 'West', 'East'],
       cities: kit.cities || existingNutrition.cities || [],
       sub_regions: kit.subRegions || existingNutrition.sub_regions || [],
       origin_city: kit.originCity || existingNutrition.origin_city || null,
@@ -190,13 +206,15 @@ export async function saveMealKitToSupabase(
       is_chef_special: kit.isChefSpecial ?? existingNutrition.is_chef_special ?? false,
       chef_id: kit.chefId || existingNutrition.chef_id || null,
       chef_name: kit.chefName || existingNutrition.chef_name || null,
-      available_storage_centres: kit.availableStorageCentres || existingNutrition.available_storage_centres || [],
+      available_storage_centres:
+        kit.availableStorageCentres || existingNutrition.available_storage_centres || [],
       shelf_life_days: kit.shelfLifeDays || existingNutrition.shelf_life_days || 4,
       shelf_life:
         kit.shelfLife ||
         existingNutrition.shelf_life ||
         `${kit.shelfLifeDays || 4} days (${kit.storageCondition || 'Keep refrigerated at 2°C - 5°C'})`,
-      storage_condition: kit.storageCondition || existingNutrition.storage_condition || 'Refrigerated at 2°C - 5°C',
+      storage_condition:
+        kit.storageCondition || existingNutrition.storage_condition || 'Refrigerated at 2°C - 5°C',
       dietary_tags: kit.dietaryTags || [kit.diet || 'veg'],
       difficulty: kit.difficulty || 'Easy',
       hero_image: kit.heroImage,
@@ -257,7 +275,11 @@ export async function toggleMealKitTrendingStatus(
   isTrending: boolean,
 ): Promise<{ success: boolean }> {
   try {
-    const { data: current } = await supabase.from('meal_kits').select('nutrition').eq('id', kitId).maybeSingle();
+    const { data: current } = await supabase
+      .from('meal_kits')
+      .select('nutrition')
+      .eq('id', kitId)
+      .maybeSingle();
     const currentNutr = current?.nutrition || {};
     const { error } = await supabase
       .from('meal_kits')
@@ -415,7 +437,11 @@ export async function updateMealKitShelfLifeInSupabase(
   storageCondition: string = 'Refrigerated at 2°C - 5°C',
 ): Promise<{ success: boolean }> {
   try {
-    const { data: current } = await supabase.from('meal_kits').select('nutrition').eq('id', kitId).maybeSingle();
+    const { data: current } = await supabase
+      .from('meal_kits')
+      .select('nutrition')
+      .eq('id', kitId)
+      .maybeSingle();
     const currentNutr = current?.nutrition || {};
     const { error } = await supabase
       .from('meal_kits')
@@ -456,67 +482,52 @@ export async function deleteMealKitFromSupabase(kitId: string): Promise<{ succes
   }
 }
 
-/**
- * Shared Supabase Realtime channel for meal_kits.
- * Broadcasts instant updates (trending toggles, stock changes, etc.) to all connected clients.
- */
-let sharedMealKitsRealtimeChannel: ReturnType<typeof supabase.channel> | null = null;
-const realtimeMealKitListeners = new Set<() => void>();
-
-export function subscribeToMealKitsRealtime(listener: () => void): () => void {
-  realtimeMealKitListeners.add(listener);
-  ensureSharedMealKitsRealtimeChannel();
-  return () => {
-    realtimeMealKitListeners.delete(listener);
-  };
+export interface MealKitRealtimeHandlers {
+  onInsert?: (kit: MealKit) => void;
+  onUpdate?: (kit: MealKit, oldRow?: Partial<MealKit>) => void;
+  onDelete?: (kitId: string, oldRow?: Partial<MealKit>) => void;
+  onStatusChange?: (status: RealtimeConnectionStatus) => void;
+  onResync?: () => void | Promise<void>;
 }
 
-function ensureSharedMealKitsRealtimeChannel() {
-  if (sharedMealKitsRealtimeChannel) return;
-
-  try {
-    const channelTopic = `rasoi_mealkits_realtime_${Math.random().toString(36).substring(2, 9)}`;
-    const channel = supabase.channel(channelTopic);
-
-    channel.on(
-      'postgres_changes',
-      { event: '*', schema: 'public', table: 'meal_kits' },
-      async (payload: any) => {
-        try {
-          const { updateMealKit, syncMealKitsWithSupabase } = await import('./mealKitsService');
-          if (payload?.eventType === 'UPDATE' && payload?.new) {
-            const updatedRow = payload.new;
-            updateMealKit(updatedRow.id, {
-              isTrending:
-                typeof updatedRow.is_trending === 'boolean' ? updatedRow.is_trending : undefined,
-              isOutOfStock: updatedRow.stock_status === 'out_of_stock',
-              price: typeof updatedRow.price === 'number' ? updatedRow.price : undefined,
-            });
-          } else {
-            await syncMealKitsWithSupabase();
-          }
-
-          realtimeMealKitListeners.forEach((listener) => {
-            try {
-              listener();
-            } catch (err) {
-              console.warn('[Supabase Realtime MealKits] Listener callback error:', err);
-            }
-          });
-        } catch (err) {
-          console.warn('[Supabase Realtime MealKits] Error in change event handler:', err);
-        }
-      },
-    );
-
-    channel.subscribe((status: string, err?: any) => {
-      if (err) {
-        console.warn('[Supabase Realtime MealKits] Subscription error:', status, err);
+/**
+ * Realtime subscription for meal kits.
+ * Directly updates in-memory catalogStore on incoming changes and invokes callbacks.
+ * Does NOT write back to Supabase, eliminating echo loops.
+ */
+export function subscribeToMealKits(handlers: MealKitRealtimeHandlers): () => void {
+  return subscribeToTable<any>({
+    table: 'meal_kits',
+    onInsert: (row) => {
+      const kit = mapSupabaseRowToMealKit(row);
+      applyRealtimeMealKitInsert(kit);
+      handlers.onInsert?.(kit);
+    },
+    onUpdate: (newRow, oldRow) => {
+      const kit = mapSupabaseRowToMealKit(newRow);
+      applyRealtimeMealKitUpdate(kit.id, kit);
+      handlers.onUpdate?.(kit, oldRow as any);
+    },
+    onDelete: (oldRow) => {
+      const deletedId = oldRow?.id;
+      if (deletedId) {
+        applyRealtimeMealKitDelete(deletedId);
+        handlers.onDelete?.(deletedId, oldRow as any);
       }
-    });
+    },
+    onStatusChange: handlers.onStatusChange,
+    onResync: handlers.onResync,
+  });
+}
 
-    sharedMealKitsRealtimeChannel = channel;
-  } catch (err) {
-    console.warn('[Supabase Realtime MealKits] Could not initialize realtime channel:', err);
-  }
+/**
+ * Shared Supabase Realtime channel for meal_kits (legacy compatibility wrapper).
+ */
+export function subscribeToMealKitsRealtime(listener: () => void): () => void {
+  return subscribeToMealKits({
+    onInsert: () => listener(),
+    onUpdate: () => listener(),
+    onDelete: () => listener(),
+    onResync: () => listener(),
+  });
 }

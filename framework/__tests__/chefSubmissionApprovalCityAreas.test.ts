@@ -1,18 +1,13 @@
-import {
-  ALL_GEO_CITIES,
-  POPULAR_CITIES,
-} from '../../features/admin/ChefSubmissionApprovalView';
-import {
-  getSubRegionsForCity,
-  legacyHubForCity,
-  getStateForCity,
-} from '../services/regionService';
+import { ALL_GEO_CITIES, POPULAR_CITIES } from '../../features/admin/ChefSubmissionApprovalView';
+import { getSubRegionsForCity, legacyHubForCity, getStateForCity } from '../services/regionService';
 import {
   createChefSubmission,
   publishChefSubmission,
+  deleteChefSubmission,
   ChefRecipeSubmission,
 } from '../services/chefMealKitsService';
-import { getMealKits } from '../services/mealKitsService';
+import { getMealKits, deleteMealKit } from '../services/mealKitsService';
+import { deleteMealKitFromSupabase } from '../services/supabaseMealKitsService';
 
 describe('ChefSubmissionApprovalCityAreas', () => {
   it('exposes comprehensive Indian cities dataset without macro-region pills', () => {
@@ -80,7 +75,9 @@ describe('ChefSubmissionApprovalCityAreas', () => {
       dietaryTags: ['veg'],
       allergens: [],
       ingredients: [{ name: 'Sprouted Matki', quantity: '200g' }],
-      recipeSteps: [{ stepNumber: 1, title: 'Temper Spices', instruction: 'Heat oil with mustard seeds.' }],
+      recipeSteps: [
+        { stepNumber: 1, title: 'Temper Spices', instruction: 'Heat oil with mustard seeds.' },
+      ],
       chefId,
       chefName: 'Chef Rahul Joshi',
     };
@@ -115,6 +112,12 @@ describe('ChefSubmissionApprovalCityAreas', () => {
     const liveKit = catalogKits.find((k) => k.id === subId);
     expect(liveKit).toBeDefined();
     expect(liveKit?.subRegions).toEqual(['pune-baner', 'pune-kothrud', 'pune-hinjewadi']);
+
+    // Integration test requirement: delete created meal kit and verify deletion
+    deleteMealKit(subId);
+    await deleteMealKitFromSupabase(subId);
+    await deleteChefSubmission(subId, chefId, true);
+    expect(getMealKits().find((k) => k.id === subId)).toBeUndefined();
   });
 
   it('supports selecting and publishing across multiple target cities simultaneously', async () => {
@@ -122,7 +125,8 @@ describe('ChefSubmissionApprovalCityAreas', () => {
     const submissionData: ChefRecipeSubmission = {
       name: 'Western Gateway Biryani Feast',
       tagline: 'Dual-city Mumbai & Pune signature dum biryani',
-      description: 'Fragrant long-grain basmati with slow-cooked marinated vegetables and royal spices.',
+      description:
+        'Fragrant long-grain basmati with slow-cooked marinated vegetables and royal spices.',
       heroImage: 'https://images.unsplash.com/photo-1563379091339-03b21ab4a4f8',
       galleryImages: [],
       diet: 'veg',
@@ -135,7 +139,9 @@ describe('ChefSubmissionApprovalCityAreas', () => {
       dietaryTags: ['veg'],
       allergens: [],
       ingredients: [{ name: 'Aged Basmati Rice', quantity: '500g' }],
-      recipeSteps: [{ stepNumber: 1, title: 'Dum Steam', instruction: 'Steam sealed pot on low flame.' }],
+      recipeSteps: [
+        { stepNumber: 1, title: 'Dum Steam', instruction: 'Steam sealed pot on low flame.' },
+      ],
       chefId,
       chefName: 'Chef Ananya Deshmukh',
     };
@@ -146,12 +152,7 @@ describe('ChefSubmissionApprovalCityAreas', () => {
 
     // Admin selects multiple target cities: Pune and Mumbai
     const targetCities = ['Pune', 'Mumbai'];
-    const targetSubAreas = [
-      'pune-baner',
-      'pune-kothrud',
-      'mumbai-bandra',
-      'mumbai-andheri',
-    ];
+    const targetSubAreas = ['pune-baner', 'pune-kothrud', 'mumbai-bandra', 'mumbai-andheri'];
     const legacyHubs = Array.from(new Set(targetCities.map((c) => legacyHubForCity(c))));
 
     const pubRes = await publishChefSubmission(
@@ -173,5 +174,11 @@ describe('ChefSubmissionApprovalCityAreas', () => {
     expect(liveKit).toBeDefined();
     expect(liveKit?.cities).toEqual(['Pune', 'Mumbai']);
     expect(liveKit?.subRegions).toEqual(targetSubAreas);
+
+    // Integration test requirement: delete created meal kit and verify deletion
+    deleteMealKit(subId);
+    await deleteMealKitFromSupabase(subId);
+    await deleteChefSubmission(subId, chefId, true);
+    expect(getMealKits().find((k) => k.id === subId)).toBeUndefined();
   });
 });

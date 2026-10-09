@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import {
   View,
   Text,
@@ -10,6 +10,7 @@ import {
   Linking,
 } from 'react-native';
 import { router } from 'expo-router';
+import { useAuth } from '../../framework/context/AuthContext';
 import { useTheme } from '../../framework/theme/ThemeContext';
 import { useWallet } from '../../framework/context/WalletContext';
 import { Icon } from '../../framework/ui/Icon';
@@ -17,6 +18,7 @@ import { Badge } from '../../framework/ui/Badge';
 import { Button } from '../../framework/ui/Button';
 import { Order } from '../../framework/firebase/ordersService';
 import { buildReferralShareMessage } from '../../framework/services/referralService';
+import { useCookMode } from '../../framework/context/CookModeContext';
 
 interface OrderConfirmationViewProps {
   order: Order;
@@ -35,10 +37,23 @@ export const OrderConfirmationView: React.FC<OrderConfirmationViewProps> = ({
   onContinueShopping,
   onViewOrders,
 }) => {
+  const { user } = useAuth();
   const { colors, radii, shadows, isDark } = useTheme();
   const { referralCode } = useWallet();
+  const { registerNewActiveOrder } = useCookMode();
 
-  const activeCode = referralCode || 'RASOI' + (order.userId ? order.userId.slice(-4).toUpperCase() : 'VIP');
+  useEffect(() => {
+    if (order) {
+      registerNewActiveOrder(order);
+    }
+  }, [order, registerNewActiveOrder]);
+
+  if (!order) {
+    return null;
+  }
+
+  const activeCode =
+    referralCode || 'RASOI' + (order.userId ? order.userId.slice(-4).toUpperCase() : 'VIP');
 
   const handleShareWhatsApp = async () => {
     const shareInfo = buildReferralShareMessage(activeCode, 200);
@@ -54,6 +69,14 @@ export const OrderConfirmationView: React.FC<OrderConfirmationViewProps> = ({
     } catch {
       await Share.share({ title: shareInfo.title, message: shareInfo.message });
     }
+  };
+
+  const handleStartCookingGuide = () => {
+    registerNewActiveOrder(order);
+    router.push({
+      pathname: '/cook/[orderId]' as any,
+      params: { orderId: order.id },
+    });
   };
 
   const handleTrackOrder = () => {
@@ -87,7 +110,8 @@ export const OrderConfirmationView: React.FC<OrderConfirmationViewProps> = ({
             Order #{order.id?.slice(-8) || 'CONFIRMED'}
           </Text>
           <Text style={[styles.successSubtitle, { color: colors.textSecondary }]}>
-            Our chefs are preparing your gourmet pre-portioned meal kits with authentic whole masalas.
+            Our chefs are preparing your gourmet pre-portioned meal kits with authentic whole
+            masalas.
           </Text>
         </View>
 
@@ -136,21 +160,22 @@ export const OrderConfirmationView: React.FC<OrderConfirmationViewProps> = ({
             </Text>
           </View>
           <Text style={[styles.addressName, { color: colors.textPrimary }]}>
-            {order.customerName} • {order.customerPhone}
+            {order.customerName || 'Customer'}
+            {order.customerPhone ? ` • ${order.customerPhone}` : ''}
           </Text>
           <Text style={[styles.addressText, { color: colors.textSecondary }]}>
-            {order.deliveryAddress}
+            {order.deliveryAddress || 'Standard Delivery Address'}
           </Text>
-          {deliveryInstructions && (
+          {deliveryInstructions && deliveryInstructions.trim() ? (
             <View style={[styles.instructionsBox, { backgroundColor: colors.bgPrimary }]}>
               <Text style={[styles.instructionsLabel, { color: colors.textMuted }]}>
                 Instructions:
               </Text>
               <Text style={[styles.instructionsText, { color: colors.textPrimary }]}>
-                {deliveryInstructions}
+                {deliveryInstructions.trim()}
               </Text>
             </View>
-          )}
+          ) : null}
         </View>
 
         {/* Financial & Payment Summary */}
@@ -176,7 +201,7 @@ export const OrderConfirmationView: React.FC<OrderConfirmationViewProps> = ({
             </Text>
           </View>
 
-          {order.discount > 0 && (
+          {order.discount > 0 ? (
             <View style={styles.summaryRow}>
               <Text style={[styles.summaryLabel, { color: '#10B981' }]}>
                 Coupon Discount {order.couponCode ? `(${order.couponCode})` : ''}
@@ -185,18 +210,16 @@ export const OrderConfirmationView: React.FC<OrderConfirmationViewProps> = ({
                 -₹{Math.round(order.discount).toLocaleString('en-IN')}
               </Text>
             </View>
-          )}
+          ) : null}
 
           <View style={styles.summaryRow}>
-            <Text style={[styles.summaryLabel, { color: colors.textSecondary }]}>
-              Delivery Fee
-            </Text>
+            <Text style={[styles.summaryLabel, { color: colors.textSecondary }]}>Delivery Fee</Text>
             <Text style={[styles.summaryVal, { color: colors.textPrimary }]}>
               {order.deliveryFee === 0 ? 'FREE' : `₹${Math.round(order.deliveryFee || 0)}`}
             </Text>
           </View>
 
-          {walletCreditsApplied > 0 && (
+          {walletCreditsApplied > 0 ? (
             <View style={styles.summaryRow}>
               <Text style={[styles.summaryLabel, { color: colors.primary, fontWeight: '700' }]}>
                 Rasoi Credits Applied
@@ -205,7 +228,7 @@ export const OrderConfirmationView: React.FC<OrderConfirmationViewProps> = ({
                 -₹{Math.round(walletCreditsApplied).toLocaleString('en-IN')}
               </Text>
             </View>
-          )}
+          ) : null}
 
           <View style={[styles.divider, { backgroundColor: colors.borderLight }]} />
 
@@ -217,10 +240,7 @@ export const OrderConfirmationView: React.FC<OrderConfirmationViewProps> = ({
           </View>
 
           <View style={styles.paymentMethodRow}>
-            <Badge
-              label={`Paid via ${order.paymentMethod || 'Online'}`}
-              variant="accent"
-            />
+            <Badge label={`Paid via ${order.paymentMethod || 'Online'}`} variant="accent" />
             <Badge
               label={order.paymentStatus || 'Paid'}
               variant={order.paymentStatus === 'Paid' ? 'success' : 'warning'}
@@ -251,7 +271,9 @@ export const OrderConfirmationView: React.FC<OrderConfirmationViewProps> = ({
               {item.imageUrl ? (
                 <Image source={{ uri: item.imageUrl }} style={styles.kitThumb} />
               ) : (
-                <View style={[styles.kitThumbPlaceholder, { backgroundColor: colors.primary + '20' }]}>
+                <View
+                  style={[styles.kitThumbPlaceholder, { backgroundColor: colors.primary + '20' }]}
+                >
                   <Icon name="restaurant" size={20} color={colors.primary} />
                 </View>
               )}
@@ -268,6 +290,45 @@ export const OrderConfirmationView: React.FC<OrderConfirmationViewProps> = ({
             </View>
           ))}
         </View>
+
+        {/* Optional Create Account Prompt for Guest Users */}
+        {!user || !user.email ? (
+          <View
+            testID="guest-create-account-card"
+            style={[
+              styles.createAccountCard,
+              {
+                backgroundColor: isDark ? '#1E293B' : '#F0F9FF',
+                borderColor: '#38BDF8',
+              },
+            ]}
+          >
+            <View style={styles.createAccountLeft}>
+              <View style={[styles.createAccountIconWrap, { backgroundColor: '#38BDF820' }]}>
+                <Icon name="people" size={22} color="#0284C7" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text
+                  style={[styles.createAccountHeading, { color: isDark ? '#F0F9FF' : '#0369A1' }]}
+                >
+                  Save your details & keep orders
+                </Text>
+                <Text style={[styles.createAccountSub, { color: isDark ? '#BAE6FD' : '#0C4A6E' }]}>
+                  Create a RasoiGenie account so your order history, delivery addresses, and ₹300
+                  referral bonuses are saved permanently.
+                </Text>
+              </View>
+            </View>
+            <Button
+              testID="guest-create-account-btn"
+              title="Save Details / Create Account"
+              variant="outline"
+              size="sm"
+              onPress={() => router.push('/(tabs)/login' as any)}
+              style={{ marginTop: 10 }}
+            />
+          </View>
+        ) : null}
 
         {/* Viral Referral Banner */}
         <View
@@ -288,7 +349,9 @@ export const OrderConfirmationView: React.FC<OrderConfirmationViewProps> = ({
                 Earn ₹300 on your next meal!
               </Text>
               <Text style={[styles.referralSub, { color: isDark ? '#A7F3D0' : '#047857' }]}>
-                Give your friends ₹200 credits with code <Text style={{ fontWeight: '800' }}>{activeCode}</Text>. When they cook, you get ₹300!
+                Give your friends ₹200 credits with code{' '}
+                <Text style={{ fontWeight: '800' }}>{activeCode}</Text>. When they cook, you get
+                ₹300!
               </Text>
             </View>
           </View>
@@ -306,17 +369,30 @@ export const OrderConfirmationView: React.FC<OrderConfirmationViewProps> = ({
         {/* Actions */}
         <View style={styles.actionButtons}>
           <Button
-            title="Track Order Status"
+            testID="start-cooking-guide-btn"
+            title="Start cooking guide"
+            icon={<Icon name="restaurant" size={18} color="#FFFFFF" />}
             variant="primary"
             size="lg"
-            onPress={handleTrackOrder}
+            onPress={handleStartCookingGuide}
+            accessibilityLabel="Start cooking guide for your ordered meal kit"
           />
           <Button
-            title="Explore More Chef Recipes"
+            testID="continue-exploring-btn"
+            title="Continue exploring"
             variant="outline"
             size="md"
             onPress={handleExploreMore}
-            style={{ marginTop: 10 }}
+            style={{ marginTop: 8 }}
+            accessibilityLabel="Continue exploring chef recipes"
+          />
+          <Button
+            testID="track-order-status-btn"
+            title="Track Order Status"
+            variant="secondary"
+            size="sm"
+            onPress={handleTrackOrder}
+            style={{ marginTop: 6 }}
           />
         </View>
       </ScrollView>
@@ -535,5 +611,32 @@ const styles = StyleSheet.create({
   },
   actionButtons: {
     gap: 8,
+  },
+  createAccountCard: {
+    borderWidth: 1.5,
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 16,
+  },
+  createAccountLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  createAccountIconWrap: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  createAccountHeading: {
+    fontSize: 15,
+    fontWeight: '800',
+    marginBottom: 2,
+  },
+  createAccountSub: {
+    fontSize: 12,
+    lineHeight: 16,
   },
 });

@@ -1,7 +1,14 @@
-﻿// framework/services/seedInventoryFromMealKits.ts
+// framework/services/seedInventoryFromMealKits.ts
 // Reads meal kit catalog and adds every ingredient into inventory with category
 
-import { addInventoryItem, deleteInventoryItem, getInventoryItems, InventoryItem, InventorySection, updateInventoryItem } from './inventoryService';
+import {
+  addInventoryItem,
+  deleteInventoryItem,
+  getInventoryItems,
+  InventoryItem,
+  InventorySection,
+  updateInventoryItem,
+} from './inventoryService';
 import { INITIAL_MEAL_KITS, MealKit } from './mealKitsService';
 
 function guessSection(name: string, isMasalaSachet?: boolean): InventorySection {
@@ -34,7 +41,8 @@ function guessSection(name: string, isMasalaSachet?: boolean): InventorySection 
     n.includes('cinnamon') ||
     n.includes('bayleaf') ||
     n.includes('bay leaf')
-  ) return 'seasonings';
+  )
+    return 'seasonings';
   // Fresh & dried herb keywords
   if (
     n.includes('curry leaves') ||
@@ -53,7 +61,8 @@ function guessSection(name: string, isMasalaSachet?: boolean): InventorySection 
     n.includes('herb sprig') ||
     n.includes('kasuri methi') ||
     n.includes('methi')
-  ) return 'seasonings';
+  )
+    return 'seasonings';
 
   // ── Actual Packaging Material ───────────────────────────────────────────────
   // Only genuine packaging supply items — NOT food pouches, sauce bags, etc.
@@ -78,14 +87,33 @@ function guessSection(name: string, isMasalaSachet?: boolean): InventorySection 
     n.includes('bubble wrap')
   ) {
     // Don't mark food pouches, condiments, or fresh produce as packaging
-    if (!(n.includes('pouch') && (
-      n.includes('puree') || n.includes('sauce') || n.includes('paste') ||
-      n.includes('oil') || n.includes('cream') || n.includes('extract') ||
-      n.includes('jaggery') || n.includes('kokum') || n.includes('crema') ||
-      n.includes('drizzle') || n.includes('dip') || n.includes('mustard') ||
-      n.includes('kasundi') || n.includes('chutney') || n.includes('salsa') ||
-      n.includes('raita') || n.includes('aioli') || n.includes('mash')
-    )) && !n.includes('slaw') && !n.includes('cabbage') && !n.includes('pickled') && !n.includes('pickle')) {
+    if (
+      !(
+        n.includes('pouch') &&
+        (n.includes('puree') ||
+          n.includes('sauce') ||
+          n.includes('paste') ||
+          n.includes('oil') ||
+          n.includes('cream') ||
+          n.includes('extract') ||
+          n.includes('jaggery') ||
+          n.includes('kokum') ||
+          n.includes('crema') ||
+          n.includes('drizzle') ||
+          n.includes('dip') ||
+          n.includes('mustard') ||
+          n.includes('kasundi') ||
+          n.includes('chutney') ||
+          n.includes('salsa') ||
+          n.includes('raita') ||
+          n.includes('aioli') ||
+          n.includes('mash'))
+      ) &&
+      !n.includes('slaw') &&
+      !n.includes('cabbage') &&
+      !n.includes('pickled') &&
+      !n.includes('pickle')
+    ) {
       return 'packaging';
     }
   }
@@ -145,23 +173,74 @@ function migrateIncorrectlyClassifiedItems(): number {
   try {
     const items = getInventoryItems();
     const foodKeywords = [
-      'puree', 'sauce', 'paste', 'oil', 'cream', 'extract', 'jaggery', 'kokum',
-      'ghee', 'butter', 'peanuts', 'noodles', 'rice', 'flour', 'dal', 'beans',
-      'lentils', 'spice', 'masala', 'milk', 'yogurt', 'paneer', 'cheese',
-      'tomato', 'onion', 'garlic', 'ginger', 'herb', 'leaf', 'leaves',
-      'chilli', 'chili', 'pepper', 'cumin', 'coriander', 'turmeric',
-      'salt', 'sugar', 'honey', 'vinegar', 'soy', 'sesame',
+      'puree',
+      'sauce',
+      'paste',
+      'oil',
+      'cream',
+      'extract',
+      'jaggery',
+      'kokum',
+      'ghee',
+      'butter',
+      'peanuts',
+      'noodles',
+      'rice',
+      'flour',
+      'dal',
+      'beans',
+      'lentils',
+      'spice',
+      'masala',
+      'milk',
+      'yogurt',
+      'paneer',
+      'cheese',
+      'tomato',
+      'onion',
+      'garlic',
+      'ginger',
+      'herb',
+      'leaf',
+      'leaves',
+      'chilli',
+      'chili',
+      'pepper',
+      'cumin',
+      'coriander',
+      'turmeric',
+      'salt',
+      'sugar',
+      'honey',
+      'vinegar',
+      'soy',
+      'sesame',
       // Condiments, dressings & fresh produce
-      'avocado', 'crema', 'drizzle', 'dip', 'mustard', 'kasundi',
-      'slaw', 'cabbage', 'lime', 'salsa', 'chutney', 'raita', 'aioli',
-      'mash', 'puree', 'relish', 'pickle', 'pickled',
+      'avocado',
+      'crema',
+      'drizzle',
+      'dip',
+      'mustard',
+      'kasundi',
+      'slaw',
+      'cabbage',
+      'lime',
+      'salsa',
+      'chutney',
+      'raita',
+      'aioli',
+      'mash',
+      'puree',
+      'relish',
+      'pickle',
+      'pickled',
     ];
 
     for (const item of items) {
       // If it's in packaging but contains food keywords, move it to raw_ingredients
       if (item.section === 'packaging') {
         const nameLower = item.name.toLowerCase();
-        const isFoodItem = foodKeywords.some(keyword => nameLower.includes(keyword));
+        const isFoodItem = foodKeywords.some((keyword) => nameLower.includes(keyword));
 
         if (isFoodItem) {
           console.log('[Inventory] Migrating to raw_ingredients:', item.name);
@@ -199,14 +278,17 @@ export function seedInventoryFromMealKits(): number {
       if (existingNames.has(cleanName.toLowerCase())) continue;
       const section = guessSection(cleanName, ing.isMasalaSachet);
       const unit = guessUnit(ing.quantity || '');
+      const parsedQty = parseFloat(ing.quantity || '1') || 1;
+      const initialStock = unit === 'g' || unit === 'ml' ? Math.max(5000, parsedQty * 25) : 50;
+      const thresholdLow = unit === 'g' || unit === 'ml' ? 500 : 10;
       try {
         addInventoryItem({
           name: cleanName,
           section,
-          currentStock: 50,
+          currentStock: initialStock,
           unit,
           shelfLifeDays: 7,
-          thresholdLow: 10,
+          thresholdLow,
           region: 'West',
           storageCondition: 'Cool & dry / Refrigerated',
           supplier: 'Meal Kit Catalog',

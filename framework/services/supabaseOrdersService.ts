@@ -1,4 +1,5 @@
 import { supabase } from '../supabase/client';
+import { subscribeToTable, RealtimeConnectionStatus } from './realtimeService';
 import {
   notifyAdminNewOrder,
   setPendingApprovalOrdersCount,
@@ -25,8 +26,13 @@ import {
   RegionHub,
   getMealKitById,
 } from './mealKitsService';
-import { resolveStorageCentre } from './adminRbacService';
-import { deductIngredientStock, restoreIngredientStock, validateOrderIngredients, getInventoryItems } from './inventoryService';
+import { resolveStorageCentre, STORAGE_CENTRE_REGIONS } from './adminRbacService';
+import {
+  deductIngredientStock,
+  restoreIngredientStock,
+  validateOrderIngredients,
+  getInventoryItems,
+} from './inventoryService';
 import { toggleMealKitOutOfStockStatus } from './supabaseMealKitsService';
 import { creditWallet } from './walletService';
 
@@ -79,15 +85,39 @@ export async function createOrderInSupabase(
 
   // 0. Pre-order inventory validation: all ingredients must exist with sufficient stock
   try {
-    const required = params.items.map((it) => ({
-      itemId: it.kitId || it.name,
-      quantity: it.quantity,
-      region: fulfillmentRegion,
-    }));
-    const check = validateOrderIngredients(required);
-    if (!check.valid) {
-      console.warn('[Supabase Orders] Order blocked: missing/insufficient ingredients:', check.missing, check.insufficient);
-      return { success: false, orderId: '', error: 'Insufficient ingredients: ' + check.insufficient.join(', ') };
+    const required: { itemId: string; quantity: number; region: string }[] = [];
+    for (const it of params.items) {
+      const kit = getMealKitById(it.kitId);
+      if (kit && kit.ingredients) {
+        for (const ing of kit.ingredients) {
+          const inv = getInventoryItems().find(
+            (i) =>
+              i.name.toLowerCase().includes(ing.name.toLowerCase()) ||
+              i.id.toLowerCase() === ing.name.toLowerCase(),
+          );
+          if (inv) {
+            required.push({
+              itemId: inv.id,
+              quantity: Math.round(it.quantity * (parseFloat(ing.quantity) || 1)),
+              region: fulfillmentRegion,
+            });
+          }
+        }
+      }
+    }
+    if (required.length > 0) {
+      const check = validateOrderIngredients(required);
+      if (!check.valid && check.insufficient.length > 0) {
+        console.warn(
+          '[Supabase Orders] Order blocked: insufficient ingredients:',
+          check.insufficient,
+        );
+        return {
+          success: false,
+          orderId: '',
+          error: 'Insufficient ingredients: ' + check.insufficient.join(', '),
+        };
+      }
     }
   } catch (invErr) {
     console.warn('[Supabase Orders] Inventory check error:', invErr);
@@ -105,16 +135,21 @@ export async function createOrderInSupabase(
         if (kit && kit.ingredients) {
           for (const ing of kit.ingredients) {
             // Map ingredient to inventory item by name or id
-            const inv = getInventoryItems().find((i) =>
-              i.name.toLowerCase().includes(ing.name.toLowerCase()) ||
-              i.id === ing.name
+            const inv = getInventoryItems().find(
+              (i) => i.name.toLowerCase().includes(ing.name.toLowerCase()) || i.id === ing.name,
             );
             if (inv) {
-              deductIngredientStock(inv.id, Math.round(it.quantity * (parseFloat(ing.quantity) || 1)), fulfillmentRegion);
+              deductIngredientStock(
+                inv.id,
+                Math.round(it.quantity * (parseFloat(ing.quantity) || 1)),
+                fulfillmentRegion,
+              );
             }
           }
         }
-      } catch (ingErr) { console.warn('[Supabase Orders] Ingredient deduction error:', ingErr); }
+      } catch (ingErr) {
+        console.warn('[Supabase Orders] Ingredient deduction error:', ingErr);
+      }
       if (deductionRes.wentOutOfStock) {
         // Automatically set to out of stock in Supabase & notify regional admins
         toggleMealKitOutOfStockStatus(it.kitId, true).catch(() => {});
@@ -367,7 +402,12 @@ export async function updateOrderStatusInSupabase(
   // Revert inventory if order is being cancelled and inventory was deducted and not yet reverted
   if (newStatus === 'Cancelled') {
     const targetOrder = existingMem || allCurrent.find((o) => o.id === orderId);
-    if (targetOrder && !targetOrder.inventoryReverted && targetOrder.items && targetOrder.items.length > 0) {
+    if (
+      targetOrder &&
+      !targetOrder.inventoryReverted &&
+      targetOrder.items &&
+      targetOrder.items.length > 0
+    ) {
       try {
         const fulfillmentRegion: RegionHub =
           (targetOrder.fulfillmentRegion as RegionHub) ||
@@ -382,15 +422,21 @@ export async function updateOrderStatusInSupabase(
             const kit = getMealKitById(kitId);
             if (kit && kit.ingredients) {
               for (const ing of kit.ingredients) {
-                const inv = getInventoryItems().find((i) =>
-                  i.name.toLowerCase().includes(ing.name.toLowerCase()) || i.id === ing.name
+                const inv = getInventoryItems().find(
+                  (i) => i.name.toLowerCase().includes(ing.name.toLowerCase()) || i.id === ing.name,
                 );
                 if (inv) {
-                  restoreIngredientStock(inv.id, Math.round(it.quantity * (parseFloat(ing.quantity) || 1)), fulfillmentRegion);
+                  restoreIngredientStock(
+                    inv.id,
+                    Math.round(it.quantity * (parseFloat(ing.quantity) || 1)),
+                    fulfillmentRegion,
+                  );
                 }
               }
             }
-          } catch (ingErr) { console.warn('[Supabase Orders] Ingredient restore error:', ingErr); }
+          } catch (ingErr) {
+            console.warn('[Supabase Orders] Ingredient restore error:', ingErr);
+          }
           if (restoreRes.backInStock) {
             toggleMealKitOutOfStockStatus(kitId, false).catch(() => {});
             dismissOutOfStockAlert(kitId, fulfillmentRegion);
@@ -510,6 +556,83 @@ export async function clearAllOrdersFromSupabase(): Promise<{ success: boolean; 
 }
 
 /**
+ * Maps a Supabase orders database row to our strongly typed client Order object.
+ */
+export function mapSupabaseRowToOrder(row: any, existingOrder?: Order): Order {
+  const isCancelled = row.status === 'Cancelled' || !!row.cancellation_reason;
+  const approved =
+    !isCancelled && (isOrderApproved(row.id) || !!row.approved_by || !!row.approved_at);
+  const currentStatus = (row.status as OrderStatus) || 'Placed';
+  const effectiveStatus: OrderStatus = isCancelled
+    ? 'Cancelled'
+    : approved && currentStatus === 'Placed'
+      ? 'Confirmed'
+      : currentStatus;
+
+  return {
+    id: row.id,
+    userId: row.user_id,
+    customerName: row.customer_name,
+    customerPhone: row.customer_phone,
+    customerEmail: row.customer_email,
+    deliveryAddress: row.delivery_address,
+    deliverySlot: row.delivery_slot,
+    deliveryDate: row.delivery_date,
+    subtotal: Number(row.subtotal) || 0,
+    discount: Number(row.discount) || 0,
+    deliveryFee: Number(row.delivery_fee) || 0,
+    totalAmount: Number(row.total_amount) || 0,
+    status: effectiveStatus,
+    isApproved: approved,
+    approvedBy: row.approved_by,
+    approvedAt: row.approved_at,
+    cancellationReason: row.admin_notes || row.cancellation_reason,
+    adminNotes: row.admin_notes || row.cancellation_reason,
+    paymentMethod: row.payment_method || 'UPI',
+    paymentStatus: row.payment_status || 'Paid',
+    transactionId: row.transaction_id || row.id,
+    fulfillmentRegion: row.region || row.fulfillment_region,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    trackingEvents: existingOrder?.trackingEvents || [
+      {
+        status: 'Placed',
+        title: 'Order Placed',
+        description: 'Order placed by customer.',
+        timestamp: row.created_at,
+        completed: true,
+      },
+      ...(effectiveStatus !== 'Placed'
+        ? [
+            {
+              status: effectiveStatus,
+              title:
+                effectiveStatus === 'Cancelled' ? 'Order Cancelled' : `Order ${effectiveStatus}`,
+              description:
+                effectiveStatus === 'Cancelled'
+                  ? row.admin_notes || 'Cancelled by Kitchen Management.'
+                  : `Status updated to ${effectiveStatus}${row.approved_by ? ` (Approved by ${row.approved_by})` : ''}`,
+              timestamp: row.updated_at,
+              completed: true,
+            },
+          ]
+        : []),
+    ],
+    items: (row.order_items || existingOrder?.items || []).map((it: any) => ({
+      id: it.id?.toString() || it.kit_id,
+      kitId: it.kit_id || it.id?.toString(),
+      name: it.name,
+      quantity: it.quantity,
+      price: Number(it.price) || 0,
+      servings: it.servings,
+      spiceLevel: it.spice_level,
+      masalaSachets: it.masala_sachets || [],
+      imageUrl: it.image_url,
+    })),
+  };
+}
+
+/**
  * Fetches all orders from Supabase with graceful local fallback.
  * Automatically filters out legacy filler mock data and applies persistent approval state.
  */
@@ -558,79 +681,7 @@ export async function fetchAllOrdersFromSupabase(): Promise<Order[]> {
 
     const mappedOrders: Order[] = ordersData
       .filter((row: any) => !MOCK_ORDER_IDS.has(row.id))
-      .map((row: any) => {
-        const isCancelled = row.status === 'Cancelled' || !!row.cancellation_reason;
-        const approved =
-          !isCancelled && (isOrderApproved(row.id) || !!row.approved_by || !!row.approved_at);
-        const currentStatus = (row.status as OrderStatus) || 'Placed';
-        const effectiveStatus: OrderStatus = isCancelled
-          ? 'Cancelled'
-          : approved && currentStatus === 'Placed'
-            ? 'Confirmed'
-            : currentStatus;
-
-        return {
-          id: row.id,
-          userId: row.user_id,
-          customerName: row.customer_name,
-          customerPhone: row.customer_phone,
-          customerEmail: row.customer_email,
-          deliveryAddress: row.delivery_address,
-          deliverySlot: row.delivery_slot,
-          deliveryDate: row.delivery_date,
-          subtotal: Number(row.subtotal) || 0,
-          discount: Number(row.discount) || 0,
-          deliveryFee: Number(row.delivery_fee) || 0,
-          totalAmount: Number(row.total_amount) || 0,
-          status: effectiveStatus,
-          isApproved: approved,
-          approvedBy: row.approved_by,
-          approvedAt: row.approved_at,
-          cancellationReason: row.admin_notes || row.cancellation_reason,
-          adminNotes: row.admin_notes || row.cancellation_reason,
-          paymentMethod: row.payment_method || 'UPI',
-          paymentStatus: row.payment_status || 'Paid',
-          transactionId: row.transaction_id || row.id,
-          createdAt: row.created_at,
-          updatedAt: row.updated_at,
-          trackingEvents: [
-            {
-              status: 'Placed',
-              title: 'Order Placed',
-              description: 'Order placed by customer.',
-              timestamp: row.created_at,
-              completed: true,
-            },
-            ...(effectiveStatus !== 'Placed'
-              ? [
-                  {
-                    status: effectiveStatus,
-                    title:
-                      effectiveStatus === 'Cancelled'
-                        ? 'Order Cancelled'
-                        : `Order ${effectiveStatus}`,
-                    description:
-                      effectiveStatus === 'Cancelled'
-                        ? row.admin_notes || 'Cancelled by Kitchen Management.'
-                        : `Status updated to ${effectiveStatus}${row.approved_by ? ` (Approved by ${row.approved_by})` : ''}`,
-                    timestamp: row.updated_at,
-                    completed: true,
-                  },
-                ]
-              : []),
-          ],
-          items: (row.order_items || []).map((it: any) => ({
-            id: it.id?.toString() || it.kit_id,
-            name: it.name,
-            quantity: it.quantity,
-            price: Number(it.price) || 0,
-            servings: it.servings,
-            spiceLevel: it.spice_level,
-            masalaSachets: it.masala_sachets || [],
-            imageUrl: it.image_url,
-          })),
-        };
-      });
+      .map((row: any) => mapSupabaseRowToOrder(row));
 
     // Merge: Combine remote Supabase orders with local orders without reverting advanced statuses
     const combinedMap = new Map<string, Order>();
@@ -836,28 +887,148 @@ export async function processOrderRefund(params: {
   }
 }
 
+export interface OrderRealtimeHandlers {
+  onInsert?: (order: Order) => void;
+  onUpdate?: (order: Order, oldRow?: Partial<Order>) => void;
+  onDelete?: (orderId: string, oldRow?: Partial<Order>) => void;
+  onStatusChange?: (status: RealtimeConnectionStatus) => void;
+  onResync?: () => void | Promise<void>;
+}
+
+// Track alerted order IDs across the runtime session to prevent duplicate chimes
+const sessionChimedOrderIds = new Set<string>();
+
 /**
- * Sets up Supabase Realtime subscription for orders.
+ * Registers orders already present during initial load so they do not trigger chimes.
+ */
+export function recordInitialOrderIds(orderIds: string[]): void {
+  for (const id of orderIds) {
+    if (id) sessionChimedOrderIds.add(id);
+  }
+}
+
+/**
+ * Resets the session chimed order IDs set (primarily for automated tests).
+ */
+export function _resetSessionChimedOrderIds(): void {
+  sessionChimedOrderIds.clear();
+}
+
+/**
+ * Scopes orders by admin region assignments. Super admins see all orders.
+ * Regional admins only see orders delivering to their assigned regions/centres.
+ */
+export function filterOrdersByAdminRegions(
+  orders: Order[],
+  assignedRegions?: (RegionHub | string)[],
+  isSuperAdmin?: boolean,
+): Order[] {
+  if (isSuperAdmin) return orders;
+  if (!assignedRegions || assignedRegions.length === 0) return [];
+  const assignedSet = new Set(assignedRegions.map((r) => r.toLowerCase()));
+
+  // Derive all cities & storage centre IDs associated with assigned regions
+  const matchedCities = new Set<string>();
+  const matchedCentreIds = new Set<string>();
+  for (const reg of assignedRegions) {
+    const sc = STORAGE_CENTRE_REGIONS.find(
+      (r) => r.id.toLowerCase() === reg.toLowerCase() || r.name.toLowerCase() === reg.toLowerCase(),
+    );
+    if (sc) {
+      matchedCities.add(sc.city.toLowerCase());
+      matchedCentreIds.add(sc.id.toLowerCase());
+    }
+  }
+
+  return orders.filter((order) => {
+    // 1. Check fulfillmentRegion if explicitly set
+    if (order.fulfillmentRegion) {
+      const fr = order.fulfillmentRegion.toLowerCase();
+      if (assignedSet.has(fr) || matchedCentreIds.has(fr) || matchedCities.has(fr)) {
+        return true;
+      }
+    }
+
+    // 2. Resolve storage centre from delivery address
+    const sc = resolveStorageCentre(order.deliveryAddress || '');
+    if (sc) {
+      // Direct storage centre match
+      if (
+        assignedSet.has(sc.id.toLowerCase()) ||
+        assignedSet.has(sc.name.toLowerCase()) ||
+        matchedCentreIds.has(sc.id.toLowerCase())
+      ) {
+        return true;
+      }
+      // Macro zone match (only if admin is explicitly assigned the zone like 'West')
+      if (assignedSet.has(sc.zone.toLowerCase())) {
+        return true;
+      }
+      // City match (only if admin is explicitly assigned the city like 'Pune')
+      if (assignedSet.has(sc.city.toLowerCase())) {
+        return true;
+      }
+    }
+
+    return false;
+  });
+}
+
+/**
+ * High-performance realtime subscription for orders.
+ * Automatically maps Postgres rows, suppresses duplicate chimes, updates pending approval count,
+ * and passes typed Order events to caller.
+ */
+export function subscribeToOrders(handlers: OrderRealtimeHandlers): () => void {
+  return subscribeToTable<any>({
+    table: 'orders',
+    onInsert: (row) => {
+      const order = mapSupabaseRowToOrder(row);
+      if (order.status === 'Placed' && !sessionChimedOrderIds.has(order.id) && !order.isApproved) {
+        sessionChimedOrderIds.add(order.id);
+        playOrderAlertSound();
+      }
+      refreshPendingApprovalCount();
+      notifyRealtimeOrderListeners();
+      handlers.onInsert?.(order);
+    },
+    onUpdate: (newRow, oldRow) => {
+      const updatedOrder = mapSupabaseRowToOrder(newRow);
+      refreshPendingApprovalCount();
+      notifyRealtimeOrderListeners();
+      handlers.onUpdate?.(updatedOrder, oldRow as any);
+    },
+    onDelete: (oldRow) => {
+      const deletedId = oldRow?.id;
+      if (deletedId) {
+        refreshPendingApprovalCount();
+        notifyRealtimeOrderListeners();
+        handlers.onDelete?.(deletedId, oldRow as any);
+      }
+    },
+    onStatusChange: handlers.onStatusChange,
+    onResync: handlers.onResync,
+  });
+}
+
+/**
+ * Sets up Supabase Realtime subscription for orders (legacy compatibility wrapper).
  * Listens for new orders (INSERT) and status changes (UPDATE).
- * Safe to call from multiple components simultaneously (AdminDashboard, OrderHistory, TabLayout).
- * When a new order with status 'Placed' arrives, triggers audio alert and increments pending count.
  */
 export function subscribeToOrdersRealtime(onOrdersChanged: () => void): () => void {
-  // Initial check
   refreshPendingApprovalCount();
-
   realtimeOrderListeners.add(onOrdersChanged);
-  ensureSharedRealtimeChannel();
+
+  // Subscribe using the resilient realtime service
+  const unsubscribe = subscribeToOrders({
+    onInsert: () => onOrdersChanged(),
+    onUpdate: () => onOrdersChanged(),
+    onDelete: () => onOrdersChanged(),
+    onResync: () => onOrdersChanged(),
+  });
 
   return () => {
     realtimeOrderListeners.delete(onOrdersChanged);
-    if (realtimeOrderListeners.size === 0 && sharedRealtimeChannel) {
-      try {
-        supabase.removeChannel(sharedRealtimeChannel);
-      } catch (err) {
-        console.warn('[Supabase Realtime] Error removing channel:', err);
-      }
-      sharedRealtimeChannel = null;
-    }
+    unsubscribe();
   };
 }

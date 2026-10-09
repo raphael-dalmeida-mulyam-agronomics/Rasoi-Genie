@@ -8,6 +8,10 @@ import {
   createGatewayOrder,
   verifyAndRecordPayment,
   processCheckoutPayment,
+  executeMockGatewayTransaction,
+  MOCK_TEST_CARDS,
+  MOCK_UPI_APPS,
+  MOCK_NET_BANKS,
 } from '../services/paymentGatewayService';
 import { processOrderRefund } from '../services/supabaseOrdersService';
 
@@ -175,6 +179,59 @@ describe('addressService & paymentGatewayService', () => {
       });
       expect(refundRes.success).toBe(true);
       expect(refundRes.walletCredited).toBe(true);
+    });
+
+    it('simulates mock payment gateway success with realistic tokens', async () => {
+      const res = await executeMockGatewayTransaction({
+        orderId: 'ORD_SIM_SUCCESS',
+        payableAmount: 499,
+        paymentMethod: 'Card',
+        customer: { name: 'Raphael', email: 'raph@rasoigenie.in', phone: '9876543210' },
+        outcome: 'success',
+        details: { cardLast4: '4242' },
+      });
+      expect(res.success).toBe(true);
+      expect(res.paymentId).toMatch(/^pay_/);
+      expect(res.signature).toMatch(/^sig_/);
+      expect(res.simulated).toBe(true);
+    });
+
+    it('simulates mock payment gateway bank decline', async () => {
+      const res = await executeMockGatewayTransaction({
+        orderId: 'ORD_SIM_DECLINE',
+        payableAmount: 499,
+        paymentMethod: 'Card',
+        customer: { name: 'Raphael', email: 'raph@rasoigenie.in', phone: '9876543210' },
+        outcome: 'decline',
+      });
+      expect(res.success).toBe(false);
+      expect(res.error).toContain('ERR_CARD_DECLINED');
+      expect(res.simulated).toBe(true);
+    });
+
+    it('simulates mock payment gateway insufficient funds error', async () => {
+      const res = await executeMockGatewayTransaction({
+        orderId: 'ORD_SIM_FUNDS',
+        payableAmount: 499,
+        paymentMethod: 'UPI',
+        customer: { name: 'Raphael', email: 'raph@rasoigenie.in', phone: '9876543210' },
+        outcome: 'insufficient_funds',
+      });
+      expect(res.success).toBe(false);
+      expect(res.error).toContain('ERR_INSUFFICIENT_FUNDS');
+      expect(res.simulated).toBe(true);
+    });
+
+    it('provides valid presets for cards, UPI apps, and net banking', () => {
+      expect(MOCK_TEST_CARDS.length).toBeGreaterThanOrEqual(3);
+      expect(MOCK_TEST_CARDS.find((c) => c.outcome === 'success')).toBeDefined();
+      expect(MOCK_TEST_CARDS.find((c) => c.outcome === 'decline')).toBeDefined();
+
+      expect(MOCK_UPI_APPS.length).toBeGreaterThanOrEqual(4);
+      expect(MOCK_UPI_APPS.map((a) => a.id)).toContain('gpay');
+
+      expect(MOCK_NET_BANKS.length).toBeGreaterThanOrEqual(4);
+      expect(MOCK_NET_BANKS.map((b) => b.id)).toContain('hdfc');
     });
   });
 });

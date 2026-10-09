@@ -1,4 +1,5 @@
-﻿import React, { createContext, useContext, useState, useMemo, useEffect } from 'react';
+import React, { createContext, useContext, useState, useMemo, useEffect } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { MealKit } from '../services/mealKitsService';
 import { validateCoupon, Coupon } from '../services/couponsService';
 import { OrderItem } from '../firebase/ordersService';
@@ -59,6 +60,35 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }
 
   const [items, setItems] = useState<CartItem[]>([]);
+  const [isCartLoaded, setIsCartLoaded] = useState(false);
+
+  useEffect(() => {
+    let mounted = true;
+    AsyncStorage.getItem('@rasoi_cart_items_v1')
+      .then((saved) => {
+        if (mounted && saved) {
+          try {
+            const parsed = JSON.parse(saved);
+            if (Array.isArray(parsed)) {
+              setItems(parsed);
+            }
+          } catch {}
+        }
+      })
+      .finally(() => {
+        if (mounted) setIsCartLoaded(true);
+      });
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (isCartLoaded) {
+      AsyncStorage.setItem('@rasoi_cart_items_v1', JSON.stringify(items)).catch(() => {});
+    }
+  }, [items, isCartLoaded]);
+
   const [appliedCoupon, setAppliedCoupon] = useState<Coupon | null>(null);
   const [couponDiscount, setCouponDiscount] = useState<number>(0);
   const [couponMessage, setCouponMessage] = useState<string | null>(null);
@@ -139,6 +169,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setAppliedCoupon(null);
     setCouponDiscount(0);
     setCouponMessage(null);
+    AsyncStorage.removeItem('@rasoi_cart_items_v1').catch(() => {});
   };
 
   const reorderItems = (orderItems: OrderItem[]) => {

@@ -1,4 +1,4 @@
-﻿import { MealKit, RegionHub, addMealKit, getMealKits } from './mealKitsService';
+import { MealKit, RegionHub, addMealKit, getMealKits } from './mealKitsService';
 import { saveMealKitToSupabase } from './supabaseMealKitsService';
 import { hubForCity } from '../../features/admin/cityKitsSeederService';
 
@@ -498,11 +498,19 @@ export async function ensureCitySpecialtiesSeeded(city: string): Promise<MealKit
 
   // If Pune is requested and missing, seed the authentic Pune specialty kits
   if (targetCity === 'pune') {
-    const timestamp = Date.now();
+    const existingIds = new Set(existingKits.map((k) => k.id));
     const newKits: MealKit[] = PUNE_SPECIALTY_SEEDS.map((template, idx) => ({
       ...template,
-      id: `pune-spec-${timestamp}-${idx + 1}`,
-    }));
+      id: `pune-spec-${idx + 1}`,
+    })).filter(
+      (k) =>
+        !existingIds.has(k.id) &&
+        !existingKits.some((ek) => ek.name.toLowerCase() === k.name.toLowerCase()),
+    );
+
+    if (newKits.length === 0) {
+      return [];
+    }
 
     // Add to in-memory store
     newKits.forEach((kit) => addMealKit(kit));

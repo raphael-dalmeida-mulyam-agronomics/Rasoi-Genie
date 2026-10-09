@@ -1,13 +1,5 @@
 import React, { useState, useRef } from 'react';
-import {
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  Image,
-  StyleSheet,
-  Platform,
-} from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, Image, StyleSheet, Platform } from 'react-native';
 import { useTheme } from '../../../framework/theme/ThemeContext';
 import { Icon } from '../../../framework/ui/Icon';
 import { ChefRecipeFormState } from '../types';
@@ -21,11 +13,21 @@ import { SAMPLE_RECIPE_THUMBNAILS } from '../sampleImages';
 
 const DIET_TYPES: Array<{ key: DietTag; label: string; icon: string; desc: string }> = [
   { key: 'veg', label: 'Vegetarian', icon: 'leaf-outline', desc: 'Plant-based with dairy' },
-  { key: 'nonveg', label: 'Non-Vegetarian', icon: 'restaurant-outline', desc: 'Contains poultry/meat' },
+  {
+    key: 'nonveg',
+    label: 'Non-Vegetarian',
+    icon: 'restaurant-outline',
+    desc: 'Contains poultry/meat',
+  },
   { key: 'jain', label: 'Jain', icon: 'flower-outline', desc: 'No root vegetables' },
   { key: 'vegan', label: 'Vegan', icon: 'nutrition-outline', desc: '100% plant-based' },
   { key: 'keto', label: 'Keto', icon: 'flame-outline', desc: 'Low-carb & high-fat' },
-  { key: 'gluten-free', label: 'Gluten-Free', icon: 'shield-checkmark-outline', desc: 'Zero gluten grains' },
+  {
+    key: 'gluten-free',
+    label: 'Gluten-Free',
+    icon: 'shield-checkmark-outline',
+    desc: 'Zero gluten grains',
+  },
 ];
 
 const CUISINES: CuisineType[] = [
@@ -147,10 +149,7 @@ export function Step1Details({ form, onChange }: Step1DetailsProps) {
     <View style={styles.container}>
       {/* SECTION: Recipe Thumbnail */}
       <View
-        style={[
-          styles.card,
-          { backgroundColor: colors.bgCard, borderColor: colors.borderLight },
-        ]}
+        style={[styles.card, { backgroundColor: colors.bgCard, borderColor: colors.borderLight }]}
       >
         <View style={styles.cardHeader}>
           <View style={styles.titleWithBadge}>
@@ -250,7 +249,10 @@ export function Step1Details({ form, onChange }: Step1DetailsProps) {
                   onPress={() => onChange({ thumbnailUrl: sample.url })}
                 >
                   <Image source={{ uri: sample.url }} style={styles.presetImage} />
-                  <Text style={[styles.presetText, { color: colors.textSecondary }]} numberOfLines={1}>
+                  <Text
+                    style={[styles.presetText, { color: colors.textSecondary }]}
+                    numberOfLines={1}
+                  >
                     {sample.label}
                   </Text>
                 </TouchableOpacity>
@@ -262,10 +264,7 @@ export function Step1Details({ form, onChange }: Step1DetailsProps) {
 
       {/* SECTION: Recipe Overview */}
       <View
-        style={[
-          styles.card,
-          { backgroundColor: colors.bgCard, borderColor: colors.borderLight },
-        ]}
+        style={[styles.card, { backgroundColor: colors.bgCard, borderColor: colors.borderLight }]}
       >
         <View style={styles.cardHeader}>
           <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
@@ -346,10 +345,7 @@ export function Step1Details({ form, onChange }: Step1DetailsProps) {
 
       {/* SECTION: Diet Type (Single-select Card Grid) */}
       <View
-        style={[
-          styles.card,
-          { backgroundColor: colors.bgCard, borderColor: colors.borderLight },
-        ]}
+        style={[styles.card, { backgroundColor: colors.bgCard, borderColor: colors.borderLight }]}
       >
         <View style={styles.cardHeader}>
           <View style={styles.titleWithBadge}>
@@ -405,9 +401,7 @@ export function Step1Details({ form, onChange }: Step1DetailsProps) {
                 >
                   {dt.label}
                 </Text>
-                <Text style={[styles.dietCardDesc, { color: colors.textMuted }]}>
-                  {dt.desc}
-                </Text>
+                <Text style={[styles.dietCardDesc, { color: colors.textMuted }]}>{dt.desc}</Text>
               </TouchableOpacity>
             );
           })}
@@ -416,15 +410,10 @@ export function Step1Details({ form, onChange }: Step1DetailsProps) {
 
       {/* SECTION: Cuisine & Dish Category Dropdowns */}
       <View
-        style={[
-          styles.card,
-          { backgroundColor: colors.bgCard, borderColor: colors.borderLight },
-        ]}
+        style={[styles.card, { backgroundColor: colors.bgCard, borderColor: colors.borderLight }]}
       >
         <View style={styles.cardHeader}>
-          <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
-            Classification
-          </Text>
+          <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Classification</Text>
           <Text style={[styles.sectionSubtitle, { color: colors.textSecondary }]}>
             Regional cuisine and dish category for catalog filtering.
           </Text>
@@ -488,8 +477,7 @@ export function Step1Details({ form, onChange }: Step1DetailsProps) {
                       style={[
                         styles.dropdownItem,
                         {
-                          backgroundColor:
-                            form.cuisine === c ? colors.primaryLight : 'transparent',
+                          backgroundColor: form.cuisine === c ? colors.primaryLight : 'transparent',
                         },
                       ]}
                       onPress={() => {
@@ -585,8 +573,7 @@ export function Step1Details({ form, onChange }: Step1DetailsProps) {
                         style={[
                           styles.dropdownItemText,
                           {
-                            color:
-                              form.dishCategory === cat ? colors.primary : colors.textPrimary,
+                            color: form.dishCategory === cat ? colors.primary : colors.textPrimary,
                             fontWeight: form.dishCategory === cat ? '700' : '400',
                           },
                         ]}
@@ -604,10 +591,7 @@ export function Step1Details({ form, onChange }: Step1DetailsProps) {
 
       {/* SECTION: Spice Level & Timings */}
       <View
-        style={[
-          styles.card,
-          { backgroundColor: colors.bgCard, borderColor: colors.borderLight },
-        ]}
+        style={[styles.card, { backgroundColor: colors.bgCard, borderColor: colors.borderLight }]}
       >
         <View style={styles.cardHeader}>
           <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
@@ -635,7 +619,9 @@ export function Step1Details({ form, onChange }: Step1DetailsProps) {
                     styles.segmentTab,
                     {
                       backgroundColor: isSelected ? colors.bgSurface : 'transparent',
-                      shadowOpacity: isSelected ? 0.08 : 0,
+                      ...(Platform.OS === 'web'
+                        ? { boxShadow: isSelected ? '0px 2px 6px rgba(0, 0, 0, 0.08)' : 'none' }
+                        : { shadowOpacity: isSelected ? 0.08 : 0 }),
                     },
                   ]}
                   onPress={() => onChange({ spiceLevel: sp.level })}
@@ -693,9 +679,7 @@ export function Step1Details({ form, onChange }: Step1DetailsProps) {
             >
               <TextInput
                 value={String(form.prepTimeMinutes)}
-                onChangeText={(t) =>
-                  onChange({ prepTimeMinutes: Math.max(0, parseInt(t) || 0) })
-                }
+                onChangeText={(t) => onChange({ prepTimeMinutes: Math.max(0, parseInt(t) || 0) })}
                 keyboardType="numeric"
                 style={[styles.numericInput, { color: colors.textPrimary }]}
               />
@@ -713,9 +697,7 @@ export function Step1Details({ form, onChange }: Step1DetailsProps) {
             >
               <TextInput
                 value={String(form.cookTimeMinutes)}
-                onChangeText={(t) =>
-                  onChange({ cookTimeMinutes: Math.max(0, parseInt(t) || 0) })
-                }
+                onChangeText={(t) => onChange({ cookTimeMinutes: Math.max(0, parseInt(t) || 0) })}
                 keyboardType="numeric"
                 style={[styles.numericInput, { color: colors.textPrimary }]}
               />
@@ -727,10 +709,7 @@ export function Step1Details({ form, onChange }: Step1DetailsProps) {
 
       {/* SECTION: Dietary Tags & Allergens (Searchable Multi-select) */}
       <View
-        style={[
-          styles.card,
-          { backgroundColor: colors.bgCard, borderColor: colors.borderLight },
-        ]}
+        style={[styles.card, { backgroundColor: colors.bgCard, borderColor: colors.borderLight }]}
       >
         <View style={styles.cardHeader}>
           <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
@@ -1085,10 +1064,17 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     padding: 8,
     maxHeight: 220,
-    shadowColor: '#000',
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
+    ...Platform.select({
+      web: {
+        boxShadow: '0px 4px 12px rgba(0, 0, 0, 0.1)',
+      },
+      default: {
+        shadowColor: '#000',
+        shadowOpacity: 0.1,
+        shadowRadius: 8,
+        elevation: 4,
+      },
+    }),
     zIndex: 100,
   },
   dropdownSearch: {
