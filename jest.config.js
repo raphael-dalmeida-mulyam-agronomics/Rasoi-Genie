@@ -5,4 +5,5 @@ module.exports = {
     '^react-native/src/setup-env(\\.js)?$': '<rootDir>/node_modules/react-native/index.js',
   },
   testPathIgnorePatterns: ['/node_modules/', '/.expo/', '/e2e/'],
+  testTimeout: 20000,
 };
