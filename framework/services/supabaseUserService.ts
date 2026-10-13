@@ -88,7 +88,25 @@ export async function saveUserProfileToSupabase(
       updated_at: new Date().toISOString(),
     };
 
-    const { error } = await supabase.from('user_profiles').upsert(row, { onConflict: 'uid' });
+    let { error } = await supabase.from('user_profiles').upsert(row, { onConflict: 'uid' });
+
+    if (
+      error &&
+      (error.code === 'PGRST204' || error.message?.includes('column') || error.code === '42703')
+    ) {
+      // Table in Supabase does not have extended columns (preferences, addresses, etc.); retry with basic row
+      const basicRow = {
+        uid: profile.uid,
+        email: profile.email || null,
+        display_name: profile.displayName || null,
+        phone_number: profile.phoneNumber || null,
+        updated_at: new Date().toISOString(),
+      };
+      const retryResult = await supabase
+        .from('user_profiles')
+        .upsert(basicRow, { onConflict: 'uid' });
+      error = retryResult.error;
+    }
 
     if (error) {
       if (!isMissingSchemaError(error)) {

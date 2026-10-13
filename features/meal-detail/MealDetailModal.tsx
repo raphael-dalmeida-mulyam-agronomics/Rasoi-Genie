@@ -21,6 +21,7 @@ import { useTheme } from '../../framework/theme/ThemeContext';
 import { useCart } from '../../framework/context/CartContext';
 import { useWishlist } from '../../framework/context/WishlistContext';
 import { usePreferences } from '../../framework/context/PreferencesContext';
+import { useFamily } from '../../framework/context/FamilyContext';
 import { Badge, getDietBadgeInfo } from '../../framework/ui/Badge';
 import { Button } from '../../framework/ui/Button';
 import { RatingStars } from '../../framework/ui/RatingStars';
@@ -58,6 +59,10 @@ export const MealDetailModal: React.FC<MealDetailModalProps> = ({
   // Customization: Serving size and Spice level
   const [selectedServings, setSelectedServings] = useState<number>(kit?.servings || 2);
   const [selectedSpiceLevel, setSelectedSpiceLevel] = useState<string>(kit?.spiceLevel || 'Medium');
+
+  // Family integration
+  const { family, isDependent, addFamilyItem } = useFamily();
+  const [targetCart, setTargetCart] = useState<'personal' | 'family'>('personal');
 
   // Animation values for smooth entrance and drop-down exit
   const windowHeight = Dimensions.get('window').height;
@@ -159,9 +164,13 @@ export const MealDetailModal: React.FC<MealDetailModalProps> = ({
     setRunningTimers((prev) => ({ ...prev, [stepNumber]: !prev[stepNumber] }));
   };
 
-  const handleAddToCart = () => {
+  const handleAddToCart = async () => {
     if (!kit) return;
-    addItem(kit, quantity, selectedServings, selectedSpiceLevel);
+    if (isDependent || targetCart === 'family') {
+      await addFamilyItem(kit, quantity, selectedServings, selectedSpiceLevel);
+    } else {
+      addItem(kit, quantity, selectedServings, selectedSpiceLevel);
+    }
     // Smooth drop-down animation to reveal the home screen again
     handleDropDownAndClose();
   };
@@ -950,30 +959,57 @@ export const MealDetailModal: React.FC<MealDetailModalProps> = ({
                 backgroundColor: colors.bgSurface,
                 borderTopColor: colors.borderLight,
                 ...shadows.medium,
+                flexDirection: 'column',
+                alignItems: 'stretch',
+                paddingBottom: Platform.OS === 'ios' ? 32 : 16,
               },
             ]}
           >
-            <View style={styles.bottomQtyCol}>
-              <Text style={[styles.qtyLabel, { color: colors.textMuted }]}>QUANTITY</Text>
-              <QuantityStepper value={quantity} onChange={setQuantity} min={1} max={10} />
-            </View>
+            {/* Personal / Family Chooser when in a family and not dependent */}
+            {family && !isDependent && (
+              <View style={{ marginBottom: 10 }}>
+                <SegmentedControl
+                  options={[
+                    { label: 'Personal Cart', value: 'personal' },
+                    { label: 'Family Cart', value: 'family' },
+                  ]}
+                  selectedValue={targetCart}
+                  onSelect={(val) => setTargetCart(val as 'personal' | 'family')}
+                />
+              </View>
+            )}
 
-            <View style={styles.bottomTotalCol}>
-              <Text style={[styles.qtyLabel, { color: colors.textMuted }]}>TOTAL</Text>
-              <Text style={[styles.bottomTotal, { color: colors.primary }]}>
-                ₹{effectiveUnitPrice * quantity}
-              </Text>
-            </View>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+              <View style={styles.bottomQtyCol}>
+                <Text style={[styles.qtyLabel, { color: colors.textMuted }]}>QUANTITY</Text>
+                <QuantityStepper value={quantity} onChange={setQuantity} min={1} max={10} />
+              </View>
 
-            <Button
-              testID="modal-add-to-cart-btn"
-              title={kit.isOutOfStock ? 'Out of Stock' : 'Add to Cart'}
-              icon={kit.isOutOfStock ? undefined : <Icon name="cart" size={18} color="#FFFFFF" />}
-              style={{ flex: 1.4, opacity: kit.isOutOfStock ? 0.6 : 1 }}
-              size="lg"
-              disabled={kit.isOutOfStock}
-              onPress={handleAddToCart}
-            />
+              <View style={styles.bottomTotalCol}>
+                <Text style={[styles.qtyLabel, { color: colors.textMuted }]}>TOTAL</Text>
+                <Text style={[styles.bottomTotal, { color: colors.primary }]}>
+                  ₹{effectiveUnitPrice * quantity}
+                </Text>
+              </View>
+
+              <Button
+                testID="modal-add-to-cart-btn"
+                title={
+                  kit.isOutOfStock
+                    ? 'Out of Stock'
+                    : isDependent
+                      ? 'Add to family cart (needs approval)'
+                      : targetCart === 'family'
+                        ? 'Add to Family Cart'
+                        : 'Add to Cart'
+                }
+                icon={kit.isOutOfStock ? undefined : <Icon name="cart" size={18} color="#FFFFFF" />}
+                style={{ flex: 1.4, opacity: kit.isOutOfStock ? 0.6 : 1 }}
+                size="lg"
+                disabled={kit.isOutOfStock}
+                onPress={handleAddToCart}
+              />
+            </View>
           </View>
         </Animated.View>
       </Animated.View>

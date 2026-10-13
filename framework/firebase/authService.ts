@@ -3,6 +3,7 @@ import {
   signOut,
   sendSignInLinkToEmail,
   onAuthStateChanged,
+  signInAnonymously,
   User as FirebaseUser,
 } from 'firebase/auth';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -19,6 +20,7 @@ export interface UserProfile {
   displayName?: string | null;
   photoURL?: string | null;
   createdAt: string;
+  isAnonymous?: boolean;
 }
 
 export interface AuthResult {
@@ -484,5 +486,55 @@ export async function logoutUser(): Promise<void> {
     await signOut(auth);
   } catch {
     // Silent catch for local session clear
+  }
+}
+
+/**
+ * Creates or restores an anonymous user session (used for link-joined dependents).
+ * Stores the profile in local storage and registers in Supabase user_profiles.
+ */
+export async function signInAnonymousUser(displayName: string): Promise<AuthResult> {
+  try {
+    const firstName = displayName.trim().split(' ')[0] || 'Member';
+    let uid: string;
+
+    try {
+      const result = await signInAnonymously(auth);
+      uid = result.user.uid;
+    } catch (fbErr) {
+      // Offline / sandbox fallback
+      uid = `anon_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+    }
+
+    const profile: UserProfile = {
+      uid,
+      displayName: firstName,
+      role: 'customer',
+      isAnonymous: true,
+      createdAt: new Date().toISOString(),
+    };
+
+    await saveStoredUser(profile);
+
+    // Persist to Supabase user_profiles
+    saveUserProfileToSupabase({
+      uid: profile.uid,
+      displayName: firstName,
+      preferences: {} as any,
+      addresses: [],
+      preferredPaymentMethod: 'UPI',
+      isOnboarded: true,
+      updatedAt: profile.createdAt,
+    }).catch(() => {});
+
+    return {
+      success: true,
+      user: profile,
+    };
+  } catch (err: any) {
+    return {
+      success: false,
+      error: err?.message || 'Could not create anonymous session',
+    };
   }
 }

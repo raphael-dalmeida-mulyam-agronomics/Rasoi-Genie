@@ -1,9 +1,9 @@
-﻿import React from 'react';
-import { View, StyleSheet, ViewProps, ViewStyle } from 'react-native';
+import React from 'react';
+import { View, StyleSheet, ViewProps, ViewStyle, StyleProp } from 'react-native';
 import { useTheme } from '../theme/ThemeContext';
 
 export interface CardProps extends ViewProps {
-  style?: ViewStyle;
+  style?: StyleProp<ViewStyle>;
   variant?: 'elevated' | 'outlined' | 'flat' | 'warm';
 }
 

@@ -1,4 +1,4 @@
-﻿import React from 'react';
+import React from 'react';
 import {
   TouchableOpacity,
   Text,
@@ -7,6 +7,7 @@ import {
   TouchableOpacityProps,
   ViewStyle,
   TextStyle,
+  StyleProp,
 } from 'react-native';
 import { useTheme } from '../theme/ThemeContext';
 
@@ -15,8 +16,8 @@ export interface ButtonProps extends TouchableOpacityProps {
   variant?: 'primary' | 'secondary' | 'accent' | 'danger' | 'outline' | 'ghost';
   size?: 'sm' | 'md' | 'lg';
   loading?: boolean;
-  style?: ViewStyle;
-  textStyle?: TextStyle;
+  style?: StyleProp<ViewStyle>;
+  textStyle?: StyleProp<TextStyle>;
   icon?: React.ReactNode;
 }
 

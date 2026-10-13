@@ -1,4 +1,4 @@
-﻿import { BuyerReview, getMealKits, updateMealKit } from './mealKitsService';
+import { BuyerReview, getMealKits, updateMealKit } from './mealKitsService';
 
 export interface ExtendedReview extends BuyerReview {
   mealKitId: string;
@@ -6,6 +6,7 @@ export interface ExtendedReview extends BuyerReview {
   userId: string;
   status: 'approved' | 'flagged' | 'hidden';
   reportReason?: string;
+  createdAt?: number;
 }
 
 const INITIAL_EXTENDED_REVIEWS: ExtendedReview[] = [];
@@ -20,6 +21,34 @@ export function getAllReviewsForModeration(): ExtendedReview[] {
   return [...reviewsStore];
 }
 
+/**
+ * Checks if a user has already reviewed a meal kit recently (within specified minutes, default 60m).
+ * Prevents publishing duplicate reviews for the same meal kit in a short span of time.
+ */
+export function hasUserReviewedRecently(
+  mealKitId: string,
+  userId: string,
+  withinMinutes = 60,
+): boolean {
+  if (!userId || userId === 'guest-user') {
+    // For anonymous/guest users, check if any guest review was published for this kit within the cutoff
+    const cutoff = Date.now() - withinMinutes * 60 * 1000;
+    return reviewsStore.some(
+      (r) =>
+        r.mealKitId === mealKitId &&
+        r.userId === userId &&
+        (r.createdAt ? r.createdAt > cutoff : false),
+    );
+  }
+  const cutoff = Date.now() - withinMinutes * 60 * 1000;
+  return reviewsStore.some(
+    (r) =>
+      r.mealKitId === mealKitId &&
+      r.userId === userId &&
+      (r.createdAt ? r.createdAt > cutoff : false),
+  );
+}
+
 export function addReview(
   mealKitId: string,
   mealKitName: string,
@@ -27,9 +56,15 @@ export function addReview(
   userName: string,
   userCity: string,
   rating: number,
-  comment: string,
+  comment?: string,
   photoUrl?: string,
 ): ExtendedReview {
+  const existingRecent = hasUserReviewedRecently(mealKitId, userId, 60);
+  if (existingRecent) {
+    const existing = reviewsStore.find((r) => r.mealKitId === mealKitId && r.userId === userId);
+    if (existing) return existing;
+  }
+
   const newReview: ExtendedReview = {
     id: 'rev-' + Math.floor(1000 + Math.random() * 9000),
     mealKitId,
@@ -38,12 +73,13 @@ export function addReview(
     userName,
     userCity,
     rating,
-    comment,
+    comment: (comment || '').trim(),
     date: 'Just now',
     verifiedBuyer: true,
     helpfulCount: 0,
     photoUrl,
     status: 'approved',
+    createdAt: Date.now(),
   };
 
   reviewsStore = [newReview, ...reviewsStore];

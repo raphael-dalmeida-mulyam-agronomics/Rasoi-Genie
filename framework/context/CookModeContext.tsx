@@ -15,6 +15,7 @@ import {
 } from '../services/supabaseOrdersService';
 import { getGuestOrders } from '../services/guestService';
 import { useAuth } from './AuthContext';
+import { useFamily } from './FamilyContext';
 import {
   scheduleCookingTimerNotification,
   cancelCookingTimerNotification,
@@ -85,6 +86,7 @@ const TERMINAL_STATUSES: Set<OrderStatus> = new Set(['Delivered', 'Cancelled', '
 
 export const CookModeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user } = useAuth();
+  const { family } = useFamily();
 
   const [allOrders, setAllOrders] = useState<Order[]>([]);
   const [guestLocalOrders, setGuestLocalOrders] = useState<Order[]>([]);
@@ -215,8 +217,11 @@ export const CookModeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       );
     }
 
-    const filtered = cleanOrders.filter(
-      (o) =>
+    const filtered = cleanOrders.filter((o) => {
+      if (family && (o as any).familyId === family.id) {
+        return true;
+      }
+      return (
         o.userId === user.uid ||
         (user.phoneNumber &&
           o.customerPhone &&
@@ -226,14 +231,15 @@ export const CookModeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         (user.email &&
           o.customerEmail &&
           o.customerEmail.trim().toLowerCase() === user.email.trim().toLowerCase()) ||
-        o.userId.startsWith('guest_user_'),
-    );
+        o.userId.startsWith('guest_user_')
+      );
+    });
 
     // Sort newest first
     return filtered.sort(
       (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
     );
-  }, [allOrders, guestLocalOrders, user]);
+  }, [allOrders, guestLocalOrders, user, family]);
 
   // 4. Timer interval tick for active running timers
   useEffect(() => {
@@ -317,9 +323,15 @@ export const CookModeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const isOrderDismissed = useCallback(
     (orderId: string) => {
-      return dismissedOrderIds.has(orderId);
+      if (dismissedOrderIds.has(orderId)) return true;
+      const orderRec = progressMap[orderId];
+      if (orderRec?.kits && Object.keys(orderRec.kits).length > 0) {
+        const allCompleted = Object.values(orderRec.kits).every((k) => k.isCompleted);
+        if (allCompleted) return true;
+      }
+      return false;
     },
-    [dismissedOrderIds],
+    [dismissedOrderIds, progressMap],
   );
 
   // Text size toggle
@@ -398,6 +410,15 @@ export const CookModeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       current[orderId] = orderRec;
 
       await persistProgress(current);
+
+      // Auto-dismiss order so all prompts immediately stop displaying
+      setDismissedOrderIds((prev) => {
+        const next = new Set(prev).add(orderId);
+        AsyncStorage.setItem(STORAGE_KEYS.DISMISSED_ORDERS, JSON.stringify(Array.from(next))).catch(
+          () => {},
+        );
+        return next;
+      });
     },
     [persistProgress],
   );

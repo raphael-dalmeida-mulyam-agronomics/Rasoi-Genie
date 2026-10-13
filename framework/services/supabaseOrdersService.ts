@@ -63,6 +63,8 @@ export interface CreateOrderParams {
   totalAmount: number;
   paymentMethod: 'UPI' | 'Card' | 'Wallet' | 'Cash on Delivery';
   transactionId?: string;
+  familyId?: string;
+  payerId?: string;
 }
 
 // Local fallback cache if Supabase network is unavailable
@@ -224,7 +226,7 @@ export async function createOrderInSupabase(
 
   try {
     // 1. Insert into Supabase `orders` table (only columns present in schema)
-    const { error: orderError } = await supabase.from('orders').insert({
+    const orderInsertPayload: any = {
       id: orderId,
       user_id: params.userId,
       customer_name: params.customerName,
@@ -241,7 +243,11 @@ export async function createOrderInSupabase(
       payment_status: params.paymentMethod === 'Cash on Delivery' ? 'Pending' : 'Paid',
       transaction_id: newOrder.transactionId,
       created_at: now,
-    });
+    };
+    if (params.familyId) orderInsertPayload.family_id = params.familyId;
+    if (params.payerId) orderInsertPayload.payer_id = params.payerId;
+
+    const { error: orderError } = await supabase.from('orders').insert(orderInsertPayload);
 
     if (orderError) {
       console.warn(
@@ -250,7 +256,7 @@ export async function createOrderInSupabase(
       );
     } else {
       // 2. Insert order items
-      const itemsToInsert = params.items.map((item) => ({
+      const itemsToInsert = params.items.map((item: any) => ({
         order_id: orderId,
         kit_id: item.kitId,
         name: item.name,
@@ -260,6 +266,7 @@ export async function createOrderInSupabase(
         spice_level: item.spiceLevel || 'Medium',
         masala_sachets: item.masalaSachets || [],
         image_url: item.imageUrl,
+        ...(item.addedBy ? { added_by: item.addedBy } : {}),
       }));
 
       await supabase

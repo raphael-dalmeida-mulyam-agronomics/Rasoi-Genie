@@ -1,7 +1,30 @@
-﻿import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { CONFIG } from '../../src/constants/config';
 
 let clientInstance: SupabaseClient | null = null;
+let currentAuthToken: string | null = null;
+
+/**
+ * Sets the active authorization token (e.g. from Firebase or anonymous bridge)
+ * and updates Supabase Realtime authorization.
+ */
+export function setSupabaseAuthToken(token: string | null): void {
+  currentAuthToken = token;
+  if (clientInstance && token) {
+    try {
+      clientInstance.realtime.setAuth(token);
+    } catch (err) {
+      console.warn('[Supabase] Failed to set realtime auth token:', err);
+    }
+  }
+}
+
+/**
+ * Returns the currently active custom authorization token.
+ */
+export function getSupabaseAuthToken(): string | null {
+  return currentAuthToken;
+}
 
 /**
  * Returns a singleton instance of the Supabase client.

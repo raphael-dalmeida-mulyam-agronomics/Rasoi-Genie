@@ -29,7 +29,7 @@ export const CONFIG: AppConfig = {
   enableMockApi:
     (process.env.EXPO_PUBLIC_ENABLE_MOCK_API ??
       Constants?.expoConfig?.extra?.EXPO_PUBLIC_ENABLE_MOCK_API ??
-      'true') === 'true',
+      'false') === 'true',
   analyticsEnabled:
     (process.env.EXPO_PUBLIC_ANALYTICS_ENABLED ??
       Constants?.expoConfig?.extra?.EXPO_PUBLIC_ANALYTICS_ENABLED ??

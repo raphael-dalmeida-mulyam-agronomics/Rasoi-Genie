@@ -8,7 +8,8 @@ import { Badge } from './Badge';
 import { ActiveOrdersSelectorModal } from './ActiveOrdersSelectorModal';
 
 export const CookModeMiniBar: React.FC = () => {
-  const { activeOrders, getProgressForOrderKit, activeOrderWithTimer } = useCookMode();
+  const { activeOrders, isOrderDismissed, getProgressForOrderKit, activeOrderWithTimer } =
+    useCookMode();
   const { colors, radii, shadows, isDark } = useTheme();
   const pathname = usePathname();
   const [selectorVisible, setSelectorVisible] = useState(false);
@@ -18,26 +19,36 @@ export const CookModeMiniBar: React.FC = () => {
     return null;
   }
 
-  // Hide if there are no active orders
-  if (!activeOrders || activeOrders.length === 0) {
+  // Filter for active orders that are NOT dismissed and whose recipe is NOT completed
+  const pendingOrders = (activeOrders || []).filter((order) => {
+    if (isOrderDismissed(order.id)) return false;
+    const firstKit = order.items?.[0];
+    const kitId = firstKit?.kitId || firstKit?.id || 'kit-1';
+    const progress = getProgressForOrderKit(order.id, kitId);
+    return !progress.isCompleted;
+  });
+
+  // Hide if there are no active cooking orders pending
+  if (pendingOrders.length === 0) {
     return null;
   }
 
   // The primary order to show: if any order has an active running timer, prioritize that, else most recent active order
-  const primaryOrder = activeOrderWithTimer?.order || activeOrders[0];
+  const primaryOrder =
+    activeOrderWithTimer?.order && pendingOrders.some((o) => o.id === activeOrderWithTimer.order.id)
+      ? activeOrderWithTimer.order
+      : pendingOrders[0];
   if (!primaryOrder) {
     return null;
   }
-  const moreCount = activeOrders.length - 1;
+  const moreCount = pendingOrders.length - 1;
 
   const firstKit = primaryOrder.items?.[0];
   const kitId = activeOrderWithTimer?.kitId || firstKit?.kitId || firstKit?.id || 'kit-1';
   const kitName = firstKit?.name || 'Meal Kit Recipe';
 
   const progress = getProgressForOrderKit(primaryOrder.id, kitId);
-  const currentStepDisplay = progress.isCompleted
-    ? 'Completed ✓'
-    : `Step ${(progress.currentStepIndex || 0) + 1}`;
+  const currentStepDisplay = `Step ${(progress.currentStepIndex || 0) + 1}`;
 
   // Running timer format mm:ss
   const runningTimer = activeOrderWithTimer?.timer?.isRunning
@@ -158,7 +169,7 @@ export const CookModeMiniBar: React.FC = () => {
       <ActiveOrdersSelectorModal
         visible={selectorVisible}
         onClose={() => setSelectorVisible(false)}
-        activeOrders={activeOrders}
+        activeOrders={pendingOrders}
       />
     </>
   );

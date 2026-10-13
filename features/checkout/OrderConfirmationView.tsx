@@ -19,6 +19,7 @@ import { Button } from '../../framework/ui/Button';
 import { Order } from '../../framework/firebase/ordersService';
 import { buildReferralShareMessage } from '../../framework/services/referralService';
 import { useCookMode } from '../../framework/context/CookModeContext';
+import { FamilyOrderBadge } from '../family/FamilyOrderBadge';
 
 interface OrderConfirmationViewProps {
   order: Order;
@@ -114,6 +115,17 @@ export const OrderConfirmationView: React.FC<OrderConfirmationViewProps> = ({
             masalas.
           </Text>
         </View>
+
+        {Boolean(order.familyId) && (
+          <View style={{ marginBottom: 16 }}>
+            <FamilyOrderBadge
+              testID="order-confirmation-family-badge"
+              ownerName={order.familyOwnerName || 'Family Owner'}
+              memberNames={order.familyMemberNames}
+              yourItemsCount={order.items?.length}
+            />
+          </View>
+        )}
 
         {/* Estimated Delivery Slot */}
         <View

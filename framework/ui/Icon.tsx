@@ -1,4 +1,4 @@
-﻿import React from 'react';
+import React from 'react';
 import { StyleSheet, ViewStyle } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
@@ -97,6 +97,21 @@ const SEMANTIC_ICON_MAP: Record<string, keyof typeof Ionicons.glyphMap> = {
   chat: 'chatbubble-ellipses-outline',
   play: 'play-outline',
   pause: 'pause-outline',
+  // Sharing, Links & Security
+  link: 'link-outline',
+  share: 'share-social-outline',
+  copy: 'copy-outline',
+  shield: 'shield-checkmark-outline',
+  clock: 'time-outline',
+  'user-plus': 'person-add-outline',
+  user: 'person-outline',
+  users: 'people-outline',
+  edit: 'create-outline',
+  'ellipsis-vertical': 'ellipsis-vertical',
+  unlock: 'lock-open-outline',
+  'lock-closed': 'lock-closed',
+  warning: 'warning-outline',
+
   ticket: 'receipt-outline',
   stats: 'bar-chart-outline',
 };

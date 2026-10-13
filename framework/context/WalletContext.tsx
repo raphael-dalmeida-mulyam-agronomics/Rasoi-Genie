@@ -1,16 +1,16 @@
-﻿import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import {
-    CreditLot,
-    debitWallet,
-    getCreditLots,
-    getReferralCode,
-    getWalletBalance,
-    getWalletTransactions,
-    initializeWallet,
-    reverseWalletDebit,
-    subscribeToWalletEvents,
-    WalletBalance,
-    WalletTransaction,
+  CreditLot,
+  debitWallet,
+  getCreditLots,
+  getReferralCode,
+  getWalletBalance,
+  getWalletTransactions,
+  initializeWallet,
+  reverseWalletDebit,
+  subscribeToWalletEvents,
+  WalletBalance,
+  WalletTransaction,
 } from '../services/walletService';
 import { getSupabaseClient } from '../supabase/client';
 import { useAuth } from './AuthContext';
@@ -29,13 +29,19 @@ export interface WalletContextValue {
   refreshTransactions: () => Promise<void>;
   refreshCreditLots: () => Promise<void>;
   refreshAll: () => Promise<void>;
-  calculateApplicableCredits: (orderTotal: number) => { creditsToApply: number; remainingPayable: number };
+  calculateApplicableCredits: (orderTotal: number) => {
+    creditsToApply: number;
+    remainingPayable: number;
+  };
   debitCredits: (params: {
     amount: number;
     orderId?: string;
     description?: string;
   }) => Promise<{ success: boolean; transactionId?: string; error?: string }>;
-  reverseDebit: (transactionId: string, reason?: string) => Promise<{ success: boolean; error?: string }>;
+  reverseDebit: (
+    transactionId: string,
+    reason?: string,
+  ) => Promise<{ success: boolean; error?: string }>;
 }
 
 const WalletContext = createContext<WalletContextValue | undefined>(undefined);
@@ -93,7 +99,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   // ─── Fetch referral code ───────────────────────────────────────────────────
   const refreshReferralCode = useCallback(async () => {
-    if (!userId) {
+    if (!userId || user?.isAnonymous) {
       setReferralCode(null);
       return;
     }
@@ -101,7 +107,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     if (res.success && res.data) {
       setReferralCode(res.data.code);
     }
-  }, [userId]);
+  }, [userId, user?.isAnonymous]);
 
   // ─── Refresh All ───────────────────────────────────────────────────────────
   const refreshAll = useCallback(async () => {
@@ -201,7 +207,8 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   // ─── Helper: Calculate applicable credits for checkout ─────────────────────
   const calculateApplicableCredits = useCallback(
     (orderTotal: number) => {
-      const available = (balance as any)?.available_balance ?? (balance as any)?.availableBalance ?? 0;
+      const available =
+        (balance as any)?.available_balance ?? (balance as any)?.availableBalance ?? 0;
       if (available <= 0 || orderTotal <= 0) {
         return { creditsToApply: 0, remainingPayable: orderTotal };
       }
@@ -268,8 +275,10 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     [refreshAll],
   );
 
-  const availableBalance = (balance as any)?.available_balance ?? (balance as any)?.availableBalance ?? 0;
-  const reservedBalance = (balance as any)?.reserved_balance ?? (balance as any)?.reservedBalance ?? 0;
+  const availableBalance =
+    (balance as any)?.available_balance ?? (balance as any)?.availableBalance ?? 0;
+  const reservedBalance =
+    (balance as any)?.reserved_balance ?? (balance as any)?.reservedBalance ?? 0;
 
   const value = useMemo<WalletContextValue>(
     () => ({

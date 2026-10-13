@@ -1,5 +1,6 @@
-﻿import { getSupabaseClient } from '../supabase/client';
+import { getSupabaseClient } from '../supabase/client';
 import { isMissingSchemaError } from './supabaseUtils';
+import { areRelated } from './familyService';
 
 export interface ReferralSettings {
   id: number;
@@ -143,7 +144,9 @@ export async function updateReferralSettings(
 /**
  * Gets or creates the customer's referral code and overall referral statistics.
  */
-export async function getCustomerReferralStats(userId: string): Promise<ServiceResult<ReferralStats>> {
+export async function getCustomerReferralStats(
+  userId: string,
+): Promise<ServiceResult<ReferralStats>> {
   try {
     const supabase = getSupabaseClient();
 
@@ -192,7 +195,9 @@ export async function getCustomerReferralStats(userId: string): Promise<ServiceR
     }
 
     const items = (referrals as ReferralItem[]) || [];
-    const successful = items.filter((r) => r.status === 'REWARDED' || r.status === 'QUALIFIED').length;
+    const successful = items.filter(
+      (r) => r.status === 'REWARDED' || r.status === 'QUALIFIED',
+    ).length;
     const pending = items.filter((r) => r.status === 'PENDING').length;
     const totalEarnings = items
       .filter((r) => r.status === 'REWARDED')
@@ -219,7 +224,9 @@ export async function getCustomerReferralStats(userId: string): Promise<ServiceR
 /**
  * Fetches the list of friends referred by the current user.
  */
-export async function getCustomerReferralsList(userId: string): Promise<ServiceResult<ReferralItem[]>> {
+export async function getCustomerReferralsList(
+  userId: string,
+): Promise<ServiceResult<ReferralItem[]>> {
   try {
     const supabase = getSupabaseClient();
     const { data, error } = await supabase
@@ -256,6 +263,24 @@ export async function registerReferralCode(
     }
 
     const supabase = getSupabaseClient();
+    try {
+      const { data: codeData } = await supabase
+        .from('referral_codes')
+        .select('user_id')
+        .eq('code', cleanCode)
+        .maybeSingle();
+
+      if (codeData?.user_id) {
+        const related = await areRelated(codeData.user_id, referredUserId);
+        if (related) {
+          return {
+            success: false,
+            error: 'Referral rewards are not permitted between members of the same family',
+          };
+        }
+      }
+    } catch {}
+
     const { data, error } = await supabase.rpc('register_referral', {
       p_referral_code: cleanCode,
       p_referred_user_id: referredUserId,
@@ -319,7 +344,10 @@ export async function qualifyReferralOrder(
 /**
  * Generates a sharable referral text and link for WhatsApp, SMS, or copy-paste.
  */
-export function buildReferralShareMessage(code: string, friendReward = 200): { title: string; message: string; url: string } {
+export function buildReferralShareMessage(
+  code: string,
+  friendReward = 200,
+): { title: string; message: string; url: string } {
   const url = `https://rasoigenie.in/join?ref=${code}`;
   const message = `Hey! Cook restaurant-quality meals at home with Rasoi-Genie! Use my referral code *${code}* to get ₹${friendReward} free credits in your wallet on your first order. Download the app or order here: ${url}`;
   return {

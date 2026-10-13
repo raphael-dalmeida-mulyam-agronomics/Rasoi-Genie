@@ -19,8 +19,14 @@ interface EnjoyYourMealViewProps {
 export const EnjoyYourMealView: React.FC<EnjoyYourMealViewProps> = ({ order, kit, onDone }) => {
   const { colors, radii, isDark } = useTheme();
   const { reorderItems } = useCart();
-  const { markKitCompleted } = useCookMode();
+  const { markKitCompleted, dismissCookMode } = useCookMode();
   const [reviewModalVisible, setReviewModalVisible] = useState(false);
+
+  // Auto-mark completed and dismiss prompt as soon as user reaches celebration view
+  React.useEffect(() => {
+    markKitCompleted(order.id, kit.id);
+    dismissCookMode(order.id);
+  }, [order.id, kit.id, markKitCompleted, dismissCookMode]);
 
   const handleReorder = () => {
     reorderItems(order.items);
@@ -35,6 +41,7 @@ export const EnjoyYourMealView: React.FC<EnjoyYourMealViewProps> = ({ order, kit
 
   const handleFinish = async () => {
     await markKitCompleted(order.id, kit.id);
+    await dismissCookMode(order.id);
     onDone();
   };
 
@@ -81,8 +88,7 @@ export const EnjoyYourMealView: React.FC<EnjoyYourMealViewProps> = ({ order, kit
           >
             <Icon name="delivery" size={16} color={colors.primary} />
             <Text style={[styles.statusNoticeText, { color: colors.textPrimary }]}>
-              Order is currently {order.status}. The "Cook now" mini-bar will stay docked above your
-              tabs until your kit is marked delivered.
+              Order is currently {order.status}. You can track delivery status in the Orders tab.
             </Text>
           </View>
         )}
@@ -123,9 +129,12 @@ export const EnjoyYourMealView: React.FC<EnjoyYourMealViewProps> = ({ order, kit
         kit={kit}
         visible={reviewModalVisible}
         onClose={() => setReviewModalVisible(false)}
-        onReviewSubmitted={() => {
+        onReviewSubmitted={async () => {
           setReviewModalVisible(false);
-          Alert.alert('Thank You!', 'Your review has been shared with our culinary team.');
+          await markKitCompleted(order.id, kit.id);
+          await dismissCookMode(order.id);
+          onDone();
+          router.replace('/(tabs)' as any);
         }}
       />
     </>

@@ -10,8 +10,14 @@ export const ResumeCookingBanner: React.FC = () => {
   const { activeOrders, isOrderDismissed, dismissCookMode, getProgressForOrderKit } = useCookMode();
   const { colors, radii, shadows, isDark } = useTheme();
 
-  // Find the first active order that has NOT been dismissed
-  const undismissedOrder = activeOrders.find((o) => !isOrderDismissed(o.id));
+  // Find the first active order that has NOT been dismissed and whose recipe is NOT completed
+  const undismissedOrder = (activeOrders || []).find((o) => {
+    if (isOrderDismissed(o.id)) return false;
+    const firstKit = o.items?.[0];
+    const kitId = firstKit?.kitId || firstKit?.id || 'kit-1';
+    const progress = getProgressForOrderKit(o.id, kitId);
+    return !progress.isCompleted;
+  });
 
   if (!undismissedOrder) {
     return null;
@@ -21,9 +27,7 @@ export const ResumeCookingBanner: React.FC = () => {
   const kitId = firstKit?.kitId || firstKit?.id || 'kit-1';
   const kitName = firstKit?.name || 'Meal Kit';
   const progress = getProgressForOrderKit(undismissedOrder.id, kitId);
-  const stepLabel = progress.isCompleted
-    ? 'Recipe completed ✓'
-    : `Step ${(progress.currentStepIndex || 0) + 1}`;
+  const stepLabel = `Step ${(progress.currentStepIndex || 0) + 1}`;
 
   const handleResume = () => {
     router.push({

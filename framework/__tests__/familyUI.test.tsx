@@ -1,0 +1,535 @@
+import React from 'react';
+import { render, fireEvent, waitFor } from '@testing-library/react-native';
+import { FamilyHomeView } from '../../features/family/FamilyHomeView';
+import { FamilyCartView } from '../../features/family/FamilyCartView';
+import { ApprovalQueueView } from '../../features/family/ApprovalQueueView';
+import { JoinLandingView } from '../../features/family/JoinLandingView';
+import { FamilyContext, FamilyContextValue } from '../context/FamilyContext';
+import { ThemeProvider } from '../theme/ThemeContext';
+import { FamilyMember, FamilyCartItem, encodePayloadToToken } from '../services/familyService';
+
+import { router } from 'expo-router';
+import { HomeScreenView } from '../../features/home/HomeScreenView';
+
+jest.mock('react-native-safe-area-context', () => ({
+  useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
+  SafeAreaProvider: ({ children }: any) => children,
+}));
+
+jest.mock('expo-router', () => ({
+  router: {
+    push: jest.fn(),
+    replace: jest.fn(),
+    back: jest.fn(),
+  },
+  useRouter: () => ({
+    push: jest.fn(),
+    replace: jest.fn(),
+    back: jest.fn(),
+  }),
+  usePathname: () => '/',
+  useLocalSearchParams: () => ({ token: 'mock-token-123' }),
+}));
+
+jest.mock('../context/AuthContext', () => ({
+  useAuth: () => ({
+    user: { uid: 'user_owner', displayName: 'Priya Sharma' },
+    isAdmin: false,
+    isChef: false,
+  }),
+}));
+
+jest.mock('../context/PreferencesContext', () => ({
+  usePreferences: () => ({
+    preferences: {
+      currentCity: 'Bengaluru',
+      city: 'Bengaluru',
+      preferredCuisines: [],
+      dietTypes: [],
+      allergies: [],
+    },
+    updatePreferences: jest.fn(),
+  }),
+}));
+
+jest.mock('../context/CartContext', () => ({
+  useCart: () => ({
+    addItem: jest.fn(),
+    totalCount: 0,
+    items: [],
+  }),
+}));
+
+jest.mock('../context/WishlistContext', () => ({
+  useWishlist: () => ({
+    isInWishlist: jest.fn(),
+    toggleWishlist: jest.fn(),
+    wishlistCount: 0,
+  }),
+}));
+
+jest.mock('../context/CookModeContext', () => ({
+  useCookMode: () => ({
+    activeOrders: [],
+    activeCookSession: null,
+    pendingCookingOrders: [],
+    startCooking: jest.fn(),
+    isOrderDismissed: jest.fn(() => false),
+    dismissCookMode: jest.fn(),
+    getProgressForOrderKit: jest.fn(() => ({ isCompleted: false })),
+  }),
+}));
+
+jest.mock('../services/mealKitsService', () => ({
+  getMealKitById: jest.fn((id: string) => ({
+    id,
+    name: id === 'kit_1' ? 'Paneer Butter Masala Kit' : 'Dal Makhani Kit',
+    price: 349,
+    heroImage: 'https://images.unsplash.com/mock.jpg',
+  })),
+  getMealKits: jest.fn(() => []),
+  subscribeToMealKits: jest.fn(() => jest.fn()),
+  syncMealKitsWithSupabase: jest.fn().mockResolvedValue(undefined),
+}));
+
+jest.mock('../services/supabaseMealKitsService', () => ({
+  subscribeToMealKitsRealtime: jest.fn(() => jest.fn()),
+}));
+
+jest.mock('../services/dishOriginService', () => ({
+  ensureCitySpecialtiesSeeded: jest.fn().mockResolvedValue(undefined),
+  isRegionalSpecialtyOfCity: jest.fn(() => false),
+  rankMealKitsForCityTrending: jest.fn((kits) => kits),
+}));
+
+jest.mock('../../features/admin/cityKitsSeederService', () => ({
+  seedKitsForCityIfNeeded: jest.fn().mockResolvedValue(undefined),
+}));
+
+const baseFamily = {
+  id: 'fam_1',
+  name: 'Sharma Family',
+  owner_id: 'user_owner',
+  is_locked: false,
+  created_at: new Date().toISOString(),
+  updated_at: new Date().toISOString(),
+};
+
+const mockMembers: FamilyMember[] = [
+  {
+    family_id: 'fam_1',
+    user_id: 'user_owner',
+    role: 'owner',
+    display_name: 'Priya Sharma',
+    joined_at: new Date().toISOString(),
+  },
+  {
+    family_id: 'fam_1',
+    user_id: 'user_co_owner',
+    role: 'co_owner',
+    display_name: 'Rahul Sharma',
+    joined_at: new Date().toISOString(),
+  },
+  {
+    family_id: 'fam_1',
+    user_id: 'user_member',
+    role: 'member',
+    display_name: 'Anjali Sharma',
+    joined_at: new Date().toISOString(),
+  },
+  {
+    family_id: 'fam_1',
+    user_id: 'user_child',
+    role: 'dependent',
+    dependent_type: 'child',
+    display_name: 'Aarav (Child)',
+    joined_at: new Date().toISOString(),
+  },
+];
+
+const mockCartItems: FamilyCartItem[] = [
+  {
+    id: 'item_1',
+    family_id: 'fam_1',
+    added_by: 'user_owner',
+    kit_id: 'kit_1',
+    quantity: 2,
+    servings: 2,
+    unit_price: 349,
+    status: 'approved',
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  },
+  {
+    id: 'item_2',
+    family_id: 'fam_1',
+    added_by: 'user_child',
+    kit_id: 'kit_2',
+    quantity: 1,
+    servings: 2,
+    unit_price: 299,
+    status: 'pending_approval',
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  },
+];
+
+function createMockFamilyContext(
+  role: 'owner' | 'co_owner' | 'member' | 'dependent',
+): FamilyContextValue {
+  const isOwner = role === 'owner';
+  const isCoOwner = role === 'co_owner';
+  const isAdultMember = role === 'member';
+  const isDependent = role === 'dependent';
+
+  const currentMember = mockMembers.find((m) => m.role === role) || mockMembers[0]!;
+
+  return {
+    family: baseFamily,
+    members: mockMembers,
+    currentMember,
+    role,
+    dependentType: isDependent ? 'child' : null,
+    isOwner,
+    isCoOwner,
+    isAdultMember,
+    isDependent,
+    isChild: isDependent,
+    isSenior: false,
+    canInvite: isOwner,
+    canManageMembers: isOwner,
+    canApproveItems: isOwner,
+    canPay: isOwner || isCoOwner,
+    canLockCart: isOwner,
+    canUsePersonalFeatures: !isDependent,
+    activeCartType: 'family',
+    setActiveCartType: jest.fn(),
+    cartState: {
+      items: mockCartItems,
+      approvedItems: [mockCartItems[0]!],
+      pendingItems: [mockCartItems[1]!],
+      subtotal: 698,
+      approvedCount: 2,
+      pendingCount: 1,
+    },
+    memberBreakdown: [
+      {
+        userId: 'user_owner',
+        displayName: 'Priya Sharma',
+        items: [mockCartItems[0]!],
+        subtotal: 698,
+        allocatedFee: 0,
+        allocatedDiscount: 0,
+        finalTotal: 698,
+      },
+      {
+        userId: 'user_child',
+        displayName: 'Aarav (Child)',
+        items: [mockCartItems[1]!],
+        subtotal: 299,
+        allocatedFee: 0,
+        allocatedDiscount: 0,
+        finalTotal: 299,
+      },
+    ],
+    isCartLocked: false,
+    activeHold: null,
+    isHoldActive: false,
+    isHeldByMe: false,
+    isHeldByOther: false,
+    heldByOtherName: null,
+    invites: [],
+    links: [],
+    loading: false,
+    refreshFamily: jest.fn().mockResolvedValue(undefined),
+    createNewFamily: jest.fn().mockResolvedValue({ success: true }),
+    deleteFamily: jest.fn().mockResolvedValue({ success: true }),
+    inviteAdult: jest.fn().mockResolvedValue({ success: true }),
+    createDependentLink: jest.fn().mockResolvedValue({ success: true }),
+    revokeLink: jest.fn().mockResolvedValue({ success: true }),
+    revokeAllLinks: jest.fn().mockResolvedValue({ success: true }),
+    reissueLink: jest.fn().mockResolvedValue({ success: true }),
+    promoteOrDemoteCoOwner: jest.fn().mockResolvedValue({ success: true }),
+    removeFamilyMember: jest.fn().mockResolvedValue({ success: true }),
+    leaveCurrentFamily: jest.fn().mockResolvedValue({ success: true }),
+    transferFamilyOwnership: jest.fn().mockResolvedValue({ success: true }),
+    addFamilyItem: jest.fn().mockResolvedValue({ success: true }),
+    editFamilyItem: jest.fn().mockResolvedValue({ success: true }),
+    removeFamilyItem: jest.fn().mockResolvedValue({ success: true }),
+    approveDependentItem: jest.fn().mockResolvedValue({ success: true }),
+    rejectDependentItem: jest.fn().mockResolvedValue({ success: true }),
+    toggleCartLock: jest.fn().mockResolvedValue({ success: true }),
+    startCheckoutHold: jest.fn().mockResolvedValue({ success: true }),
+    cancelCheckoutHold: jest.fn().mockResolvedValue({ success: true }),
+    checkoutFamilyOrder: jest.fn().mockResolvedValue({ success: true, orderId: 'ORD-FAM-1' }),
+  };
+}
+
+async function renderWithProviders(ui: React.ReactElement, ctx: FamilyContextValue) {
+  return await render(
+    <ThemeProvider>
+      <FamilyContext.Provider value={ctx}>{ui}</FamilyContext.Provider>
+    </ThemeProvider>,
+  );
+}
+
+describe('Family Feature UI Test Suite', () => {
+  // ─── 1. FamilyHomeView (Role based controls) ──────────────────────────────
+  describe('FamilyHomeView Role Matrix', () => {
+    it('renders Owner controls: Invite adult, Add child/senior, Approvals, Manage links, Danger zone', async () => {
+      const ctx = createMockFamilyContext('owner');
+      const { getByTestId, queryByTestId, getByText } = await renderWithProviders(
+        <FamilyHomeView />,
+        ctx,
+      );
+
+      expect(getByText('Sharma Family')).toBeTruthy();
+      expect(getByTestId('capacity-meter')).toBeTruthy();
+      expect(getByTestId('invite-adult-btn')).toBeTruthy();
+      expect(getByTestId('add-dependent-btn')).toBeTruthy();
+      expect(getByTestId('view-approvals-btn')).toBeTruthy();
+      expect(getByTestId('manage-links-btn')).toBeTruthy();
+      expect(getByTestId('open-family-cart-btn')).toBeTruthy();
+      expect(getByTestId('danger-zone')).toBeTruthy();
+      expect(getByTestId('transfer-ownership-btn')).toBeTruthy();
+      expect(getByTestId('delete-family-btn')).toBeTruthy();
+
+      // Owner does NOT see the leave button
+      expect(queryByTestId('leave-family-btn')).toBeNull();
+    });
+
+    it('renders Co-Owner controls: Info chip, Open cart, Leave family, but NO member management or danger actions', async () => {
+      const ctx = createMockFamilyContext('co_owner');
+      const { getByTestId, queryByTestId, getByText } = await renderWithProviders(
+        <FamilyHomeView />,
+        ctx,
+      );
+
+      expect(getByText(/You can pay for the family cart/i)).toBeTruthy();
+      expect(getByTestId('open-family-cart-btn')).toBeTruthy();
+      expect(getByTestId('leave-family-btn')).toBeTruthy();
+
+      // Forbidden for Co-Owner:
+      expect(queryByTestId('invite-adult-btn')).toBeNull();
+      expect(queryByTestId('add-dependent-btn')).toBeNull();
+      expect(queryByTestId('view-approvals-btn')).toBeNull();
+      expect(queryByTestId('manage-links-btn')).toBeNull();
+      expect(queryByTestId('danger-zone')).toBeNull();
+      expect(queryByTestId('transfer-ownership-btn')).toBeNull();
+    });
+
+    it('renders Member controls: Open cart and Leave family only', async () => {
+      const ctx = createMockFamilyContext('member');
+      const { getByTestId, queryByTestId } = await renderWithProviders(<FamilyHomeView />, ctx);
+
+      expect(getByTestId('open-family-cart-btn')).toBeTruthy();
+      expect(getByTestId('leave-family-btn')).toBeTruthy();
+
+      // Forbidden for Member:
+      expect(queryByTestId('invite-adult-btn')).toBeNull();
+      expect(queryByTestId('add-dependent-btn')).toBeNull();
+      expect(queryByTestId('view-approvals-btn')).toBeNull();
+      expect(queryByTestId('danger-zone')).toBeNull();
+    });
+
+    it('renders Dependent controls: Open cart only, no member management or danger options', async () => {
+      const ctx = createMockFamilyContext('dependent');
+      const { getByTestId, queryByTestId } = await renderWithProviders(<FamilyHomeView />, ctx);
+
+      expect(getByTestId('open-family-cart-btn')).toBeTruthy();
+      expect(queryByTestId('invite-adult-btn')).toBeNull();
+      expect(queryByTestId('add-dependent-btn')).toBeNull();
+      expect(queryByTestId('danger-zone')).toBeNull();
+    });
+  });
+
+  // ─── 2. FamilyCartView (Role based checkout and editing) ─────────────────
+  describe('FamilyCartView Role Matrix', () => {
+    it('allows Owner to Lock cart, Approve pending items, and Proceed to Checkout', async () => {
+      const ctx = createMockFamilyContext('owner');
+      const { getByTestId, getByText } = await renderWithProviders(<FamilyCartView />, ctx);
+
+      expect(getByTestId('cart-lock-toggle-btn')).toBeTruthy();
+      expect(getByTestId('family-checkout-cta-btn')).toBeTruthy();
+      expect(getByText(/Needs Approval/i)).toBeTruthy();
+    });
+
+    it('allows Co-Owner to Checkout and edit own items, but NOT Lock cart', async () => {
+      const ctx = createMockFamilyContext('co_owner');
+      const { getByTestId, queryByTestId } = await renderWithProviders(<FamilyCartView />, ctx);
+
+      expect(getByTestId('family-checkout-cta-btn')).toBeTruthy();
+      expect(queryByTestId('cart-lock-toggle-btn')).toBeNull();
+    });
+
+    it('displays Member view: waiting for owner/co-owner notice and NO checkout button', async () => {
+      const ctx = createMockFamilyContext('member');
+      const { queryByTestId, getByText } = await renderWithProviders(<FamilyCartView />, ctx);
+
+      expect(queryByTestId('family-checkout-cta-btn')).toBeNull();
+      expect(queryByTestId('cart-lock-toggle-btn')).toBeNull();
+      expect(getByText(/Waiting for .* to place the order/i)).toBeTruthy();
+    });
+
+    it('displays Dependent view: items needing approval, no prices of others, NO checkout', async () => {
+      const ctx = createMockFamilyContext('dependent');
+      const { queryByTestId, getByText } = await renderWithProviders(<FamilyCartView />, ctx);
+
+      expect(queryByTestId('family-checkout-cta-btn')).toBeNull();
+      expect(
+        getByText(/Your meal kits will be sent to the family owner for approval/i),
+      ).toBeTruthy();
+    });
+  });
+
+  // ─── 3. ApprovalQueueView ─────────────────────────────────────────────────
+  describe('ApprovalQueueView', () => {
+    it('renders pending items with approve and reject buttons and bulk approve', async () => {
+      const ctx = createMockFamilyContext('owner');
+      ctx.cartState.pendingItems = [
+        mockCartItems[1]!,
+        {
+          ...mockCartItems[1]!,
+          id: 'item_3',
+        },
+      ];
+      ctx.cartState.pendingCount = 2;
+
+      const { getByTestId, getByText } = await renderWithProviders(<ApprovalQueueView />, ctx);
+
+      expect(getByText(/Pending Approvals/i)).toBeTruthy();
+      expect(getByTestId('approve-all-btn')).toBeTruthy();
+      expect(getByTestId('approve-approval-item_2')).toBeTruthy();
+      expect(getByTestId('reject-approval-item_2')).toBeTruthy();
+    });
+
+    it('renders empty state when there are no pending items', async () => {
+      const ctx = createMockFamilyContext('owner');
+      ctx.cartState.pendingItems = [];
+      ctx.cartState.pendingCount = 0;
+
+      const { getByText, queryByTestId } = await renderWithProviders(<ApprovalQueueView />, ctx);
+
+      expect(getByText(/Nothing waiting for approval/i)).toBeTruthy();
+      expect(queryByTestId('approve-all-btn')).toBeNull();
+    });
+  });
+
+  // ─── 4. JoinLandingView (Public landing and errors) ───────────────────────
+  describe('JoinLandingView', () => {
+    it('renders large touch targets, font toggle, and join button', async () => {
+      const ctx = createMockFamilyContext('member');
+      const { getByTestId, getByText } = await renderWithProviders(
+        <JoinLandingView token="mock-token-123" />,
+        ctx,
+      );
+
+      // Verify font toggle button
+      expect(getByTestId('font-size-toggle')).toBeTruthy();
+
+      // Trigger font size toggle
+      fireEvent.press(getByTestId('font-size-toggle'));
+      await waitFor(() => {
+        expect(getByText('A+ (Large Text)')).toBeTruthy();
+      });
+
+      // Join button
+      expect(getByTestId('join-family-big-btn')).toBeTruthy();
+    });
+
+    it('renders personalized child invitation with guardian notice and no senior checkbox', async () => {
+      const childToken = encodePayloadToToken({
+        fid: 'fam_1',
+        fn: 'Sharma Family',
+        dt: 'child',
+        dn: 'Aarav',
+        exp: Date.now() + 24 * 60 * 60 * 1000,
+      });
+
+      const ctx = createMockFamilyContext('member');
+      const { getByText, queryByText } = await renderWithProviders(
+        <JoinLandingView token={childToken} />,
+        ctx,
+      );
+
+      // Personalized headline
+      expect(getByText('Aarav, you are invited to join Sharma Family!')).toBeTruthy();
+      // Guardian confirmation notice
+      expect(
+        getByText(/Parent or legal guardian consent confirmed by Sharma Family/i),
+      ).toBeTruthy();
+      // No senior checkbox for child
+      expect(queryByText(/I agree to join this family basket on RasoiGenie/i)).toBeNull();
+    });
+
+    it('renders senior invitation with explicit consent checkbox', async () => {
+      const seniorToken = encodePayloadToToken({
+        fid: 'fam_1',
+        fn: 'Sharma Family',
+        dt: 'senior',
+        dn: 'Dadi',
+        exp: Date.now() + 24 * 60 * 60 * 1000,
+      });
+
+      const ctx = createMockFamilyContext('member');
+      const { getByText, queryByText } = await renderWithProviders(
+        <JoinLandingView token={seniorToken} />,
+        ctx,
+      );
+
+      // Personalized headline
+      expect(getByText('Dadi, you are invited to join Sharma Family!')).toBeTruthy();
+      // Senior checkbox must be present
+      expect(getByText(/I agree to join this family basket on RasoiGenie/i)).toBeTruthy();
+      // No child notice
+      expect(queryByText(/Parent or legal guardian consent confirmed/i)).toBeNull();
+    });
+
+    it('displays expired error message when join token is expired', async () => {
+      const expiredToken = encodePayloadToToken({
+        fid: 'fam_1',
+        fn: 'Sharma Family',
+        dt: 'child',
+        dn: 'Kittu',
+        exp: Date.now() - 10000, // expired in the past
+      });
+
+      const ctx = createMockFamilyContext('member');
+      const { getByText } = await renderWithProviders(
+        <JoinLandingView token={expiredToken} />,
+        ctx,
+      );
+
+      expect(getByText(/This join link has expired/i)).toBeTruthy();
+    });
+  });
+
+  // ─── 5. HomeScreen Family Access Controls ─────────────────────────
+  describe('HomeScreen Family Access Controls', () => {
+    it('shows Family top tab and header button when user is in a family', async () => {
+      const ctx = createMockFamilyContext('owner');
+      const { getByTestId, getByText } = await renderWithProviders(<HomeScreenView />, ctx);
+
+      expect(getByTestId('home-family-header-btn')).toBeTruthy();
+      expect(getByTestId('home-family-top-tab')).toBeTruthy();
+      expect(getByText('Sharma Family')).toBeTruthy();
+
+      fireEvent.press(getByTestId('home-family-top-tab'));
+      expect(router.push).toHaveBeenCalledWith('/family');
+    });
+
+    it('does NOT render Family top tab or header button when user is not in a family', async () => {
+      const ctx: FamilyContextValue = {
+        ...createMockFamilyContext('member'),
+        family: null,
+        role: null,
+        members: [],
+        currentMember: null,
+      };
+      const { queryByTestId } = await renderWithProviders(<HomeScreenView />, ctx);
+
+      expect(queryByTestId('home-family-header-btn')).toBeNull();
+      expect(queryByTestId('home-family-top-tab')).toBeNull();
+    });
+  });
+});

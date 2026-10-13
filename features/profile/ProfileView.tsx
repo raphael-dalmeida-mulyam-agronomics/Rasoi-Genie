@@ -24,6 +24,10 @@ import { SupportView } from '../support/SupportView';
 import { SubscriptionPlanView } from '../subscription/SubscriptionPlanView';
 import { subscribeToPendingApprovalCount } from '../../framework/services/notificationService';
 import { useWallet } from '../../framework/context/WalletContext';
+import { useFamily } from '../../framework/context/FamilyContext';
+import { RoleBadge } from '../../framework/ui/RoleBadge';
+import { Avatar } from '../../framework/ui/Avatar';
+import { CreateFamilySheet } from '../family/CreateFamilySheet';
 import { WalletView } from '../wallet/WalletView';
 import { ReferralView } from '../referral/ReferralView';
 
@@ -33,8 +37,10 @@ export const ProfileView: React.FC = () => {
   const { preferences, defaultAddress, preferredPaymentMethod, setPreferredPaymentMethod } =
     usePreferences();
   const { availableBalance } = useWallet();
+  const { family, role, members, invites, refreshFamily } = useFamily();
   const [pendingApprovalCount, setPendingApprovalCount] = useState<number>(0);
   const [paymentModalVisible, setPaymentModalVisible] = useState<boolean>(false);
+  const [createFamilySheetVisible, setCreateFamilySheetVisible] = useState<boolean>(false);
 
   React.useEffect(() => {
     const unsub = subscribeToPendingApprovalCount((count) => setPendingApprovalCount(count));
@@ -206,6 +212,121 @@ export const ProfileView: React.FC = () => {
             />
           )}
         </View>
+
+        {/* SECTION: Family Card (Screen A) */}
+        {!family ? (
+          <View
+            style={[
+              styles.prefCard,
+              {
+                backgroundColor: colors.bgSurface,
+                borderRadius: radii.xl,
+                borderColor: colors.borderLight,
+                ...shadows.card,
+              },
+            ]}
+            testID="profile-family-card"
+          >
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+              <View
+                style={{
+                  width: 44,
+                  height: 44,
+                  borderRadius: 22,
+                  backgroundColor: colors.primaryLight,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <Icon name="people" size={22} color={colors.primary} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Family</Text>
+                <Text style={{ fontSize: 13, color: colors.textSecondary, marginTop: 2 }}>
+                  Order together. Pay once.
+                </Text>
+              </View>
+            </View>
+
+            <Button
+              title="Create your family"
+              variant="primary"
+              size="md"
+              onPress={() => setCreateFamilySheetVisible(true)}
+              style={{ marginTop: 14 }}
+              testID="create-family-profile-btn"
+            />
+          </View>
+        ) : (
+          <View
+            style={[
+              styles.prefCard,
+              {
+                backgroundColor: colors.bgSurface,
+                borderRadius: radii.xl,
+                borderColor: colors.borderLight,
+                ...shadows.card,
+              },
+            ]}
+            testID="profile-family-card"
+          >
+            <View
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+              }}
+            >
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
+                  {family.name}
+                </Text>
+                <View style={{ marginTop: 4 }}>
+                  <RoleBadge role={role || 'member'} size="sm" />
+                </View>
+              </View>
+
+              {/* Overlapping Member Avatars (max 6) */}
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                {members.slice(0, 6).map((m, idx) => (
+                  <View
+                    key={m.user_id}
+                    style={{
+                      marginLeft: idx > 0 ? -10 : 0,
+                      borderRadius: 18,
+                      borderWidth: 2,
+                      borderColor: colors.bgSurface,
+                    }}
+                  >
+                    <Avatar name={m.display_name} id={m.user_id} size="sm" />
+                  </View>
+                ))}
+              </View>
+            </View>
+
+            <View style={{ flexDirection: 'row', gap: 10, marginTop: 14 }}>
+              <Button
+                title="Open family"
+                variant="primary"
+                size="sm"
+                onPress={() => router.push('/family' as any)}
+                style={{ flex: 1 }}
+                testID="open-family-profile-btn"
+              />
+
+              {invites.filter((i) => i.status === 'pending').length > 0 && (
+                <Button
+                  title={`Invites (${invites.filter((i) => i.status === 'pending').length})`}
+                  variant="outline"
+                  size="sm"
+                  onPress={() => router.push('/family/invites' as any)}
+                  style={{ flex: 1 }}
+                  testID="open-invites-profile-btn"
+                />
+              )}
+            </View>
+          </View>
+        )}
 
         {/* SECTION: Quick Preferences Highlights */}
         <View
@@ -454,6 +575,12 @@ export const ProfileView: React.FC = () => {
           </View>
         </View>
       </Modal>
+
+      <CreateFamilySheet
+        visible={createFamilySheetVisible}
+        onClose={() => setCreateFamilySheetVisible(false)}
+        onCreated={() => refreshFamily()}
+      />
     </View>
   );
 };

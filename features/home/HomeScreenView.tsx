@@ -42,6 +42,8 @@ import { MealDetailModal } from '../meal-detail/MealDetailModal';
 import { DietaryPreferencesModal } from '../onboarding/DietaryPreferencesModal';
 import { LocationPickerModal } from '../onboarding/LocationPickerModal';
 import { useCookMode } from '../../framework/context/CookModeContext';
+import { useFamily } from '../../framework/context/FamilyContext';
+import { RoleBadge } from '../../framework/ui/RoleBadge';
 import { ResumeCookingBanner } from '../cook/components/ResumeCookingBanner';
 import { ActiveOrdersSelectorModal } from '../../framework/ui/ActiveOrdersSelectorModal';
 
@@ -719,6 +721,8 @@ export const HomeScreenView: React.FC = () => {
   const { addItem, totalCount } = useCart();
   const { isInWishlist, toggleWishlist, wishlistCount } = useWishlist();
   const { preferences } = usePreferences();
+  const { family, role, members, dependentType } = useFamily();
+  const isDependent = role === 'dependent';
 
   // Selected filters
   const [dietFilterTags, setDietFilterTags] = useState<Set<DietTag>>(new Set());
@@ -757,8 +761,17 @@ export const HomeScreenView: React.FC = () => {
   const [reviewModalVisible, setReviewModalVisible] = useState(false);
   const [allKits, setAllKits] = useState<MealKit[]>(() => getMealKits());
   const [isSeedingCity, setIsSeedingCity] = useState(false);
-  const { activeOrders } = useCookMode();
+  const { activeOrders, isOrderDismissed, getProgressForOrderKit } = useCookMode();
   const [activeOrdersSheetVisible, setActiveOrdersSheetVisible] = useState(false);
+
+  const pendingCookingOrders = useMemo(() => {
+    return (activeOrders || []).filter((order) => {
+      if (isOrderDismissed(order.id)) return false;
+      const firstKit = order.items?.[0];
+      const kitId = firstKit?.kitId || firstKit?.id || 'kit-1';
+      return !getProgressForOrderKit(order.id, kitId).isCompleted;
+    });
+  }, [activeOrders, isOrderDismissed, getProgressForOrderKit]);
 
   // Seed city-specific kits when the user's city is known and no city kits exist yet
   const runCitySeederIfNeeded = useCallback(async (city: string) => {
@@ -1046,21 +1059,32 @@ export const HomeScreenView: React.FC = () => {
           <TouchableOpacity
             testID="explore-location-chip"
             style={styles.locationSelector}
-            onPress={() => setLocationModalVisible(true)}
-            activeOpacity={0.8}
+            onPress={() => {
+              if (isDependent) return;
+              setLocationModalVisible(true);
+            }}
+            disabled={isDependent}
+            activeOpacity={isDependent ? 1 : 0.8}
+            accessibilityLabel={
+              isDependent
+                ? 'Family delivery address is managed by family owner'
+                : 'Select delivery location'
+            }
           >
             <View style={{ marginRight: 6 }}>
-              <Icon name="location" size={18} color={colors.primary} />
+              <Icon name={isDependent ? 'home' : 'location'} size={18} color={colors.primary} />
             </View>
             <View>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 2 }}>
                 <Text style={[styles.deliveringToText, { color: colors.textMuted }]}>
-                  DELIVERING TO
+                  {isDependent ? 'FAMILY ADDRESS' : 'DELIVERING TO'}
                 </Text>
-                <Icon name="chevron-down" size={12} color={colors.primary} />
+                {!isDependent && <Icon name="chevron-down" size={12} color={colors.primary} />}
               </View>
               <Text style={[styles.locationCity, { color: colors.textPrimary }]}>
-                {preferences.city || preferences.currentCity || 'Choose City'}
+                {preferences.city ||
+                  preferences.currentCity ||
+                  (isDependent ? 'Managed by Owner' : 'Choose City')}
                 {preferences.regionHub ? ` (${preferences.regionHub} Hub)` : ''}
               </Text>
             </View>
@@ -1070,8 +1094,33 @@ export const HomeScreenView: React.FC = () => {
           <ThemeSwitcher variant="header" />
         </View>
 
-        {/* Right header actions: Dietary badge, Wishlist, Cart */}
+        {/* Right header actions: Family button, Dietary badge, Wishlist, Cart */}
         <View style={styles.headerRight}>
+          {family && (
+            <TouchableOpacity
+              testID="home-family-header-btn"
+              style={[
+                styles.familyHeaderChip,
+                {
+                  backgroundColor: colors.primaryLight,
+                  borderColor: colors.primary + '35',
+                },
+              ]}
+              onPress={() => router.push('/family' as any)}
+              accessibilityRole="button"
+              accessibilityLabel={`Go to ${family.name || 'Family'} page`}
+              activeOpacity={0.8}
+            >
+              <Icon name="people" size={15} color={colors.primary} />
+              <Text
+                style={[styles.familyHeaderChipText, { color: colors.primary }]}
+                numberOfLines={1}
+              >
+                Family
+              </Text>
+            </TouchableOpacity>
+          )}
+
           <TouchableOpacity
             style={[styles.prefChip, { backgroundColor: colors.primaryLight }]}
             onPress={() => setPreferencesModalVisible(true)}
@@ -1084,26 +1133,26 @@ export const HomeScreenView: React.FC = () => {
           </TouchableOpacity>
 
           {/* Active Orders Chef Hat Button */}
-          {activeOrders.length > 0 && (
+          {pendingCookingOrders.length > 0 && (
             <TouchableOpacity
               testID="explore-cook-mode-btn"
               style={[styles.iconButton, { backgroundColor: colors.primaryLight }]}
               onPress={() => {
-                if (activeOrders.length === 1 && activeOrders[0]) {
+                if (pendingCookingOrders.length === 1 && pendingCookingOrders[0]) {
                   router.push({
                     pathname: '/cook/[orderId]' as any,
-                    params: { orderId: activeOrders[0].id },
+                    params: { orderId: pendingCookingOrders[0].id },
                   });
                 } else {
                   setActiveOrdersSheetVisible(true);
                 }
               }}
               accessibilityRole="button"
-              accessibilityLabel={`Active cooking guide for ${activeOrders.length} orders`}
+              accessibilityLabel={`Active cooking guide for ${pendingCookingOrders.length} orders`}
             >
               <Icon name="chef" size={18} color={colors.primary} />
               <View style={[styles.counterBadge, { backgroundColor: colors.primary }]}>
-                <Text style={styles.counterBadgeText}>{activeOrders.length}</Text>
+                <Text style={styles.counterBadgeText}>{pendingCookingOrders.length}</Text>
               </View>
             </TouchableOpacity>
           )}
@@ -1135,6 +1184,56 @@ export const HomeScreenView: React.FC = () => {
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollBody}>
+        {/* Family Hub Top Tab/Banner (only shown if user created or is in a family) */}
+        {family && (
+          <View style={styles.familyBannerWrapper}>
+            <TouchableOpacity
+              testID="home-family-top-tab"
+              style={[
+                styles.familyTopTab,
+                {
+                  backgroundColor: colors.bgSurface,
+                  borderColor: colors.borderLight,
+                  borderRadius: radii.xl,
+                  ...shadows.soft,
+                },
+              ]}
+              onPress={() => router.push('/family' as any)}
+              activeOpacity={0.85}
+              accessibilityRole="button"
+              accessibilityLabel={`Open ${family.name || 'Family'} Hub`}
+            >
+              <View style={[styles.familyIconWrap, { backgroundColor: colors.primaryLight }]}>
+                <Icon name="people" size={20} color={colors.primary} />
+              </View>
+
+              <View style={styles.familyTextWrap}>
+                <View style={styles.familyTitleRow}>
+                  <Text
+                    style={[styles.familyTitleText, { color: colors.textPrimary }]}
+                    numberOfLines={1}
+                  >
+                    {family.name}
+                  </Text>
+                  {role && <RoleBadge role={role} dependentType={dependentType} size="sm" />}
+                </View>
+                <Text
+                  style={[styles.familySubtitleText, { color: colors.textSecondary }]}
+                  numberOfLines={1}
+                >
+                  {members.length} {members.length === 1 ? 'member' : 'members'} • Shared Cart &
+                  Approvals
+                </Text>
+              </View>
+
+              <View style={[styles.familyTabActionBtn, { backgroundColor: colors.primary }]}>
+                <Text style={styles.familyTabActionText}>Open Family</Text>
+                <Icon name="chevron-right" size={14} color="#FFFFFF" />
+              </View>
+            </TouchableOpacity>
+          </View>
+        )}
+
         {/* Resume Cooking Guide Banner if active undismissed order exists */}
         <ResumeCookingBanner />
 
@@ -1779,7 +1878,7 @@ export const HomeScreenView: React.FC = () => {
       <ActiveOrdersSelectorModal
         visible={activeOrdersSheetVisible}
         onClose={() => setActiveOrdersSheetVisible(false)}
-        activeOrders={activeOrders}
+        activeOrders={pendingCookingOrders}
       />
     </View>
   );
@@ -2355,6 +2454,68 @@ const styles = StyleSheet.create({
   },
   showMoreBtnText: {
     fontSize: 14,
+    fontWeight: '700',
+  },
+  familyHeaderChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+  familyHeaderChipText: {
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  familyBannerWrapper: {
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 4,
+  },
+  familyTopTab: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    borderWidth: 1,
+  },
+  familyIconWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  familyTextWrap: {
+    flex: 1,
+    marginRight: 8,
+  },
+  familyTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 2,
+  },
+  familyTitleText: {
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  familySubtitleText: {
+    fontSize: 12,
+  },
+  familyTabActionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+  },
+  familyTabActionText: {
+    color: '#FFFFFF',
+    fontSize: 12,
     fontWeight: '700',
   },
 });

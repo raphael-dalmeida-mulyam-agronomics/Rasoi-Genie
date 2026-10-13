@@ -60,15 +60,21 @@ export function subscribeToTable<T = any>(options: RealtimeSubscriptionOptions<T
     }
   };
 
+  let isCleaningUp = false;
+
   const cleanupActiveChannel = () => {
     if (activeChannel) {
+      const channelToClean = activeChannel;
+      activeChannel = null;
+      isCleaningUp = true;
       try {
         const client = getSupabaseClient();
-        client.removeChannel(activeChannel);
+        client.removeChannel(channelToClean);
       } catch (err) {
         // Safe disposal
+      } finally {
+        isCleaningUp = false;
       }
-      activeChannel = null;
     }
   };
 
@@ -147,7 +153,7 @@ export function subscribeToTable<T = any>(options: RealtimeSubscriptionOptions<T
             console.warn(`[RealtimeService:${table}] Error in onResync:`, resyncErr);
           }
         } else if (status === 'TIMED_OUT' || status === 'CHANNEL_ERROR' || status === 'CLOSED') {
-          if (!isDisposed) {
+          if (!isDisposed && !isCleaningUp) {
             console.warn(
               `[RealtimeService:${table}] Channel disconnected (${status}), scheduling reconnect.`,
               err || '',
