@@ -38,6 +38,7 @@ export const CookModeView: React.FC<CookModeViewProps> = ({ orderId }) => {
   const {
     activeOrders,
     dismissCookMode,
+    markKitCompleted,
     textSize,
     toggleTextSize,
     getProgressForOrderKit,
@@ -202,6 +203,8 @@ export const CookModeView: React.FC<CookModeViewProps> = ({ orderId }) => {
     } else {
       // Reached the end!
       await setKitStep(order.id, currentKitInfo.kitId, totalSteps);
+      await markKitCompleted(order.id, currentKitInfo.kitId);
+      await dismissCookMode(order.id);
     }
   };
 

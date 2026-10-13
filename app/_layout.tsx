@@ -21,6 +21,7 @@ import { CartProvider } from '../framework/context/CartContext';
 import { InAppDialogProvider } from '../framework/context/InAppDialogContext';
 import { WalletProvider } from '../framework/context/WalletContext';
 import { CookModeProvider } from '../framework/context/CookModeContext';
+import { FamilyProvider } from '../framework/context/FamilyContext';
 
 export {
   // Catch any errors thrown by the Layout component.
@@ -65,33 +66,40 @@ function RootLayoutNav() {
   return (
     <RasoiThemeProvider>
       <AuthProvider>
-        <PreferencesProvider>
-          <WishlistProvider>
-            <WalletProvider>
-              <CartProvider>
-                <InAppDialogProvider>
-                  <CookModeProvider>
-                    <NavigationThemeProvider
-                      value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}
-                    >
-                      <View style={{ flex: 1 }}>
-                        <Stack>
-                          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-                          <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
-                          <Stack.Screen
-                            name="cook/[orderId]"
-                            options={{ headerShown: false, animation: 'slide_from_bottom' }}
-                          />
-                        </Stack>
-                        <AppLoadingCoverScreen />
-                      </View>
-                    </NavigationThemeProvider>
-                  </CookModeProvider>
-                </InAppDialogProvider>
-              </CartProvider>
-            </WalletProvider>
-          </WishlistProvider>
-        </PreferencesProvider>
+        <FamilyProvider>
+          <PreferencesProvider>
+            <WishlistProvider>
+              <WalletProvider>
+                <CartProvider>
+                  <InAppDialogProvider>
+                    <CookModeProvider>
+                      <NavigationThemeProvider
+                        value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}
+                      >
+                        <View style={{ flex: 1 }}>
+                          <Stack>
+                            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+                            <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
+                            <Stack.Screen
+                              name="cook/[orderId]"
+                              options={{ headerShown: false, animation: 'slide_from_bottom' }}
+                            />
+                            <Stack.Screen
+                              name="join/[token]"
+                              options={{ headerShown: false, animation: 'slide_from_bottom' }}
+                            />
+                            <Stack.Screen name="family" options={{ headerShown: false }} />
+                          </Stack>
+                          <AppLoadingCoverScreen />
+                        </View>
+                      </NavigationThemeProvider>
+                    </CookModeProvider>
+                  </InAppDialogProvider>
+                </CartProvider>
+              </WalletProvider>
+            </WishlistProvider>
+          </PreferencesProvider>
+        </FamilyProvider>
       </AuthProvider>
     </RasoiThemeProvider>
   );

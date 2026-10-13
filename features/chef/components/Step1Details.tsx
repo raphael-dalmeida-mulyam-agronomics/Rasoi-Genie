@@ -94,7 +94,7 @@ interface Step1DetailsProps {
 }
 
 export function Step1Details({ form, onChange }: Step1DetailsProps) {
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
 
   // Search states for dropdowns
   const [cuisineQuery, setCuisineQuery] = useState('');
@@ -735,15 +735,20 @@ export function Step1Details({ form, onChange }: Step1DetailsProps) {
                   style={[
                     styles.checkboxChip,
                     {
-                      backgroundColor: checked ? colors.primaryLight : colors.bgSubtle,
-                      borderColor: checked ? colors.primary : colors.borderLight,
+                      backgroundColor: checked
+                        ? colors.primaryLight
+                        : isDark
+                          ? 'rgba(255, 255, 255, 0.05)'
+                          : colors.bgSurface || '#FFFFFF',
+                      borderColor: checked ? colors.primary : isDark ? '#4B5563' : '#9CA3AF',
+                      borderWidth: 1.5,
                     },
                   ]}
                 >
                   <Icon
                     name={checked ? 'checkbox' : 'square-outline'}
                     size={16}
-                    color={checked ? colors.primary : colors.textMuted}
+                    color={checked ? colors.primary : isDark ? '#9CA3AF' : '#4B5563'}
                   />
                   <Text
                     style={[
@@ -794,15 +799,20 @@ export function Step1Details({ form, onChange }: Step1DetailsProps) {
                   style={[
                     styles.checkboxChip,
                     {
-                      backgroundColor: checked ? '#FEE2E2' : colors.bgSubtle,
-                      borderColor: checked ? '#EF4444' : colors.borderLight,
+                      backgroundColor: checked
+                        ? '#FEE2E2'
+                        : isDark
+                          ? 'rgba(255, 255, 255, 0.05)'
+                          : colors.bgSurface || '#FFFFFF',
+                      borderColor: checked ? '#EF4444' : isDark ? '#4B5563' : '#9CA3AF',
+                      borderWidth: 1.5,
                     },
                   ]}
                 >
                   <Icon
                     name={checked ? 'alert-circle' : 'square-outline'}
                     size={16}
-                    color={checked ? '#DC2626' : colors.textMuted}
+                    color={checked ? '#DC2626' : isDark ? '#9CA3AF' : '#4B5563'}
                   />
                   <Text
                     style={[

@@ -19,6 +19,7 @@ import { useTheme } from '../../framework/theme/ThemeContext';
 import { Icon } from '../../framework/ui/Icon';
 import { Badge } from '../../framework/ui/Badge';
 import { Button } from '../../framework/ui/Button';
+import { Avatar } from '../../framework/ui/Avatar';
 import { Order, createOrder } from '../../framework/firebase/ordersService';
 import { createOrderInSupabase } from '../../framework/services/supabaseOrdersService';
 import { createDeliveryAddressSnapshot } from '../../framework/services/addressService';
@@ -27,11 +28,14 @@ import { MockPaymentGatewayModal } from './MockPaymentGatewayModal';
 import { qualifyReferralOrder } from '../../framework/services/referralService';
 import { getOrCreateGuestId, saveGuestOrder } from '../../framework/services/guestService';
 import { canonicalCityName } from '../admin/cityKitsSeederService';
+import { getMealKitById, MealKit } from '../../framework/services/mealKitsService';
 import {
   getVerifiedContactInfo,
   saveVerifiedContactInfo,
   VerifiedContactInfo,
 } from '../../framework/services/verifiedContactService';
+import { useFamily } from '../../framework/context/FamilyContext';
+import { CheckoutHoldBanner } from '../family/CheckoutHoldBanner';
 
 interface CheckoutViewProps {
   onBack: () => void;
@@ -69,6 +73,18 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({ onBack, onOrderPlace
 
   const { preferences, addresses, defaultAddress, addAddress } = usePreferences();
   const { availableBalance, debitCredits, refreshAll: refreshWallet } = useWallet();
+  const {
+    family,
+    activeCartType,
+    cancelCheckoutHold,
+    refreshFamily,
+    cartState,
+    memberBreakdown,
+    members,
+    activeHold,
+    isHeldByMe,
+    checkoutFamilyOrder,
+  } = useFamily();
 
   // Prefill Contact & Address Details
   const initialCity = canonicalCityName(preferences.city || preferences.currentCity || 'Bengaluru');
@@ -185,15 +201,72 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({ onBack, onOrderPlace
   const [showGatewayModal, setShowGatewayModal] = useState<boolean>(false);
   const [pendingGatewayOrderId, setPendingGatewayOrderId] = useState<string>('');
 
+  // Family Checkout State & Derived Items
+  const isFamilyCheckout = Boolean(family && activeCartType === 'family');
+
+  const familyMemberCount = useMemo(() => {
+    const withItems = memberBreakdown.filter((m) => m.items.length > 0).length;
+    return withItems > 0 ? withItems : members.length;
+  }, [memberBreakdown, members]);
+
+  const effectiveItems = useMemo(() => {
+    if (isFamilyCheckout) {
+      return cartState.approvedItems.map((item) => {
+        const kit = getMealKitById(item.kit_id);
+        return {
+          kit:
+            kit ||
+            ({
+              id: item.kit_id,
+              name: 'Gourmet Meal Kit',
+              price: item.unit_price,
+              heroImage: '',
+              category: 'Vegetarian',
+              prepTimeMinutes: 20,
+              cookTimeMinutes: 20,
+              difficulty: 'Medium',
+              description: '',
+              highlights: [],
+              shelfLifeDays: 3,
+              nutritionFacts: {
+                calories: 400,
+                proteinGrams: 10,
+                carbsGrams: 50,
+                fatGrams: 15,
+                fiberGrams: 5,
+              },
+              chefNotes: '',
+              dietaryTags: [],
+              tags: [],
+              status: 'Available',
+              createdAt: '',
+              updatedAt: '',
+            } as unknown as MealKit),
+          quantity: item.quantity,
+          servings: item.servings,
+          spiceLevel: item.spice_level,
+          unitPrice: item.unit_price,
+          addedBy: item.added_by,
+        };
+      });
+    }
+    return items;
+  }, [isFamilyCheckout, cartState.approvedItems, items]);
+
+  const effectiveSubtotal = isFamilyCheckout ? cartState.subtotal : subtotal;
+  const effectiveTotal = isFamilyCheckout
+    ? Math.max(0, effectiveSubtotal + deliveryFee - (appliedCoupon ? discount : 0))
+    : total;
+
   // Calculate Payable Amount
   const { creditsApplied, payableAmount } = useMemo(() => {
     if (!user || !useWalletCredits || availableBalance <= 0) {
-      return { creditsApplied: 0, payableAmount: total };
+      return { creditsApplied: 0, payableAmount: effectiveTotal };
     }
-    const applied = Math.min(availableBalance, total);
-    const remaining = Math.max(0, total - applied);
+    const applied = Math.min(availableBalance, effectiveTotal);
+    const remaining = Math.max(0, effectiveTotal - applied);
     return { creditsApplied: applied, payableAmount: remaining };
-  }, [user, useWalletCredits, availableBalance, total]);
+  }, [user, useWalletCredits, availableBalance, effectiveTotal]);
 
   const isFullyWalletPaid = payableAmount === 0 && creditsApplied > 0;
 
@@ -370,7 +443,7 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({ onBack, onOrderPlace
         customerEmail: email.trim() || undefined,
         deliveryAddress: deliveryAddressFormatted,
         deliverySlot: selectedSlot || DELIVERY_SLOTS[0]!.title,
-        items: items.map((i) => ({
+        items: effectiveItems.map((i) => ({
           kitId: i.kit.id,
           name: i.kit.name,
           quantity: i.quantity,
@@ -380,8 +453,8 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({ onBack, onOrderPlace
           masalaSachets: i.kit.masalaSachets,
           imageUrl: i.kit.heroImage,
         })),
-        subtotal,
-        discount,
+        subtotal: effectiveSubtotal,
+        discount: isFamilyCheckout ? 0 : discount,
         couponCode: appliedCoupon?.code,
         deliveryFee,
         totalAmount: payableAmount,
@@ -390,6 +463,14 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({ onBack, onOrderPlace
         walletCreditsApplied: creditsApplied,
         externalPaymentAmount: payableAmount,
         deliveryAddressSnapshot: addressSnapshot,
+        ...(isFamilyCheckout
+          ? {
+              familyId: family!.id,
+              payerId: user?.uid,
+              familyOwnerName: family!.name,
+              familyMemberNames: members.map((m) => m.display_name),
+            }
+          : {}),
       };
 
       // 3. Create in Supabase (with full RLS guest support & regional admin scoping)
@@ -413,6 +494,24 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({ onBack, onOrderPlace
           imageUrl: it.imageUrl,
         })),
       });
+
+      // 4b. Family RPC sync
+      if (isFamilyCheckout) {
+        await checkoutFamilyOrder({
+          orderId: sharedOrderId,
+          customerName: name.trim(),
+          customerPhone: cleanPhone,
+          customerEmail: email.trim() || undefined,
+          deliveryAddress: deliveryAddressFormatted,
+          deliveryAddressSnapshot: addressSnapshot,
+          deliverySlot: selectedSlot || DELIVERY_SLOTS[0]!.title,
+          couponCode: appliedCoupon?.code,
+          deliveryFee,
+          walletCreditsToApply: creditsApplied,
+          paymentMethod,
+          region: city,
+        });
+      }
 
       // 5. Guest Local Order Persistence (Orders stay on this device)
       if (!user) {
@@ -465,6 +564,10 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({ onBack, onOrderPlace
       if (user) {
         await refreshWallet();
       }
+      if (activeCartType === 'family' && family) {
+        await cancelCheckoutHold();
+        await refreshFamily();
+      }
       clearCart();
       setPendingGatewayOrderId('');
 
@@ -483,8 +586,13 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({ onBack, onOrderPlace
 
   // Place Order Handler with Mock Gateway Modal
   const handlePlaceOrder = async () => {
-    if (items.length === 0) {
-      Alert.alert('Empty Basket', 'Your cooking basket is empty.');
+    if (effectiveItems.length === 0) {
+      Alert.alert(
+        'Empty Basket',
+        isFamilyCheckout
+          ? 'No approved items in the family basket to order.'
+          : 'Your cooking basket is empty.',
+      );
       return;
     }
 
@@ -513,11 +621,50 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({ onBack, onOrderPlace
         <TouchableOpacity testID="checkout-back-btn" onPress={onBack} style={styles.backBtn}>
           <Icon name="arrow-back" size={24} color={colors.textPrimary} />
         </TouchableOpacity>
-        <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Contact & Delivery</Text>
+        <View style={{ alignItems: 'center', flex: 1 }}>
+          <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>
+            {isFamilyCheckout ? 'Family Checkout' : 'Contact & Delivery'}
+          </Text>
+          {isFamilyCheckout && (
+            <Text
+              testID="checkout-family-header-badge"
+              style={{ fontSize: 11, fontWeight: '700', color: colors.primary, marginTop: 2 }}
+            >
+              Family order • {familyMemberCount} members • {cartState.approvedCount} items
+            </Text>
+          )}
+        </View>
         <View style={{ width: 24 }} />
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        {/* Family Checkout Hold Banner */}
+        {isFamilyCheckout && activeHold && (
+          <CheckoutHoldBanner expiresAt={activeHold.expires_at} isHeldByMe={isHeldByMe} />
+        )}
+
+        {/* Pending items excluded note */}
+        {isFamilyCheckout && cartState.pendingCount > 0 && (
+          <View
+            testID="checkout-pending-excluded-note"
+            style={[
+              styles.pendingExcludedCard,
+              {
+                backgroundColor: isDark ? 'rgba(217, 119, 6, 0.15)' : '#FFFBEB',
+                borderColor: '#F59E0B',
+                borderRadius: radii.lg,
+              },
+            ]}
+          >
+            <Icon name="information-circle" size={16} color="#D97706" />
+            <Text
+              style={{ fontSize: 13, color: '#B45309', fontWeight: '600', marginLeft: 8, flex: 1 }}
+            >
+              {cartState.pendingCount} item{cartState.pendingCount > 1 ? 's' : ''} awaiting approval
+              won't be included in this order.
+            </Text>
+          </View>
+        )}
         {/* Payment Error Banner if retryable */}
         {paymentError ? (
           <View
@@ -1139,6 +1286,58 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({ onBack, onOrderPlace
           </View>
         </View>
 
+        {/* Family Grouped Items */}
+        {isFamilyCheckout && (
+          <View
+            testID="checkout-family-items-grouped"
+            style={[
+              styles.sectionCard,
+              {
+                backgroundColor: colors.bgSurface,
+                borderColor: colors.borderLight,
+                ...shadows.card,
+              },
+            ]}
+          >
+            <View style={styles.titleWithIcon}>
+              <Icon name="people" size={18} color={colors.primary} />
+              <Text style={[styles.sectionHeading, { color: colors.textPrimary }]}>
+                Items by Family Member
+              </Text>
+            </View>
+
+            {memberBreakdown
+              .filter((m) => m.items.length > 0)
+              .map((mb) => (
+                <View key={mb.userId} style={styles.memberItemsGroup}>
+                  <View style={styles.memberHeaderRow}>
+                    <Avatar name={mb.displayName} size="xs" />
+                    <Text style={[styles.memberNameText, { color: colors.textPrimary }]}>
+                      {mb.displayName}
+                    </Text>
+                    <Text style={[styles.memberSubtotalText, { color: colors.primary }]}>
+                      ₹{mb.subtotal}
+                    </Text>
+                  </View>
+                  {mb.items
+                    .filter((it) => it.status === 'approved')
+                    .map((it) => {
+                      const kit = getMealKitById(it.kit_id);
+                      return (
+                        <Text
+                          key={it.id}
+                          style={[styles.groupedItemRow, { color: colors.textSecondary }]}
+                        >
+                          • {it.quantity}x {kit?.name || 'Meal Kit'} ({it.servings} serv • ₹
+                          {it.unit_price * it.quantity})
+                        </Text>
+                      );
+                    })}
+                </View>
+              ))}
+          </View>
+        )}
+
         {/* SECTION 4: Wallet Credits (Signed in only) or Guest Note */}
         {user ? (
           <View
@@ -1179,6 +1378,22 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({ onBack, onOrderPlace
               <View style={styles.walletDeductionInfo}>
                 <Text style={[styles.deductionText, { color: colors.primary }]}>
                   -₹{Math.round(creditsApplied).toLocaleString('en-IN')} deducted from wallet
+                </Text>
+              </View>
+            )}
+
+            {isFamilyCheckout && (
+              <View
+                style={{
+                  marginTop: 10,
+                  paddingTop: 8,
+                  borderTopWidth: 1,
+                  borderTopColor: colors.borderLight,
+                }}
+              >
+                <Text style={{ fontSize: 12, color: colors.textMuted, fontStyle: 'italic' }}>
+                  Your wallet credits only. Credits are debited solely from your personal Rasoi
+                  wallet.
                 </Text>
               </View>
             )}
@@ -1324,7 +1539,7 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({ onBack, onOrderPlace
           <View style={styles.billRow}>
             <Text style={[styles.billLabel, { color: colors.textSecondary }]}>Items Subtotal</Text>
             <Text style={[styles.billValue, { color: colors.textPrimary }]}>
-              ₹{Math.round(subtotal).toLocaleString('en-IN')}
+              ₹{Math.round(effectiveSubtotal).toLocaleString('en-IN')}
             </Text>
           </View>
 
@@ -2042,5 +2257,38 @@ const styles = StyleSheet.create({
   savedInstructionsText: {
     fontSize: 12,
     fontStyle: 'italic',
+  },
+  pendingExcludedCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    borderWidth: 1,
+    marginBottom: 12,
+  },
+  memberItemsGroup: {
+    marginBottom: 12,
+    paddingBottom: 8,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#E5E7EB',
+  },
+  memberHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 6,
+    gap: 8,
+  },
+  memberNameText: {
+    fontSize: 14,
+    fontWeight: '700',
+    flex: 1,
+  },
+  memberSubtotalText: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  groupedItemRow: {
+    fontSize: 13,
+    lineHeight: 20,
+    paddingLeft: 24,
   },
 });

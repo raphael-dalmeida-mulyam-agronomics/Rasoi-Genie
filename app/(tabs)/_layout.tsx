@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Tabs } from 'expo-router';
-import { View, ActivityIndicator } from 'react-native';
+import { Tabs, usePathname, useRouter } from 'expo-router';
+import { View, Text, ActivityIndicator } from 'react-native';
 import { Icon } from '../../framework/ui/Icon';
+import { RoleBadge } from '../../framework/ui/RoleBadge';
 import { useAuth } from '../../framework/context/AuthContext';
 import { useTheme } from '../../framework/theme/ThemeContext';
 import { useCart } from '../../framework/context/CartContext';
@@ -14,13 +15,40 @@ import { subscribeToPendingApprovalCount } from '../../framework/services/notifi
 import { refreshPendingApprovalCount } from '../../framework/services/supabaseOrdersService';
 
 import { CookModeMiniBar } from '../../framework/ui/CookModeMiniBar';
+import { useFamily } from '../../framework/context/FamilyContext';
 
 export default function TabLayout() {
   const { user, isAdmin, isChef } = useAuth();
   const { preferences } = usePreferences();
   const { colors } = useTheme();
   const { totalCount } = useCart();
+  const {
+    family,
+    isDependent,
+    dependentType,
+    canApproveItems,
+    cartState: familyCartState,
+  } = useFamily();
   const [pendingApprovalCount, setPendingApprovalCount] = useState<number>(0);
+
+  const pathname = usePathname();
+  const router = useRouter();
+
+  // Route guard: Dependent accounts cannot access search, login/account, admin, or chef
+  useEffect(() => {
+    if (isDependent && pathname) {
+      if (
+        pathname.includes('/search') ||
+        pathname.includes('/login') ||
+        pathname.includes('/wallet') ||
+        pathname.includes('/referral') ||
+        pathname.includes('/admin') ||
+        pathname.includes('/chef')
+      ) {
+        router.replace('/');
+      }
+    }
+  }, [isDependent, pathname, router]);
 
   // First launch welcome & location onboarding state
   const [isInitializing, setIsInitializing] = useState(true);
@@ -69,7 +97,7 @@ export default function TabLayout() {
   }
 
   // 1. Optional first-launch welcome cover screen: "Get Started" proceeds to location step
-  if (!hasSeenWelcome && !userLocation && !user) {
+  if (!isDependent && !hasSeenWelcome && !userLocation && !user) {
     return (
       <View style={{ flex: 1, backgroundColor: colors.bgPrimary }}>
         <CoverScreenView
@@ -82,8 +110,8 @@ export default function TabLayout() {
     );
   }
 
-  // 2. Location is the only onboarding step: require location before entering main app
-  if (!userLocation && !preferences.city && !preferences.currentCity) {
+  // 2. Location is the only onboarding step: require location before entering main app (skipped for dependents)
+  if (!isDependent && !userLocation && !preferences.city && !preferences.currentCity) {
     return (
       <View style={{ flex: 1, backgroundColor: colors.bgPrimary }}>
         <LocationOnboardingView
@@ -101,6 +129,30 @@ export default function TabLayout() {
 
   return (
     <View style={{ flex: 1 }}>
+      {isDependent && family && (
+        <View
+          testID="dependent-shell-header"
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            paddingHorizontal: 16,
+            paddingVertical: 10,
+            backgroundColor: colors.bgSurface,
+            borderBottomWidth: 1,
+            borderBottomColor: colors.borderLight,
+          }}
+        >
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <Icon name="people" size={20} color={colors.primary} />
+            <Text style={{ fontSize: 16, fontWeight: '700', color: colors.textPrimary }}>
+              {family.name}
+            </Text>
+          </View>
+          <RoleBadge role="dependent" dependentType={dependentType} size="sm" />
+        </View>
+      )}
+
       <Tabs
         screenOptions={{
           tabBarActiveTintColor: colors.primary,
@@ -124,6 +176,7 @@ export default function TabLayout() {
           name="search"
           options={{
             title: 'Search',
+            href: isDependent ? null : undefined,
             tabBarIcon: ({ color }) => <Icon name="search" size={22} color={color as string} />,
           }}
         />
@@ -131,13 +184,28 @@ export default function TabLayout() {
         <Tabs.Screen
           name="cart"
           options={{
-            title: 'Basket',
-            tabBarBadge: totalCount > 0 ? totalCount : undefined,
-            tabBarBadgeStyle: {
-              backgroundColor: colors.primary,
-              fontSize: 10,
-              fontWeight: '800',
-            },
+            title: isDependent ? 'Family Basket' : 'Basket',
+            tabBarBadge: isDependent
+              ? familyCartState.approvedCount > 0
+                ? familyCartState.approvedCount
+                : undefined
+              : canApproveItems && familyCartState.pendingCount > 0
+                ? familyCartState.pendingCount
+                : totalCount > 0
+                  ? totalCount
+                  : undefined,
+            tabBarBadgeStyle:
+              canApproveItems && familyCartState.pendingCount > 0 && !isDependent
+                ? {
+                    backgroundColor: '#D97706',
+                    fontSize: 10,
+                    fontWeight: '800',
+                  }
+                : {
+                    backgroundColor: colors.primary,
+                    fontSize: 10,
+                    fontWeight: '800',
+                  },
             tabBarIcon: ({ color }) => <Icon name="cart" size={22} color={color as string} />,
           }}
         />
@@ -145,7 +213,7 @@ export default function TabLayout() {
         <Tabs.Screen
           name="orders"
           options={{
-            title: 'My Orders',
+            title: isDependent ? 'Family Orders' : 'My Orders',
             tabBarIcon: ({ color }) => <Icon name="time" size={22} color={color as string} />,
           }}
         />
@@ -154,6 +222,7 @@ export default function TabLayout() {
           name="login"
           options={{
             title: user ? 'Account' : 'Sign In',
+            href: isDependent ? null : undefined,
             tabBarIcon: ({ color }) => <Icon name="people" size={22} color={color as string} />,
           }}
         />

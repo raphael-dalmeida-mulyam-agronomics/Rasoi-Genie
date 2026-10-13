@@ -1,4 +1,4 @@
-﻿import {
+import {
   collection,
   addDoc,
   getDocs,
@@ -76,6 +76,10 @@ export interface Order {
   isApproved?: boolean;
   approvedBy?: string;
   approvedAt?: string;
+  familyId?: string;
+  payerId?: string;
+  familyOwnerName?: string;
+  familyMemberNames?: string[];
   createdAt: string;
   updatedAt: string;
 }
@@ -576,8 +580,10 @@ export async function updateOrderStatus(
           const { resolveStorageCentre } = require('../services/adminRbacService');
           const { toggleMealKitOutOfStockStatus } = require('../services/supabaseMealKitsService');
 
-          const region = (order.fulfillmentRegion ||
-            resolveStorageCentre(order.deliveryAddress || '').zone) || 'West';
+          const region =
+            order.fulfillmentRegion ||
+            resolveStorageCentre(order.deliveryAddress || '').zone ||
+            'West';
 
           order.items.forEach((it) => {
             const kitId = it.kitId || it.id?.replace(/^ORD-[^-]+-/, '') || it.id;

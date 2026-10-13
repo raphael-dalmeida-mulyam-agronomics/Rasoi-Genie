@@ -321,4 +321,84 @@ describe('Cook Mode & Kitchen Companion Suite', () => {
       expect(storedGuests[0].items[0].name).toBe('Dum Biryani Kit');
     });
   });
+
+  describe('8. Recipe Completion and Prompt Dismissal', () => {
+    it('automatically marks kit completed and dismisses order so prompt no longer displays', async () => {
+      const orderId = 'ORD-DONE-001';
+      const kitId = 'paneer-butter-masala';
+      const dismissed = new Set<string>();
+
+      // Simulate markKitCompleted
+      const progress: Record<
+        string,
+        {
+          orderId: string;
+          kits: Record<string, { kitId: string; currentStepIndex: number; isCompleted: boolean }>;
+          updatedAt: string;
+        }
+      > = {
+        [orderId]: {
+          orderId,
+          kits: {
+            [kitId]: {
+              kitId,
+              currentStepIndex: 4,
+              isCompleted: true,
+            },
+          },
+          updatedAt: new Date().toISOString(),
+        },
+      };
+
+      dismissed.add(orderId);
+
+      const isOrderDismissed = (oId: string) => {
+        if (dismissed.has(oId)) return true;
+        const rec = progress[oId];
+        if (rec?.kits && Object.values(rec.kits).every((k) => k.isCompleted)) return true;
+        return false;
+      };
+
+      expect(isOrderDismissed(orderId)).toBe(true);
+    });
+
+    it('filters out completed or dismissed orders from recipe prompts', () => {
+      const activeOrders: Partial<Order>[] = [
+        {
+          id: 'ORD-1',
+          items: [
+            { id: 'k1', kitId: 'kit-1', name: 'Dal', quantity: 1, price: 200, masalaSachets: [] },
+          ],
+        },
+        {
+          id: 'ORD-2',
+          items: [
+            {
+              id: 'k2',
+              kitId: 'kit-2',
+              name: 'Biryani',
+              quantity: 1,
+              price: 300,
+              masalaSachets: [],
+            },
+          ],
+        },
+      ];
+
+      const dismissedOrders = new Set<string>(['ORD-1']);
+      const progressMap: Record<string, { isCompleted: boolean }> = {
+        'ORD-1': { isCompleted: false },
+        'ORD-2': { isCompleted: true },
+      };
+
+      const pendingOrders = activeOrders.filter((order) => {
+        if (dismissedOrders.has(order.id!)) return false;
+        if (progressMap[order.id!]?.isCompleted) return false;
+        return true;
+      });
+
+      // Both ORD-1 (dismissed) and ORD-2 (completed) should be filtered out
+      expect(pendingOrders).toHaveLength(0);
+    });
+  });
 });

@@ -21,13 +21,16 @@ import { Badge, BadgeVariant } from '../../framework/ui/Badge';
 import { Button } from '../../framework/ui/Button';
 import { Icon } from '../../framework/ui/Icon';
 import { LiveTrackingModal } from './LiveTrackingModal';
-import { WishlistView } from '../wishlist/WishlistView';
 import { getGuestOrders } from '../../framework/services/guestService';
+import { useFamily } from '../../framework/context/FamilyContext';
+import { FamilyOrderBadge } from '../family/FamilyOrderBadge';
+import { WishlistView } from '../wishlist/WishlistView';
 
 export const OrderHistoryView: React.FC = () => {
   const { user } = useAuth();
   const { colors, radii, shadows } = useTheme();
   const { reorderItems } = useCart();
+  const { family, members, isDependent } = useFamily();
 
   const [activeTab, setActiveTab] = useState<'active' | 'previous' | 'wishlist'>('active');
   const [orders, setOrders] = useState<Order[]>([]);
@@ -110,6 +113,16 @@ export const OrderHistoryView: React.FC = () => {
         }
       }
       return Array.from(guestOrderMap.values()).sort(
+        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+      );
+    }
+
+    if (isDependent) {
+      // Dependents only see family orders
+      const familyOrders = clean.filter(
+        (o) => Boolean(o.familyId) || (family && o.familyId === family.id),
+      );
+      return familyOrders.sort(
         (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
       );
     }
@@ -251,6 +264,17 @@ export const OrderHistoryView: React.FC = () => {
             <Badge label={order.status} variant={getBadgeVariant(order.status)} />
           </View>
         </View>
+
+        {Boolean(order.familyId) && (
+          <View style={{ marginTop: 8, marginBottom: 4 }}>
+            <FamilyOrderBadge
+              testID={`family-order-badge-${order.id}`}
+              ownerName={order.familyOwnerName || family?.name || 'Family Owner'}
+              memberNames={order.familyMemberNames || members.map((m) => m.display_name)}
+              yourItemsCount={order.items.length}
+            />
+          </View>
+        )}
 
         {isCancelled ? (
           <View

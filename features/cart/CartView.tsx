@@ -24,7 +24,11 @@ import { QuantityStepper } from '../../framework/ui/QuantityStepper';
 import { Icon } from '../../framework/ui/Icon';
 import { CheckoutView } from '../checkout/CheckoutView';
 import { OrderConfirmationView } from '../checkout/OrderConfirmationView';
+import { SegmentedControl } from '../../framework/ui/SegmentedControl';
+import { useFamily } from '../../framework/context/FamilyContext';
 import { getOrCreateGuestId } from '../../framework/services/guestService';
+import { FamilyCartView } from '../family/FamilyCartView';
+import { FamilyManagementView } from '../family/FamilyManagementView';
 
 const DELIVERY_SLOTS = [
   { id: 'slot-1', title: '6:00 PM - 8:00 PM (Dinner)', tag: 'Fastest' },
@@ -78,6 +82,15 @@ export const CartView: React.FC = () => {
   const [deliveryInstructions, setDeliveryInstructions] = useState('');
   const [isCheckingOut, setIsCheckingOut] = useState(false);
   const [confirmedOrder, setConfirmedOrder] = useState<Order | null>(null);
+
+  const {
+    family,
+    activeCartType,
+    setActiveCartType,
+    isDependent,
+    cartState: familyCartState,
+  } = useFamily();
+  const [familyHubVisible, setFamilyHubVisible] = useState(false);
 
   const activeAddress =
     addresses.find((a) => a.id === selectedAddressId) || defaultAddress || addresses[0];
@@ -217,10 +230,45 @@ export const CartView: React.FC = () => {
     );
   }
 
-  // Empty cart screen
+  // Dependents only see Family Cart; members with activeCartType === 'family' see FamilyCartView
+  if (isDependent || (family && activeCartType === 'family')) {
+    return (
+      <View style={[styles.container, { backgroundColor: colors.bgPrimary }]}>
+        {!isDependent && (
+          <View
+            style={{ paddingHorizontal: 16, paddingTop: 12, backgroundColor: colors.bgSurface }}
+          >
+            <SegmentedControl
+              options={[
+                { label: `Personal (${items.length})`, value: 'personal' },
+                { label: `Family (${familyCartState.approvedCount})`, value: 'family' },
+              ]}
+              selectedValue={activeCartType}
+              onSelect={(val) => setActiveCartType(val as 'personal' | 'family')}
+            />
+          </View>
+        )}
+        <FamilyCartView />
+      </View>
+    );
+  }
+
+  // Empty personal cart screen
   if (items.length === 0 && !confirmedOrder) {
     return (
       <View style={[styles.emptyContainer, { backgroundColor: colors.bgPrimary }]}>
+        {family && !isDependent && (
+          <View style={{ width: '100%', maxWidth: 400, paddingHorizontal: 16, marginBottom: 20 }}>
+            <SegmentedControl
+              options={[
+                { label: `Personal (0)`, value: 'personal' },
+                { label: `Family (${familyCartState.approvedCount})`, value: 'family' },
+              ]}
+              selectedValue={activeCartType}
+              onSelect={(val) => setActiveCartType(val as 'personal' | 'family')}
+            />
+          </View>
+        )}
         <View style={{ marginBottom: 16 }}>
           <Icon name="basket" size={64} color={colors.primary} />
         </View>
@@ -249,468 +297,536 @@ export const CartView: React.FC = () => {
           { backgroundColor: colors.bgSurface, borderBottomColor: colors.borderLight },
         ]}
       >
-        <Text style={[styles.appBarTitle, { color: colors.textPrimary }]}>
-          Your Meal-Kit Basket ({items.length})
-        </Text>
-        <TouchableOpacity onPress={clearCart}>
-          <Text style={[styles.clearCartText, { color: colors.danger }]}>Clear All</Text>
-        </TouchableOpacity>
+        {family && !isDependent ? (
+          <View style={{ flex: 1, marginRight: 12 }}>
+            <SegmentedControl
+              options={[
+                { label: `Personal (${items.length})`, value: 'personal' },
+                { label: `Family (${familyCartState.approvedCount})`, value: 'family' },
+              ]}
+              selectedValue={activeCartType}
+              onSelect={(val) => setActiveCartType(val as 'personal' | 'family')}
+            />
+          </View>
+        ) : (
+          <Text style={[styles.appBarTitle, { color: colors.textPrimary, flex: 1 }]}>
+            Your Meal-Kit Basket ({items.length})
+          </Text>
+        )}
+
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+          <TouchableOpacity
+            onPress={() => setFamilyHubVisible(true)}
+            style={{ padding: 6, flexDirection: 'row', alignItems: 'center', gap: 4 }}
+          >
+            <Icon name="people" size={20} color={colors.primary} />
+            <Text style={{ fontSize: 12, fontWeight: '700', color: colors.primary }}>Family</Text>
+          </TouchableOpacity>
+
+          {activeCartType === 'personal' && (
+            <TouchableOpacity onPress={clearCart}>
+              <Text style={[styles.clearCartText, { color: colors.danger }]}>Clear All</Text>
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        {/* LINE ITEMS LIST */}
-        <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>1. Recipe Items</Text>
-          {items.map(({ kit, quantity, servings, spiceLevel, unitPrice }, index) => (
-            <View
-              key={`${kit.id}-${servings}-${spiceLevel}-${index}`}
-              style={[
-                styles.itemRow,
-                {
-                  backgroundColor: colors.bgSubtle,
-                  borderRadius: radii.lg,
-                },
-              ]}
-            >
-              <Image source={{ uri: kit.heroImage }} style={styles.itemThumb} />
-              <View style={styles.itemInfo}>
-                <View style={styles.itemHeader}>
-                  <Text style={[styles.itemName, { color: colors.textPrimary }]} numberOfLines={1}>
-                    {kit.name}
-                  </Text>
-                  <TouchableOpacity
-                    onPress={() => removeItem(kit.id, servings, spiceLevel)}
-                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                  >
-                    <Icon name="close" size={16} color={colors.textMuted} />
-                  </TouchableOpacity>
-                </View>
-
-                {/* Serving & Spice Badges */}
+        {activeCartType === 'family' ? (
+          <FamilyCartView />
+        ) : (
+          <>
+            {/* LINE ITEMS LIST */}
+            <View style={styles.section}>
+              <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
+                1. Recipe Items
+              </Text>
+              {items.map(({ kit, quantity, servings, spiceLevel, unitPrice }, index) => (
                 <View
-                  style={{
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    gap: 6,
-                    marginVertical: 4,
-                    flexWrap: 'wrap',
-                  }}
+                  key={`${kit.id}-${servings}-${spiceLevel}-${index}`}
+                  style={[
+                    styles.itemRow,
+                    {
+                      backgroundColor: colors.bgSubtle,
+                      borderRadius: radii.lg,
+                    },
+                  ]}
                 >
-                  <View
-                    style={{
-                      flexDirection: 'row',
-                      alignItems: 'center',
-                      gap: 4,
-                      backgroundColor: colors.bgSurface,
-                      paddingHorizontal: 7,
-                      paddingVertical: 2,
-                      borderRadius: 6,
-                      borderWidth: 1,
-                      borderColor: colors.borderLight,
-                    }}
-                  >
-                    <Icon name="people" size={12} color={colors.textSecondary} />
-                    <Text style={{ fontSize: 11, fontWeight: '700', color: colors.textPrimary }}>
-                      {servings} Servings
-                    </Text>
-                  </View>
-                  {spiceLevel ? (
+                  <Image source={{ uri: kit.heroImage }} style={styles.itemThumb} />
+                  <View style={styles.itemInfo}>
+                    <View style={styles.itemHeader}>
+                      <Text
+                        style={[styles.itemName, { color: colors.textPrimary }]}
+                        numberOfLines={1}
+                      >
+                        {kit.name}
+                      </Text>
+                      <TouchableOpacity
+                        onPress={() => removeItem(kit.id, servings, spiceLevel)}
+                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                      >
+                        <Icon name="close" size={16} color={colors.textMuted} />
+                      </TouchableOpacity>
+                    </View>
+
+                    {/* Serving & Spice Badges */}
                     <View
                       style={{
                         flexDirection: 'row',
                         alignItems: 'center',
-                        gap: 4,
-                        backgroundColor: colors.bgSurface,
-                        paddingHorizontal: 7,
-                        paddingVertical: 2,
-                        borderRadius: 6,
-                        borderWidth: 1,
-                        borderColor: colors.borderLight,
+                        gap: 6,
+                        marginVertical: 4,
+                        flexWrap: 'wrap',
                       }}
                     >
-                      <Icon name="flame" size={12} color={colors.primary} />
-                      <Text style={{ fontSize: 11, fontWeight: '700', color: colors.primary }}>
-                        {spiceLevel}
+                      <View
+                        style={{
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          gap: 4,
+                          backgroundColor: colors.bgSurface,
+                          paddingHorizontal: 7,
+                          paddingVertical: 2,
+                          borderRadius: 6,
+                          borderWidth: 1,
+                          borderColor: colors.borderLight,
+                        }}
+                      >
+                        <Icon name="people" size={12} color={colors.textSecondary} />
+                        <Text
+                          style={{ fontSize: 11, fontWeight: '700', color: colors.textPrimary }}
+                        >
+                          {servings} Servings
+                        </Text>
+                      </View>
+                      {spiceLevel ? (
+                        <View
+                          style={{
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            gap: 4,
+                            backgroundColor: colors.bgSurface,
+                            paddingHorizontal: 7,
+                            paddingVertical: 2,
+                            borderRadius: 6,
+                            borderWidth: 1,
+                            borderColor: colors.borderLight,
+                          }}
+                        >
+                          <Icon name="flame" size={12} color={colors.primary} />
+                          <Text style={{ fontSize: 11, fontWeight: '700', color: colors.primary }}>
+                            {spiceLevel}
+                          </Text>
+                        </View>
+                      ) : null}
+                    </View>
+
+                    <View style={styles.itemBottomRow}>
+                      <Text style={[styles.itemPrice, { color: colors.primary }]}>
+                        ₹{(unitPrice ?? kit.price) * quantity}
+                      </Text>
+                      <QuantityStepper
+                        value={quantity}
+                        onChange={(q) => updateQuantity(kit.id, q, servings, spiceLevel)}
+                        size="sm"
+                      />
+                    </View>
+                  </View>
+                </View>
+              ))}
+            </View>
+
+            {/* PROMO COUPON CODE */}
+            <View
+              style={[
+                styles.sectionCard,
+                { backgroundColor: colors.bgSurface, borderRadius: radii.xl },
+              ]}
+            >
+              <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
+                2. Offers & Discount Coupons
+              </Text>
+
+              {appliedCoupon ? (
+                <View
+                  style={[styles.appliedCouponBanner, { backgroundColor: colors.primaryLight }]}
+                >
+                  <View style={{ flex: 1 }}>
+                    <View
+                      style={{
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        gap: 6,
+                        marginBottom: 2,
+                      }}
+                    >
+                      <Icon name="tag" size={16} color={colors.primary} />
+                      <Text
+                        testID="cart-applied-coupon-text"
+                        style={[styles.couponCodeText, { color: colors.primary, marginBottom: 0 }]}
+                      >
+                        {appliedCoupon.code} Applied
                       </Text>
                     </View>
-                  ) : null}
+                    <Text style={[styles.couponSavingsText, { color: colors.primaryDark }]}>
+                      {couponMessage || `You saved ₹${discount} on this box!`}
+                    </Text>
+                  </View>
+                  <TouchableOpacity onPress={removeCoupon} style={styles.removeCouponBtn}>
+                    <Text style={[styles.removeCouponText, { color: colors.danger }]}>Remove</Text>
+                  </TouchableOpacity>
                 </View>
-
-                <View style={styles.itemBottomRow}>
-                  <Text style={[styles.itemPrice, { color: colors.primary }]}>
-                    ₹{(unitPrice ?? kit.price) * quantity}
-                  </Text>
-                  <QuantityStepper
-                    value={quantity}
-                    onChange={(q) => updateQuantity(kit.id, q, servings, spiceLevel)}
+              ) : (
+                <View style={styles.couponInputRow}>
+                  <TextInput
+                    testID="cart-coupon-input"
+                    style={[
+                      styles.couponInput,
+                      {
+                        backgroundColor: colors.bgSubtle,
+                        borderColor: colors.border,
+                        borderRadius: radii.lg,
+                        color: colors.textPrimary,
+                      },
+                    ]}
+                    placeholder="Enter coupon (e.g. RASOI100, FREEDEL)"
+                    placeholderTextColor={colors.textMuted}
+                    autoCapitalize="characters"
+                    value={couponInput}
+                    onChangeText={setCouponInput}
+                  />
+                  <Button
+                    testID="cart-apply-coupon-btn"
+                    title="Apply"
                     size="sm"
+                    onPress={handleApplyCoupon}
+                    style={{ marginLeft: 8, paddingHorizontal: 16 }}
                   />
                 </View>
-              </View>
-            </View>
-          ))}
-        </View>
+              )}
 
-        {/* PROMO COUPON CODE */}
-        <View
-          style={[
-            styles.sectionCard,
-            { backgroundColor: colors.bgSurface, borderRadius: radii.xl },
-          ]}
-        >
-          <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
-            2. Offers & Discount Coupons
-          </Text>
-
-          {appliedCoupon ? (
-            <View style={[styles.appliedCouponBanner, { backgroundColor: colors.primaryLight }]}>
-              <View style={{ flex: 1 }}>
-                <View
-                  style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 2 }}
-                >
-                  <Icon name="tag" size={16} color={colors.primary} />
+              <View style={styles.popularCoupons}>
+                <Text style={[styles.popularCouponsLabel, { color: colors.textMuted }]}>
+                  Available:
+                </Text>
+                <TouchableOpacity onPress={() => applyCouponCode('RASOI100')}>
                   <Text
-                    testID="cart-applied-coupon-text"
-                    style={[styles.couponCodeText, { color: colors.primary, marginBottom: 0 }]}
+                    testID="cart-coupon-rasoi100"
+                    style={[
+                      styles.couponPill,
+                      { color: colors.primary, borderColor: colors.primary + '40' },
+                    ]}
                   >
-                    {appliedCoupon.code} Applied
+                    RASOI100 (₹100 OFF)
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => applyCouponCode('FREEDEL')}>
+                  <Text
+                    testID="cart-coupon-freedel"
+                    style={[
+                      styles.couponPill,
+                      { color: colors.accent, borderColor: colors.accent + '40' },
+                    ]}
+                  >
+                    FREEDEL (Free Delivery)
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              {!user && (
+                <View
+                  testID="cart-guest-wallet-notice"
+                  style={{
+                    marginTop: 12,
+                    padding: 10,
+                    backgroundColor: colors.bgSubtle,
+                    borderRadius: radii.md,
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 8,
+                  }}
+                >
+                  <Icon name="wallet" size={16} color={colors.textSecondary} />
+                  <Text style={{ fontSize: 12, color: colors.textSecondary, flex: 1 }}>
+                    Wallet credits & referrals:{' '}
+                    <Text
+                      style={{ color: colors.primary, fontWeight: '700' }}
+                      onPress={() => router.push('/login' as any)}
+                    >
+                      Sign in to use
+                    </Text>
                   </Text>
                 </View>
-                <Text style={[styles.couponSavingsText, { color: colors.primaryDark }]}>
-                  {couponMessage || `You saved ₹${discount} on this box!`}
-                </Text>
-              </View>
-              <TouchableOpacity onPress={removeCoupon} style={styles.removeCouponBtn}>
-                <Text style={[styles.removeCouponText, { color: colors.danger }]}>Remove</Text>
-              </TouchableOpacity>
+              )}
             </View>
-          ) : (
-            <View style={styles.couponInputRow}>
-              <TextInput
-                testID="cart-coupon-input"
-                style={[
-                  styles.couponInput,
-                  {
-                    backgroundColor: colors.bgSubtle,
-                    borderColor: colors.border,
-                    borderRadius: radii.lg,
-                    color: colors.textPrimary,
-                  },
-                ]}
-                placeholder="Enter coupon (e.g. RASOI100, FREEDEL)"
-                placeholderTextColor={colors.textMuted}
-                autoCapitalize="characters"
-                value={couponInput}
-                onChangeText={setCouponInput}
-              />
-              <Button
-                testID="cart-apply-coupon-btn"
-                title="Apply"
-                size="sm"
-                onPress={handleApplyCoupon}
-                style={{ marginLeft: 8, paddingHorizontal: 16 }}
-              />
-            </View>
-          )}
 
-          <View style={styles.popularCoupons}>
-            <Text style={[styles.popularCouponsLabel, { color: colors.textMuted }]}>
-              Available:
-            </Text>
-            <TouchableOpacity onPress={() => applyCouponCode('RASOI100')}>
-              <Text
-                testID="cart-coupon-rasoi100"
-                style={[
-                  styles.couponPill,
-                  { color: colors.primary, borderColor: colors.primary + '40' },
-                ]}
-              >
-                RASOI100 (₹100 OFF)
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity onPress={() => applyCouponCode('FREEDEL')}>
-              <Text
-                testID="cart-coupon-freedel"
-                style={[
-                  styles.couponPill,
-                  { color: colors.accent, borderColor: colors.accent + '40' },
-                ]}
-              >
-                FREEDEL (Free Delivery)
-              </Text>
-            </TouchableOpacity>
-          </View>
-
-          {!user && (
+            {/* DELIVERY ADDRESS SELECTION */}
             <View
-              testID="cart-guest-wallet-notice"
-              style={{
-                marginTop: 12,
-                padding: 10,
-                backgroundColor: colors.bgSubtle,
-                borderRadius: radii.md,
-                flexDirection: 'row',
-                alignItems: 'center',
-                gap: 8,
-              }}
+              style={[
+                styles.sectionCard,
+                { backgroundColor: colors.bgSurface, borderRadius: radii.xl },
+              ]}
             >
-              <Icon name="wallet" size={16} color={colors.textSecondary} />
-              <Text style={{ fontSize: 12, color: colors.textSecondary, flex: 1 }}>
-                Wallet credits & referrals:{' '}
-                <Text
-                  style={{ color: colors.primary, fontWeight: '700' }}
-                  onPress={() => router.push('/login' as any)}
-                >
-                  Sign in to use
+              <View style={styles.sectionHeaderRow}>
+                <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
+                  3. Delivery Address
                 </Text>
-              </Text>
-            </View>
-          )}
-        </View>
+                <TouchableOpacity onPress={() => setAddressModalVisible(true)}>
+                  <Text style={[styles.addAddressLink, { color: colors.primary }]}>+ Add New</Text>
+                </TouchableOpacity>
+              </View>
 
-        {/* DELIVERY ADDRESS SELECTION */}
-        <View
-          style={[
-            styles.sectionCard,
-            { backgroundColor: colors.bgSurface, borderRadius: radii.xl },
-          ]}
-        >
-          <View style={styles.sectionHeaderRow}>
-            <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
-              3. Delivery Address
-            </Text>
-            <TouchableOpacity onPress={() => setAddressModalVisible(true)}>
-              <Text style={[styles.addAddressLink, { color: colors.primary }]}>+ Add New</Text>
-            </TouchableOpacity>
-          </View>
-
-          {addresses.map((addr) => {
-            const isSelected = addr.id === (activeAddress?.id || selectedAddressId);
-            return (
-              <TouchableOpacity
-                key={addr.id}
-                style={[
-                  styles.addressCard,
-                  {
-                    borderColor: isSelected ? colors.primary : colors.borderLight,
-                    backgroundColor: isSelected ? colors.primaryLight + '35' : colors.bgSubtle,
-                    borderRadius: radii.lg,
-                  },
-                ]}
-                onPress={() => setSelectedAddressId(addr.id)}
-              >
-                <View style={styles.addressTop}>
-                  <Badge label={addr.tag} variant="accent" size="sm" />
-                  {addr.isDefault && <Badge label="Default" variant="neutral" size="sm" />}
-                </View>
-                <Text style={[styles.addressText, { color: colors.textPrimary }]}>
-                  {addr.flatAndStreet}, {addr.areaAndLandmark}
-                </Text>
-                <Text style={[styles.addressCity, { color: colors.textSecondary }]}>
-                  {addr.city} - {addr.pincode} • {addr.phone}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-
-        {/* DELIVERY SLOT PICKER */}
-        <View
-          style={[
-            styles.sectionCard,
-            { backgroundColor: colors.bgSurface, borderRadius: radii.xl },
-          ]}
-        >
-          <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>4. Delivery Slot</Text>
-
-          {DELIVERY_SLOTS.map((slot) => {
-            const isSelected = selectedSlot === slot.title;
-            return (
-              <TouchableOpacity
-                key={slot.id}
-                style={[
-                  styles.slotRow,
-                  {
-                    borderColor: isSelected ? colors.primary : colors.borderLight,
-                    backgroundColor: isSelected ? colors.primaryLight + '35' : colors.bgSubtle,
-                    borderRadius: radii.md,
-                  },
-                ]}
-                onPress={() => setSelectedSlot(slot.title)}
-              >
-                <View style={{ flex: 1 }}>
-                  <Text
+              {addresses.map((addr) => {
+                const isSelected = addr.id === (activeAddress?.id || selectedAddressId);
+                return (
+                  <TouchableOpacity
+                    key={addr.id}
                     style={[
-                      styles.slotTitle,
-                      { color: isSelected ? colors.primary : colors.textPrimary },
+                      styles.addressCard,
+                      {
+                        borderColor: isSelected ? colors.primary : colors.borderLight,
+                        backgroundColor: isSelected ? colors.primaryLight + '35' : colors.bgSubtle,
+                        borderRadius: radii.lg,
+                      },
                     ]}
+                    onPress={() => setSelectedAddressId(addr.id)}
                   >
-                    {slot.title}
+                    <View style={styles.addressTop}>
+                      <Badge label={addr.tag} variant="accent" size="sm" />
+                      {addr.isDefault && <Badge label="Default" variant="neutral" size="sm" />}
+                    </View>
+                    <Text style={[styles.addressText, { color: colors.textPrimary }]}>
+                      {addr.flatAndStreet}, {addr.areaAndLandmark}
+                    </Text>
+                    <Text style={[styles.addressCity, { color: colors.textSecondary }]}>
+                      {addr.city} - {addr.pincode} • {addr.phone}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            {/* DELIVERY SLOT PICKER */}
+            <View
+              style={[
+                styles.sectionCard,
+                { backgroundColor: colors.bgSurface, borderRadius: radii.xl },
+              ]}
+            >
+              <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
+                4. Delivery Slot
+              </Text>
+
+              {DELIVERY_SLOTS.map((slot) => {
+                const isSelected = selectedSlot === slot.title;
+                return (
+                  <TouchableOpacity
+                    key={slot.id}
+                    style={[
+                      styles.slotRow,
+                      {
+                        borderColor: isSelected ? colors.primary : colors.borderLight,
+                        backgroundColor: isSelected ? colors.primaryLight + '35' : colors.bgSubtle,
+                        borderRadius: radii.md,
+                      },
+                    ]}
+                    onPress={() => setSelectedSlot(slot.title)}
+                  >
+                    <View style={{ flex: 1 }}>
+                      <Text
+                        style={[
+                          styles.slotTitle,
+                          { color: isSelected ? colors.primary : colors.textPrimary },
+                        ]}
+                      >
+                        {slot.title}
+                      </Text>
+                    </View>
+                    <Badge
+                      label={slot.tag}
+                      variant={isSelected ? 'primary' : 'neutral'}
+                      size="sm"
+                    />
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            {/* PAYMENT METHOD SELECTION */}
+            <View
+              style={[
+                styles.sectionCard,
+                { backgroundColor: colors.bgSurface, borderRadius: radii.xl },
+              ]}
+            >
+              <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
+                5. Payment Method
+              </Text>
+
+              {(['UPI', 'Card', 'Cash on Delivery'] as PaymentMethod[]).map((method) => {
+                const isSelected = selectedPaymentMethod === method;
+                return (
+                  <TouchableOpacity
+                    key={method}
+                    style={[
+                      styles.paymentOption,
+                      {
+                        borderColor: isSelected ? colors.primary : colors.borderLight,
+                        backgroundColor: isSelected ? colors.primaryLight + '30' : colors.bgSubtle,
+                        borderRadius: radii.md,
+                      },
+                    ]}
+                    onPress={() => setSelectedPaymentMethod(method)}
+                  >
+                    <View style={{ marginRight: 12 }}>
+                      <Icon
+                        name={method === 'UPI' ? 'flash' : method === 'Card' ? 'card' : 'cash'}
+                        size={22}
+                        color={isSelected ? colors.primary : colors.textSecondary}
+                      />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text
+                        style={[
+                          styles.paymentTitle,
+                          { color: isSelected ? colors.primary : colors.textPrimary },
+                        ]}
+                      >
+                        {method === 'UPI'
+                          ? 'Instant UPI (Google Pay / PhonePe / Paytm / Amazon Pay)'
+                          : method === 'Card'
+                            ? 'Credit / Debit Card (Visa, MasterCard, RuPay)'
+                            : 'Cash on Delivery (Pay upon doorstep handover)'}
+                      </Text>
+                    </View>
+                    <View
+                      style={[
+                        styles.radioDot,
+                        {
+                          borderColor: isSelected ? colors.primary : colors.border,
+                          backgroundColor: isSelected ? colors.primary : 'transparent',
+                        },
+                      ]}
+                    />
+                  </TouchableOpacity>
+                );
+              })}
+
+              {selectedPaymentMethod === 'UPI' && (
+                <View style={styles.upiSubBox}>
+                  <Text style={[styles.upiLabel, { color: colors.textSecondary }]}>
+                    UPI VPA ID:
                   </Text>
-                </View>
-                <Badge label={slot.tag} variant={isSelected ? 'primary' : 'neutral'} size="sm" />
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-
-        {/* PAYMENT METHOD SELECTION */}
-        <View
-          style={[
-            styles.sectionCard,
-            { backgroundColor: colors.bgSurface, borderRadius: radii.xl },
-          ]}
-        >
-          <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
-            5. Payment Method
-          </Text>
-
-          {(['UPI', 'Card', 'Cash on Delivery'] as PaymentMethod[]).map((method) => {
-            const isSelected = selectedPaymentMethod === method;
-            return (
-              <TouchableOpacity
-                key={method}
-                style={[
-                  styles.paymentOption,
-                  {
-                    borderColor: isSelected ? colors.primary : colors.borderLight,
-                    backgroundColor: isSelected ? colors.primaryLight + '30' : colors.bgSubtle,
-                    borderRadius: radii.md,
-                  },
-                ]}
-                onPress={() => setSelectedPaymentMethod(method)}
-              >
-                <View style={{ marginRight: 12 }}>
-                  <Icon
-                    name={method === 'UPI' ? 'flash' : method === 'Card' ? 'card' : 'cash'}
-                    size={22}
-                    color={isSelected ? colors.primary : colors.textSecondary}
+                  <TextInput
+                    style={[
+                      styles.upiInput,
+                      {
+                        backgroundColor: colors.bgSubtle,
+                        borderColor: colors.border,
+                        borderRadius: radii.md,
+                        color: colors.textPrimary,
+                      },
+                    ]}
+                    value={upiId}
+                    onChangeText={setUpiId}
+                    placeholder="name@okaxis or name@upi"
+                    placeholderTextColor={colors.textMuted}
                   />
                 </View>
-                <View style={{ flex: 1 }}>
-                  <Text
-                    style={[
-                      styles.paymentTitle,
-                      { color: isSelected ? colors.primary : colors.textPrimary },
-                    ]}
-                  >
-                    {method === 'UPI'
-                      ? 'Instant UPI (Google Pay / PhonePe / Paytm / Amazon Pay)'
-                      : method === 'Card'
-                        ? 'Credit / Debit Card (Visa, MasterCard, RuPay)'
-                        : 'Cash on Delivery (Pay upon doorstep handover)'}
+              )}
+            </View>
+
+            {/* ORDER SUMMARY */}
+            <View
+              style={[
+                styles.sectionCard,
+                { backgroundColor: colors.bgSurface, borderRadius: radii.xl },
+              ]}
+            >
+              <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
+                Order Summary
+              </Text>
+
+              <View style={styles.summaryLine}>
+                <Text style={[styles.summaryLabel, { color: colors.textSecondary }]}>
+                  Items Subtotal
+                </Text>
+                <Text style={[styles.summaryVal, { color: colors.textPrimary }]}>₹{subtotal}</Text>
+              </View>
+
+              {discount > 0 && (
+                <View style={styles.summaryLine}>
+                  <Text style={[styles.summaryLabel, { color: colors.primary }]}>
+                    Coupon Discount
                   </Text>
+                  <Text style={[styles.summaryVal, { color: colors.primary }]}>-₹{discount}</Text>
                 </View>
-                <View
-                  style={[
-                    styles.radioDot,
-                    {
-                      borderColor: isSelected ? colors.primary : colors.border,
-                      backgroundColor: isSelected ? colors.primary : 'transparent',
-                    },
-                  ]}
-                />
-              </TouchableOpacity>
-            );
-          })}
+              )}
 
-          {selectedPaymentMethod === 'UPI' && (
-            <View style={styles.upiSubBox}>
-              <Text style={[styles.upiLabel, { color: colors.textSecondary }]}>UPI VPA ID:</Text>
-              <TextInput
-                style={[
-                  styles.upiInput,
-                  {
-                    backgroundColor: colors.bgSubtle,
-                    borderColor: colors.border,
-                    borderRadius: radii.md,
-                    color: colors.textPrimary,
-                  },
-                ]}
-                value={upiId}
-                onChangeText={setUpiId}
-                placeholder="name@okaxis or name@upi"
-                placeholderTextColor={colors.textMuted}
-              />
+              <View style={styles.summaryLine}>
+                <Text style={[styles.summaryLabel, { color: colors.textSecondary }]}>
+                  Cold-Chain Delivery Fee
+                </Text>
+                <Text style={[styles.summaryVal, { color: colors.textPrimary }]}>
+                  {deliveryFee === 0 ? 'FREE' : `₹${deliveryFee}`}
+                </Text>
+              </View>
+
+              <View style={styles.summaryLine}>
+                <Text style={[styles.summaryLabel, { color: colors.textMuted }]}>
+                  GST (5% Food Preparation)
+                </Text>
+                <Text style={[styles.summaryVal, { color: colors.textMuted }]}>Included</Text>
+              </View>
+
+              <View style={[styles.totalDivider, { backgroundColor: colors.borderLight }]} />
+
+              <View style={styles.summaryLineTotal}>
+                <Text style={[styles.totalText, { color: colors.textPrimary }]}>Grand Total</Text>
+                <Text
+                  testID="cart-grand-total"
+                  style={[styles.totalAmount, { color: colors.primary }]}
+                >
+                  ₹{total}
+                </Text>
+              </View>
             </View>
-          )}
-        </View>
-
-        {/* ORDER SUMMARY */}
-        <View
-          style={[
-            styles.sectionCard,
-            { backgroundColor: colors.bgSurface, borderRadius: radii.xl },
-          ]}
-        >
-          <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Order Summary</Text>
-
-          <View style={styles.summaryLine}>
-            <Text style={[styles.summaryLabel, { color: colors.textSecondary }]}>
-              Items Subtotal
-            </Text>
-            <Text style={[styles.summaryVal, { color: colors.textPrimary }]}>₹{subtotal}</Text>
-          </View>
-
-          {discount > 0 && (
-            <View style={styles.summaryLine}>
-              <Text style={[styles.summaryLabel, { color: colors.primary }]}>Coupon Discount</Text>
-              <Text style={[styles.summaryVal, { color: colors.primary }]}>-₹{discount}</Text>
-            </View>
-          )}
-
-          <View style={styles.summaryLine}>
-            <Text style={[styles.summaryLabel, { color: colors.textSecondary }]}>
-              Cold-Chain Delivery Fee
-            </Text>
-            <Text style={[styles.summaryVal, { color: colors.textPrimary }]}>
-              {deliveryFee === 0 ? 'FREE' : `₹${deliveryFee}`}
-            </Text>
-          </View>
-
-          <View style={styles.summaryLine}>
-            <Text style={[styles.summaryLabel, { color: colors.textMuted }]}>
-              GST (5% Food Preparation)
-            </Text>
-            <Text style={[styles.summaryVal, { color: colors.textMuted }]}>Included</Text>
-          </View>
-
-          <View style={[styles.totalDivider, { backgroundColor: colors.borderLight }]} />
-
-          <View style={styles.summaryLineTotal}>
-            <Text style={[styles.totalText, { color: colors.textPrimary }]}>Grand Total</Text>
-            <Text testID="cart-grand-total" style={[styles.totalAmount, { color: colors.primary }]}>
-              ₹{total}
-            </Text>
-          </View>
-        </View>
+          </>
+        )}
       </ScrollView>
 
-      {/* BOTTOM CHECKOUT BAR */}
-      <View
-        style={[
-          styles.checkoutBar,
-          {
-            backgroundColor: colors.bgSurface,
-            borderTopColor: colors.borderLight,
-            ...shadows.medium,
-          },
-        ]}
-      >
-        <View>
-          <Text style={[styles.payableLabel, { color: colors.textMuted }]}>TO PAY</Text>
-          <Text style={[styles.payableAmount, { color: colors.primary }]}>₹{total}</Text>
-        </View>
+      {/* BOTTOM CHECKOUT BAR (PERSONAL BASKET ONLY) */}
+      {activeCartType === 'personal' && (
+        <View
+          style={[
+            styles.checkoutBar,
+            {
+              backgroundColor: colors.bgSurface,
+              borderTopColor: colors.borderLight,
+              ...shadows.medium,
+            },
+          ]}
+        >
+          <View>
+            <Text style={[styles.payableLabel, { color: colors.textMuted }]}>TO PAY</Text>
+            <Text style={[styles.payableAmount, { color: colors.primary }]}>₹{total}</Text>
+          </View>
 
-        <Button
-          testID="cart-proceed-checkout-btn"
-          title="Proceed to Checkout"
-          icon={<Icon name="arrow-forward" size={18} color="#FFFFFF" />}
-          size="lg"
-          style={{ flex: 1, marginLeft: 16 }}
-          onPress={() => setFlowStep('checkout')}
-        />
-      </View>
+          <Button
+            testID="cart-proceed-checkout-btn"
+            title="Proceed to Checkout"
+            icon={<Icon name="arrow-forward" size={18} color="#FFFFFF" />}
+            size="lg"
+            style={{ flex: 1, marginLeft: 16 }}
+            onPress={() => setFlowStep('checkout')}
+          />
+        </View>
+      )}
+
+      {/* FAMILY HUB MODAL */}
+      <Modal visible={familyHubVisible} animationType="slide">
+        <FamilyManagementView onClose={() => setFamilyHubVisible(false)} />
+      </Modal>
 
       {/* NEW ADDRESS MODAL */}
       <Modal visible={addressModalVisible} transparent animationType="fade">
@@ -1277,5 +1393,22 @@ const styles = StyleSheet.create({
   },
   successBtnCol: {
     width: '100%',
+  },
+  familySwitcherContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flex: 1,
+  },
+  tabSwitchButton: {
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'transparent',
+  },
+  tabSwitchText: {
+    fontSize: 13,
+    fontWeight: '700',
   },
 });
