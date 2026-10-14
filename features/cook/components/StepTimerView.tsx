@@ -55,30 +55,43 @@ export const StepTimerView: React.FC<StepTimerViewProps> = ({
         {
           backgroundColor: isRunning
             ? isDark
-              ? '#3B1D06'
-              : '#FEF3C7'
+              ? '#2A1A0A'
+              : '#FFF8F0'
             : isDark
-              ? '#1E293B'
+              ? '#1A1816'
               : colors.bgSubtle,
           borderColor: isRunning ? colors.primary : colors.borderLight,
-          borderRadius: radii.lg,
+          borderRadius: radii.xl,
+          borderWidth: 1.5,
         },
       ]}
     >
       <View style={styles.topInfo}>
         <View style={styles.titleWrap}>
-          <Icon
-            name={isRunning ? 'flame' : 'time'}
-            size={18}
-            color={isRunning ? colors.primary : colors.textSecondary}
-          />
+          <View
+            style={[
+              styles.timerIconWrap,
+              {
+                backgroundColor: isRunning ? colors.primary : colors.bgSurface,
+                borderRadius: radii.pill,
+              },
+            ]}
+          >
+            <Icon
+              name={isRunning ? 'flame' : 'time'}
+              size={14}
+              color={isRunning ? '#FFFFFF' : colors.textSecondary}
+            />
+          </View>
           <Text style={[styles.timerLabel, { color: colors.textPrimary }]}>
             Step Timer ({Math.round(timerSeconds / 60)} min)
           </Text>
         </View>
 
         {remainingSeconds === 0 && (
-          <View style={[styles.doneBadge, { backgroundColor: '#10B981' }]}>
+          <View
+            style={[styles.doneBadge, { backgroundColor: '#10B981', borderRadius: radii.pill }]}
+          >
             <Text style={styles.doneText}>Complete ✓</Text>
           </View>
         )}
@@ -106,7 +119,7 @@ export const StepTimerView: React.FC<StepTimerViewProps> = ({
               styles.actionBtn,
               {
                 backgroundColor: isRunning ? '#EAB308' : colors.primary,
-                borderRadius: radii.md,
+                borderRadius: radii.pill,
               },
             ]}
             onPress={handleTogglePlay}
@@ -115,7 +128,7 @@ export const StepTimerView: React.FC<StepTimerViewProps> = ({
               isRunning ? `Pause timer for step ${stepNumber}` : `Start timer for ${formattedTime}`
             }
           >
-            <Icon name={isRunning ? 'pause' : 'play'} size={18} color="#FFFFFF" />
+            <Icon name={isRunning ? 'pause' : 'play'} size={16} color="#FFFFFF" />
             <Text style={styles.actionBtnText}>{isRunning ? 'Pause' : 'Start Timer'}</Text>
           </TouchableOpacity>
 
@@ -126,14 +139,14 @@ export const StepTimerView: React.FC<StepTimerViewProps> = ({
               {
                 borderColor: colors.borderLight,
                 backgroundColor: colors.bgSurface,
-                borderRadius: radii.md,
+                borderRadius: radii.pill,
               },
             ]}
             onPress={handleReset}
             accessibilityRole="button"
             accessibilityLabel={`Reset timer for step ${stepNumber} to ${Math.round(timerSeconds / 60)} minutes`}
           >
-            <Icon name="refresh" size={16} color={colors.textSecondary} />
+            <Icon name="refresh" size={15} color={colors.textSecondary} />
             <Text style={[styles.resetBtnText, { color: colors.textSecondary }]}>Reset</Text>
           </TouchableOpacity>
         </View>
@@ -157,7 +170,13 @@ const styles = StyleSheet.create({
   titleWrap: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 8,
+  },
+  timerIconWrap: {
+    width: 24,
+    height: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   timerLabel: {
     fontSize: 13,

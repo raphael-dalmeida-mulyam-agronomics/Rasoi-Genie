@@ -19,6 +19,7 @@ import { Button } from '../../framework/ui/Button';
 import { Order } from '../../framework/firebase/ordersService';
 import { buildReferralShareMessage } from '../../framework/services/referralService';
 import { useCookMode } from '../../framework/context/CookModeContext';
+import { useFamily } from '../../framework/context/FamilyContext';
 import { FamilyOrderBadge } from '../family/FamilyOrderBadge';
 
 interface OrderConfirmationViewProps {
@@ -39,15 +40,38 @@ export const OrderConfirmationView: React.FC<OrderConfirmationViewProps> = ({
   onViewOrders,
 }) => {
   const { user } = useAuth();
+  const { family, role } = useFamily();
   const { colors, radii, shadows, isDark } = useTheme();
   const { referralCode } = useWallet();
   const { registerNewActiveOrder } = useCookMode();
 
+  const isFamilyOrder = Boolean(order?.familyId);
+  const isFamilyOwner = Boolean(
+    isFamilyOrder &&
+    (role === 'owner' ||
+      (user?.uid && (order.userId === user.uid || (order as any).familyOwnerId === user.uid)) ||
+      (family && user?.uid && family.owner_id === user.uid)),
+  );
+
+  // Non-owners only see recipes/kits they ordered; family owner sees all meal kits
+  const visibleItems = React.useMemo(() => {
+    if (!order?.items) return [];
+    if (!isFamilyOrder || isFamilyOwner) {
+      return order.items;
+    }
+    const currentUid = user?.uid;
+    if (!currentUid) return order.items;
+    const myItems = order.items.filter((it: any) => (it.addedBy || it.added_by) === currentUid);
+    return myItems.length > 0 ? myItems : order.items;
+  }, [order?.items, isFamilyOrder, isFamilyOwner, user?.uid]);
+
   useEffect(() => {
     if (order) {
-      registerNewActiveOrder(order);
+      const orderForCooking =
+        isFamilyOrder && !isFamilyOwner ? { ...order, items: visibleItems } : order;
+      registerNewActiveOrder(orderForCooking);
     }
-  }, [order, registerNewActiveOrder]);
+  }, [order, isFamilyOrder, isFamilyOwner, visibleItems, registerNewActiveOrder]);
 
   if (!order) {
     return null;
@@ -72,12 +96,22 @@ export const OrderConfirmationView: React.FC<OrderConfirmationViewProps> = ({
     }
   };
 
-  const handleStartCookingGuide = () => {
-    registerNewActiveOrder(order);
+  const handleOpenKitRecipe = (item?: any) => {
+    const orderForCooking =
+      isFamilyOrder && !isFamilyOwner ? { ...order, items: visibleItems } : order;
+    registerNewActiveOrder(orderForCooking);
+    const targetKitId = item?.kitId || item?.id;
     router.push({
       pathname: '/cook/[orderId]' as any,
-      params: { orderId: order.id },
+      params: {
+        orderId: order.id,
+        ...(targetKitId ? { kitId: targetKitId } : {}),
+      },
     });
+  };
+
+  const handleStartCookingGuide = () => {
+    handleOpenKitRecipe();
   };
 
   const handleTrackOrder = () => {
@@ -274,33 +308,77 @@ export const OrderConfirmationView: React.FC<OrderConfirmationViewProps> = ({
           <View style={styles.cardHeader}>
             <Icon name="basket" size={18} color={colors.primary} />
             <Text style={[styles.cardTitle, { color: colors.textPrimary }]}>
-              Ordered Kits ({order.items.length})
+              {isFamilyOrder && !isFamilyOwner
+                ? `Your Ordered Recipes (${visibleItems.length})`
+                : `Ordered Kits (${visibleItems.length})`}
             </Text>
           </View>
 
-          {order.items.map((item, idx) => (
-            <View key={idx} style={styles.kitItemRow}>
-              {item.imageUrl ? (
-                <Image source={{ uri: item.imageUrl }} style={styles.kitThumb} />
-              ) : (
-                <View
-                  style={[styles.kitThumbPlaceholder, { backgroundColor: colors.primary + '20' }]}
-                >
-                  <Icon name="restaurant" size={20} color={colors.primary} />
+          {visibleItems.map((item, idx) => {
+            const kitId = item.kitId || item.id || `kit-${idx}`;
+            return (
+              <TouchableOpacity
+                key={idx}
+                testID={`order-confirmation-kit-${kitId}`}
+                style={[
+                  styles.kitItemRow,
+                  {
+                    backgroundColor: colors.bgSubtle,
+                    borderRadius: radii.xl,
+                    borderColor: colors.borderLight,
+                    borderWidth: 1,
+                    padding: 10,
+                    marginBottom: 10,
+                  },
+                ]}
+                onPress={() => handleOpenKitRecipe(item)}
+                activeOpacity={0.7}
+                accessibilityRole="button"
+                accessibilityLabel={`Open recipe page for ${item.name}`}
+              >
+                {item.imageUrl ? (
+                  <Image source={{ uri: item.imageUrl }} style={styles.kitThumb} />
+                ) : (
+                  <View
+                    style={[styles.kitThumbPlaceholder, { backgroundColor: colors.primary + '20' }]}
+                  >
+                    <Icon name="restaurant" size={20} color={colors.primary} />
+                  </View>
+                )}
+                <View style={styles.kitInfo}>
+                  <Text style={[styles.kitName, { color: colors.textPrimary }]}>{item.name}</Text>
+                  <Text style={[styles.kitMeta, { color: colors.textSecondary }]}>
+                    Qty: {item.quantity} • {item.servings || 2} Servings
+                    {item.spiceLevel ? ` • ${item.spiceLevel}` : ''}
+                  </Text>
+                  <View
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      gap: 4,
+                      marginTop: 4,
+                    }}
+                  >
+                    <Text style={{ fontSize: 11, fontWeight: '700', color: colors.primary }}>
+                      Tap to open recipe
+                    </Text>
+                    <Icon name="arrow-forward" size={12} color={colors.primary} />
+                  </View>
                 </View>
-              )}
-              <View style={styles.kitInfo}>
-                <Text style={[styles.kitName, { color: colors.textPrimary }]}>{item.name}</Text>
-                <Text style={[styles.kitMeta, { color: colors.textSecondary }]}>
-                  Qty: {item.quantity} • {item.servings || 2} Servings
-                  {item.spiceLevel ? ` • ${item.spiceLevel}` : ''}
-                </Text>
-              </View>
-              <Text style={[styles.kitPrice, { color: colors.textPrimary }]}>
-                ₹{Math.round((item.price || 0) * item.quantity).toLocaleString('en-IN')}
-              </Text>
-            </View>
-          ))}
+                <View style={{ alignItems: 'flex-end', justifyContent: 'center' }}>
+                  <Text style={[styles.kitPrice, { color: colors.textPrimary }]}>
+                    ₹{Math.round((item.price || 0) * item.quantity).toLocaleString('en-IN')}
+                  </Text>
+                  <Icon
+                    name="chevron-forward"
+                    size={16}
+                    color={colors.textMuted}
+                    style={{ marginTop: 4 }}
+                  />
+                </View>
+              </TouchableOpacity>
+            );
+          })}
         </View>
 
         {/* Optional Create Account Prompt for Guest Users */}

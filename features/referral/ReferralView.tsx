@@ -47,7 +47,8 @@ export const ReferralView: React.FC<ReferralViewProps> = ({ onBack, onNavigateTo
   const [appliedSuccess, setAppliedSuccess] = useState<string | null>(null);
 
   const userId = user?.uid;
-  const activeCode = stats?.currentCode || walletCode || 'RASOI' + (userId ? userId.slice(-4).toUpperCase() : 'APP');
+  const activeCode =
+    stats?.currentCode || walletCode || 'RASOI' + (userId ? userId.slice(-4).toUpperCase() : 'APP');
 
   const loadData = async () => {
     if (!userId) return;
@@ -134,10 +135,15 @@ export const ReferralView: React.FC<ReferralViewProps> = ({ onBack, onNavigateTo
     try {
       const res = await registerReferralCode(inputCode.trim(), userId);
       if (res.success) {
-        setAppliedSuccess(`Success! Code ${inputCode.toUpperCase()} applied. You'll get ₹${res.data?.referredReward || 200} on your first order!`);
+        setAppliedSuccess(
+          `Success! Code ${inputCode.toUpperCase()} applied. You'll get ₹${res.data?.referredReward || 200} on your first order!`,
+        );
         setInputCode('');
         await refreshAll();
-        Alert.alert('Referral Applied!', `You will receive ₹${res.data?.referredReward || 200} credits upon completing your first order.`);
+        Alert.alert(
+          'Referral Applied!',
+          `You will receive ₹${res.data?.referredReward || 200} credits upon completing your first order.`,
+        );
       } else {
         Alert.alert('Invalid Code', res.error || 'Failed to apply referral code');
       }
@@ -155,9 +161,7 @@ export const ReferralView: React.FC<ReferralViewProps> = ({ onBack, onNavigateTo
             <Icon name="arrow-back" size={24} color={colors.textPrimary} />
           </TouchableOpacity>
         )}
-        <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>
-          Refer & Earn
-        </Text>
+        <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Refer & Earn</Text>
         {onNavigateToWallet && (
           <TouchableOpacity onPress={onNavigateToWallet} style={styles.walletButton}>
             <Icon name="wallet" size={20} color={colors.primary} />
@@ -184,7 +188,8 @@ export const ReferralView: React.FC<ReferralViewProps> = ({ onBack, onNavigateTo
             Give ₹{stats?.referredFriendReward || 200}, Get ₹{stats?.rewardPerReferral || 300}
           </Text>
           <Text style={[styles.heroSubtitle, { color: colors.textSecondary }]}>
-            Invite your friends to Rasoi-Genie. When they place their first chef-crafted meal kit order, both of you earn credits!
+            Invite your friends to Rasoi-Genie. When they place their first chef-crafted meal kit
+            order, both of you earn credits!
           </Text>
 
           {/* Referral Code Box */}
@@ -194,6 +199,7 @@ export const ReferralView: React.FC<ReferralViewProps> = ({ onBack, onNavigateTo
               {
                 backgroundColor: colors.bgSurface,
                 borderColor: colors.borderLight,
+                borderRadius: radii.xl,
               },
             ]}
           >
@@ -207,16 +213,12 @@ export const ReferralView: React.FC<ReferralViewProps> = ({ onBack, onNavigateTo
             <TouchableOpacity
               style={[
                 styles.copyBtn,
-                { backgroundColor: copied ? '#10B981' : colors.primary },
+                { backgroundColor: copied ? '#10B981' : colors.primary, borderRadius: radii.pill },
               ]}
               onPress={handleCopyCode}
               activeOpacity={0.8}
             >
-              <Icon
-                name={copied ? 'checkmark' : 'copy'}
-                size={16}
-                color="#FFFFFF"
-              />
+              <Icon name={copied ? 'checkmark' : 'copy'} size={16} color="#FFFFFF" />
               <Text style={styles.copyBtnText}>{copied ? 'COPIED!' : 'COPY'}</Text>
             </TouchableOpacity>
           </View>
@@ -224,7 +226,10 @@ export const ReferralView: React.FC<ReferralViewProps> = ({ onBack, onNavigateTo
           {/* Social Share Buttons */}
           <View style={styles.shareRow}>
             <TouchableOpacity
-              style={[styles.shareWhatsAppBtn, { backgroundColor: '#25D366' }]}
+              style={[
+                styles.shareWhatsAppBtn,
+                { backgroundColor: '#25D366', borderRadius: radii.pill },
+              ]}
               onPress={handleShareWhatsApp}
               activeOpacity={0.8}
             >
@@ -235,7 +240,11 @@ export const ReferralView: React.FC<ReferralViewProps> = ({ onBack, onNavigateTo
             <TouchableOpacity
               style={[
                 styles.shareOtherBtn,
-                { backgroundColor: colors.bgSurface, borderColor: colors.borderLight },
+                {
+                  backgroundColor: colors.bgSurface,
+                  borderColor: colors.borderLight,
+                  borderRadius: radii.pill,
+                },
               ]}
               onPress={handleShareNative}
               activeOpacity={0.8}
@@ -254,7 +263,12 @@ export const ReferralView: React.FC<ReferralViewProps> = ({ onBack, onNavigateTo
           <View
             style={[
               styles.stepCard,
-              { backgroundColor: colors.bgSurface, borderColor: colors.borderLight },
+              {
+                backgroundColor: colors.bgSurface,
+                borderColor: colors.borderLight,
+                borderRadius: radii.xl,
+                ...shadows.card,
+              },
             ]}
           >
             <View style={[styles.stepNumberCircle, { backgroundColor: colors.primary }]}>
@@ -273,7 +287,12 @@ export const ReferralView: React.FC<ReferralViewProps> = ({ onBack, onNavigateTo
           <View
             style={[
               styles.stepCard,
-              { backgroundColor: colors.bgSurface, borderColor: colors.borderLight },
+              {
+                backgroundColor: colors.bgSurface,
+                borderColor: colors.borderLight,
+                borderRadius: radii.xl,
+                ...shadows.card,
+              },
             ]}
           >
             <View style={[styles.stepNumberCircle, { backgroundColor: colors.accent }]}>
@@ -284,7 +303,8 @@ export const ReferralView: React.FC<ReferralViewProps> = ({ onBack, onNavigateTo
                 They Get ₹{stats?.referredFriendReward || 200} Off
               </Text>
               <Text style={[styles.stepDesc, { color: colors.textSecondary }]}>
-                Your friend applies your code and unlocks instant wallet credits on their first gourmet box.
+                Your friend applies your code and unlocks instant wallet credits on their first
+                gourmet box.
               </Text>
             </View>
           </View>
@@ -292,7 +312,12 @@ export const ReferralView: React.FC<ReferralViewProps> = ({ onBack, onNavigateTo
           <View
             style={[
               styles.stepCard,
-              { backgroundColor: colors.bgSurface, borderColor: colors.borderLight },
+              {
+                backgroundColor: colors.bgSurface,
+                borderColor: colors.borderLight,
+                borderRadius: radii.xl,
+                ...shadows.card,
+              },
             ]}
           >
             <View style={[styles.stepNumberCircle, { backgroundColor: '#10B981' }]}>
@@ -303,7 +328,8 @@ export const ReferralView: React.FC<ReferralViewProps> = ({ onBack, onNavigateTo
                 You Earn ₹{stats?.rewardPerReferral || 300}
               </Text>
               <Text style={[styles.stepDesc, { color: colors.textSecondary }]}>
-                Once their first meal kit is delivered, ₹{stats?.rewardPerReferral || 300} credits are credited directly to your Rasoi Wallet.
+                Once their first meal kit is delivered, ₹{stats?.rewardPerReferral || 300} credits
+                are credited directly to your Rasoi Wallet.
               </Text>
             </View>
           </View>
@@ -320,7 +346,12 @@ export const ReferralView: React.FC<ReferralViewProps> = ({ onBack, onNavigateTo
           <View
             style={[
               styles.statCard,
-              { backgroundColor: colors.bgSurface, borderColor: colors.borderLight },
+              {
+                backgroundColor: colors.bgSurface,
+                borderColor: colors.borderLight,
+                borderRadius: radii.xl,
+                ...shadows.card,
+              },
             ]}
           >
             <Text style={[styles.statValue, { color: colors.primary }]}>
@@ -332,7 +363,12 @@ export const ReferralView: React.FC<ReferralViewProps> = ({ onBack, onNavigateTo
           <View
             style={[
               styles.statCard,
-              { backgroundColor: colors.bgSurface, borderColor: colors.borderLight },
+              {
+                backgroundColor: colors.bgSurface,
+                borderColor: colors.borderLight,
+                borderRadius: radii.xl,
+                ...shadows.card,
+              },
             ]}
           >
             <Text style={[styles.statValue, { color: '#10B981' }]}>
@@ -344,7 +380,12 @@ export const ReferralView: React.FC<ReferralViewProps> = ({ onBack, onNavigateTo
           <View
             style={[
               styles.statCard,
-              { backgroundColor: colors.bgSurface, borderColor: colors.borderLight },
+              {
+                backgroundColor: colors.bgSurface,
+                borderColor: colors.borderLight,
+                borderRadius: radii.xl,
+                ...shadows.card,
+              },
             ]}
           >
             <Text style={[styles.statValue, { color: colors.accent }]}>
@@ -358,14 +399,20 @@ export const ReferralView: React.FC<ReferralViewProps> = ({ onBack, onNavigateTo
         <View
           style={[
             styles.redeemCard,
-            { backgroundColor: colors.bgSurface, borderColor: colors.borderLight },
+            {
+              backgroundColor: colors.bgSurface,
+              borderColor: colors.borderLight,
+              borderRadius: radii.xl,
+              ...shadows.card,
+            },
           ]}
         >
           <Text style={[styles.redeemTitle, { color: colors.textPrimary }]}>
             Have a friend's referral code?
           </Text>
           <Text style={[styles.redeemSubtitle, { color: colors.textSecondary }]}>
-            Enter their code to get ₹{stats?.referredFriendReward || 200} in credits on your first order.
+            Enter their code to get ₹{stats?.referredFriendReward || 200} in credits on your first
+            order.
           </Text>
 
           {appliedSuccess ? (
@@ -442,7 +489,11 @@ export const ReferralView: React.FC<ReferralViewProps> = ({ onBack, onNavigateTo
                     </View>
 
                     <Badge
-                      label={isRewarded ? '₹' + (ref.referrer_reward_amount || 300) + ' Rewarded' : ref.status}
+                      label={
+                        isRewarded
+                          ? '₹' + (ref.referrer_reward_amount || 300) + ' Rewarded'
+                          : ref.status
+                      }
                       variant={isRewarded ? 'success' : isQualified ? 'info' : 'warning'}
                     />
                   </View>

@@ -378,6 +378,7 @@ export const CookModeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       orderRec.kits[kitId] = {
         ...kitRec,
         currentStepIndex: Math.max(0, stepIndex),
+        isCompleted: false,
       };
       orderRec.updatedAt = new Date().toISOString();
       current[orderId] = orderRec;

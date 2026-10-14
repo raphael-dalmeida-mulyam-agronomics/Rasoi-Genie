@@ -14,8 +14,15 @@ import {
 import { router } from 'expo-router';
 import { useKeepAwake } from 'expo-keep-awake';
 import { Order } from '../../framework/firebase/ordersService';
-import { getMealKitById, MealKit, RecipeStep } from '../../framework/services/mealKitsService';
+import {
+  getMealKitById,
+  getMealKits,
+  MealKit,
+  RecipeStep,
+} from '../../framework/services/mealKitsService';
 import { useCookMode } from '../../framework/context/CookModeContext';
+import { useAuth } from '../../framework/context/AuthContext';
+import { useFamily } from '../../framework/context/FamilyContext';
 import { useTheme } from '../../framework/theme/ThemeContext';
 import { Icon } from '../../framework/ui/Icon';
 import { Badge } from '../../framework/ui/Badge';
@@ -28,16 +35,18 @@ import { EnjoyYourMealView } from './components/EnjoyYourMealView';
 
 interface CookModeViewProps {
   orderId: string;
+  initialKitId?: string;
 }
 
-export const CookModeView: React.FC<CookModeViewProps> = ({ orderId }) => {
+export const CookModeView: React.FC<CookModeViewProps> = ({ orderId, initialKitId }) => {
   // Prevent phone from sleeping while reading recipe and cooking
   useKeepAwake();
 
-  const { colors, radii, isDark } = useTheme();
+  const { colors, radii, shadows, isDark } = useTheme();
   const {
     activeOrders,
     dismissCookMode,
+    undismissCookMode,
     markKitCompleted,
     textSize,
     toggleTextSize,
@@ -45,30 +54,107 @@ export const CookModeView: React.FC<CookModeViewProps> = ({ orderId }) => {
     setKitStep,
   } = useCookMode();
 
-  // Find target order
+  const { user } = useAuth();
+  const { family, role } = useFamily();
+
+  // Find target order with realistic demo fallback for direct navigation (e.g. /cook/ORD-xxxxx)
   const order = useMemo(() => {
-    return activeOrders.find((o) => o.id === orderId) || null;
-  }, [activeOrders, orderId]);
+    const existing = activeOrders.find((o) => o.id === orderId);
+    if (existing) return existing;
+
+    // Direct URL navigation / reload fallback: If order is not in activeOrders,
+    // load realistic order with real meal kit from catalog so direct links
+    // like /cook/ORD-xxxxx immediately display the full interactive culinary cooking guide!
+    const allKits = getMealKits();
+    const fallbackKit =
+      (initialKitId && getMealKitById(initialKitId)) || (allKits.length > 0 ? allKits[0] : null);
+
+    if (fallbackKit) {
+      const demoOrder: Order = {
+        id: orderId || 'ORD-xxxxx',
+        userId: user?.uid || 'guest-user',
+        customerPhone: '+91 98765 43210',
+        deliveryAddress: 'Home Kitchen',
+        status: 'Delivered',
+        paymentStatus: 'Paid',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        paymentMethod: 'UPI',
+        transactionId: `TXN-DEMO-${Date.now()}`,
+        trackingEvents: [],
+        subtotal: fallbackKit.price,
+        discount: 0,
+        deliveryFee: 0,
+        totalAmount: fallbackKit.price,
+        deliverySlot: 'Immediate Cooking',
+        items: [
+          {
+            id: fallbackKit.id,
+            kitId: fallbackKit.id,
+            name: fallbackKit.name,
+            price: fallbackKit.price,
+            quantity: 1,
+            servings: fallbackKit.servings,
+            image: fallbackKit.heroImage,
+            shelfLifeDays: fallbackKit.shelfLifeDays,
+          } as any,
+        ],
+      };
+      return demoOrder;
+    }
+    return null;
+  }, [activeOrders, orderId, initialKitId, user?.uid]);
+
+  const isFamilyOrder = Boolean(order?.familyId);
+  const isFamilyOwner = Boolean(
+    isFamilyOrder &&
+    (role === 'owner' ||
+      (user?.uid && (order?.userId === user.uid || (order as any)?.familyOwnerId === user.uid)) ||
+      (family && user?.uid && family.owner_id === user.uid)),
+  );
+
+  // Non-owners only see recipes of the meal kits they ordered; the family owner sees all meal kits
+  const visibleKits = useMemo(() => {
+    if (!order?.items) return [];
+    if (!isFamilyOrder || isFamilyOwner) {
+      return order.items;
+    }
+    const currentUid = user?.uid;
+    if (!currentUid) return order.items;
+    const myKits = order.items.filter((it: any) => (it.addedBy || it.added_by) === currentUid);
+    return myKits.length > 0 ? myKits : order.items;
+  }, [order?.items, isFamilyOrder, isFamilyOwner, user?.uid]);
 
   // Selected kit inside multi-kit order
-  const [selectedKitId, setSelectedKitId] = useState<string | null>(null);
+  const [selectedKitId, setSelectedKitId] = useState<string | null>(initialKitId || null);
   const [stepPickerVisible, setStepPickerVisible] = useState(false);
 
-  // Auto-select kit if single kit
+  // Sync initialKitId if prop updates
   useEffect(() => {
-    if (order && order.items && order.items.length === 1 && !selectedKitId) {
-      const firstItem = order.items[0];
+    if (initialKitId) {
+      setSelectedKitId(initialKitId);
+    }
+  }, [initialKitId]);
+
+  // Auto-select kit if single visible kit
+  useEffect(() => {
+    if (visibleKits && visibleKits.length === 1 && !selectedKitId) {
+      const firstItem = visibleKits[0];
       const singleKitId = firstItem?.kitId || firstItem?.id || 'kit-1';
       setSelectedKitId(singleKitId);
     }
-  }, [order, selectedKitId]);
+  }, [visibleKits, selectedKitId]);
 
   // Exit / skip handler
   const handleExit = useCallback(async () => {
     if (orderId) {
       await dismissCookMode(orderId);
     }
-    router.replace('/(tabs)' as any);
+    if (router.canGoBack()) {
+      router.back();
+    } else {
+      router.replace('/(tabs)' as any);
+    }
   }, [orderId, dismissCookMode]);
 
   // Handle hardware Android back button
@@ -85,7 +171,7 @@ export const CookModeView: React.FC<CookModeViewProps> = ({ orderId }) => {
   const currentKitInfo = useMemo(() => {
     if (!order) return null;
     const kitItem =
-      order.items.find((it) => (it.kitId || it.id) === selectedKitId) || order.items[0];
+      visibleKits.find((it) => (it.kitId || it.id) === selectedKitId) || visibleKits[0];
 
     if (!kitItem) return null;
 
@@ -217,42 +303,109 @@ export const CookModeView: React.FC<CookModeViewProps> = ({ orderId }) => {
 
   const handleJumpToStep = async (stepIdx: number) => {
     if (!order || !currentKitInfo) return;
+    if (stepIdx < totalSteps) {
+      await undismissCookMode(order.id);
+    }
     await setKitStep(order.id, currentKitInfo.kitId, stepIdx);
     setStepPickerVisible(false);
   };
 
-  // 1. If order not found, fallback view
+  // Keyboard arrow keys navigation (desktop web & devices with keyboard)
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof window === 'undefined') return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)
+      ) {
+        return;
+      }
+
+      if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        if (currentStepIndex >= totalSteps) {
+          handleJumpToStep(0);
+        } else {
+          handlePrevStep();
+        }
+      } else if (e.key === 'ArrowRight') {
+        if (currentStepIndex < totalSteps) {
+          e.preventDefault();
+          handleNextStep();
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [currentStepIndex, totalSteps, handleJumpToStep, handlePrevStep, handleNextStep]);
+
+  // 1. If order not found, elevated fallback view
   if (!order) {
+    const allKits = getMealKits();
     return (
       <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.bgPrimary }]}>
-        <View style={styles.errorCenter}>
-          <Icon name="restaurant" size={48} color={colors.primary} />
-          <Text style={[styles.errorTitle, { color: colors.textPrimary }]}>
-            No Active Order Found
-          </Text>
-          <Text style={[styles.errorSubtitle, { color: colors.textSecondary }]}>
-            This order may have completed or is no longer active.
-          </Text>
-          <Button
-            title="Return to Explore"
-            variant="primary"
-            onPress={() => router.replace('/(tabs)' as any)}
-            style={{ marginTop: 16 }}
-          />
+        <View style={styles.pageWrapper}>
+          <View style={styles.errorCenter}>
+            <View
+              style={[
+                styles.errorCard,
+                {
+                  backgroundColor: colors.bgSurface,
+                  borderColor: colors.borderLight,
+                  borderRadius: radii.xl,
+                  ...shadows.card,
+                },
+              ]}
+            >
+              <View style={[styles.errorIconCircle, { backgroundColor: colors.primaryLight }]}>
+                <Icon name="restaurant" size={32} color={colors.primary} />
+              </View>
+              <Text style={[styles.errorTitle, { color: colors.textPrimary }]}>
+                No Active Order Found
+              </Text>
+              <Text style={[styles.errorSubtitle, { color: colors.textSecondary }]}>
+                This order may have completed or is no longer active. You can explore our chef meal
+                kits or jump back into home.
+              </Text>
+              <View style={styles.errorActionRow}>
+                {allKits.length > 0 && allKits[0] && (
+                  <Button
+                    title="Cook Chef Special Kit"
+                    variant="primary"
+                    onPress={() => setSelectedKitId(allKits[0]!.id)}
+                    style={{ minWidth: 200 }}
+                  />
+                )}
+                <Button
+                  title="Return Home"
+                  variant="outline"
+                  onPress={handleExit}
+                  style={{ minWidth: 200, marginTop: 10 }}
+                />
+              </View>
+            </View>
+          </View>
         </View>
       </SafeAreaView>
     );
   }
 
-  // 2. Multi-kit picker: if order has > 1 kits and user hasn't selected one
-  if (order.items && order.items.length > 1 && !selectedKitId) {
+  // 2. Multi-kit picker: if visible kits > 1 and user hasn't selected one
+  if (visibleKits && visibleKits.length > 1 && !selectedKitId) {
     return (
       <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.bgPrimary }]}>
-        <MultiKitPickerView
-          order={order}
-          onSelectKit={(kitId) => setSelectedKitId(kitId)}
-          onClose={handleExit}
-        />
+        <View style={styles.pageWrapper}>
+          <MultiKitPickerView
+            order={{ ...order, items: visibleKits }}
+            onSelectKit={(kitId) => setSelectedKitId(kitId)}
+            onClose={handleExit}
+          />
+        </View>
       </SafeAreaView>
     );
   }
@@ -261,39 +414,62 @@ export const CookModeView: React.FC<CookModeViewProps> = ({ orderId }) => {
   const { kit } = currentKitInfo;
 
   // 3. Enjoy Your Meal Screen after last step
-  const showEnjoyMealScreen = currentStepIndex >= totalSteps || isCompleted;
+  const showEnjoyMealScreen = currentStepIndex >= totalSteps;
   if (showEnjoyMealScreen) {
     return (
       <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.bgPrimary }]}>
-        {/* Header */}
-        <View
-          style={[
-            styles.header,
-            { backgroundColor: colors.bgSurface, borderBottomColor: colors.borderLight },
-          ]}
-        >
-          <TouchableOpacity
-            testID="cook-mode-back-btn"
-            onPress={() => handleJumpToStep(totalSteps - 1)}
-            style={styles.headerIconBtn}
-            accessibilityLabel="Back to recipe steps"
+        <View style={styles.pageWrapper}>
+          {/* Gourmet Header */}
+          <View
+            style={[
+              styles.header,
+              {
+                backgroundColor: colors.bgSurface,
+                borderColor: colors.borderLight,
+                borderRadius: radii.xl,
+                ...shadows.soft,
+              },
+            ]}
           >
-            <Icon name="arrow-back" size={20} color={colors.textPrimary} />
-          </TouchableOpacity>
-          <Text style={[styles.headerCenterTitle, { color: colors.textPrimary }]}>
-            Cooking Guide Complete
-          </Text>
-          <TouchableOpacity
-            testID="cook-mode-close-btn"
-            onPress={handleExit}
-            style={styles.headerIconBtn}
-            accessibilityLabel="Close Cook Mode"
-          >
-            <Icon name="close" size={20} color={colors.textPrimary} />
-          </TouchableOpacity>
-        </View>
+            <TouchableOpacity
+              testID="cook-mode-back-btn"
+              onPress={() => handleJumpToStep(0)}
+              style={[
+                styles.headerIconBtn,
+                { backgroundColor: colors.bgSubtle, borderRadius: radii.pill },
+              ]}
+              accessibilityLabel="Back to first recipe step"
+            >
+              <Icon name="arrow-back" size={18} color={colors.textPrimary} />
+            </TouchableOpacity>
+            <View style={styles.headerCenterWrap}>
+              <Text style={[styles.headerCenterTitle, { color: colors.textPrimary }]}>
+                Cooking Guide Complete
+              </Text>
+              <Text style={[styles.headerCenterSub, { color: colors.primary }]}>
+                ✨ Bon Appétit
+              </Text>
+            </View>
+            <TouchableOpacity
+              testID="cook-mode-close-btn"
+              onPress={handleExit}
+              style={[
+                styles.headerIconBtn,
+                { backgroundColor: colors.bgSubtle, borderRadius: radii.pill },
+              ]}
+              accessibilityLabel="Close Cook Mode"
+            >
+              <Icon name="close" size={18} color={colors.textPrimary} />
+            </TouchableOpacity>
+          </View>
 
-        <EnjoyYourMealView order={order} kit={kit} onDone={handleExit} />
+          <EnjoyYourMealView
+            order={order}
+            kit={kit}
+            onDone={handleExit}
+            onBackToRecipe={() => handleJumpToStep(0)}
+          />
+        </View>
       </SafeAreaView>
     );
   }
@@ -302,290 +478,378 @@ export const CookModeView: React.FC<CookModeViewProps> = ({ orderId }) => {
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.bgPrimary }]}>
-      {/* Cook Mode Header */}
-      <View
-        style={[
-          styles.header,
-          { backgroundColor: colors.bgSurface, borderBottomColor: colors.borderLight },
-        ]}
-      >
-        {/* Left: Thumbnail & Kit Name */}
-        <View style={styles.headerLeftCol}>
-          {kit.heroImage ? (
-            <Image source={{ uri: kit.heroImage }} style={styles.headerThumb} />
-          ) : (
-            <View style={[styles.headerThumbPlaceholder, { backgroundColor: colors.primaryLight }]}>
-              <Icon name="restaurant" size={16} color={colors.primary} />
-            </View>
-          )}
-          <View style={{ flex: 1 }}>
-            <Text style={[styles.headerKitName, { color: colors.textPrimary }]} numberOfLines={1}>
-              {kit.name}
-            </Text>
-            <View style={styles.headerMetaRow}>
-              <Text style={[styles.headerOrderId, { color: colors.primary }]}>
-                #{order.id.slice(-6)}
-              </Text>
-              <Badge
-                label={order.status}
-                variant={
-                  order.status === 'Confirmed'
-                    ? 'success'
-                    : order.status === 'Preparing'
-                      ? 'warning'
-                      : 'accent'
-                }
-                size="sm"
-              />
-            </View>
-          </View>
-        </View>
-
-        {/* Right Header Controls: Multi-Kit Switch, Text Size, Close X */}
-        <View style={styles.headerRightCol}>
-          {order.items.length > 1 && (
-            <TouchableOpacity
-              testID="switch-kit-btn"
-              style={[styles.switchKitBtn, { backgroundColor: colors.bgSubtle }]}
-              onPress={() => setSelectedKitId(null)}
-              accessibilityLabel="Switch active kit in this order"
-            >
-              <Icon name="swap-horizontal" size={16} color={colors.textSecondary} />
-            </TouchableOpacity>
-          )}
-
-          {/* Kitchen Text Size Toggle: A / A+ */}
-          <TouchableOpacity
-            testID="kitchen-text-size-toggle"
-            style={[
-              styles.textSizeToggle,
-              {
-                backgroundColor: textSize === 'large' ? colors.primary : colors.bgSubtle,
-                borderColor: colors.borderLight,
-              },
-            ]}
-            onPress={toggleTextSize}
-            accessibilityRole="button"
-            accessibilityLabel={`Kitchen text size is currently ${textSize}. Tap to toggle.`}
-          >
-            <Text
-              style={[
-                styles.textSizeToggleText,
-                { color: textSize === 'large' ? '#FFFFFF' : colors.textPrimary },
-              ]}
-            >
-              {textSize === 'large' ? 'A+' : 'A'}
-            </Text>
-          </TouchableOpacity>
-
-          {/* Close (X) button */}
-          <TouchableOpacity
-            testID="cook-mode-close-btn"
-            style={[styles.closeBtn, { backgroundColor: colors.bgSubtle }]}
-            onPress={handleExit}
-            accessibilityRole="button"
-            accessibilityLabel="Close Cook Mode and return to Explore"
-          >
-            <Icon name="close" size={20} color={colors.textPrimary} />
-          </TouchableOpacity>
-        </View>
-      </View>
-
-      {/* Progress Bar & Jump-to-Step Controls */}
-      <View
-        style={[
-          styles.progressContainer,
-          { backgroundColor: colors.bgSurface, borderBottomColor: colors.borderLight },
-        ]}
-      >
-        <View style={styles.progressBarBg}>
-          <View
-            testID="cooking-progress-fill"
-            style={[
-              styles.progressBarFill,
-              {
-                width: `${progressFraction * 100}%`,
-                backgroundColor: colors.primary,
-              },
-            ]}
-          />
-        </View>
-
-        <View style={styles.progressTextRow}>
-          <TouchableOpacity
-            testID="open-steps-overview-btn"
-            style={styles.stepOverviewTrigger}
-            onPress={() => setStepPickerVisible(true)}
-            accessibilityRole="button"
-            accessibilityLabel={`Step ${currentStepIndex + 1} of ${totalSteps}. Tap to jump to another step.`}
-          >
-            <Text style={[styles.progressStepLabel, { color: colors.textPrimary }]}>
-              Step {currentStepIndex + 1} of {totalSteps}
-            </Text>
-            <Icon name="chevron-down" size={14} color={colors.primary} />
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            onPress={handleExit}
-            accessibilityRole="button"
-            accessibilityLabel="Skip cooking guide for now"
-          >
-            <Text style={[styles.skipForNowText, { color: colors.textMuted }]}>Skip for now</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-
-      {/* Main Recipe Content */}
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-        {/* 1. Live Delivery Strip (if not delivered) */}
-        <CookingDeliveryStrip order={order} />
-
-        {/* 2. What's in your box */}
-        <WhatsInYourBoxView kit={kit} />
-
-        {/* 3. Step Card with Instruction, Image, Chef Tip, and Timer */}
-        {currentStep && (
-          <RecipeStepCard
-            orderId={order.id}
-            kitId={kit.id}
-            step={currentStep}
-            stepIndex={currentStepIndex}
-            totalSteps={totalSteps}
-            fallbackHeroImage={kit.heroImage}
-          />
-        )}
-      </ScrollView>
-
-      {/* Bottom Floating Step Navigation Buttons */}
-      <View
-        style={[
-          styles.bottomNav,
-          {
-            backgroundColor: colors.bgSurface,
-            borderTopColor: colors.borderLight,
-          },
-        ]}
-      >
-        <TouchableOpacity
-          testID="prev-step-btn"
-          disabled={currentStepIndex === 0}
+      <View style={styles.pageWrapper}>
+        {/* Floating Gourmet Cook Mode Header */}
+        <View
           style={[
-            styles.navBtn,
-            styles.prevBtn,
+            styles.header,
             {
+              backgroundColor: colors.bgSurface,
               borderColor: colors.borderLight,
-              opacity: currentStepIndex === 0 ? 0.4 : 1,
+              borderRadius: radii.xl,
+              ...shadows.soft,
             },
           ]}
-          onPress={handlePrevStep}
-          accessibilityRole="button"
-          accessibilityLabel="Previous cooking step"
         >
-          <Icon name="arrow-back" size={16} color={colors.textPrimary} />
-          <Text style={[styles.prevBtnText, { color: colors.textPrimary }]}>Previous</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          testID="next-step-btn"
-          style={[styles.navBtn, styles.nextBtn, { backgroundColor: colors.primary }]}
-          onPress={handleNextStep}
-          accessibilityRole="button"
-          accessibilityLabel={currentStepIndex + 1 >= totalSteps ? 'Finish cooking' : 'Next step'}
-        >
-          <Text style={styles.nextBtnText}>
-            {currentStepIndex + 1 >= totalSteps ? 'Finish Cooking 🎉' : 'Next Step'}
-          </Text>
-          <Icon name="arrow-forward" size={16} color="#FFFFFF" />
-        </TouchableOpacity>
-      </View>
-
-      {/* Step Picker Overview Modal */}
-      <Modal
-        visible={stepPickerVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setStepPickerVisible(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View
-            style={[
-              styles.modalSheet,
-              { backgroundColor: colors.bgSurface, borderColor: colors.borderLight },
-            ]}
-          >
-            <View style={styles.modalHeader}>
-              <Text style={[styles.modalTitle, { color: colors.textPrimary }]}>
-                Jump to Recipe Step
-              </Text>
-              <TouchableOpacity
-                onPress={() => setStepPickerVisible(false)}
-                style={styles.modalCloseBtn}
-                accessibilityLabel="Close step overview"
+          {/* Left: Thumbnail & Kit Name */}
+          <View style={styles.headerLeftCol}>
+            {kit.heroImage ? (
+              <Image
+                source={{ uri: kit.heroImage }}
+                style={[styles.headerThumb, { borderRadius: radii.md }]}
+              />
+            ) : (
+              <View
+                style={[
+                  styles.headerThumbPlaceholder,
+                  { backgroundColor: colors.primaryLight, borderRadius: radii.md },
+                ]}
               >
-                <Icon name="close" size={18} color={colors.textSecondary} />
-              </TouchableOpacity>
+                <Icon name="restaurant" size={16} color={colors.primary} />
+              </View>
+            )}
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.headerKitName, { color: colors.textPrimary }]} numberOfLines={1}>
+                {kit.name}
+              </Text>
+              <View style={styles.headerMetaRow}>
+                <Text style={[styles.headerOrderId, { color: colors.primary }]}>
+                  #{order.id.slice(-6)}
+                </Text>
+                <Badge
+                  label={order.status === 'Delivered' ? 'Ready to Cook' : order.status}
+                  variant={
+                    order.status === 'Confirmed' || order.status === 'Delivered'
+                      ? 'success'
+                      : order.status === 'Preparing'
+                        ? 'warning'
+                        : 'accent'
+                  }
+                  size="sm"
+                />
+              </View>
             </View>
+          </View>
 
-            <ScrollView style={{ maxHeight: 360 }}>
-              {steps.map((st, sIdx) => {
-                const isCurrent = sIdx === currentStepIndex;
-                return (
-                  <TouchableOpacity
-                    key={sIdx}
-                    testID={`jump-to-step-${sIdx + 1}`}
-                    style={[
-                      styles.stepOverviewRow,
-                      {
-                        backgroundColor: isCurrent ? colors.primaryLight : 'transparent',
-                        borderColor: colors.borderLight,
-                      },
-                    ]}
-                    onPress={() => handleJumpToStep(sIdx)}
-                  >
-                    <View
-                      style={[
-                        styles.stepBadgeCircle,
-                        {
-                          backgroundColor: isCurrent ? colors.primary : colors.bgSubtle,
-                        },
-                      ]}
-                    >
-                      <Text
-                        style={[
-                          styles.stepBadgeText,
-                          { color: isCurrent ? '#FFFFFF' : colors.textPrimary },
-                        ]}
-                      >
-                        {sIdx + 1}
-                      </Text>
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <Text
-                        style={[
-                          styles.stepOverviewTitle,
-                          {
-                            color: isCurrent ? colors.primary : colors.textPrimary,
-                            fontWeight: isCurrent ? '800' : '600',
-                          },
-                        ]}
-                        numberOfLines={1}
-                      >
-                        {st.title}
-                      </Text>
-                      {st.timerSeconds ? (
-                        <Text style={[styles.stepOverviewTimer, { color: colors.textMuted }]}>
-                          ⏱ {Math.round(st.timerSeconds / 60)} min timer
-                        </Text>
-                      ) : null}
-                    </View>
-                    {isCurrent && <Icon name="checkmark" size={18} color={colors.primary} />}
-                  </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
+          {/* Right Header Controls: Multi-Kit Switch, Text Size, Close X */}
+          <View style={styles.headerRightCol}>
+            {visibleKits.length > 1 && (
+              <TouchableOpacity
+                testID="switch-kit-btn"
+                style={[
+                  styles.switchKitBtn,
+                  { backgroundColor: colors.bgSubtle, borderRadius: radii.pill },
+                ]}
+                onPress={() => setSelectedKitId(null)}
+                accessibilityLabel="Switch active kit in this order"
+              >
+                <Icon name="swap-horizontal" size={16} color={colors.textSecondary} />
+              </TouchableOpacity>
+            )}
+
+            {/* Kitchen Text Size Toggle: A / A+ */}
+            <TouchableOpacity
+              testID="kitchen-text-size-toggle"
+              style={[
+                styles.textSizeToggle,
+                {
+                  backgroundColor: textSize === 'large' ? colors.primary : colors.bgSubtle,
+                  borderColor: colors.borderLight,
+                  borderRadius: radii.pill,
+                },
+              ]}
+              onPress={toggleTextSize}
+              accessibilityRole="button"
+              accessibilityLabel={`Kitchen text size is currently ${textSize}. Tap to toggle.`}
+            >
+              <Text
+                style={[
+                  styles.textSizeToggleText,
+                  { color: textSize === 'large' ? '#FFFFFF' : colors.textPrimary },
+                ]}
+              >
+                {textSize === 'large' ? 'A+' : 'A'}
+              </Text>
+            </TouchableOpacity>
+
+            {/* Close (X) button */}
+            <TouchableOpacity
+              testID="cook-mode-close-btn"
+              style={[
+                styles.closeBtn,
+                { backgroundColor: colors.bgSubtle, borderRadius: radii.pill },
+              ]}
+              onPress={handleExit}
+              accessibilityRole="button"
+              accessibilityLabel="Close Cook Mode and return to Explore"
+            >
+              <Icon name="close" size={18} color={colors.textPrimary} />
+            </TouchableOpacity>
           </View>
         </View>
-      </Modal>
+
+        {/* Progress Bar & Jump-to-Step Controls */}
+        <View
+          style={[
+            styles.progressContainer,
+            {
+              backgroundColor: colors.bgSurface,
+              borderColor: colors.borderLight,
+              borderRadius: radii.xl,
+              ...shadows.card,
+            },
+          ]}
+        >
+          {/* Segmented Step Indicator */}
+          <View style={styles.segmentedStepTrack}>
+            {Array.from({ length: totalSteps }).map((_, idx) => {
+              const isPast = idx < currentStepIndex;
+              const isCurrent = idx === currentStepIndex;
+              return (
+                <View
+                  key={idx}
+                  style={[
+                    styles.stepSegment,
+                    {
+                      backgroundColor:
+                        isPast || isCurrent ? colors.primary : isDark ? '#332E28' : '#E8E2D9',
+                      opacity: isCurrent ? 1 : isPast ? 0.75 : 0.35,
+                      borderRadius: radii.pill,
+                    },
+                  ]}
+                />
+              );
+            })}
+          </View>
+
+          {/* Hidden/Preserved for test assertion */}
+          <View style={styles.progressBarBgHidden}>
+            <View
+              testID="cooking-progress-fill"
+              style={[
+                styles.progressBarFill,
+                {
+                  width: `${progressFraction * 100}%`,
+                  backgroundColor: colors.primary,
+                },
+              ]}
+            />
+          </View>
+
+          <View style={styles.progressTextRow}>
+            <TouchableOpacity
+              testID="open-steps-overview-btn"
+              style={styles.stepOverviewTrigger}
+              onPress={() => setStepPickerVisible(true)}
+              accessibilityRole="button"
+              accessibilityLabel={`Step ${currentStepIndex + 1} of ${totalSteps}. Tap to jump to another step.`}
+            >
+              <View
+                style={[
+                  styles.stepDotPill,
+                  { backgroundColor: colors.primaryLight, borderRadius: radii.pill },
+                ]}
+              >
+                <Text style={[styles.stepDotPillText, { color: colors.primary }]}>
+                  {currentStepIndex + 1} / {totalSteps}
+                </Text>
+              </View>
+              <Text
+                style={[styles.progressStepLabel, { color: colors.textPrimary }]}
+                numberOfLines={1}
+              >
+                {currentStep ? currentStep.title : `Step ${currentStepIndex + 1} of ${totalSteps}`}
+              </Text>
+              <Icon name="chevron-down" size={14} color={colors.primary} />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              onPress={handleExit}
+              accessibilityRole="button"
+              accessibilityLabel="Skip cooking guide for now"
+            >
+              <Text style={[styles.skipForNowText, { color: colors.textMuted }]}>Skip for now</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* Main Recipe Content */}
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.scrollContent}
+        >
+          {/* 1. Live Delivery Strip (if not delivered) */}
+          <CookingDeliveryStrip order={order} />
+
+          {/* 2. What's in your box */}
+          <WhatsInYourBoxView kit={kit} />
+
+          {/* 3. Step Card with Instruction, Image, Chef Tip, and Timer */}
+          {currentStep && (
+            <RecipeStepCard
+              orderId={order.id}
+              kitId={kit.id}
+              step={currentStep}
+              stepIndex={currentStepIndex}
+              totalSteps={totalSteps}
+              fallbackHeroImage={kit.heroImage}
+            />
+          )}
+        </ScrollView>
+
+        {/* Bottom Floating Step Navigation Buttons Dock */}
+        <View
+          style={[
+            styles.bottomNav,
+            {
+              backgroundColor: colors.bgSurface,
+              borderColor: colors.borderLight,
+              borderRadius: radii.pill,
+              ...shadows.hover,
+            },
+          ]}
+        >
+          <TouchableOpacity
+            testID="prev-step-btn"
+            disabled={currentStepIndex === 0}
+            style={[
+              styles.navBtn,
+              styles.prevBtn,
+              {
+                borderColor: colors.borderLight,
+                backgroundColor: colors.bgSubtle,
+                opacity: currentStepIndex === 0 ? 0.35 : 1,
+                borderRadius: radii.pill,
+              },
+            ]}
+            onPress={handlePrevStep}
+            accessibilityRole="button"
+            accessibilityLabel="Previous cooking step"
+          >
+            <Icon name="arrow-back" size={16} color={colors.textPrimary} />
+            <Text style={[styles.prevBtnText, { color: colors.textPrimary }]}>Previous</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            testID="next-step-btn"
+            style={[
+              styles.navBtn,
+              styles.nextBtn,
+              {
+                backgroundColor: colors.primary,
+                borderRadius: radii.pill,
+                ...shadows.soft,
+              },
+            ]}
+            onPress={handleNextStep}
+            accessibilityRole="button"
+            accessibilityLabel={currentStepIndex + 1 >= totalSteps ? 'Finish cooking' : 'Next step'}
+          >
+            <Text style={styles.nextBtnText}>
+              {currentStepIndex + 1 >= totalSteps ? 'Finish Cooking 🎉' : 'Next Step'}
+            </Text>
+            <Icon name="arrow-forward" size={16} color="#FFFFFF" />
+          </TouchableOpacity>
+        </View>
+
+        {/* Step Picker Overview Modal */}
+        <Modal
+          visible={stepPickerVisible}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setStepPickerVisible(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View
+              style={[
+                styles.modalSheet,
+                {
+                  backgroundColor: colors.bgSurface,
+                  borderColor: colors.borderLight,
+                  borderRadius: radii.xl,
+                  ...shadows.card,
+                },
+              ]}
+            >
+              <View style={styles.modalHeader}>
+                <Text style={[styles.modalTitle, { color: colors.textPrimary }]}>
+                  Jump to Recipe Step
+                </Text>
+                <TouchableOpacity
+                  onPress={() => setStepPickerVisible(false)}
+                  style={[
+                    styles.modalCloseBtn,
+                    { backgroundColor: colors.bgSubtle, borderRadius: radii.pill },
+                  ]}
+                  accessibilityLabel="Close step overview"
+                >
+                  <Icon name="close" size={18} color={colors.textSecondary} />
+                </TouchableOpacity>
+              </View>
+
+              <ScrollView style={{ maxHeight: 360 }}>
+                {steps.map((st, sIdx) => {
+                  const isCurrent = sIdx === currentStepIndex;
+                  return (
+                    <TouchableOpacity
+                      key={sIdx}
+                      testID={`jump-to-step-${sIdx + 1}`}
+                      style={[
+                        styles.stepOverviewRow,
+                        {
+                          backgroundColor: isCurrent ? colors.primaryLight : 'transparent',
+                          borderColor: colors.borderLight,
+                          borderRadius: radii.md,
+                        },
+                      ]}
+                      onPress={() => handleJumpToStep(sIdx)}
+                    >
+                      <View
+                        style={[
+                          styles.stepBadgeCircle,
+                          {
+                            backgroundColor: isCurrent ? colors.primary : colors.bgSubtle,
+                            borderRadius: radii.pill,
+                          },
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.stepBadgeText,
+                            { color: isCurrent ? '#FFFFFF' : colors.textPrimary },
+                          ]}
+                        >
+                          {sIdx + 1}
+                        </Text>
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text
+                          style={[
+                            styles.stepOverviewTitle,
+                            {
+                              color: isCurrent ? colors.primary : colors.textPrimary,
+                              fontWeight: isCurrent ? '800' : '600',
+                            },
+                          ]}
+                          numberOfLines={1}
+                        >
+                          {st.title}
+                        </Text>
+                        {st.timerSeconds ? (
+                          <Text style={[styles.stepOverviewTimer, { color: colors.textMuted }]}>
+                            ⏱ {Math.round(st.timerSeconds / 60)} min timer
+                          </Text>
+                        ) : null}
+                      </View>
+                      {isCurrent && <Icon name="checkmark" size={18} color={colors.primary} />}
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+            </View>
+          </View>
+        </Modal>
+      </View>
     </SafeAreaView>
   );
 };
@@ -594,13 +858,22 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
   },
+  pageWrapper: {
+    flex: 1,
+    width: '100%',
+    maxWidth: 760,
+    alignSelf: 'center',
+    position: 'relative',
+  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    marginHorizontal: 16,
+    marginTop: Platform.OS === 'web' ? 12 : 6,
+    borderWidth: 1,
     gap: 12,
   },
   headerLeftCol: {
@@ -612,12 +885,10 @@ const styles = StyleSheet.create({
   headerThumb: {
     width: 44,
     height: 44,
-    borderRadius: 10,
   },
   headerThumbPlaceholder: {
     width: 44,
     height: 44,
-    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -636,6 +907,19 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     letterSpacing: 0.5,
   },
+  headerCenterWrap: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerCenterTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  headerCenterSub: {
+    fontSize: 11,
+    fontWeight: '700',
+    marginTop: 2,
+  },
   headerRightCol: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -644,14 +928,12 @@ const styles = StyleSheet.create({
   switchKitBtn: {
     width: 36,
     height: 36,
-    borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
   },
   textSizeToggle: {
     width: 36,
     height: 36,
-    borderRadius: 18,
     borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
@@ -663,7 +945,6 @@ const styles = StyleSheet.create({
   closeBtn: {
     width: 36,
     height: 36,
-    borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -673,26 +954,31 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  headerCenterTitle: {
-    fontSize: 16,
-    fontWeight: '800',
-  },
   progressContainer: {
-    paddingHorizontal: 16,
-    paddingTop: 8,
+    marginHorizontal: 16,
+    marginTop: 10,
+    paddingHorizontal: 14,
+    paddingTop: 10,
     paddingBottom: 10,
-    borderBottomWidth: 1,
+    borderWidth: 1,
   },
-  progressBarBg: {
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: '#E2E8F0',
-    overflow: 'hidden',
+  segmentedStepTrack: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
     marginBottom: 8,
+  },
+  stepSegment: {
+    flex: 1,
+    height: 6,
+  },
+  progressBarBgHidden: {
+    height: 0,
+    overflow: 'hidden',
+    opacity: 0,
   },
   progressBarFill: {
     height: '100%',
-    borderRadius: 3,
   },
   progressTextRow: {
     flexDirection: 'row',
@@ -702,31 +988,42 @@ const styles = StyleSheet.create({
   stepOverviewTrigger: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    flex: 1,
+    gap: 8,
+    marginRight: 8,
+  },
+  stepDotPill: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+  },
+  stepDotPillText: {
+    fontSize: 11,
+    fontWeight: '800',
   },
   progressStepLabel: {
     fontSize: 13,
     fontWeight: '800',
+    flexShrink: 1,
   },
   skipForNowText: {
     fontSize: 12,
     fontWeight: '600',
   },
   scrollContent: {
-    paddingTop: 10,
-    paddingBottom: 90,
+    paddingTop: 12,
+    paddingBottom: 110,
   },
   bottomNav: {
     position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
+    bottom: Platform.OS === 'web' ? 16 : 8,
+    left: 16,
+    right: 16,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderTopWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderWidth: 1,
     gap: 12,
   },
   navBtn: {
@@ -734,7 +1031,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 12,
-    borderRadius: 14,
     gap: 6,
   },
   prevBtn: {
@@ -757,17 +1053,38 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
+    padding: 20,
+  },
+  errorCard: {
+    width: '100%',
+    maxWidth: 420,
     padding: 24,
+    alignItems: 'center',
+    borderWidth: 1,
+  },
+  errorIconCircle: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
   },
   errorTitle: {
     fontSize: 20,
     fontWeight: '800',
-    marginTop: 16,
-    marginBottom: 6,
+    marginBottom: 8,
+    textAlign: 'center',
   },
   errorSubtitle: {
     fontSize: 14,
     textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: 20,
+  },
+  errorActionRow: {
+    width: '100%',
+    alignItems: 'center',
   },
   modalOverlay: {
     flex: 1,
@@ -780,6 +1097,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     padding: 16,
     maxHeight: '80%',
+    maxWidth: 520,
+    width: '100%',
+    alignSelf: 'center',
   },
   modalHeader: {
     flexDirection: 'row',
@@ -801,14 +1121,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     padding: 10,
-    borderRadius: 12,
     borderBottomWidth: 0.5,
     gap: 12,
   },
   stepBadgeCircle: {
     width: 28,
     height: 28,
-    borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
   },

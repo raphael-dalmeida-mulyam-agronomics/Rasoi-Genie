@@ -199,17 +199,29 @@ SELECT is(
   'Owner can lock family cart'
 );
 
--- 12. Test Cart Lock Trigger: Writes rejected when locked
+-- 12. Test Cart Lock Trigger: Writes rejected when locked for non-owners
 SELECT throws_ok(
   format(
     'INSERT INTO public.family_cart_items (family_id, added_by, kit_id, quantity, servings, unit_price, status) VALUES (%L, %L, %L, 1, 2, 299, %L)',
     (SELECT id FROM public.families WHERE owner_id = 'test_owner'),
-    'test_owner',
+    'test_co_owner',
     'paneer_butter_masala',
     'approved'
   ),
-  'Family cart is locked by the owner',
-  'Direct writes rejected when cart is locked'
+  'Family cart is currently locked by the owner',
+  'Direct writes rejected when cart is locked for non-owners'
+);
+
+-- Owner can still insert when locked
+SELECT lives_ok(
+  format(
+    'INSERT INTO public.family_cart_items (family_id, added_by, kit_id, quantity, servings, unit_price, status) VALUES (%L, %L, %L, 1, 2, 299, %L)',
+    (SELECT id FROM public.families WHERE owner_id = 'test_owner'),
+    'test_owner',
+    'dal_makhani_kit',
+    'approved'
+  ),
+  'Owner can still add items to family cart when locked'
 );
 
 -- Unlock cart for subsequent tests

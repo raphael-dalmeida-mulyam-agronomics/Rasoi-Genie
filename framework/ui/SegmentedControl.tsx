@@ -1,4 +1,4 @@
-﻿import React from 'react';
+import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ViewStyle } from 'react-native';
 import { useTheme } from '../theme/ThemeContext';
 
@@ -29,7 +29,7 @@ export const SegmentedControl = <T extends string = string>({
         styles.container,
         {
           backgroundColor: colors.bgSubtle,
-          borderRadius: radii.xl,
+          borderRadius: radii.pill,
           borderColor: colors.borderLight,
         },
         style,
@@ -43,7 +43,7 @@ export const SegmentedControl = <T extends string = string>({
             style={[
               styles.segment,
               {
-                borderRadius: radii.lg,
+                borderRadius: radii.pill,
                 backgroundColor: isSelected ? colors.bgSurface : 'transparent',
                 ...(isSelected ? shadows.soft : {}),
               },

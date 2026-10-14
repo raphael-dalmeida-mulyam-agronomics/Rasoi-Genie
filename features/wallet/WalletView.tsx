@@ -30,14 +30,8 @@ type FilterTab = 'ALL' | 'CREDIT' | 'DEBIT' | 'REFUND';
 
 export const WalletView: React.FC<WalletViewProps> = ({ onBack, onNavigateToReferral }) => {
   const { colors, radii, shadows, isDark } = useTheme();
-  const {
-    balance,
-    availableBalance,
-    reservedBalance,
-    transactions,
-    isLoading,
-    refreshAll,
-  } = useWallet();
+  const { balance, availableBalance, reservedBalance, transactions, isLoading, refreshAll } =
+    useWallet();
 
   const [activeTab, setActiveTab] = useState<FilterTab>('ALL');
   const [refreshing, setRefreshing] = useState(false);
@@ -53,7 +47,8 @@ export const WalletView: React.FC<WalletViewProps> = ({ onBack, onNavigateToRefe
     if (activeTab === 'ALL') return true;
     if (activeTab === 'CREDIT') return txn.transaction_type === 'CREDIT';
     if (activeTab === 'DEBIT') return txn.transaction_type === 'DEBIT';
-    if (activeTab === 'REFUND') return txn.transaction_type === 'REFUND' || txn.source === 'ORDER_REFUND';
+    if (activeTab === 'REFUND')
+      return txn.transaction_type === 'REFUND' || txn.source === 'ORDER_REFUND';
     return true;
   });
 
@@ -147,9 +142,7 @@ export const WalletView: React.FC<WalletViewProps> = ({ onBack, onNavigateToRefe
               <Text style={[styles.breakdownValue, { color: colors.textPrimary }]}>
                 ₹{Math.round(balance?.breakdown?.promotional_credits || 0)}
               </Text>
-              <Text style={[styles.breakdownLabel, { color: colors.textSecondary }]}>
-                Promos
-              </Text>
+              <Text style={[styles.breakdownLabel, { color: colors.textSecondary }]}>Promos</Text>
             </View>
           </View>
         </View>
@@ -195,6 +188,8 @@ export const WalletView: React.FC<WalletViewProps> = ({ onBack, onNavigateToRefe
               {
                 backgroundColor: isDark ? '#064E3B' : '#ECFDF5',
                 borderColor: '#10B981',
+                borderRadius: radii.xl,
+                ...shadows.soft,
               },
             ]}
             onPress={onNavigateToReferral}
@@ -246,15 +241,22 @@ export const WalletView: React.FC<WalletViewProps> = ({ onBack, onNavigateToRefe
             ]}
           >
             <Text style={[styles.faqBullet, { color: colors.textSecondary }]}>
-              • <Text style={{ fontWeight: 'bold', color: colors.textPrimary }}>Automatic Application:</Text>{' '}
+              •{' '}
+              <Text style={{ fontWeight: 'bold', color: colors.textPrimary }}>
+                Automatic Application:
+              </Text>{' '}
               Use credits at checkout to instantly pay for up to 100% of your meal kits.
             </Text>
             <Text style={[styles.faqBullet, { color: colors.textSecondary }]}>
-              • <Text style={{ fontWeight: 'bold', color: colors.textPrimary }}>Refund Credits:</Text>{' '}
+              •{' '}
+              <Text style={{ fontWeight: 'bold', color: colors.textPrimary }}>Refund Credits:</Text>{' '}
               Refunded credits never expire and are consumed after promotional credits.
             </Text>
             <Text style={[styles.faqBullet, { color: colors.textSecondary }]}>
-              • <Text style={{ fontWeight: 'bold', color: colors.textPrimary }}>Smart Deductions:</Text>{' '}
+              •{' '}
+              <Text style={{ fontWeight: 'bold', color: colors.textPrimary }}>
+                Smart Deductions:
+              </Text>{' '}
               Credits expiring earliest are automatically used first to protect your savings.
             </Text>
           </View>
@@ -271,15 +273,18 @@ export const WalletView: React.FC<WalletViewProps> = ({ onBack, onNavigateToRefe
         </View>
 
         {/* Filter Tabs */}
-        <View style={[styles.tabsRow, { backgroundColor: colors.bgSurface }]}>
+        <View
+          style={[styles.tabsRow, { backgroundColor: colors.bgSubtle, borderRadius: radii.pill }]}
+        >
           {(['ALL', 'CREDIT', 'DEBIT', 'REFUND'] as FilterTab[]).map((tab) => (
             <TouchableOpacity
               key={tab}
               style={[
                 styles.tabBtn,
+                { borderRadius: radii.pill },
                 activeTab === tab && {
                   backgroundColor: colors.primary,
-                  borderRadius: radii.md,
+                  ...shadows.soft,
                 },
               ]}
               onPress={() => setActiveTab(tab)}
@@ -293,7 +298,13 @@ export const WalletView: React.FC<WalletViewProps> = ({ onBack, onNavigateToRefe
                   },
                 ]}
               >
-                {tab === 'ALL' ? 'All' : tab === 'CREDIT' ? 'Credits' : tab === 'DEBIT' ? 'Debits' : 'Refunds'}
+                {tab === 'ALL'
+                  ? 'All'
+                  : tab === 'CREDIT'
+                    ? 'Credits'
+                    : tab === 'DEBIT'
+                      ? 'Debits'
+                      : 'Refunds'}
               </Text>
             </TouchableOpacity>
           ))}
@@ -343,7 +354,8 @@ export const WalletView: React.FC<WalletViewProps> = ({ onBack, onNavigateToRefe
                     {
                       backgroundColor: colors.bgSurface,
                       borderColor: colors.borderLight,
-                      borderRadius: radii.lg,
+                      borderRadius: radii.xl,
+                      ...shadows.card,
                     },
                   ]}
                 >
@@ -357,8 +369,8 @@ export const WalletView: React.FC<WalletViewProps> = ({ onBack, onNavigateToRefe
                               ? '#064E3B'
                               : '#DEF7EC'
                             : isDark
-                            ? '#7F1D1D'
-                            : '#FDE8E8',
+                              ? '#7F1D1D'
+                              : '#FDE8E8',
                         },
                       ]}
                     >

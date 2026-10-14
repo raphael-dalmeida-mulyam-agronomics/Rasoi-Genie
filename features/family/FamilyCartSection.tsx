@@ -153,7 +153,9 @@ export const FamilyCartSection: React.FC<FamilyCartSectionProps> = ({ onStartChe
         >
           <Icon name="lock-closed" size={18} color={colors.warning || '#F59E0B'} />
           <Text style={[styles.bannerText, { color: colors.warning || '#D97706' }]}>
-            Family basket is locked by the owner. Edits are disabled.
+            {isOwner
+              ? 'Family basket is locked for members. As owner, you can still add or remove items.'
+              : 'Family basket is locked by the owner. Edits are disabled.'}
           </Text>
           {isOwner && (
             <TouchableOpacity onPress={() => toggleCartLock(false)}>
@@ -301,7 +303,7 @@ export const FamilyCartSection: React.FC<FamilyCartSectionProps> = ({ onStartChe
         ) : (
           cartState.approvedItems.map((item) => {
             const isMyItem = item.added_by === user?.uid;
-            const canModify = (isOwner || isMyItem) && !isCartLocked;
+            const canModify = isOwner || (isMyItem && !isCartLocked);
 
             return (
               <Card key={item.id} style={styles.itemCard}>

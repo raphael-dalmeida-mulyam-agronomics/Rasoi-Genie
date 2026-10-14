@@ -24,7 +24,7 @@ export const RecipeStepCard: React.FC<RecipeStepCardProps> = ({
   fallbackHeroImage,
 }) => {
   const { textSize } = useCookMode();
-  const { colors, radii, isDark } = useTheme();
+  const { colors, radii, shadows, isDark } = useTheme();
 
   const isLargeText = textSize === 'large';
   const titleFontSize = isLargeText ? 26 : 19;
@@ -42,14 +42,40 @@ export const RecipeStepCard: React.FC<RecipeStepCardProps> = ({
           backgroundColor: colors.bgSurface,
           borderColor: colors.borderLight,
           borderRadius: radii.xl,
+          ...shadows.card,
         },
       ]}
     >
       {/* Step Header Badge & Step Number */}
       <View style={styles.headerRow}>
-        <View style={[styles.stepNumberBadge, { backgroundColor: colors.primary }]}>
-          <Text style={styles.stepNumberBadgeText}>Step {stepIndex + 1}</Text>
+        <View style={styles.badgeGroup}>
+          <View
+            style={[
+              styles.stepNumberBadge,
+              { backgroundColor: colors.primary, borderRadius: radii.pill },
+            ]}
+          >
+            <Text style={styles.stepNumberBadgeText}>Step {stepIndex + 1}</Text>
+          </View>
+          {step.timerSeconds && step.timerSeconds > 0 ? (
+            <View
+              style={[
+                styles.timeBadge,
+                {
+                  backgroundColor: colors.bgSubtle,
+                  borderRadius: radii.pill,
+                  borderColor: colors.borderLight,
+                },
+              ]}
+            >
+              <Icon name="time" size={12} color={colors.textSecondary} />
+              <Text style={[styles.timeBadgeText, { color: colors.textSecondary }]}>
+                {Math.round(step.timerSeconds / 60)} min
+              </Text>
+            </View>
+          ) : null}
         </View>
+
         <Text style={[styles.stepsFraction, { color: colors.textMuted }]}>
           {stepIndex + 1} of {totalSteps}
         </Text>
@@ -72,7 +98,12 @@ export const RecipeStepCard: React.FC<RecipeStepCardProps> = ({
 
       {/* Step Photo (with fallback) */}
       {photoUri && (
-        <View style={[styles.photoContainer, { borderRadius: radii.lg }]}>
+        <View
+          style={[
+            styles.photoContainer,
+            { borderRadius: radii.lg, borderColor: colors.borderLight },
+          ]}
+        >
           <Image
             source={{ uri: photoUri }}
             style={styles.stepPhoto}
@@ -115,8 +146,9 @@ export const RecipeStepCard: React.FC<RecipeStepCardProps> = ({
             styles.tipCallout,
             {
               backgroundColor: isDark ? '#1C1917' : '#FEF3C7',
-              borderColor: colors.primary,
-              borderRadius: radii.md,
+              borderColor: colors.primary + '50',
+              borderRadius: radii.lg,
+              ...shadows.soft,
             },
           ]}
         >
@@ -136,7 +168,7 @@ export const RecipeStepCard: React.FC<RecipeStepCardProps> = ({
 const styles = StyleSheet.create({
   card: {
     marginHorizontal: 16,
-    padding: 18,
+    padding: 20,
     borderWidth: 1,
     marginBottom: 20,
   },
@@ -144,32 +176,51 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 10,
+    marginBottom: 12,
+  },
+  badgeGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   stepNumberBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
   },
   stepNumberBadgeText: {
     color: '#FFFFFF',
     fontSize: 12,
     fontWeight: '800',
-    letterSpacing: 0.5,
+    letterSpacing: 0.6,
+  },
+  timeBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderWidth: 1,
+  },
+  timeBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
   },
   stepsFraction: {
     fontSize: 12,
-    fontWeight: '600',
+    fontWeight: '700',
+    letterSpacing: 0.3,
   },
   stepTitle: {
     fontWeight: '800',
+    letterSpacing: -0.3,
     marginBottom: 14,
   },
   photoContainer: {
     overflow: 'hidden',
-    height: 200,
+    height: 240,
     width: '100%',
-    marginBottom: 14,
+    borderWidth: 1,
+    marginBottom: 16,
   },
   stepPhoto: {
     width: '100%',
@@ -177,20 +228,20 @@ const styles = StyleSheet.create({
   },
   stepInstruction: {
     fontWeight: '400',
-    marginBottom: 10,
+    marginBottom: 14,
   },
   tipCallout: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    padding: 12,
+    padding: 14,
     borderWidth: 1,
-    marginTop: 8,
-    gap: 10,
+    marginTop: 10,
+    gap: 12,
   },
   tipIconWrap: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: 2,
@@ -199,13 +250,14 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   tipTitle: {
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: '800',
     letterSpacing: 0.8,
-    marginBottom: 2,
+    marginBottom: 4,
   },
   tipContent: {
-    fontSize: 12,
-    lineHeight: 16,
+    fontSize: 13,
+    lineHeight: 18,
+    fontStyle: 'italic',
   },
 });

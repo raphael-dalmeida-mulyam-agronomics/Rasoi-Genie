@@ -11,7 +11,7 @@ interface CookingDeliveryStripProps {
 }
 
 export const CookingDeliveryStrip: React.FC<CookingDeliveryStripProps> = ({ order }) => {
-  const { colors, radii, isDark } = useTheme();
+  const { colors, radii, shadows, isDark } = useTheme();
   const [trackingModalVisible, setTrackingModalVisible] = useState(false);
 
   // Strip disappears when the kit is delivered
@@ -30,7 +30,8 @@ export const CookingDeliveryStrip: React.FC<CookingDeliveryStripProps> = ({ orde
           {
             backgroundColor: isDark ? '#1C1917' : '#FEF3C7',
             borderColor: colors.primary,
-            borderRadius: radii.md,
+            borderRadius: radii.xl,
+            ...shadows.soft,
           },
         ]}
       >
@@ -57,7 +58,7 @@ export const CookingDeliveryStrip: React.FC<CookingDeliveryStripProps> = ({ orde
 
         <TouchableOpacity
           testID="track-delivery-btn"
-          style={[styles.trackBtn, { borderColor: colors.primary }]}
+          style={[styles.trackBtn, { borderColor: colors.primary, borderRadius: radii.pill }]}
           onPress={() => setTrackingModalVisible(true)}
           accessibilityRole="button"
           accessibilityLabel="Track kit delivery status"

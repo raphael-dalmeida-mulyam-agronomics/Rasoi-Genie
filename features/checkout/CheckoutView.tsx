@@ -443,7 +443,7 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({ onBack, onOrderPlace
         customerEmail: email.trim() || undefined,
         deliveryAddress: deliveryAddressFormatted,
         deliverySlot: selectedSlot || DELIVERY_SLOTS[0]!.title,
-        items: effectiveItems.map((i) => ({
+        items: effectiveItems.map((i: any) => ({
           kitId: i.kit.id,
           name: i.kit.name,
           quantity: i.quantity,
@@ -452,6 +452,7 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({ onBack, onOrderPlace
           spiceLevel: i.spiceLevel,
           masalaSachets: i.kit.masalaSachets,
           imageUrl: i.kit.heroImage,
+          addedBy: i.addedBy,
         })),
         subtotal: effectiveSubtotal,
         discount: isFamilyCheckout ? 0 : discount,
@@ -466,6 +467,7 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({ onBack, onOrderPlace
         ...(isFamilyCheckout
           ? {
               familyId: family!.id,
+              familyOwnerId: family!.owner_id,
               payerId: user?.uid,
               familyOwnerName: family!.name,
               familyMemberNames: members.map((m) => m.display_name),
@@ -483,8 +485,9 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({ onBack, onOrderPlace
         id: sharedOrderId,
         orderId: sharedOrderId,
         addressTag: 'Home',
-        items: orderPayload.items.map((it) => ({
+        items: orderPayload.items.map((it: any) => ({
           id: it.kitId,
+          kitId: it.kitId,
           name: it.name,
           quantity: it.quantity,
           price: it.price,
@@ -492,6 +495,7 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({ onBack, onOrderPlace
           spiceLevel: it.spiceLevel,
           masalaSachets: it.masalaSachets || [],
           imageUrl: it.imageUrl,
+          addedBy: it.addedBy,
         })),
       });
 

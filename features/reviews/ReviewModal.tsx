@@ -131,8 +131,13 @@ export const ReviewModal: React.FC<ReviewModalProps> = ({
         );
         onReviewSubmitted?.();
         onClose();
-        // Return to home page to prevent multiple duplicate reviews
-        router.replace('/(tabs)' as any);
+        if (!onReviewSubmitted) {
+          if (router.canGoBack()) {
+            router.back();
+          } else {
+            router.replace('/(tabs)' as any);
+          }
+        }
         return;
       }
 
@@ -157,8 +162,13 @@ export const ReviewModal: React.FC<ReviewModalProps> = ({
       onReviewSubmitted?.();
       onClose();
 
-      // Return immediately to home page so the user cannot publish multiple reviews for the same meal kit
-      router.replace('/(tabs)' as any);
+      if (!onReviewSubmitted) {
+        if (router.canGoBack()) {
+          router.back();
+        } else {
+          router.replace('/(tabs)' as any);
+        }
+      }
     } finally {
       setSubmitting(false);
     }

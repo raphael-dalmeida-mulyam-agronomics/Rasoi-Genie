@@ -14,10 +14,18 @@ interface EnjoyYourMealViewProps {
   order: Order;
   kit: MealKit;
   onDone: () => void;
+  onBackToRecipe?: () => void;
+  onPrevStep?: () => void;
 }
 
-export const EnjoyYourMealView: React.FC<EnjoyYourMealViewProps> = ({ order, kit, onDone }) => {
-  const { colors, radii, isDark } = useTheme();
+export const EnjoyYourMealView: React.FC<EnjoyYourMealViewProps> = ({
+  order,
+  kit,
+  onDone,
+  onBackToRecipe,
+  onPrevStep,
+}) => {
+  const { colors, radii, shadows, isDark } = useTheme();
   const { reorderItems } = useCart();
   const { markKitCompleted, dismissCookMode } = useCookMode();
   const [reviewModalVisible, setReviewModalVisible] = useState(false);
@@ -57,7 +65,7 @@ export const EnjoyYourMealView: React.FC<EnjoyYourMealViewProps> = ({ order, kit
       >
         {/* Celebration Hero */}
         <View style={styles.celebrationHero}>
-          <View style={[styles.badgeCircle, { backgroundColor: '#10B981' }]}>
+          <View style={[styles.badgeCircle, { backgroundColor: '#10B981', ...shadows.soft }]}>
             <Icon name="checkmark" size={36} color="#FFFFFF" />
           </View>
           <Text style={[styles.heading, { color: colors.textPrimary }]}>Enjoy Your Meal!</Text>
@@ -69,7 +77,17 @@ export const EnjoyYourMealView: React.FC<EnjoyYourMealViewProps> = ({ order, kit
 
         {/* Hero Image */}
         {kit.heroImage ? (
-          <View style={[styles.dishImageWrap, { borderRadius: radii.xl }]}>
+          <View
+            style={[
+              styles.dishImageWrap,
+              {
+                borderRadius: radii.xl,
+                borderColor: colors.borderLight,
+                borderWidth: 1,
+                ...shadows.card,
+              },
+            ]}
+          >
             <Image source={{ uri: kit.heroImage }} style={styles.dishImage} resizeMode="cover" />
           </View>
         ) : null}
@@ -82,7 +100,8 @@ export const EnjoyYourMealView: React.FC<EnjoyYourMealViewProps> = ({ order, kit
               {
                 backgroundColor: isDark ? '#1C1917' : '#FEF3C7',
                 borderColor: colors.primary,
-                borderRadius: radii.md,
+                borderRadius: radii.lg,
+                ...shadows.soft,
               },
             ]}
           >
@@ -104,6 +123,19 @@ export const EnjoyYourMealView: React.FC<EnjoyYourMealViewProps> = ({ order, kit
             onPress={() => setReviewModalVisible(true)}
           />
 
+          {(onBackToRecipe || onPrevStep) && (
+            <Button
+              testID="back-to-recipe-btn"
+              title="Back to Recipe"
+              icon={<Icon name="arrow-back" size={16} color={colors.textPrimary} />}
+              variant="outline"
+              size="md"
+              onPress={onBackToRecipe || onPrevStep}
+              style={{ marginTop: 8 }}
+              accessibilityLabel="Go back to recipe steps"
+            />
+          )}
+
           <Button
             testID="reorder-dish-btn"
             title="Reorder This Meal Kit"
@@ -116,7 +148,7 @@ export const EnjoyYourMealView: React.FC<EnjoyYourMealViewProps> = ({ order, kit
 
           <Button
             testID="done-cooking-btn"
-            title="Done / Back to Explore"
+            title="Done / Back"
             variant="secondary"
             size="md"
             onPress={handleFinish}
@@ -134,7 +166,6 @@ export const EnjoyYourMealView: React.FC<EnjoyYourMealViewProps> = ({ order, kit
           await markKitCompleted(order.id, kit.id);
           await dismissCookMode(order.id);
           onDone();
-          router.replace('/(tabs)' as any);
         }}
       />
     </>
@@ -149,6 +180,9 @@ const styles = StyleSheet.create({
     padding: 20,
     paddingBottom: 40,
     alignItems: 'center',
+    maxWidth: 680,
+    width: '100%',
+    alignSelf: 'center',
   },
   celebrationHero: {
     alignItems: 'center',

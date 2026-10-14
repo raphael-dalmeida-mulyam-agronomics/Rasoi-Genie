@@ -188,8 +188,8 @@ export const FamilyHomeView: React.FC = () => {
                 {
                   backgroundColor: colors.bgSurface,
                   borderColor: colors.borderLight,
-                  borderRadius: radii.lg,
-                  ...shadows.soft,
+                  borderRadius: radii.xl,
+                  ...shadows.card,
                 },
               ]}
               onPress={() => setInviteAdultVisible(true)}
@@ -210,8 +210,8 @@ export const FamilyHomeView: React.FC = () => {
                 {
                   backgroundColor: colors.bgSurface,
                   borderColor: colors.borderLight,
-                  borderRadius: radii.lg,
-                  ...shadows.soft,
+                  borderRadius: radii.xl,
+                  ...shadows.card,
                 },
               ]}
               onPress={() => setAddDependentVisible(true)}
@@ -232,8 +232,8 @@ export const FamilyHomeView: React.FC = () => {
                 {
                   backgroundColor: colors.bgSurface,
                   borderColor: colors.borderLight,
-                  borderRadius: radii.lg,
-                  ...shadows.soft,
+                  borderRadius: radii.xl,
+                  ...shadows.card,
                 },
               ]}
               onPress={() => router.push('/family/links' as any)}
@@ -254,8 +254,8 @@ export const FamilyHomeView: React.FC = () => {
                 {
                   backgroundColor: colors.bgSurface,
                   borderColor: colors.borderLight,
-                  borderRadius: radii.lg,
-                  ...shadows.soft,
+                  borderRadius: radii.xl,
+                  ...shadows.card,
                 },
               ]}
               onPress={() => router.push('/family/approvals' as any)}

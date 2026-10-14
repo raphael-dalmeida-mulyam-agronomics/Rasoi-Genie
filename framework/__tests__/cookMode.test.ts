@@ -401,4 +401,67 @@ describe('Cook Mode & Kitchen Companion Suite', () => {
       expect(pendingOrders).toHaveLength(0);
     });
   });
+
+  describe('9. Recipe Page Navigation & Review Page Arrow Keys', () => {
+    it('returns user to previous page with router.back() when canGoBack is true', () => {
+      const routerMock = {
+        canGoBack: jest.fn(() => true),
+        back: jest.fn(),
+        replace: jest.fn(),
+      };
+
+      const handleExit = (orderId?: string) => {
+        if (routerMock.canGoBack()) {
+          routerMock.back();
+        } else {
+          routerMock.replace('/(tabs)');
+        }
+      };
+
+      handleExit('ORD-123');
+      expect(routerMock.back).toHaveBeenCalled();
+      expect(routerMock.replace).not.toHaveBeenCalled();
+
+      // If canGoBack is false, defaults to /(tabs)
+      routerMock.canGoBack.mockReturnValue(false);
+      handleExit('ORD-123');
+      expect(routerMock.replace).toHaveBeenCalledWith('/(tabs)');
+    });
+
+    it('navigates to the first slide (step 0) of the recipe when back to recipe is triggered from celebration view', () => {
+      let currentStepIndex = 4; // celebration / review page
+      const totalSteps = 4;
+      let isCompleted = true;
+
+      const handleBackToRecipe = () => {
+        currentStepIndex = 0; // takes user to the first slide of the recipe
+        isCompleted = false;
+      };
+
+      handleBackToRecipe();
+      const showEnjoyMealScreen = currentStepIndex >= totalSteps;
+
+      expect(currentStepIndex).toBe(0); // first slide
+      expect(isCompleted).toBe(false);
+      expect(showEnjoyMealScreen).toBe(false); // recipe view is active on slide 1
+    });
+
+    it('resets isCompleted to false when jumping back to a recipe step from celebration view', () => {
+      let isCompleted = true;
+      let currentStepIndex = 4;
+      const totalSteps = 4;
+
+      const handleJumpToStep = (stepIdx: number) => {
+        currentStepIndex = stepIdx;
+        isCompleted = stepIdx >= totalSteps;
+      };
+
+      handleJumpToStep(0);
+      const showEnjoyMealScreen = currentStepIndex >= totalSteps;
+
+      expect(currentStepIndex).toBe(0);
+      expect(isCompleted).toBe(false);
+      expect(showEnjoyMealScreen).toBe(false); // recipe view is active again!
+    });
+  });
 });

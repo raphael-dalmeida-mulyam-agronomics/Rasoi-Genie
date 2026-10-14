@@ -10,7 +10,7 @@ interface WhatsInYourBoxViewProps {
 }
 
 export const WhatsInYourBoxView: React.FC<WhatsInYourBoxViewProps> = ({ kit }) => {
-  const { colors, radii, isDark } = useTheme();
+  const { colors, radii, shadows, isDark } = useTheme();
   const [expanded, setExpanded] = useState(false);
 
   const allergensText =
@@ -24,7 +24,8 @@ export const WhatsInYourBoxView: React.FC<WhatsInYourBoxViewProps> = ({ kit }) =
         {
           backgroundColor: colors.bgSurface,
           borderColor: colors.borderLight,
-          borderRadius: radii.lg,
+          borderRadius: radii.xl,
+          ...shadows.card,
         },
       ]}
     >
@@ -56,7 +57,7 @@ export const WhatsInYourBoxView: React.FC<WhatsInYourBoxViewProps> = ({ kit }) =
           {
             backgroundColor: isDark ? '#1E293B' : colors.bgSubtle,
             borderColor: colors.borderLight,
-            borderRadius: radii.md,
+            borderRadius: radii.pill,
           },
         ]}
       >

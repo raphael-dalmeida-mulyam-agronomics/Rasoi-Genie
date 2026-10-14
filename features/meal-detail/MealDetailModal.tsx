@@ -11,6 +11,7 @@ import {
   Animated,
   Easing,
   Platform,
+  Alert,
 } from 'react-native';
 import {
   MealKit,
@@ -61,7 +62,7 @@ export const MealDetailModal: React.FC<MealDetailModalProps> = ({
   const [selectedSpiceLevel, setSelectedSpiceLevel] = useState<string>(kit?.spiceLevel || 'Medium');
 
   // Family integration
-  const { family, isDependent, addFamilyItem } = useFamily();
+  const { family, isOwner, isDependent, isCartLocked, addFamilyItem } = useFamily();
   const [targetCart, setTargetCart] = useState<'personal' | 'family'>('personal');
 
   // Animation values for smooth entrance and drop-down exit
@@ -167,7 +168,11 @@ export const MealDetailModal: React.FC<MealDetailModalProps> = ({
   const handleAddToCart = async () => {
     if (!kit) return;
     if (isDependent || targetCart === 'family') {
-      await addFamilyItem(kit, quantity, selectedServings, selectedSpiceLevel);
+      const res = await addFamilyItem(kit, quantity, selectedServings, selectedSpiceLevel);
+      if (res && !res.success) {
+        Alert.alert('Cannot Add Item', res.error || 'Failed to add item to family basket.');
+        return;
+      }
     } else {
       addItem(kit, quantity, selectedServings, selectedSpiceLevel);
     }
@@ -971,7 +976,10 @@ export const MealDetailModal: React.FC<MealDetailModalProps> = ({
                 <SegmentedControl
                   options={[
                     { label: 'Personal Cart', value: 'personal' },
-                    { label: 'Family Cart', value: 'family' },
+                    {
+                      label: isCartLocked && !isOwner ? 'Family Cart (Locked)' : 'Family Cart',
+                      value: 'family',
+                    },
                   ]}
                   selectedValue={targetCart}
                   onSelect={(val) => setTargetCart(val as 'personal' | 'family')}
@@ -998,15 +1006,36 @@ export const MealDetailModal: React.FC<MealDetailModalProps> = ({
                   kit.isOutOfStock
                     ? 'Out of Stock'
                     : isDependent
-                      ? 'Add to family cart (needs approval)'
+                      ? isCartLocked && !isOwner
+                        ? 'Family Basket Locked by Owner'
+                        : 'Add to family cart (needs approval)'
                       : targetCart === 'family'
-                        ? 'Add to Family Cart'
+                        ? isCartLocked && !isOwner
+                          ? 'Family Basket Locked'
+                          : 'Add to Family Cart'
                         : 'Add to Cart'
                 }
-                icon={kit.isOutOfStock ? undefined : <Icon name="cart" size={18} color="#FFFFFF" />}
-                style={{ flex: 1.4, opacity: kit.isOutOfStock ? 0.6 : 1 }}
+                icon={
+                  kit.isOutOfStock ||
+                  (isCartLocked &&
+                    !isOwner &&
+                    (isDependent || targetCart === 'family')) ? undefined : (
+                    <Icon name="cart" size={18} color="#FFFFFF" />
+                  )
+                }
+                style={{
+                  flex: 1.4,
+                  opacity:
+                    kit.isOutOfStock ||
+                    (isCartLocked && !isOwner && (isDependent || targetCart === 'family'))
+                      ? 0.6
+                      : 1,
+                }}
                 size="lg"
-                disabled={kit.isOutOfStock}
+                disabled={
+                  kit.isOutOfStock ||
+                  (isCartLocked && !isOwner && (isDependent || targetCart === 'family'))
+                }
                 onPress={handleAddToCart}
               />
             </View>

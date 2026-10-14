@@ -342,19 +342,30 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql STABLE;
 
--- 2.3 Cart Lock Trigger: Rejects writes when cart is locked
+-- 2.3 Cart Lock Trigger: Rejects writes when cart is locked (allows family owner)
 CREATE OR REPLACE FUNCTION public.check_family_cart_locked()
 RETURNS TRIGGER AS $$
 DECLARE
   v_family_id UUID;
   v_is_locked BOOLEAN;
+  v_owner_id TEXT;
+  v_caller TEXT;
 BEGIN
   v_family_id := COALESCE(NEW.family_id, OLD.family_id);
-  SELECT is_locked INTO v_is_locked FROM public.families WHERE id = v_family_id;
+  SELECT is_locked, owner_id INTO v_is_locked, v_owner_id FROM public.families WHERE id = v_family_id;
   IF v_is_locked IS TRUE THEN
+    v_caller := public.get_caller_id();
+    -- If caller is the family owner, allow modification (adding, updating, or removing items)
+    IF v_caller IS NOT NULL AND v_caller = v_owner_id THEN
+      RETURN COALESCE(NEW, OLD);
+    END IF;
+    -- If caller could not be determined from auth context, check if inserted row was added by owner
+    IF v_caller IS NULL AND TG_OP = 'INSERT' AND NEW.added_by = v_owner_id THEN
+      RETURN NEW;
+    END IF;
     RAISE EXCEPTION 'Family cart is currently locked by the owner';
   END IF;
-  RETURN NEW;
+  RETURN COALESCE(NEW, OLD);
 END;
 $$ LANGUAGE plpgsql;
 
@@ -1615,6 +1626,11 @@ BEGIN
 
   IF v_member IS NULL THEN
     RETURN json_build_object('success', false, 'error', 'You are not a member of this family');
+  END IF;
+
+  -- Cart lock check: owner can add items even when locked, but other members cannot
+  IF EXISTS (SELECT 1 FROM public.families WHERE id = p_family_id AND is_locked = true AND owner_id != v_caller) THEN
+    RETURN json_build_object('success', false, 'error', 'Family cart is currently locked by the owner');
   END IF;
 
   -- Dependents items go to pending approval; Adult items are approved immediately

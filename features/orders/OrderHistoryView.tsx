@@ -350,15 +350,32 @@ export const OrderHistoryView: React.FC = () => {
         ) : null}
 
         <View style={styles.itemsList}>
-          {order.items.map((it, idx) => (
-            <Text
-              key={idx}
-              style={[styles.itemLine, { color: colors.textSecondary }]}
-              numberOfLines={1}
-            >
-              • {it.quantity}x {it.name}
-            </Text>
-          ))}
+          {(() => {
+            const isFamilyOrder = Boolean(order.familyId);
+            const isFamilyOwner = Boolean(
+              isFamilyOrder &&
+              ((user?.uid &&
+                (order.userId === user.uid || (order as any).familyOwnerId === user.uid)) ||
+                (family && user?.uid && family.owner_id === user.uid)),
+            );
+            const displayItems =
+              !isFamilyOrder || isFamilyOwner
+                ? order.items
+                : order.items.filter((it: any) => (it.addedBy || it.added_by) === user?.uid)
+                      .length > 0
+                  ? order.items.filter((it: any) => (it.addedBy || it.added_by) === user?.uid)
+                  : order.items;
+
+            return displayItems.map((it, idx) => (
+              <Text
+                key={idx}
+                style={[styles.itemLine, { color: colors.textSecondary }]}
+                numberOfLines={1}
+              >
+                • {it.quantity}x {it.name}
+              </Text>
+            ));
+          })()}
         </View>
 
         <View style={[styles.cardDivider, { backgroundColor: colors.borderLight }]} />
@@ -859,9 +876,9 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   livePulseBanner: {
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 14,
     marginVertical: 8,
   },
   pulseText: {
@@ -897,8 +914,8 @@ const styles = StyleSheet.create({
   },
   cancelledAlertBanner: {
     paddingVertical: 8,
-    paddingHorizontal: 10,
-    borderRadius: 8,
+    paddingHorizontal: 12,
+    borderRadius: 14,
     borderWidth: 1,
     marginVertical: 8,
   },

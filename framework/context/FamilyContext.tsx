@@ -34,6 +34,7 @@ import {
   rejectItem,
   subscribeToFamilyMembersRealtime,
   subscribeToFamilyLinksRealtime,
+  subscribeToFamilyRealtime,
   setCartLock,
   beginCheckoutHold,
   releaseCheckoutHold,
@@ -308,9 +309,15 @@ export const FamilyProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     };
   }, [family?.id]);
 
-  // Realtime subscription to family members and join links
+  // Realtime subscription to family (including lock/unlock state), members, and join links
   useEffect(() => {
     if (!family?.id) return;
+
+    const unsubFamily = subscribeToFamilyRealtime(family.id, (updatedFam) => {
+      if (updatedFam) {
+        setFamily((prev) => (prev ? { ...prev, ...updatedFam } : prev));
+      }
+    });
 
     const unsubMembers = subscribeToFamilyMembersRealtime(family.id, () => {
       fetchFamilyMembers(family.id).then((memList) => setMembers(memList));
@@ -321,6 +328,7 @@ export const FamilyProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     });
 
     return () => {
+      unsubFamily();
       unsubMembers();
       unsubLinks();
     };
@@ -500,7 +508,7 @@ export const FamilyProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   // Cart operations
   const addFamilyItem = async (kit: MealKit, quantity = 1, servings = 2, spiceLevel = 'Medium') => {
     if (!family || !effectiveUserId) return { success: false, error: 'No active family' };
-    if (family.is_locked) {
+    if (family.is_locked && !isOwner) {
       return { success: false, error: 'Family cart is currently locked by the owner' };
     }
 
@@ -535,7 +543,7 @@ export const FamilyProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     spiceLevel?: string,
   ) => {
     if (!family || !effectiveUserId) return { success: false, error: 'No active family' };
-    if (family.is_locked) {
+    if (family.is_locked && !isOwner) {
       return { success: false, error: 'Family cart is locked by owner' };
     }
 
@@ -568,7 +576,7 @@ export const FamilyProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   const removeFamilyItem = async (itemId: string) => {
     if (!family || !effectiveUserId) return { success: false, error: 'No active family' };
-    if (family.is_locked) {
+    if (family.is_locked && !isOwner) {
       return { success: false, error: 'Family cart is locked by owner' };
     }
 

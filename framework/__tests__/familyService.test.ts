@@ -19,6 +19,7 @@ import {
   approveItem,
   rejectItem,
   setCartLock,
+  subscribeToFamilyRealtime,
   beginCheckoutHold,
   releaseCheckoutHold,
   placeFamilyOrder,
@@ -250,18 +251,24 @@ describe('Family Service Unit & Integration Tests', () => {
       expect(p3.error).toContain(`Maximum ${MAX_CO_OWNERS} co-owners`);
     });
 
-    it('cart lock prevents adding or editing items', async () => {
+    it('cart lock prevents adding or editing items for other members, but allows owner', async () => {
       const famRes = await createFamily('Sharma Clan', 'Aarav', 'owner_1');
       const fid = famRes.family!.id;
 
+      const link = await createJoinLink(fid, 'child', 'Golu', true, 'v1.0', 'owner_1');
+      await redeemJoinLink(link.rawToken!, 'member_1');
+
       await setCartLock(fid, true, 'owner_1');
 
-      const addRes = await addOwnItem(fid, 'biryani_kit', 1, 2, 'Medium', 300, 'owner_1');
+      const addRes = await addOwnItem(fid, 'biryani_kit', 1, 2, 'Medium', 300, 'member_1');
       expect(addRes.success).toBe(false);
       expect(addRes.error).toContain('locked');
 
+      const ownerAdd = await addOwnItem(fid, 'biryani_kit', 1, 2, 'Medium', 300, 'owner_1');
+      expect(ownerAdd.success).toBe(true);
+
       await setCartLock(fid, false, 'owner_1');
-      const addRes2 = await addOwnItem(fid, 'biryani_kit', 1, 2, 'Medium', 300, 'owner_1');
+      const addRes2 = await addOwnItem(fid, 'biryani_kit', 1, 2, 'Medium', 300, 'member_1');
       expect(addRes2.success).toBe(true);
     });
 
@@ -321,6 +328,53 @@ describe('Family Service Unit & Integration Tests', () => {
 
       const unrelated = await areRelated('owner_1', 'stranger_uid');
       expect(unrelated).toBe(false);
+    });
+  });
+
+  describe('Cart Lock Enforcement: Owner vs Non-Owner', () => {
+    it('allows owner to add items when locked, but blocks other members', async () => {
+      const famRes = await createFamily('Kapoor Clan', 'Rishi', 'owner_1');
+      const fid = famRes.family!.id;
+
+      // Add a non-owner member
+      const link = await createJoinLink(fid, 'child', 'Ranbir', true, 'v1.0', 'owner_1');
+      await redeemJoinLink(link.rawToken!, 'member_1');
+
+      // Lock the cart
+      const lockRes = await setCartLock(fid, true, 'owner_1');
+      expect(lockRes.success).toBe(true);
+
+      // Non-owner member attempts to add item -> blocked
+      const nonOwnerAdd = await addOwnItem(fid, 'paneer_tikka', 1, 2, 'Mild', 250, 'member_1');
+      expect(nonOwnerAdd.success).toBe(false);
+      expect(nonOwnerAdd.error).toMatch(/locked by the owner/i);
+
+      // Owner attempts to add item -> succeeds
+      const ownerAdd = await addOwnItem(fid, 'butter_chicken', 1, 2, 'Medium', 350, 'owner_1');
+      expect(ownerAdd.success).toBe(true);
+      expect(ownerAdd.itemId).toBeDefined();
+    });
+
+    it('broadcasts async/realtime lock and unlock updates to subscribers without reloading', async () => {
+      const famRes = await createFamily('Mehta Family', 'Anita', 'owner_mehta');
+      const fid = famRes.family!.id;
+
+      const receivedUpdates: boolean[] = [];
+      const unsubscribe = subscribeToFamilyRealtime(fid, (updatedFam) => {
+        if (updatedFam?.is_locked !== undefined) {
+          receivedUpdates.push(updatedFam.is_locked);
+        }
+      });
+
+      // Owner locks basket -> subscriber receives update instantly
+      await setCartLock(fid, true, 'owner_mehta');
+      expect(receivedUpdates).toContain(true);
+
+      // Owner unlocks basket -> subscriber receives update instantly
+      await setCartLock(fid, false, 'owner_mehta');
+      expect(receivedUpdates).toContain(false);
+
+      unsubscribe();
     });
   });
 });

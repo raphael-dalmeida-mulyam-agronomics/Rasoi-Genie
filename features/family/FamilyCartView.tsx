@@ -28,7 +28,11 @@ import { Icon } from '../../framework/ui/Icon';
 import { FamilyCartItemRow } from './FamilyCartItemRow';
 import { CheckoutHoldBanner } from './CheckoutHoldBanner';
 
-export const FamilyCartView: React.FC = () => {
+export interface FamilyCartViewProps {
+  onProceedToCheckout?: () => void;
+}
+
+export const FamilyCartView: React.FC<FamilyCartViewProps> = ({ onProceedToCheckout }) => {
   const { colors, radii, shadows, isDark } = useTheme();
   const { width } = useWindowDimensions();
   const isWebSplit = width >= 768;
@@ -74,7 +78,7 @@ export const FamilyCartView: React.FC = () => {
 
   // Handle Checkout initiation
   const handleProceedToCheckout = async () => {
-    if (isCartLocked) {
+    if (isCartLocked && !isOwner) {
       Alert.alert('Cart Locked', 'The family basket is currently locked by the owner.');
       return;
     }
@@ -97,7 +101,14 @@ export const FamilyCartView: React.FC = () => {
         return;
       }
       // Navigate to checkout with family mode active
-      router.push('/(tabs)/cart' as any);
+      if (onProceedToCheckout) {
+        onProceedToCheckout();
+      } else {
+        router.push({
+          pathname: '/(tabs)/cart',
+          params: { step: 'checkout', type: 'family' },
+        } as any);
+      }
     } finally {
       setIsProcessingCheckout(false);
     }
@@ -209,7 +220,11 @@ export const FamilyCartView: React.FC = () => {
       {isCartLocked && (
         <View style={[styles.statusStrip, { backgroundColor: '#FEE2E2', borderColor: '#EF4444' }]}>
           <Icon name="lock" size={16} color="#DC2626" style={{ marginRight: 6 }} />
-          <Text style={styles.statusStripText}>{t.lockedBanner(family?.name || 'Owner')}</Text>
+          <Text style={styles.statusStripText}>
+            {isOwner
+              ? 'Family basket is locked for other members. You can still add, edit, or remove items.'
+              : t.lockedBanner(family?.name || 'Owner')}
+          </Text>
         </View>
       )}
 
@@ -271,14 +286,12 @@ export const FamilyCartView: React.FC = () => {
             <View style={styles.groupItemsList}>
               {memberItems.map((item) => {
                 const isOwnItem = item.added_by === currentMember?.user_id;
-                const canEditItem =
-                  !isCartLocked &&
-                  (isOwner ? can(role, 'edit_any_item') : isOwnItem && can(role, 'edit_own_item'));
-                const canRemoveItem =
-                  !isCartLocked &&
-                  (isOwner
-                    ? can(role, 'remove_any_item')
-                    : isOwnItem && can(role, 'remove_own_item'));
+                const canEditItem = isOwner
+                  ? can(role, 'edit_any_item')
+                  : !isCartLocked && isOwnItem && can(role, 'edit_own_item');
+                const canRemoveItem = isOwner
+                  ? can(role, 'remove_any_item')
+                  : !isCartLocked && isOwnItem && can(role, 'remove_own_item');
                 const canApproveItem = isOwner && can(role, 'approve_item');
 
                 return (
@@ -416,7 +429,7 @@ export const FamilyCartView: React.FC = () => {
             onPress={handleProceedToCheckout}
             disabled={
               isProcessingCheckout ||
-              isCartLocked ||
+              (isCartLocked && !isOwner) ||
               cartState.approvedItems.length === 0 ||
               isHeldByOther
             }

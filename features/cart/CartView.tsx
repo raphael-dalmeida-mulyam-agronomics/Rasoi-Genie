@@ -10,7 +10,7 @@ import {
   Modal,
   Alert,
 } from 'react-native';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useCart, PaymentMethod } from '../../framework/context/CartContext';
 import { usePreferences, AddressItem } from '../../framework/context/PreferencesContext';
 import { useAuth } from '../../framework/context/AuthContext';
@@ -29,6 +29,7 @@ import { useFamily } from '../../framework/context/FamilyContext';
 import { getOrCreateGuestId } from '../../framework/services/guestService';
 import { FamilyCartView } from '../family/FamilyCartView';
 import { FamilyManagementView } from '../family/FamilyManagementView';
+import { useCookMode } from '../../framework/context/CookModeContext';
 
 const DELIVERY_SLOTS = [
   { id: 'slot-1', title: '6:00 PM - 8:00 PM (Dinner)', tag: 'Fastest' },
@@ -91,6 +92,17 @@ export const CartView: React.FC = () => {
     cartState: familyCartState,
   } = useFamily();
   const [familyHubVisible, setFamilyHubVisible] = useState(false);
+  const { activeOrders } = useCookMode();
+
+  const params = useLocalSearchParams<{ step?: string; type?: string }>();
+  React.useEffect(() => {
+    if (params?.step === 'checkout') {
+      if (params?.type === 'family') {
+        setActiveCartType('family');
+      }
+      setFlowStep('checkout');
+    }
+  }, [params?.step, params?.type, setActiveCartType]);
 
   const activeAddress =
     addresses.find((a) => a.id === selectedAddressId) || defaultAddress || addresses[0];
@@ -214,8 +226,8 @@ export const CartView: React.FC = () => {
     );
   }
 
-  // Dedicated checkout step
-  if (flowStep === 'checkout' && items.length > 0) {
+  // Dedicated checkout step (supports both personal and family cart checkout)
+  if (flowStep === 'checkout') {
     return (
       <CheckoutView
         onBack={() => setFlowStep('cart')}
@@ -248,7 +260,7 @@ export const CartView: React.FC = () => {
             />
           </View>
         )}
-        <FamilyCartView />
+        <FamilyCartView onProceedToCheckout={() => setFlowStep('checkout')} />
       </View>
     );
   }
@@ -257,33 +269,145 @@ export const CartView: React.FC = () => {
   if (items.length === 0 && !confirmedOrder) {
     return (
       <View style={[styles.emptyContainer, { backgroundColor: colors.bgPrimary }]}>
-        {family && !isDependent && (
-          <View style={{ width: '100%', maxWidth: 400, paddingHorizontal: 16, marginBottom: 20 }}>
-            <SegmentedControl
-              options={[
-                { label: `Personal (0)`, value: 'personal' },
-                { label: `Family (${familyCartState.approvedCount})`, value: 'family' },
+        <ScrollView
+          style={{ width: '100%' }}
+          contentContainerStyle={{
+            alignItems: 'center',
+            paddingVertical: 16,
+            paddingHorizontal: 16,
+          }}
+          showsVerticalScrollIndicator={false}
+        >
+          {family && !isDependent && (
+            <View style={{ width: '100%', maxWidth: 440, marginBottom: 16 }}>
+              <SegmentedControl
+                options={[
+                  { label: `Personal (0)`, value: 'personal' },
+                  { label: `Family (${familyCartState.approvedCount})`, value: 'family' },
+                ]}
+                selectedValue={activeCartType}
+                onSelect={(val) => setActiveCartType(val as 'personal' | 'family')}
+              />
+            </View>
+          )}
+
+          {/* If there is an active placed order, show meal kits ready to cook */}
+          {activeOrders && activeOrders.length > 0 && (
+            <View
+              testID="cart-active-order-section"
+              style={[
+                styles.activeOrderCard,
+                {
+                  backgroundColor: colors.bgSurface,
+                  borderColor: colors.primary,
+                  borderRadius: radii.xl,
+                  ...shadows.card,
+                },
               ]}
-              selectedValue={activeCartType}
-              onSelect={(val) => setActiveCartType(val as 'personal' | 'family')}
-            />
+            >
+              <View style={styles.activeOrderHeader}>
+                <View
+                  style={[styles.activeOrderIconCircle, { backgroundColor: colors.primary + '20' }]}
+                >
+                  <Icon name="restaurant" size={20} color={colors.primary} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.activeOrderTitle, { color: colors.textPrimary }]}>
+                    Recent Placed Order • Ready to Cook!
+                  </Text>
+                  <Text style={[styles.activeOrderSubtitle, { color: colors.textSecondary }]}>
+                    Tap any meal kit below to open its recipe:
+                  </Text>
+                </View>
+                <Badge label={activeOrders[0]?.status || 'Placed'} variant="success" size="sm" />
+              </View>
+
+              {activeOrders[0]?.items?.map((kitItem: any, kIdx: number) => {
+                const kId = kitItem.kitId || kitItem.id || `placed-kit-${kIdx}`;
+                return (
+                  <TouchableOpacity
+                    key={kIdx}
+                    testID={`cart-placed-mealkit-${kId}`}
+                    style={[
+                      styles.activeOrderKitRow,
+                      {
+                        backgroundColor: colors.bgSubtle,
+                        borderRadius: radii.md,
+                        borderColor: colors.borderLight,
+                      },
+                    ]}
+                    onPress={() => {
+                      if (!activeOrders[0]) return;
+                      router.push({
+                        pathname: '/cook/[orderId]' as any,
+                        params: {
+                          orderId: activeOrders[0].id,
+                          kitId: kitItem.kitId || kitItem.id,
+                        },
+                      });
+                    }}
+                    activeOpacity={0.7}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Open recipe for ${kitItem.name || kitItem.title}`}
+                  >
+                    {kitItem.heroImage || kitItem.imageUrl ? (
+                      <Image
+                        source={{ uri: kitItem.heroImage || kitItem.imageUrl }}
+                        style={styles.activeKitThumb}
+                      />
+                    ) : (
+                      <View
+                        style={[
+                          styles.activeKitThumb,
+                          {
+                            backgroundColor: colors.primary + '20',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                          },
+                        ]}
+                      >
+                        <Icon name="restaurant" size={18} color={colors.primary} />
+                      </View>
+                    )}
+                    <View style={{ flex: 1, paddingRight: 8 }}>
+                      <Text
+                        style={[styles.activeKitName, { color: colors.textPrimary }]}
+                        numberOfLines={1}
+                      >
+                        {kitItem.name || kitItem.title || 'Gourmet Meal Kit'}
+                      </Text>
+                      <Text style={[styles.activeKitMeta, { color: colors.textSecondary }]}>
+                        Qty: {kitItem.quantity} • Tap to view recipe
+                      </Text>
+                    </View>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                      <Text style={{ fontSize: 12, fontWeight: '700', color: colors.primary }}>
+                        Open Recipe
+                      </Text>
+                      <Icon name="arrow-forward" size={14} color={colors.primary} />
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          )}
+
+          <View style={{ marginBottom: 16, marginTop: activeOrders.length > 0 ? 16 : 30 }}>
+            <Icon name="basket" size={64} color={colors.primary} />
           </View>
-        )}
-        <View style={{ marginBottom: 16 }}>
-          <Icon name="basket" size={64} color={colors.primary} />
-        </View>
-        <Text style={[styles.emptyBasketTitle, { color: colors.textPrimary }]}>
-          Your Cooking Basket is Empty
-        </Text>
-        <Text style={[styles.emptyBasketSubtitle, { color: colors.textSecondary }]}>
-          Discover restaurant-grade meal kits with authentic pre-portioned masalas!
-        </Text>
-        <Button
-          title="Explore Gourmet Meal Kits"
-          icon={<Icon name="restaurant" size={18} color="#FFFFFF" />}
-          style={{ marginTop: 20 }}
-          onPress={() => router.push('/' as any)}
-        />
+          <Text style={[styles.emptyBasketTitle, { color: colors.textPrimary }]}>
+            Your Cooking Basket is Empty
+          </Text>
+          <Text style={[styles.emptyBasketSubtitle, { color: colors.textSecondary }]}>
+            Discover restaurant-grade meal kits with authentic pre-portioned masalas!
+          </Text>
+          <Button
+            title="Explore Gourmet Meal Kits"
+            icon={<Icon name="restaurant" size={18} color="#FFFFFF" />}
+            style={{ marginTop: 20 }}
+            onPress={() => router.push('/' as any)}
+          />
+        </ScrollView>
       </View>
     );
   }
@@ -347,12 +471,18 @@ export const CartView: React.FC = () => {
                   style={[
                     styles.itemRow,
                     {
-                      backgroundColor: colors.bgSubtle,
-                      borderRadius: radii.lg,
+                      backgroundColor: colors.bgSurface,
+                      borderRadius: radii.xl,
+                      borderColor: colors.borderLight,
+                      borderWidth: 1,
+                      ...shadows.card,
                     },
                   ]}
                 >
-                  <Image source={{ uri: kit.heroImage }} style={styles.itemThumb} />
+                  <Image
+                    source={{ uri: kit.heroImage }}
+                    style={[styles.itemThumb, { borderRadius: radii.lg }]}
+                  />
                   <View style={styles.itemInfo}>
                     <View style={styles.itemHeader}>
                       <Text
@@ -384,10 +514,10 @@ export const CartView: React.FC = () => {
                           flexDirection: 'row',
                           alignItems: 'center',
                           gap: 4,
-                          backgroundColor: colors.bgSurface,
-                          paddingHorizontal: 7,
-                          paddingVertical: 2,
-                          borderRadius: 6,
+                          backgroundColor: colors.bgSubtle,
+                          paddingHorizontal: 8,
+                          paddingVertical: 3,
+                          borderRadius: radii.pill,
                           borderWidth: 1,
                           borderColor: colors.borderLight,
                         }}
@@ -405,12 +535,12 @@ export const CartView: React.FC = () => {
                             flexDirection: 'row',
                             alignItems: 'center',
                             gap: 4,
-                            backgroundColor: colors.bgSurface,
-                            paddingHorizontal: 7,
-                            paddingVertical: 2,
-                            borderRadius: 6,
+                            backgroundColor: colors.primaryLight,
+                            paddingHorizontal: 8,
+                            paddingVertical: 3,
+                            borderRadius: radii.pill,
                             borderWidth: 1,
-                            borderColor: colors.borderLight,
+                            borderColor: colors.primary + '30',
                           }}
                         >
                           <Icon name="flame" size={12} color={colors.primary} />
@@ -440,7 +570,13 @@ export const CartView: React.FC = () => {
             <View
               style={[
                 styles.sectionCard,
-                { backgroundColor: colors.bgSurface, borderRadius: radii.xl },
+                {
+                  backgroundColor: colors.bgSurface,
+                  borderRadius: radii.xl,
+                  borderColor: colors.borderLight,
+                  borderWidth: 1,
+                  ...shadows.card,
+                },
               ]}
             >
               <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
@@ -1410,5 +1546,54 @@ const styles = StyleSheet.create({
   tabSwitchText: {
     fontSize: 13,
     fontWeight: '700',
+  },
+  activeOrderCard: {
+    width: '100%',
+    maxWidth: 440,
+    padding: 16,
+    borderWidth: 1.5,
+    marginBottom: 20,
+  },
+  activeOrderHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 12,
+  },
+  activeOrderIconCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  activeOrderTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  activeOrderSubtitle: {
+    fontSize: 11,
+    marginTop: 2,
+  },
+  activeOrderKitRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 10,
+    borderWidth: 1,
+    marginTop: 8,
+  },
+  activeKitThumb: {
+    width: 44,
+    height: 44,
+    borderRadius: 8,
+    marginRight: 10,
+  },
+  activeKitName: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  activeKitMeta: {
+    fontSize: 11,
+    marginTop: 2,
   },
 });

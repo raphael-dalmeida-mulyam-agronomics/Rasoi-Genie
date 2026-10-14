@@ -94,27 +94,27 @@ export const Button: React.FC<ButtonProps> = ({
             paddingVertical: 8,
             paddingHorizontal: 14,
             minHeight: 36,
-            borderRadius: radii.md,
+            borderRadius: radii.pill,
           },
           text: { fontSize: 13, fontWeight: '700' },
         };
       case 'lg':
         return {
           container: {
-            paddingVertical: 16,
+            paddingVertical: 15,
             paddingHorizontal: 24,
-            minHeight: 54,
-            borderRadius: radii.lg,
+            minHeight: 52,
+            borderRadius: radii.xl,
           },
-          text: { fontSize: 17, fontWeight: '800' },
+          text: { fontSize: 16, fontWeight: '800' },
         };
       default:
         return {
           container: {
             paddingVertical: 12,
-            paddingHorizontal: 18,
+            paddingHorizontal: 20,
             minHeight: 46,
-            borderRadius: radii.lg,
+            borderRadius: radii.xl,
           },
           text: { fontSize: 15, fontWeight: '700' },
         };

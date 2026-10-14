@@ -63,9 +63,9 @@ const SAFFRON_LIGHT: ThemeColors = {
   accentLight: '#E0F2FE',
   accentDark: '#164E63',
 
-  bgPrimary: '#FFFDF9',
+  bgPrimary: '#FCFAF6',
   bgSurface: '#FFFFFF',
-  bgSubtle: '#F8F5F0',
+  bgSubtle: '#F6F2EB',
   bgCard: '#FFFFFF',
 
   textPrimary: '#1C1917',
@@ -73,8 +73,8 @@ const SAFFRON_LIGHT: ThemeColors = {
   textMuted: '#A8A29E',
   textInverse: '#FFFFFF',
 
-  border: '#E7E5E4',
-  borderLight: '#F5F5F4',
+  border: '#E8E3DC',
+  borderLight: '#F3EFE9',
 
   veg: '#15803D',
   vegLight: '#DCFCE7',
@@ -389,56 +389,56 @@ export const RADII = {
   sm: 8,
   md: 12,
   lg: 16,
-  xl: 20,
+  xl: 22,
   pill: 999,
 };
 
 export const SHADOWS = {
   soft: Platform.select({
     web: {
-      boxShadow: '0px 2px 8px rgba(0, 0, 0, 0.06)',
+      boxShadow: '0px 2px 10px rgba(36, 22, 15, 0.05)',
     },
     default: {
-      shadowColor: '#000000',
+      shadowColor: '#24160F',
       shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: 0.06,
+      shadowOpacity: 0.05,
       shadowRadius: 8,
       elevation: 2,
     },
   }) as any,
   medium: Platform.select({
     web: {
-      boxShadow: '0px 4px 12px rgba(0, 0, 0, 0.1)',
+      boxShadow: '0px 4px 14px rgba(36, 22, 15, 0.08), 0px 1px 4px rgba(36, 22, 15, 0.04)',
     },
     default: {
-      shadowColor: '#000000',
+      shadowColor: '#24160F',
       shadowOffset: { width: 0, height: 4 },
-      shadowOpacity: 0.1,
-      shadowRadius: 12,
+      shadowOpacity: 0.08,
+      shadowRadius: 14,
       elevation: 4,
     },
   }) as any,
   card: Platform.select({
     web: {
-      boxShadow: '0px 4px 14px rgba(28, 25, 23, 0.08)',
+      boxShadow: '0px 6px 20px rgba(36, 22, 15, 0.07), 0px 1px 4px rgba(36, 22, 15, 0.04)',
     },
     default: {
-      shadowColor: '#1C1917',
+      shadowColor: '#24160F',
       shadowOffset: { width: 0, height: 4 },
-      shadowOpacity: 0.08,
-      shadowRadius: 14,
+      shadowOpacity: 0.07,
+      shadowRadius: 18,
       elevation: 3,
     },
   }) as any,
   hover: Platform.select({
     web: {
-      boxShadow: '0px 8px 20px rgba(0, 0, 0, 0.14)',
+      boxShadow: '0px 10px 26px rgba(36, 22, 15, 0.12), 0px 2px 8px rgba(36, 22, 15, 0.06)',
     },
     default: {
-      shadowColor: '#000000',
+      shadowColor: '#24160F',
       shadowOffset: { width: 0, height: 8 },
-      shadowOpacity: 0.14,
-      shadowRadius: 20,
+      shadowOpacity: 0.12,
+      shadowRadius: 24,
       elevation: 6,
     },
   }) as any,

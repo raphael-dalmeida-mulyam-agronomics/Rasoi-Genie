@@ -4,6 +4,7 @@ import { FamilyHomeView } from '../../features/family/FamilyHomeView';
 import { FamilyCartView } from '../../features/family/FamilyCartView';
 import { ApprovalQueueView } from '../../features/family/ApprovalQueueView';
 import { JoinLandingView } from '../../features/family/JoinLandingView';
+import { OrderConfirmationView } from '../../features/checkout/OrderConfirmationView';
 import { FamilyContext, FamilyContextValue } from '../context/FamilyContext';
 import { ThemeProvider } from '../theme/ThemeContext';
 import { FamilyMember, FamilyCartItem, encodePayloadToToken } from '../services/familyService';
@@ -31,11 +32,22 @@ jest.mock('expo-router', () => ({
   useLocalSearchParams: () => ({ token: 'mock-token-123' }),
 }));
 
+let mockCurrentUser = { uid: 'user_owner', displayName: 'Priya Sharma' };
+
 jest.mock('../context/AuthContext', () => ({
   useAuth: () => ({
-    user: { uid: 'user_owner', displayName: 'Priya Sharma' },
+    user: mockCurrentUser,
     isAdmin: false,
     isChef: false,
+  }),
+}));
+
+jest.mock('../context/WalletContext', () => ({
+  useWallet: () => ({
+    referralCode: 'RASOI123',
+    availableBalance: 500,
+    debitCredits: jest.fn(),
+    refreshAll: jest.fn(),
   }),
 }));
 
@@ -77,6 +89,7 @@ jest.mock('../context/CookModeContext', () => ({
     isOrderDismissed: jest.fn(() => false),
     dismissCookMode: jest.fn(),
     getProgressForOrderKit: jest.fn(() => ({ isCompleted: false })),
+    registerNewActiveOrder: jest.fn(),
   }),
 }));
 
@@ -380,6 +393,68 @@ describe('Family Feature UI Test Suite', () => {
         getByText(/Your meal kits will be sent to the family owner for approval/i),
       ).toBeTruthy();
     });
+
+    it('allows Owner to edit, remove items, and checkout when cart is locked', async () => {
+      const ctx = createMockFamilyContext('owner');
+      ctx.isCartLocked = true;
+      const { getByTestId, getAllByLabelText, getByText } = await renderWithProviders(
+        <FamilyCartView />,
+        ctx,
+      );
+
+      // Owner sees lock indicator message allowing them to edit
+      expect(
+        getByText(
+          /Family basket is locked for other members. You can still add, edit, or remove items./i,
+        ),
+      ).toBeTruthy();
+
+      // Owner still has remove button and checkout button enabled
+      expect(getAllByLabelText(/Remove .* from basket/i).length).toBeGreaterThan(0);
+      const checkoutBtn = getByTestId('family-checkout-cta-btn');
+      expect(checkoutBtn.props.accessibilityState?.disabled).toBeFalsy();
+    });
+
+    it('blocks other members from editing or removing items and checking out when cart is locked', async () => {
+      const ctx = createMockFamilyContext('co_owner');
+      ctx.isCartLocked = true;
+      const { queryAllByLabelText, getByText, getByTestId } = await renderWithProviders(
+        <FamilyCartView />,
+        ctx,
+      );
+
+      // Co-owner sees member lock banner
+      expect(getByText(/locked by/i)).toBeTruthy();
+
+      // Co-owner cannot remove items when locked
+      expect(queryAllByLabelText(/Remove .* from basket/i)).toHaveLength(0);
+
+      // Co-owner cannot checkout when locked
+      const checkoutBtn = getByTestId('family-checkout-cta-btn');
+      expect(checkoutBtn.props.accessibilityState?.disabled).toBe(true);
+    });
+
+    it('invokes onProceedToCheckout callback or routes to checkout URL when clicked by payer', async () => {
+      const ctx = createMockFamilyContext('owner');
+      const onProceedMock = jest.fn();
+      const { getByTestId } = await renderWithProviders(
+        <FamilyCartView onProceedToCheckout={onProceedMock} />,
+        ctx,
+      );
+
+      fireEvent.press(getByTestId('family-checkout-cta-btn'));
+      await waitFor(() => expect(onProceedMock).toHaveBeenCalledTimes(1));
+
+      // Without onProceedToCheckout prop, routes to /(tabs)/cart?step=checkout&type=family
+      const { getByTestId: getBtn2 } = await renderWithProviders(<FamilyCartView />, ctx);
+      fireEvent.press(getBtn2('family-checkout-cta-btn'));
+      await waitFor(() =>
+        expect(router.push).toHaveBeenCalledWith({
+          pathname: '/(tabs)/cart',
+          params: { step: 'checkout', type: 'family' },
+        }),
+      );
+    });
   });
 
   // ─── 3. ApprovalQueueView ─────────────────────────────────────────────────
@@ -530,6 +605,99 @@ describe('Family Feature UI Test Suite', () => {
 
       expect(queryByTestId('home-family-header-btn')).toBeNull();
       expect(queryByTestId('home-family-top-tab')).toBeNull();
+    });
+  });
+
+  // ─── 6. OrderConfirmationView Recipe Scoping ────────────────────────
+  describe('OrderConfirmationView Recipe Scoping', () => {
+    const sampleFamilyOrder: any = {
+      id: 'order_fam_test_1',
+      userId: 'user_owner',
+      familyId: 'fam_1',
+      familyOwnerId: 'user_owner',
+      status: 'placed',
+      items: [
+        {
+          id: 'item_kit_1',
+          kitId: 'kit_1',
+          name: 'Paneer Butter Masala Kit',
+          quantity: 2,
+          price: 349,
+          servings: 2,
+          addedBy: 'user_owner',
+        },
+        {
+          id: 'item_kit_2',
+          kitId: 'kit_2',
+          name: 'Dal Makhani Kit',
+          quantity: 1,
+          price: 299,
+          servings: 2,
+          addedBy: 'user_child',
+        },
+      ],
+      totalAmount: 997,
+      subtotal: 997,
+      deliveryFee: 0,
+      discount: 0,
+      tax: 0,
+      paymentMethod: 'mock',
+      paymentStatus: 'completed',
+      deliveryAddress: '123 MG Road, Bengaluru, Karnataka 560001',
+      customerName: 'Priya Sharma',
+      createdAt: new Date().toISOString(),
+    };
+
+    it('shows recipes and items for ALL family members when viewed by Family Owner', async () => {
+      mockCurrentUser = { uid: 'user_owner', displayName: 'Priya Sharma' };
+      const ctx = createMockFamilyContext('owner');
+
+      const { getByText } = await renderWithProviders(
+        <OrderConfirmationView order={sampleFamilyOrder} />,
+        ctx,
+      );
+
+      // Owner sees all kits
+      expect(getByText('Paneer Butter Masala Kit')).toBeTruthy();
+      expect(getByText('Dal Makhani Kit')).toBeTruthy();
+      expect(getByText(/Ordered Kits \(2\)/i)).toBeTruthy();
+    });
+
+    it('shows recipes and items ONLY for their own items when viewed by a regular member/child', async () => {
+      mockCurrentUser = { uid: 'user_child', displayName: 'Aarav (Child)' };
+      const ctx = createMockFamilyContext('dependent');
+
+      const { getByText, queryByText } = await renderWithProviders(
+        <OrderConfirmationView order={sampleFamilyOrder} />,
+        ctx,
+      );
+
+      // Child only sees their own kit
+      expect(getByText('Dal Makhani Kit')).toBeTruthy();
+      expect(queryByText('Paneer Butter Masala Kit')).toBeNull();
+      expect(getByText(/Your Ordered Recipes \(1\)/i)).toBeTruthy();
+    });
+
+    it('opens the recipe page when user clicks on a mealkit in their cart after order is placed', async () => {
+      mockCurrentUser = { uid: 'user_owner', displayName: 'Priya Sharma' };
+      const ctx = createMockFamilyContext('owner');
+
+      const { getByTestId } = await renderWithProviders(
+        <OrderConfirmationView order={sampleFamilyOrder} />,
+        ctx,
+      );
+
+      const kitRow = getByTestId('order-confirmation-kit-kit_1');
+      expect(kitRow).toBeTruthy();
+
+      fireEvent.press(kitRow);
+      expect(router.push).toHaveBeenCalledWith({
+        pathname: '/cook/[orderId]',
+        params: {
+          orderId: sampleFamilyOrder.id,
+          kitId: 'kit_1',
+        },
+      });
     });
   });
 });

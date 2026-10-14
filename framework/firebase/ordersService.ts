@@ -33,6 +33,7 @@ export interface OrderItem {
   spiceLevel?: string;
   masalaSachets: string[];
   imageUrl?: string;
+  addedBy?: string;
 }
 
 export interface TrackingEvent {
@@ -77,6 +78,7 @@ export interface Order {
   approvedBy?: string;
   approvedAt?: string;
   familyId?: string;
+  familyOwnerId?: string;
   payerId?: string;
   familyOwnerName?: string;
   familyMemberNames?: string[];

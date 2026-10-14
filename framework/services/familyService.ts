@@ -1425,12 +1425,13 @@ export async function addOwnItem(
   // Fallback
   await ensureLocalFamilyStore();
   const fam = localStore.families.get(familyId);
-  if (fam && fam.is_locked) {
+  const effectiveCaller = callerId || 'user';
+  if (fam && fam.is_locked && fam.owner_id !== effectiveCaller) {
     return { success: false, error: 'Family cart is currently locked by the owner' };
   }
 
   const members = localStore.members.get(familyId) || [];
-  const caller = members.find((m) => m.user_id === (callerId || 'user'));
+  const caller = members.find((m) => m.user_id === effectiveCaller);
   const isDep = caller?.role === 'dependent';
   const itemStatus: ItemStatus = isDep ? 'pending_approval' : 'approved';
 
@@ -1677,7 +1678,10 @@ export async function setCartLock(
           return { success: false, error: error.message };
         }
       } else if (data) {
-        if (data.success) return { success: true, isLocked: data.is_locked };
+        if (data.success) {
+          notifyFamilyLockListeners(familyId, data.is_locked);
+          return { success: true, isLocked: data.is_locked };
+        }
         return { success: false, error: data.error };
       }
     } catch {}
@@ -1689,8 +1693,10 @@ export async function setCartLock(
   if (fam) {
     fam.is_locked = locked;
     await persistLocalStore();
+    notifyFamilyLockListeners(familyId, locked);
     return { success: true, isLocked: locked };
   }
+  notifyFamilyLockListeners(familyId, locked);
   return { success: true, isLocked: locked };
 }
 
@@ -1938,6 +1944,28 @@ export async function fetchUserFamily(userId: string): Promise<Family | null> {
   return null;
 }
 
+export async function fetchFamilyById(familyId: string): Promise<Family | null> {
+  if (!isMockEnabled()) {
+    if (!isValidUUID(familyId)) return null;
+    const supabase = getSupabaseClient();
+    try {
+      const { data, error } = await supabase
+        .from('families')
+        .select('*')
+        .eq('id', familyId)
+        .maybeSingle();
+
+      if (!error && data) {
+        return data as Family;
+      }
+    } catch {}
+    return null;
+  }
+
+  await ensureLocalFamilyStore();
+  return localStore.families.get(familyId) || null;
+}
+
 export async function fetchFamilyMembers(familyId: string): Promise<FamilyMember[]> {
   if (!isMockEnabled()) {
     if (!isValidUUID(familyId)) return [];
@@ -2140,4 +2168,68 @@ export function subscribeToFamilyLinksRealtime(
     onDelete: () => onChanged(),
     onResync: onChanged,
   });
+}
+
+// ─── Reactive Family Lock Events & Realtime ──────────────────────────────────
+type FamilyLockListener = (payload: { familyId: string; isLocked: boolean }) => void;
+const familyLockListeners = new Set<FamilyLockListener>();
+
+export function subscribeToFamilyLockEvents(listener: FamilyLockListener): () => void {
+  familyLockListeners.add(listener);
+  return () => {
+    familyLockListeners.delete(listener);
+  };
+}
+
+export function notifyFamilyLockListeners(familyId: string, isLocked: boolean) {
+  familyLockListeners.forEach((listener) => {
+    try {
+      listener({ familyId, isLocked });
+    } catch (e) {
+      console.warn('[FamilyService] Error in family lock listener:', e);
+    }
+  });
+}
+
+/**
+ * Subscribes to realtime updates for a family (e.g. lock/unlock changes).
+ * Works across both Supabase Realtime subscriptions and in-app event broadcasts.
+ */
+export function subscribeToFamilyRealtime(
+  familyId: string,
+  onChanged: (updatedFam?: Partial<Family>) => void,
+): () => void {
+  // In-app / mock event subscription
+  const unsubEvents = subscribeToFamilyLockEvents((evt) => {
+    if (evt.familyId === familyId) {
+      onChanged({ is_locked: evt.isLocked });
+    }
+  });
+
+  if (isMockEnabled()) {
+    return unsubEvents;
+  }
+
+  // Supabase Realtime subscription on public.families
+  const unsubTable = subscribeToTable<Family>({
+    table: 'families',
+    filter: `id=eq.${familyId}`,
+    onUpdate: (newRow) => {
+      if (newRow) {
+        onChanged(newRow);
+      }
+    },
+    onResync: () => {
+      fetchFamilyById(familyId).then((fam) => {
+        if (fam) {
+          onChanged(fam);
+        }
+      });
+    },
+  });
+
+  return () => {
+    unsubEvents();
+    unsubTable();
+  };
 }

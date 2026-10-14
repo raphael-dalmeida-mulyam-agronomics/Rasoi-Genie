@@ -52,3 +52,15 @@
 - Implemented anti-abuse referral check (`areRelated`) blocking referral reward exploitation between existing family members.
 - Maintained append-only audit trail (`family_audit_log`) logging all joins, approvals, rejections, locks, and holds.
 - Verified test coverage with 39 passing Jest unit and integration tests across services, UI components, and state reducers.
+
+### Warm Gourmet Design System & Cook Mode Upgrade
+
+- Upgraded global theme tokens (`framework/theme/tokens.ts`) with modern gourmet color palettes (`bgPrimary: '#FCFAF6'`, `bgSubtle: '#F6F2EB'`, warm amber accents, organic elevation shadows, and `radii.xl: 22`).
+- Fixed direct URL order resolution in Cook Mode (`http://localhost:8081/cook/ORD-xxxxx`) with fallback demo order integration so direct links immediately display the full interactive culinary cooking guide.
+- Wrapped desktop/web viewports in a centered responsive shell (`maxWidth: 760`, `alignSelf: 'center'`) preventing awkward wide-screen stretching.
+- Implemented elevated floating header pill with meal kit photography, live cooking indicator, and kitchen text size toggle (`Aa / A+`).
+- Replaced flat progress line with segmented step indicator and quick-jump step overview modal.
+- Upgraded step cards (`RecipeStepCard.tsx`) with elevated shadows, time badges, rounded photo frames (`240px`), and styled chef's tips.
+- Upgraded digital kitchen timer (`StepTimerView.tsx`) with pulse borders, tabular-numeric countdown, and pill action buttons.
+- Upgraded floating bottom action dock with rounded pill buttons (`borderRadius: radii.pill`) and hover shadows.
+- All 34 test suites (267/267 tests) passing.
