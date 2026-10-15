@@ -19,6 +19,8 @@ import {
   createFamily,
   deleteFamily as deleteFamilyService,
   inviteMemberByPhone,
+  addDependentMember,
+  updateDependentPreferences as updateDependentPreferencesService,
   createJoinLink,
   revokeJoinLink,
   revokeAllPendingLinks as revokeAllPendingLinksService,
@@ -39,6 +41,7 @@ import {
   beginCheckoutHold,
   releaseCheckoutHold,
   placeFamilyOrder,
+  clearFamilyCart as clearFamilyCartService,
   isValidUUID,
   isMockEnabled,
 } from '../services/familyService';
@@ -111,6 +114,15 @@ export interface FamilyContextValue {
     expiresAt?: string;
     error?: string;
   }>;
+  addDependentProfile: (
+    type: DependentType,
+    name: string,
+    preferences?: Record<string, any>,
+  ) => Promise<{ success: boolean; member?: FamilyMember; error?: string }>;
+  updateDependentPreferences: (
+    dependentId: string,
+    preferences: Record<string, any>,
+  ) => Promise<{ success: boolean; error?: string }>;
   revokeLink: (linkId: string) => Promise<{ success: boolean; error?: string }>;
   revokeAllLinks: () => Promise<{ success: boolean; count?: number; error?: string }>;
   reissueLink: (
@@ -132,6 +144,7 @@ export interface FamilyContextValue {
     quantity?: number,
     servings?: number,
     spiceLevel?: string,
+    targetUserId?: string | null,
   ) => Promise<{ success: boolean; error?: string }>;
   editFamilyItem: (
     item: FamilyCartItem,
@@ -140,6 +153,7 @@ export interface FamilyContextValue {
     spiceLevel?: string,
   ) => Promise<{ success: boolean; error?: string }>;
   removeFamilyItem: (itemId: string) => Promise<{ success: boolean; error?: string }>;
+  clearFamilyCart: () => Promise<{ success: boolean; error?: string }>;
   approveDependentItem: (itemId: string) => Promise<{ success: boolean; error?: string }>;
   rejectDependentItem: (
     itemId: string,
@@ -201,6 +215,7 @@ export const FamilyProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   const [activeCartType, setActiveCartType] = useState<'personal' | 'family'>('personal');
   const [loading, setLoading] = useState<boolean>(true);
+  const recentlyRemovedCartItemIdsRef = React.useRef<Set<string>>(new Set());
 
   // Restore dependent session if active
   useEffect(() => {
@@ -291,7 +306,9 @@ export const FamilyProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     const unsubscribe = subscribeToFamilyCartRealtime(
       family.id,
       (item) => {
-        setCartState((prev) => familyCartReducer(prev, { type: 'UPSERT_ITEM', item }));
+        if (!recentlyRemovedCartItemIdsRef.current.has(item.id)) {
+          setCartState((prev) => familyCartReducer(prev, { type: 'UPSERT_ITEM', item }));
+        }
       },
       (itemId) => {
         setCartState((prev) => familyCartReducer(prev, { type: 'REMOVE_ITEM', itemId }));
@@ -299,7 +316,8 @@ export const FamilyProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       () => {
         // On resync, re-fetch all cart items
         fetchFamilyCartItems(family.id).then((items) => {
-          setCartState(buildCartState(items));
+          const valid = items.filter((i) => !recentlyRemovedCartItemIdsRef.current.has(i.id));
+          setCartState(buildCartState(valid));
         });
       },
     );
@@ -427,6 +445,36 @@ export const FamilyProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     return res;
   };
 
+  const addDependentProfile = async (
+    type: DependentType,
+    name: string,
+    preferences?: Record<string, any>,
+  ) => {
+    if (!family || !effectiveUserId) return { success: false, error: 'Family not found' };
+    const res = await addDependentMember(family.id, type, name, preferences, effectiveUserId);
+    if (res.success) {
+      await refreshFamily();
+    }
+    return res;
+  };
+
+  const updateDependentPreferences = async (
+    dependentId: string,
+    preferences: Record<string, any>,
+  ) => {
+    if (!family || !effectiveUserId) return { success: false, error: 'Family not found' };
+    const res = await updateDependentPreferencesService(
+      family.id,
+      dependentId,
+      preferences,
+      effectiveUserId,
+    );
+    if (res.success) {
+      await refreshFamily();
+    }
+    return res;
+  };
+
   const revokeLink = async (linkId: string) => {
     if (!effectiveUserId) return { success: false, error: 'Authentication required' };
     const res = await revokeJoinLink(linkId, effectiveUserId);
@@ -506,16 +554,23 @@ export const FamilyProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   };
 
   // Cart operations
-  const addFamilyItem = async (kit: MealKit, quantity = 1, servings = 2, spiceLevel = 'Medium') => {
+  const addFamilyItem = async (
+    kit: MealKit,
+    quantity = 1,
+    servings = 2,
+    spiceLevel = 'Medium',
+    targetUserId?: string | null,
+  ) => {
     if (!family || !effectiveUserId) return { success: false, error: 'No active family' };
     if (family.is_locked && !isOwner) {
       return { success: false, error: 'Family cart is currently locked by the owner' };
     }
 
+    let res;
     if (isOwner) {
-      return ownerUpsertItem(
+      res = await ownerUpsertItem(
         family.id,
-        null,
+        targetUserId || null,
         kit.id,
         quantity,
         servings,
@@ -524,7 +579,7 @@ export const FamilyProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         effectiveUserId,
       );
     } else {
-      return addOwnItem(
+      res = await addOwnItem(
         family.id,
         kit.id,
         quantity,
@@ -534,6 +589,17 @@ export const FamilyProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         effectiveUserId,
       );
     }
+
+    if (res.success) {
+      fetchFamilyCartItems(family.id)
+        .then((freshItems) => {
+          if (freshItems) {
+            setCartState(buildCartState(freshItems));
+          }
+        })
+        .catch(() => {});
+    }
+    return res;
   };
 
   const editFamilyItem = async (
@@ -547,8 +613,9 @@ export const FamilyProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       return { success: false, error: 'Family cart is locked by owner' };
     }
 
+    let res;
     if (isOwner) {
-      return ownerUpsertItem(
+      res = await ownerUpsertItem(
         family.id,
         item.id,
         item.kit_id,
@@ -562,7 +629,7 @@ export const FamilyProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       if (item.added_by !== effectiveUserId) {
         return { success: false, error: 'You can only edit your own items' };
       }
-      return addOwnItem(
+      res = await addOwnItem(
         family.id,
         item.kit_id,
         quantity,
@@ -572,6 +639,17 @@ export const FamilyProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         effectiveUserId,
       );
     }
+
+    if (res.success) {
+      fetchFamilyCartItems(family.id)
+        .then((freshItems) => {
+          if (freshItems) {
+            setCartState(buildCartState(freshItems));
+          }
+        })
+        .catch(() => {});
+    }
+    return res;
   };
 
   const removeFamilyItem = async (itemId: string) => {
@@ -580,25 +658,65 @@ export const FamilyProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       return { success: false, error: 'Family cart is locked by owner' };
     }
 
+    let res: { success: boolean; error?: string };
     if (isOwner) {
-      return ownerRemoveItem(family.id, itemId, effectiveUserId);
+      res = await ownerRemoveItem(family.id, itemId, effectiveUserId);
     } else {
       const item = cartState.items.find((i) => i.id === itemId);
       if (item && item.added_by !== effectiveUserId) {
         return { success: false, error: 'You can only remove your own items' };
       }
-      return ownerRemoveItem(family.id, itemId, effectiveUserId);
+      res = await ownerRemoveItem(family.id, itemId, effectiveUserId);
     }
+
+    if (res.success) {
+      recentlyRemovedCartItemIdsRef.current.add(itemId);
+      setTimeout(() => {
+        recentlyRemovedCartItemIdsRef.current.delete(itemId);
+      }, 15000);
+      setCartState((prev) => familyCartReducer(prev, { type: 'REMOVE_ITEM', itemId }));
+      fetchFamilyCartItems(family.id)
+        .then((freshItems) => {
+          if (freshItems) {
+            const filtered = freshItems.filter(
+              (i) => i.id !== itemId && !recentlyRemovedCartItemIdsRef.current.has(i.id),
+            );
+            setCartState(buildCartState(filtered));
+          }
+        })
+        .catch(() => {});
+    }
+    return res;
   };
 
   const approveDependentItem = async (itemId: string) => {
     if (!family || !effectiveUserId) return { success: false, error: 'No active family' };
-    return approveItem(family.id, itemId, effectiveUserId);
+    const res = await approveItem(family.id, itemId, effectiveUserId);
+    if (res.success) {
+      fetchFamilyCartItems(family.id)
+        .then((freshItems) => {
+          if (freshItems) {
+            setCartState(buildCartState(freshItems));
+          }
+        })
+        .catch(() => {});
+    }
+    return res;
   };
 
   const rejectDependentItem = async (itemId: string, reason?: string) => {
     if (!family || !effectiveUserId) return { success: false, error: 'No active family' };
-    return rejectItem(family.id, itemId, reason, effectiveUserId);
+    const res = await rejectItem(family.id, itemId, reason, effectiveUserId);
+    if (res.success) {
+      fetchFamilyCartItems(family.id)
+        .then((freshItems) => {
+          if (freshItems) {
+            setCartState(buildCartState(freshItems));
+          }
+        })
+        .catch(() => {});
+    }
+    return res;
   };
 
   const toggleCartLock = async (locked: boolean) => {
@@ -655,8 +773,23 @@ export const FamilyProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     });
     if (res.success) {
       setActiveHold(null);
+      setCartState(buildCartState([]));
+      await clearFamilyCartService(family.id, effectiveUserId);
       await refreshFamily();
+    } else {
+      // Ensure family basket is cleaned up even if order RPC had fallback handling
+      await clearFamilyCartService(family.id, effectiveUserId);
+      setCartState(buildCartState([]));
+      setActiveHold(null);
     }
+    return res;
+  };
+
+  const clearFamilyCart = async () => {
+    if (!family) return { success: false, error: 'No active family' };
+    const res = await clearFamilyCartService(family.id, effectiveUserId || undefined);
+    setCartState(buildCartState([]));
+    setActiveHold(null);
     return res;
   };
 
@@ -696,6 +829,8 @@ export const FamilyProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     deleteFamily,
     inviteAdult,
     createDependentLink,
+    addDependentProfile,
+    updateDependentPreferences,
     revokeLink,
     revokeAllLinks,
     reissueLink,
@@ -712,6 +847,7 @@ export const FamilyProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     startCheckoutHold,
     cancelCheckoutHold,
     checkoutFamilyOrder,
+    clearFamilyCart,
   };
 
   return <FamilyContext.Provider value={value}>{children}</FamilyContext.Provider>;

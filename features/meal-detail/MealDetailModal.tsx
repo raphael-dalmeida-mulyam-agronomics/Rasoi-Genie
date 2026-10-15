@@ -62,8 +62,10 @@ export const MealDetailModal: React.FC<MealDetailModalProps> = ({
   const [selectedSpiceLevel, setSelectedSpiceLevel] = useState<string>(kit?.spiceLevel || 'Medium');
 
   // Family integration
-  const { family, isOwner, isDependent, isCartLocked, addFamilyItem } = useFamily();
-  const [targetCart, setTargetCart] = useState<'personal' | 'family'>('personal');
+  const { family, isOwner, isDependent, isCartLocked, addFamilyItem, activeCartType } = useFamily();
+  const [targetCart, setTargetCart] = useState<'personal' | 'family'>(
+    activeCartType === 'family' ? 'family' : 'personal',
+  );
 
   // Animation values for smooth entrance and drop-down exit
   const windowHeight = Dimensions.get('window').height;
@@ -72,6 +74,7 @@ export const MealDetailModal: React.FC<MealDetailModalProps> = ({
 
   useEffect(() => {
     if (visible) {
+      setTargetCart(activeCartType === 'family' ? 'family' : 'personal');
       setModalVisible(true);
       slideAnim.setValue(windowHeight);
       Animated.timing(slideAnim, {
@@ -83,7 +86,7 @@ export const MealDetailModal: React.FC<MealDetailModalProps> = ({
     } else {
       setModalVisible(false);
     }
-  }, [visible, windowHeight]);
+  }, [visible, windowHeight, activeCartType]);
 
   const handleDropDownAndClose = (callback?: () => void) => {
     Animated.timing(slideAnim, {

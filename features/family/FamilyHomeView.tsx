@@ -27,6 +27,7 @@ import { AddDependentSheet } from './AddDependentSheet';
 import { MemberOptionsSheet } from './MemberOptionsSheet';
 import { LeaveFamilySheet } from './LeaveFamilySheet';
 import { TransferOwnershipSheet } from './TransferOwnershipSheet';
+import { DependentProfileSheet } from './DependentProfileSheet';
 
 export const FamilyHomeView: React.FC = () => {
   const { colors, radii, shadows, isDark } = useTheme();
@@ -50,6 +51,8 @@ export const FamilyHomeView: React.FC = () => {
   const [transferSheetVisible, setTransferSheetVisible] = useState(false);
   const [selectedMember, setSelectedMember] = useState<FamilyMember | null>(null);
   const [memberOptionsVisible, setMemberOptionsVisible] = useState(false);
+  const [selectedDependent, setSelectedDependent] = useState<FamilyMember | null>(null);
+  const [dependentSheetVisible, setDependentSheetVisible] = useState(false);
 
   const t = familyStrings.home;
 
@@ -236,28 +239,6 @@ export const FamilyHomeView: React.FC = () => {
                   ...shadows.card,
                 },
               ]}
-              onPress={() => router.push('/family/links' as any)}
-              activeOpacity={0.8}
-              testID="manage-links-btn"
-            >
-              <View style={[styles.actionIconWrap, { backgroundColor: '#EDE9FE' }]}>
-                <Icon name="link" size={18} color="#7C3AED" />
-              </View>
-              <Text style={[styles.actionCardTitle, { color: colors.textPrimary }]}>
-                {t.manageLinksBtn}
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[
-                styles.actionCard,
-                {
-                  backgroundColor: colors.bgSurface,
-                  borderColor: colors.borderLight,
-                  borderRadius: radii.xl,
-                  ...shadows.card,
-                },
-              ]}
               onPress={() => router.push('/family/approvals' as any)}
               activeOpacity={0.8}
               testID="view-approvals-btn"
@@ -290,6 +271,10 @@ export const FamilyHomeView: React.FC = () => {
                 member={member}
                 canManage={can(role, 'manage_members')}
                 isSelf={member.user_id === currentMember?.user_id}
+                onPressMember={(dep) => {
+                  setSelectedDependent(dep);
+                  setDependentSheetVisible(true);
+                }}
                 onPressMenu={() => {
                   setSelectedMember(member);
                   setMemberOptionsVisible(true);
@@ -388,7 +373,16 @@ export const FamilyHomeView: React.FC = () => {
       <AddDependentSheet
         visible={addDependentVisible}
         onClose={() => setAddDependentVisible(false)}
-        onLinkCreated={() => refreshFamily()}
+        onDependentAdded={() => refreshFamily()}
+      />
+
+      <DependentProfileSheet
+        visible={dependentSheetVisible}
+        member={selectedDependent}
+        onClose={() => {
+          setDependentSheetVisible(false);
+          setSelectedDependent(null);
+        }}
       />
 
       <MemberOptionsSheet
@@ -400,6 +394,10 @@ export const FamilyHomeView: React.FC = () => {
         }}
         onActionComplete={() => refreshFamily()}
         onOpenTransfer={() => setTransferSheetVisible(true)}
+        onOpenPreferences={(mem) => {
+          setSelectedDependent(mem);
+          setDependentSheetVisible(true);
+        }}
       />
 
       <LeaveFamilySheet

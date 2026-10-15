@@ -20,6 +20,7 @@ export interface FamilyMemberRowProps {
   canManage?: boolean;
   isSelf?: boolean;
   onPressMenu?: () => void;
+  onPressMember?: (member: FamilyMember) => void;
   testID?: string;
 }
 
@@ -30,6 +31,7 @@ export const FamilyMemberRow: React.FC<FamilyMemberRowProps> = ({
   canManage = false,
   isSelf = false,
   onPressMenu,
+  onPressMember,
   testID,
 }) => {
   const { colors, radii, isDark } = useTheme();
@@ -117,14 +119,19 @@ export const FamilyMemberRow: React.FC<FamilyMemberRowProps> = ({
       })
     : '';
 
+  const isDependent = member.role === 'dependent' || Boolean(member.dependent_type);
+
   return (
-    <View
+    <TouchableOpacity
       testID={testID}
+      disabled={!isDependent || !onPressMember}
+      onPress={() => isDependent && onPressMember?.(member)}
+      activeOpacity={isDependent && onPressMember ? 0.75 : 1}
       style={[
         styles.container,
         {
           backgroundColor: isDark ? 'rgba(255, 255, 255, 0.03)' : colors.bgSurface,
-          borderColor: colors.borderLight,
+          borderColor: isDependent ? (isDark ? '#065F46' : '#A7F3D0') : colors.borderLight,
           borderRadius: radii.lg,
         },
       ]}
@@ -138,8 +145,12 @@ export const FamilyMemberRow: React.FC<FamilyMemberRowProps> = ({
           </Text>
           <RoleBadge role={member.role} dependentType={member.dependent_type} size="sm" />
         </View>
-        <Text style={[styles.subtext, { color: colors.textMuted }]}>
-          {joinedFormatted ? `Joined ${joinedFormatted}` : 'Active Member'}
+        <Text style={[styles.subtext, { color: isDependent ? colors.primary : colors.textMuted }]}>
+          {isDependent
+            ? 'Tap to view recommendations & taste profile'
+            : joinedFormatted
+              ? `Joined ${joinedFormatted}`
+              : 'Active Member'}
         </Text>
       </View>
 
@@ -147,15 +158,20 @@ export const FamilyMemberRow: React.FC<FamilyMemberRowProps> = ({
       {canManage && !isSelf && onPressMenu ? (
         <TouchableOpacity
           style={styles.menuBtn}
-          onPress={onPressMenu}
+          onPress={(e) => {
+            e.stopPropagation?.();
+            onPressMenu();
+          }}
           accessibilityRole="button"
           accessibilityLabel={`Manage ${member.display_name}`}
           hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
         >
           <Icon name="ellipsis-vertical" size={18} color={colors.textSecondary} />
         </TouchableOpacity>
+      ) : isDependent ? (
+        <Icon name="chevron-forward" size={16} color={colors.textMuted} />
       ) : null}
-    </View>
+    </TouchableOpacity>
   );
 };
 

@@ -13,6 +13,7 @@ export interface SegmentedControlProps<T extends string = string> {
   selectedValue: T;
   onSelect: (value: T) => void;
   style?: ViewStyle;
+  testID?: string;
 }
 
 export const SegmentedControl = <T extends string = string>({
@@ -20,11 +21,13 @@ export const SegmentedControl = <T extends string = string>({
   selectedValue,
   onSelect,
   style,
+  testID,
 }: SegmentedControlProps<T>) => {
   const { colors, radii, shadows } = useTheme();
 
   return (
     <View
+      testID={testID}
       style={[
         styles.container,
         {

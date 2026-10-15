@@ -84,6 +84,7 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({ onBack, onOrderPlace
     activeHold,
     isHeldByMe,
     checkoutFamilyOrder,
+    clearFamilyCart,
   } = useFamily();
 
   // Prefill Contact & Address Details
@@ -568,7 +569,8 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({ onBack, onOrderPlace
       if (user) {
         await refreshWallet();
       }
-      if (activeCartType === 'family' && family) {
+      if (isFamilyCheckout || (activeCartType === 'family' && family)) {
+        await clearFamilyCart();
         await cancelCheckoutHold();
         await refreshFamily();
       }

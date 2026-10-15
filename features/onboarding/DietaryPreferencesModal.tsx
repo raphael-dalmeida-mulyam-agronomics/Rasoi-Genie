@@ -1,11 +1,15 @@
-﻿import React, { useState } from 'react';
-import { Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { usePreferences } from '../../framework/context/PreferencesContext';
+import React, { useState } from 'react';
 import {
-  CuisineType,
-  DietTag,
-  SpiceLevel,
-} from '../../framework/services/mealKitsService';
+  Modal,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from 'react-native';
+import { usePreferences, UserDietaryPreferences } from '../../framework/context/PreferencesContext';
+import { CuisineType, DietTag, SpiceLevel } from '../../framework/services/mealKitsService';
 import {
   getCitiesForState,
   getStates,
@@ -16,9 +20,14 @@ import { Button } from '../../framework/ui/Button';
 import { Icon } from '../../framework/ui/Icon';
 import { PillTag } from '../../framework/ui/PillTag';
 
-interface DietaryPreferencesModalProps {
+export interface DietaryPreferencesModalProps {
   visible: boolean;
   onClose: () => void;
+  initialPreferences?: Partial<UserDietaryPreferences>;
+  onSavePreferences?: (prefs: UserDietaryPreferences) => Promise<void> | void;
+  title?: string;
+  subtitle?: string;
+  saveButtonText?: string;
 }
 
 const DIET_TYPES: { id: DietTag; label: string; icon: string; desc: string }[] = [
@@ -40,15 +49,19 @@ const DIET_TYPES: { id: DietTag; label: string; icon: string; desc: string }[] =
   },
 ];
 
-const ALLERGY_OPTIONS = [
-  'Peanuts',
-  'Dairy',
-  'Gluten / Wheat',
-  'Tree Nuts (Cashew, Almond)',
-  'Soy',
-  'Shellfish / Seafood',
-  'Sesame',
-  'Mustard',
+const ALLERGY_OPTIONS: { id: string; label: string; desc: string }[] = [
+  { id: 'Peanuts', label: 'Peanuts', desc: 'Groundnuts, peanut butter & oil' },
+  { id: 'Dairy', label: 'Dairy / Lactose', desc: 'Milk, cheese, butter, paneer & ghee' },
+  { id: 'Gluten / Wheat', label: 'Gluten / Wheat', desc: 'Wheat flour, maida & semolina' },
+  {
+    id: 'Tree Nuts (Cashew, Almond)',
+    label: 'Tree Nuts',
+    desc: 'Cashews, almonds, walnuts & pistachios',
+  },
+  { id: 'Soy', label: 'Soy / Soya', desc: 'Soy sauce, edamame & soya chunks' },
+  { id: 'Shellfish / Seafood', label: 'Shellfish / Seafood', desc: 'Prawns, crab, shrimp & fish' },
+  { id: 'Sesame', label: 'Sesame', desc: 'Til seeds and sesame cooking oil' },
+  { id: 'Mustard', label: 'Mustard', desc: 'Mustard seeds, paste & mustard oil' },
 ];
 
 const SPICE_LEVELS: { id: SpiceLevel; label: string; icon: string }[] = [
@@ -58,22 +71,22 @@ const SPICE_LEVELS: { id: SpiceLevel; label: string; icon: string }[] = [
   { id: 'Fiery', label: 'Fiery (Kolhapuri / Andhra)', icon: '' },
 ];
 
-const CUISINES: CuisineType[] = [
-  'North Indian',
-  'South Indian',
-  'Hyderabadi',
-  'Punjabi',
-  'Mughlai',
-  'Coastal',
-  'Gujarati',
-  'Maharashtrian',
-  'Indo-Chinese',
-  'Italian',
-  'Mexican',
-  'American',
-  'Continental',
-  'European',
-  'Mediterranean',
+const CUISINES: { id: CuisineType; label: string; desc: string }[] = [
+  { id: 'North Indian', label: 'North Indian', desc: 'Rich gravies, paneer & tandoori rotis' },
+  { id: 'South Indian', label: 'South Indian', desc: 'Dosas, idlis, sambar & coconut chutneys' },
+  { id: 'Hyderabadi', label: 'Hyderabadi', desc: 'Dum biryani, mirchi salan & korma' },
+  { id: 'Punjabi', label: 'Punjabi', desc: 'Dal makhani, butter gravies & kulchas' },
+  { id: 'Mughlai', label: 'Mughlai', desc: 'Aromatic spices & shahi preparations' },
+  { id: 'Coastal', label: 'Coastal', desc: 'Coconut, tamarind & coastal flavors' },
+  { id: 'Gujarati', label: 'Gujarati', desc: 'Sweet-savory dals, theplas & kadhi' },
+  { id: 'Maharashtrian', label: 'Maharashtrian', desc: 'Spiced misal, thalipeeth & poha' },
+  { id: 'Indo-Chinese', label: 'Indo-Chinese', desc: 'Wok noodles, manchurian & fried rice' },
+  { id: 'Italian', label: 'Italian', desc: 'Pasta, risottos, herbs & pizza' },
+  { id: 'Mexican', label: 'Mexican', desc: 'Tacos, burritos, fajitas & salsa' },
+  { id: 'American', label: 'American', desc: 'Burgers, loaded bowls & classic bakes' },
+  { id: 'Continental', label: 'Continental', desc: 'Herb bakes, creamy soups & roasts' },
+  { id: 'European', label: 'European', desc: 'Classic continental sauces & bakes' },
+  { id: 'Mediterranean', label: 'Mediterranean', desc: 'Olive oil, roasted veggies & falafel' },
 ];
 
 // Region hierarchy
@@ -82,14 +95,22 @@ const ALL_STATES = getStates();
 export const DietaryPreferencesModal: React.FC<DietaryPreferencesModalProps> = ({
   visible,
   onClose,
+  initialPreferences,
+  onSavePreferences,
+  title,
+  subtitle,
+  saveButtonText,
 }) => {
   const { preferences, updatePreferences } = usePreferences();
+  const effectiveBasePrefs = initialPreferences || preferences;
   const { colors, radii, shadows } = useTheme();
 
   // Region hierarchy state
-  const [selectedState, setSelectedState] = useState<string>(preferences.state || '');
-  const [selectedCity, setSelectedCity] = useState<string>(preferences.city || '');
-  const [selectedSubRegion, setSelectedSubRegion] = useState<string>(preferences.subRegion || '');
+  const [selectedState, setSelectedState] = useState<string>(effectiveBasePrefs.state || '');
+  const [selectedCity, setSelectedCity] = useState<string>(effectiveBasePrefs.city || '');
+  const [selectedSubRegion, setSelectedSubRegion] = useState<string>(
+    effectiveBasePrefs.subRegion || '',
+  );
 
   // Dropdown visibility state
   const [showStateDropdown, setShowStateDropdown] = useState(false);
@@ -108,29 +129,35 @@ export const DietaryPreferencesModal: React.FC<DietaryPreferencesModalProps> = (
   const filteredStates = stateSearchText
     ? ALL_STATES.filter((s: string) => s.toLowerCase().includes(stateSearchText.toLowerCase()))
     : ALL_STATES;
-  const filteredCities = citySearchText && selectedState
-    ? availableCities.filter((c: string) => c.toLowerCase().includes(citySearchText.toLowerCase()))
-    : availableCities;
+  const filteredCities =
+    citySearchText && selectedState
+      ? availableCities.filter((c: string) =>
+          c.toLowerCase().includes(citySearchText.toLowerCase()),
+        )
+      : availableCities;
 
   const [selectedDiets, setSelectedDiets] = useState<DietTag[]>([]);
-  const [allergies, setAllergies] = useState<string[]>(preferences.allergies);
-  const [spiceTolerance, setSpiceTolerance] = useState<SpiceLevel>(preferences.spiceTolerance);
+  const [allergies, setAllergies] = useState<string[]>(effectiveBasePrefs.allergies || []);
+  const [spiceTolerance, setSpiceTolerance] = useState<SpiceLevel>(
+    effectiveBasePrefs.spiceTolerance || 'Medium',
+  );
   const [preferredCuisines, setPreferredCuisines] = useState<CuisineType[]>(
-    preferences.preferredCuisines,
+    effectiveBasePrefs.preferredCuisines || [],
   );
 
   // Sync state whenever modal opens or preferences update
   React.useEffect(() => {
     if (visible) {
-      setSelectedState(preferences.state || '');
-      setSelectedCity(preferences.city || '');
-      setSelectedSubRegion(preferences.subRegion || '');
-      setSelectedDiets(preferences.dietTypes || []);
-      setAllergies(preferences.allergies || []);
-      setSpiceTolerance(preferences.spiceTolerance || 'Medium');
-      setPreferredCuisines(preferences.preferredCuisines || []);
+      const p = initialPreferences || preferences;
+      setSelectedState(p.state || '');
+      setSelectedCity(p.city || '');
+      setSelectedSubRegion(p.subRegion || '');
+      setSelectedDiets(p.dietTypes || []);
+      setAllergies(p.allergies || []);
+      setSpiceTolerance(p.spiceTolerance || 'Medium');
+      setPreferredCuisines(p.preferredCuisines || []);
     }
-  }, [visible, preferences]);
+  }, [visible, initialPreferences, preferences]);
 
   const toggleAllergy = (allergy: string) => {
     setAllergies((prev) =>
@@ -144,8 +171,9 @@ export const DietaryPreferencesModal: React.FC<DietaryPreferencesModalProps> = (
     );
   };
 
-  const handleSave = () => {
-    updatePreferences({
+  const handleSave = async () => {
+    const updated: UserDietaryPreferences = {
+      ...(initialPreferences ? (initialPreferences as UserDietaryPreferences) : preferences),
       dietTypes: selectedDiets,
       allergies,
       spiceTolerance,
@@ -153,7 +181,16 @@ export const DietaryPreferencesModal: React.FC<DietaryPreferencesModalProps> = (
       state: selectedState,
       city: selectedCity,
       subRegion: selectedSubRegion,
-    });
+      regionHub: preferences.regionHub,
+      currentCity: selectedCity || preferences.currentCity,
+      isOnboarded: true,
+    };
+
+    if (onSavePreferences) {
+      await onSavePreferences(updated);
+    } else {
+      updatePreferences(updated);
+    }
     onClose();
   };
 
@@ -176,10 +213,10 @@ export const DietaryPreferencesModal: React.FC<DietaryPreferencesModalProps> = (
           </TouchableOpacity>
           <View style={{ flex: 1, alignItems: 'center' }}>
             <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>
-              Taste & Dietary Profile
+              {title || 'Taste & Dietary Profile'}
             </Text>
             <Text style={[styles.headerSub, { color: colors.textSecondary }]}>
-              Personalize recommendations & recipes
+              {subtitle || 'Personalize recommendations & recipes'}
             </Text>
           </View>
           <View style={{ width: 36 }} />
@@ -292,16 +329,35 @@ export const DietaryPreferencesModal: React.FC<DietaryPreferencesModalProps> = (
               Select the authentic culinary regions you love cooking.
             </Text>
 
-            <View style={styles.pillsWrap}>
+            <View style={styles.dietGrid}>
               {CUISINES.map((cuis) => {
-                const isSelected = preferredCuisines.includes(cuis);
+                const isSelected = preferredCuisines.includes(cuis.id);
                 return (
-                  <PillTag
-                    key={cuis}
-                    label={cuis}
-                    selected={isSelected}
-                    onPress={() => toggleCuisine(cuis)}
-                  />
+                  <TouchableOpacity
+                    key={cuis.id}
+                    style={[
+                      styles.dietCard,
+                      {
+                        backgroundColor: isSelected ? colors.primaryLight : colors.bgSubtle,
+                        borderColor: isSelected ? colors.primary : colors.borderLight,
+                        borderRadius: radii.lg,
+                      },
+                    ]}
+                    onPress={() => toggleCuisine(cuis.id)}
+                    activeOpacity={0.8}
+                  >
+                    <Text
+                      style={[
+                        styles.dietLabel,
+                        { color: isSelected ? colors.primary : colors.textPrimary },
+                      ]}
+                    >
+                      {cuis.label}
+                    </Text>
+                    <Text style={[styles.dietDescText, { color: colors.textSecondary }]}>
+                      {cuis.desc}
+                    </Text>
+                  </TouchableOpacity>
                 );
               })}
             </View>
@@ -318,16 +374,35 @@ export const DietaryPreferencesModal: React.FC<DietaryPreferencesModalProps> = (
               We’ll visibly highlight safety warnings on kits containing these ingredients.
             </Text>
 
-            <View style={styles.pillsWrap}>
+            <View style={styles.dietGrid}>
               {ALLERGY_OPTIONS.map((alg) => {
-                const isSelected = allergies.includes(alg);
+                const isSelected = allergies.includes(alg.id);
                 return (
-                  <PillTag
-                    key={alg}
-                    label={alg}
-                    selected={isSelected}
-                    onPress={() => toggleAllergy(alg)}
-                  />
+                  <TouchableOpacity
+                    key={alg.id}
+                    style={[
+                      styles.dietCard,
+                      {
+                        backgroundColor: isSelected ? colors.primaryLight : colors.bgSubtle,
+                        borderColor: isSelected ? colors.primary : colors.borderLight,
+                        borderRadius: radii.lg,
+                      },
+                    ]}
+                    onPress={() => toggleAllergy(alg.id)}
+                    activeOpacity={0.8}
+                  >
+                    <Text
+                      style={[
+                        styles.dietLabel,
+                        { color: isSelected ? colors.primary : colors.textPrimary },
+                      ]}
+                    >
+                      {alg.label}
+                    </Text>
+                    <Text style={[styles.dietDescText, { color: colors.textSecondary }]}>
+                      {alg.desc}
+                    </Text>
+                  </TouchableOpacity>
                 );
               })}
             </View>
@@ -346,9 +421,27 @@ export const DietaryPreferencesModal: React.FC<DietaryPreferencesModalProps> = (
 
             {/* State Input with Dropdown */}
             <Text style={[styles.label, { color: colors.textSecondary }]}>State</Text>
-            <View style={[styles.picker, { backgroundColor: colors.bgSubtle, borderColor: showStateDropdown ? colors.primary : colors.borderLight, flexDirection: 'row', alignItems: 'center', paddingRight: 8 }]}>
+            <View
+              style={[
+                styles.picker,
+                {
+                  backgroundColor: colors.bgSubtle,
+                  borderColor: showStateDropdown ? colors.primary : colors.borderLight,
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  paddingRight: 8,
+                },
+              ]}
+            >
               <TextInput
-                style={[styles.pickerText, { flex: 1, paddingVertical: 0, color: selectedState ? colors.textPrimary : colors.textMuted }]}
+                style={[
+                  styles.pickerText,
+                  {
+                    flex: 1,
+                    paddingVertical: 0,
+                    color: selectedState ? colors.textPrimary : colors.textMuted,
+                  },
+                ]}
                 placeholder="Select or type state"
                 placeholderTextColor={colors.textMuted}
                 value={selectedState || stateSearchText}
@@ -360,17 +453,32 @@ export const DietaryPreferencesModal: React.FC<DietaryPreferencesModalProps> = (
                 onFocus={() => setShowStateDropdown(true)}
                 onBlur={() => setTimeout(() => setShowStateDropdown(false), 200)}
               />
-              <TouchableOpacity onPress={() => setShowStateDropdown(!showStateDropdown)} hitSlop={{top: 10, bottom: 10, left: 10, right: 10}}>
-                <Icon name={showStateDropdown ? 'chevron-up' : 'chevron-down'} size={16} color={colors.textMuted} />
+              <TouchableOpacity
+                onPress={() => setShowStateDropdown(!showStateDropdown)}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <Icon
+                  name={showStateDropdown ? 'chevron-up' : 'chevron-down'}
+                  size={16}
+                  color={colors.textMuted}
+                />
               </TouchableOpacity>
             </View>
             {showStateDropdown && filteredStates.length > 0 && (
-              <View style={[styles.dropdownList, { backgroundColor: colors.bgSurface, borderColor: colors.borderLight }]}>
+              <View
+                style={[
+                  styles.dropdownList,
+                  { backgroundColor: colors.bgSurface, borderColor: colors.borderLight },
+                ]}
+              >
                 <ScrollView style={styles.dropdownScroll} nestedScrollEnabled>
                   {filteredStates.map((state) => (
                     <TouchableOpacity
                       key={state}
-                      style={[styles.dropdownItem, selectedState === state && { backgroundColor: colors.primaryLight }]}
+                      style={[
+                        styles.dropdownItem,
+                        selectedState === state && { backgroundColor: colors.primaryLight },
+                      ]}
                       onPress={() => {
                         setSelectedState(state);
                         setSelectedCity('');
@@ -379,7 +487,12 @@ export const DietaryPreferencesModal: React.FC<DietaryPreferencesModalProps> = (
                         setStateSearchText('');
                       }}
                     >
-                      <Text style={[styles.dropdownItemText, { color: selectedState === state ? colors.primary : colors.textPrimary }]}>
+                      <Text
+                        style={[
+                          styles.dropdownItemText,
+                          { color: selectedState === state ? colors.primary : colors.textPrimary },
+                        ]}
+                      >
                         {state}
                       </Text>
                     </TouchableOpacity>
@@ -391,10 +504,30 @@ export const DietaryPreferencesModal: React.FC<DietaryPreferencesModalProps> = (
             {/* City Input with Dropdown */}
             {!!selectedState && (
               <>
-                <Text style={[styles.label, { color: colors.textSecondary, marginTop: 12 }]}>City</Text>
-                <View style={[styles.picker, { backgroundColor: colors.bgSubtle, borderColor: showCityDropdown ? colors.primary : colors.borderLight, flexDirection: 'row', alignItems: 'center', paddingRight: 8 }]}>
+                <Text style={[styles.label, { color: colors.textSecondary, marginTop: 12 }]}>
+                  City
+                </Text>
+                <View
+                  style={[
+                    styles.picker,
+                    {
+                      backgroundColor: colors.bgSubtle,
+                      borderColor: showCityDropdown ? colors.primary : colors.borderLight,
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      paddingRight: 8,
+                    },
+                  ]}
+                >
                   <TextInput
-                    style={[styles.pickerText, { flex: 1, paddingVertical: 0, color: selectedCity ? colors.textPrimary : colors.textMuted }]}
+                    style={[
+                      styles.pickerText,
+                      {
+                        flex: 1,
+                        paddingVertical: 0,
+                        color: selectedCity ? colors.textPrimary : colors.textMuted,
+                      },
+                    ]}
                     placeholder="Select or type city"
                     placeholderTextColor={colors.textMuted}
                     value={selectedCity || citySearchText}
@@ -406,17 +539,32 @@ export const DietaryPreferencesModal: React.FC<DietaryPreferencesModalProps> = (
                     onFocus={() => setShowCityDropdown(true)}
                     onBlur={() => setTimeout(() => setShowCityDropdown(false), 200)}
                   />
-                  <TouchableOpacity onPress={() => setShowCityDropdown(!showCityDropdown)} hitSlop={{top: 10, bottom: 10, left: 10, right: 10}}>
-                    <Icon name={showCityDropdown ? 'chevron-up' : 'chevron-down'} size={16} color={colors.textMuted} />
+                  <TouchableOpacity
+                    onPress={() => setShowCityDropdown(!showCityDropdown)}
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                  >
+                    <Icon
+                      name={showCityDropdown ? 'chevron-up' : 'chevron-down'}
+                      size={16}
+                      color={colors.textMuted}
+                    />
                   </TouchableOpacity>
                 </View>
                 {showCityDropdown && filteredCities.length > 0 && (
-                  <View style={[styles.dropdownList, { backgroundColor: colors.bgSurface, borderColor: colors.borderLight }]}>
+                  <View
+                    style={[
+                      styles.dropdownList,
+                      { backgroundColor: colors.bgSurface, borderColor: colors.borderLight },
+                    ]}
+                  >
                     <ScrollView style={styles.dropdownScroll} nestedScrollEnabled>
                       {filteredCities.map((city) => (
                         <TouchableOpacity
                           key={city}
-                          style={[styles.dropdownItem, selectedCity === city && { backgroundColor: colors.primaryLight }]}
+                          style={[
+                            styles.dropdownItem,
+                            selectedCity === city && { backgroundColor: colors.primaryLight },
+                          ]}
                           onPress={() => {
                             setSelectedCity(city);
                             setSelectedSubRegion('');
@@ -424,7 +572,14 @@ export const DietaryPreferencesModal: React.FC<DietaryPreferencesModalProps> = (
                             setCitySearchText('');
                           }}
                         >
-                          <Text style={[styles.dropdownItemText, { color: selectedCity === city ? colors.primary : colors.textPrimary }]}>
+                          <Text
+                            style={[
+                              styles.dropdownItemText,
+                              {
+                                color: selectedCity === city ? colors.primary : colors.textPrimary,
+                              },
+                            ]}
+                          >
                             {city}
                           </Text>
                         </TouchableOpacity>
@@ -438,42 +593,87 @@ export const DietaryPreferencesModal: React.FC<DietaryPreferencesModalProps> = (
             {/* Sub-Region Picker */}
             {!!selectedCity && availableSubRegions.length > 0 && (
               <>
-                <Text style={[styles.label, { color: colors.textSecondary, marginTop: 12 }]}>Neighborhood / Zone (Optional)</Text>
+                <Text style={[styles.label, { color: colors.textSecondary, marginTop: 12 }]}>
+                  Neighborhood / Zone (Optional)
+                </Text>
                 <TouchableOpacity
-                  style={[styles.picker, { backgroundColor: colors.bgSubtle, borderColor: colors.borderLight, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }]}
+                  style={[
+                    styles.picker,
+                    {
+                      backgroundColor: colors.bgSubtle,
+                      borderColor: colors.borderLight,
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                    },
+                  ]}
                   onPress={() => setShowSubRegionDropdown(!showSubRegionDropdown)}
                 >
-                  <Text style={[styles.pickerText, { color: selectedSubRegion ? colors.textPrimary : colors.textMuted }]}>
+                  <Text
+                    style={[
+                      styles.pickerText,
+                      { color: selectedSubRegion ? colors.textPrimary : colors.textMuted },
+                    ]}
+                  >
                     {selectedSubRegion
-                      ? availableSubRegions.find((sr) => sr.id === selectedSubRegion)?.name || 'Select zone'
+                      ? availableSubRegions.find((sr) => sr.id === selectedSubRegion)?.name ||
+                        'Select zone'
                       : 'All zones in ' + selectedCity}
                   </Text>
-                  <Icon name={showSubRegionDropdown ? 'chevron-up' : 'chevron-down'} size={16} color={colors.textMuted} />
+                  <Icon
+                    name={showSubRegionDropdown ? 'chevron-up' : 'chevron-down'}
+                    size={16}
+                    color={colors.textMuted}
+                  />
                 </TouchableOpacity>
                 {showSubRegionDropdown && (
-                  <View style={[styles.dropdownList, { backgroundColor: colors.bgSurface, borderColor: colors.borderLight }]}>
+                  <View
+                    style={[
+                      styles.dropdownList,
+                      { backgroundColor: colors.bgSurface, borderColor: colors.borderLight },
+                    ]}
+                  >
                     <ScrollView style={styles.dropdownScroll} nestedScrollEnabled>
                       <TouchableOpacity
-                        style={[styles.dropdownItem, !selectedSubRegion && { backgroundColor: colors.primaryLight }]}
+                        style={[
+                          styles.dropdownItem,
+                          !selectedSubRegion && { backgroundColor: colors.primaryLight },
+                        ]}
                         onPress={() => {
                           setSelectedSubRegion('');
                           setShowSubRegionDropdown(false);
                         }}
                       >
-                        <Text style={[styles.dropdownItemText, { color: !selectedSubRegion ? colors.primary : colors.textPrimary }]}>
+                        <Text
+                          style={[
+                            styles.dropdownItemText,
+                            { color: !selectedSubRegion ? colors.primary : colors.textPrimary },
+                          ]}
+                        >
                           All zones in {selectedCity}
                         </Text>
                       </TouchableOpacity>
                       {availableSubRegions.map((sr) => (
                         <TouchableOpacity
                           key={sr.id}
-                          style={[styles.dropdownItem, selectedSubRegion === sr.id && { backgroundColor: colors.primaryLight }]}
+                          style={[
+                            styles.dropdownItem,
+                            selectedSubRegion === sr.id && { backgroundColor: colors.primaryLight },
+                          ]}
                           onPress={() => {
                             setSelectedSubRegion(sr.id);
                             setShowSubRegionDropdown(false);
                           }}
                         >
-                          <Text style={[styles.dropdownItemText, { color: selectedSubRegion === sr.id ? colors.primary : colors.textPrimary }]}>
+                          <Text
+                            style={[
+                              styles.dropdownItemText,
+                              {
+                                color:
+                                  selectedSubRegion === sr.id ? colors.primary : colors.textPrimary,
+                              },
+                            ]}
+                          >
                             {sr.name}
                           </Text>
                         </TouchableOpacity>
@@ -498,7 +698,7 @@ export const DietaryPreferencesModal: React.FC<DietaryPreferencesModalProps> = (
           ]}
         >
           <Button
-            title="Save Preferences & Update Feed"
+            title={saveButtonText || 'Save Preferences & Update Feed'}
             icon={<Icon name="check-circle" size={18} color="#FFFFFF" />}
             size="lg"
             style={{ width: '100%' }}

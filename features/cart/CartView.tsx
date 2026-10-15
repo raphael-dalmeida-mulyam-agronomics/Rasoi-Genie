@@ -15,6 +15,7 @@ import { useCart, PaymentMethod } from '../../framework/context/CartContext';
 import { usePreferences, AddressItem } from '../../framework/context/PreferencesContext';
 import { useAuth } from '../../framework/context/AuthContext';
 import { useTheme } from '../../framework/theme/ThemeContext';
+import { MealKit } from '../../framework/services/mealKitsService';
 import { createOrder, Order } from '../../framework/firebase/ordersService';
 import { createOrderInSupabase } from '../../framework/services/supabaseOrdersService';
 import { Button } from '../../framework/ui/Button';
@@ -89,10 +90,27 @@ export const CartView: React.FC = () => {
     activeCartType,
     setActiveCartType,
     isDependent,
+    isOwner,
+    isCartLocked,
+    addFamilyItem,
     cartState: familyCartState,
   } = useFamily();
   const [familyHubVisible, setFamilyHubVisible] = useState(false);
   const { activeOrders } = useCookMode();
+
+  const handleMoveToFamilyBasket = async (item: {
+    kit: MealKit;
+    quantity: number;
+    servings: number;
+    spiceLevel?: string;
+  }) => {
+    const res = await addFamilyItem(item.kit, item.quantity, item.servings, item.spiceLevel);
+    if (res && !res.success) {
+      Alert.alert('Cannot Move Item', res.error || 'Failed to move item to family basket.');
+      return;
+    }
+    removeItem(item.kit.id, item.servings, item.spiceLevel);
+  };
 
   const params = useLocalSearchParams<{ step?: string; type?: string }>();
   React.useEffect(() => {
@@ -561,6 +579,50 @@ export const CartView: React.FC = () => {
                         size="sm"
                       />
                     </View>
+
+                    {/* Move to Family Basket Action */}
+                    {family && !isDependent && (
+                      <View style={[styles.moveRow, { borderTopColor: colors.borderLight }]}>
+                        <TouchableOpacity
+                          style={[
+                            styles.moveBasketBtn,
+                            {
+                              backgroundColor:
+                                isCartLocked && !isOwner ? colors.bgSubtle : colors.primaryLight,
+                              borderColor:
+                                isCartLocked && !isOwner
+                                  ? colors.borderLight
+                                  : colors.primary + '30',
+                              borderRadius: radii.pill,
+                            },
+                          ]}
+                          onPress={() =>
+                            handleMoveToFamilyBasket({ kit, quantity, servings, spiceLevel })
+                          }
+                          disabled={isCartLocked && !isOwner}
+                          activeOpacity={0.7}
+                          testID={`move-to-family-basket-btn-${kit.id}`}
+                        >
+                          <Icon
+                            name="swap-horizontal"
+                            size={13}
+                            color={isCartLocked && !isOwner ? colors.textMuted : colors.primary}
+                          />
+                          <Text
+                            style={[
+                              styles.moveBasketBtnText,
+                              {
+                                color: isCartLocked && !isOwner ? colors.textMuted : colors.primary,
+                              },
+                            ]}
+                          >
+                            {isCartLocked && !isOwner
+                              ? 'Family Basket (Locked)'
+                              : 'Move to Family Basket'}
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
+                    )}
                   </View>
                 </View>
               ))}
@@ -1595,5 +1657,24 @@ const styles = StyleSheet.create({
   activeKitMeta: {
     fontSize: 11,
     marginTop: 2,
+  },
+  moveRow: {
+    marginTop: 8,
+    paddingTop: 8,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+  },
+  moveBasketBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderWidth: 1,
+  },
+  moveBasketBtnText: {
+    fontSize: 11,
+    fontWeight: '700',
   },
 });

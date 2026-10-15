@@ -29,6 +29,9 @@ export interface FamilyMember {
   role: FamilyRole;
   dependent_type?: DependentType | null;
   display_name: string;
+  age?: number | null;
+  gender?: string | null;
+  preferences?: Record<string, any> | null;
   joined_at: string;
 }
 
@@ -795,6 +798,168 @@ export async function createJoinLink(
 }
 
 /**
+ * Directly adds a child or senior citizen profile to the family.
+ * Stored and managed directly from the owner's account without sending join invitations.
+ */
+export async function addDependentMember(
+  familyId: string,
+  dependentType: DependentType,
+  displayName: string,
+  preferences?: Record<string, any>,
+  callerId?: string,
+): Promise<{ success: boolean; member?: FamilyMember; error?: string }> {
+  const firstName = extractFirstName(displayName);
+  if (!firstName) {
+    return { success: false, error: 'Display name is required' };
+  }
+
+  if (preferences?.age !== undefined && preferences?.age !== null && preferences?.age !== '') {
+    const numericAge = Number(preferences.age);
+    if (isNaN(numericAge)) {
+      return { success: false, error: 'Please enter a valid age' };
+    }
+    if (dependentType === 'child' && (numericAge < 4 || numericAge > 15)) {
+      return { success: false, error: 'Child age must be between 4 and 15 years' };
+    }
+    if (dependentType === 'senior' && (numericAge < 60 || numericAge > 120)) {
+      return { success: false, error: 'Senior citizen age must be between 60 and 120 years' };
+    }
+  }
+
+  if (!isMockEnabled()) {
+    const supabase = getSupabaseClient();
+    try {
+      const { data, error } = await supabase.rpc('add_dependent_member', {
+        p_family_id: familyId,
+        p_dependent_type: dependentType,
+        p_display_name: firstName,
+        p_preferences: preferences || {},
+        p_caller_id: callerId || null,
+      });
+
+      if (error) {
+        if (!isMissingSchemaError(error)) {
+          return { success: false, error: error.message };
+        }
+      } else if (data) {
+        if (data.success && data.member) {
+          await ensureLocalFamilyStore();
+          const list = localStore.members.get(familyId) || [];
+          const existingIdx = list.findIndex((m) => m.user_id === data.member.user_id);
+          if (existingIdx >= 0) {
+            list[existingIdx] = data.member;
+          } else {
+            list.push(data.member);
+          }
+          localStore.members.set(familyId, list);
+          await persistLocalStore();
+          return { success: true, member: data.member };
+        }
+        return { success: false, error: data.error };
+      }
+    } catch {}
+  }
+
+  // Fallback: local store
+  await ensureLocalFamilyStore();
+  const list = localStore.members.get(familyId) || [];
+  if (list.length >= MAX_FAMILY_MEMBERS) {
+    return { success: false, error: 'Family has reached the maximum capacity of 6 members' };
+  }
+
+  const newMember: FamilyMember = {
+    family_id: familyId,
+    user_id: `dep_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+    role: 'dependent',
+    dependent_type: dependentType,
+    display_name: firstName,
+    age: preferences?.age ? Number(preferences.age) : null,
+    gender: preferences?.gender || null,
+    preferences: preferences || {},
+    joined_at: new Date().toISOString(),
+  };
+
+  list.push(newMember);
+  localStore.members.set(familyId, list);
+  await persistLocalStore();
+
+  return { success: true, member: newMember };
+}
+
+/**
+ * Updates taste and dietary preferences for a child or senior citizen profile.
+ */
+export async function updateDependentPreferences(
+  familyId: string,
+  dependentId: string,
+  preferences: Record<string, any>,
+  callerId?: string,
+): Promise<{ success: boolean; error?: string }> {
+  if (!isMockEnabled()) {
+    const supabase = getSupabaseClient();
+    try {
+      const { data, error } = await supabase.rpc('update_dependent_preferences', {
+        p_family_id: familyId,
+        p_dependent_id: dependentId,
+        p_preferences: preferences,
+        p_caller_id: callerId || null,
+      });
+
+      if (error) {
+        if (!isMissingSchemaError(error)) {
+          return { success: false, error: error.message };
+        }
+      } else if (data) {
+        if (data.success) {
+          await ensureLocalFamilyStore();
+          const list = localStore.members.get(familyId) || [];
+          const target = list.find((m) => m.user_id === dependentId);
+          if (target) {
+            target.preferences = preferences;
+            if (preferences?.age !== undefined) {
+              target.age = preferences.age ? Number(preferences.age) : null;
+            }
+            if (preferences?.gender !== undefined) {
+              target.gender = preferences.gender || null;
+            }
+            if (preferences?.display_name) {
+              target.display_name = preferences.display_name;
+            }
+            localStore.members.set(familyId, list);
+            await persistLocalStore();
+          }
+          return { success: true };
+        }
+        return { success: false, error: data.error };
+      }
+    } catch {}
+  }
+
+  // Fallback: local store
+  await ensureLocalFamilyStore();
+  const list = localStore.members.get(familyId) || [];
+  const target = list.find((m) => m.user_id === dependentId);
+  if (!target) {
+    return { success: false, error: 'Dependent not found in family' };
+  }
+
+  target.preferences = preferences;
+  if (preferences?.age !== undefined) {
+    target.age = preferences.age ? Number(preferences.age) : null;
+  }
+  if (preferences?.gender !== undefined) {
+    target.gender = preferences.gender || null;
+  }
+  if (preferences?.display_name) {
+    target.display_name = preferences.display_name;
+  }
+  localStore.members.set(familyId, list);
+  await persistLocalStore();
+
+  return { success: true };
+}
+
+/**
  * Revokes a pending dependent join link.
  */
 export async function revokeJoinLink(
@@ -1541,32 +1706,112 @@ export async function ownerRemoveItem(
   callerId?: string,
 ): Promise<{ success: boolean; error?: string }> {
   if (!isMockEnabled()) {
-    const supabase = getSupabaseClient();
-    try {
-      const { data, error } = await supabase.rpc('owner_remove_item', {
-        p_family_id: familyId,
-        p_item_id: itemId,
-        p_caller_id: callerId || null,
-      });
+    if (isValidUUID(familyId) && isValidUUID(itemId)) {
+      const supabase = getSupabaseClient();
+      try {
+        // Strategy 1: RPC owner_remove_item (bypasses RLS as SECURITY DEFINER)
+        const { data: rpcData, error: rpcError } = await supabase.rpc('owner_remove_item', {
+          p_family_id: familyId,
+          p_item_id: itemId,
+          p_caller_id: callerId || null,
+        });
 
-      if (error) {
-        if (!isMissingSchemaError(error)) {
-          return { success: false, error: error.message };
+        if (!rpcError && rpcData?.success) {
+          await ensureLocalFamilyStore();
+          const list = localStore.cartItems.get(familyId) || [];
+          localStore.cartItems.set(
+            familyId,
+            list.filter((i) => i.id !== itemId),
+          );
+          await persistLocalStore();
+          return { success: true };
         }
-      } else if (data) {
-        if (data.success) return { success: true };
-        return { success: false, error: data.error };
+
+        // Strategy 2: Direct table delete with select verification
+        const { data: deletedRows, error: directError } = await supabase
+          .from('family_cart_items')
+          .delete()
+          .eq('id', itemId)
+          .select('id');
+
+        if (!directError && deletedRows && deletedRows.length > 0) {
+          await ensureLocalFamilyStore();
+          const list = localStore.cartItems.get(familyId) || [];
+          localStore.cartItems.set(
+            familyId,
+            list.filter((i) => i.id !== itemId),
+          );
+          await persistLocalStore();
+          return { success: true };
+        }
+
+        if (rpcError && !isMissingSchemaError(rpcError)) {
+          console.warn('[FamilyService] owner_remove_item RPC error:', rpcError);
+        }
+        if (directError && !isMissingSchemaError(directError)) {
+          console.warn('[FamilyService] direct delete error:', directError);
+        }
+      } catch (err: any) {
+        console.warn('[FamilyService] ownerRemoveItem exception:', err);
       }
-    } catch {}
+    }
   }
 
-  // Fallback
+  // Fallback / Sandbox local store update
   await ensureLocalFamilyStore();
   const list = localStore.cartItems.get(familyId) || [];
   localStore.cartItems.set(
     familyId,
     list.filter((i) => i.id !== itemId),
   );
+  await persistLocalStore();
+  return { success: true };
+}
+
+/**
+ * Clears all items and holds from the family cart (invoked after order placement).
+ */
+export async function clearFamilyCart(
+  familyId: string,
+  callerId?: string,
+): Promise<{ success: boolean; error?: string }> {
+  if (!isMockEnabled()) {
+    if (isValidUUID(familyId)) {
+      const supabase = getSupabaseClient();
+      try {
+        // Strategy 1: RPC clear_family_cart
+        const { data: rpcData, error: rpcError } = await supabase.rpc('clear_family_cart', {
+          p_family_id: familyId,
+          p_caller_id: callerId || null,
+        });
+
+        if (!rpcError && rpcData?.success) {
+          await ensureLocalFamilyStore();
+          localStore.cartItems.set(familyId, []);
+          localStore.holds.delete(familyId);
+          await persistLocalStore();
+          return { success: true };
+        }
+
+        // Strategy 2: Direct table delete
+        await supabase.from('family_cart_items').delete().eq('family_id', familyId);
+        await supabase.from('family_checkout_holds').delete().eq('family_id', familyId);
+
+        await ensureLocalFamilyStore();
+        localStore.cartItems.set(familyId, []);
+        localStore.holds.delete(familyId);
+        await persistLocalStore();
+        return { success: true };
+      } catch (err: any) {
+        console.warn('[FamilyService] clearFamilyCart exception:', err);
+      }
+    }
+  }
+
+  // Fallback / Sandbox store
+  await ensureLocalFamilyStore();
+  localStore.cartItems.set(familyId, []);
+  localStore.holds.delete(familyId);
   await persistLocalStore();
   return { success: true };
 }
@@ -1864,6 +2109,10 @@ export async function placeFamilyOrder(params: {
         }
       } else if (data) {
         if (data.success) {
+          await ensureLocalFamilyStore();
+          localStore.cartItems.set(params.familyId, []);
+          localStore.holds.delete(params.familyId);
+          await persistLocalStore();
           return {
             success: true,
             orderId: data.order_id,
@@ -1894,8 +2143,8 @@ export async function placeFamilyOrder(params: {
     subtotal + (params.deliveryFee || 0) - (params.walletCreditsToApply || 0),
   );
 
-  // Clear approved items and release hold
-  localStore.cartItems.set(params.familyId, pending);
+  // Clear all items and release hold
+  localStore.cartItems.set(params.familyId, []);
   localStore.holds.delete(params.familyId);
   await persistLocalStore();
 

@@ -252,8 +252,8 @@ BEGIN
     RETURN json_build_object('success', true, 'wallet_id', v_wallet_id, 'already_existed', true);
   END IF;
 
-  INSERT INTO public.wallets (user_id, available_balance, reserved_balance, currency)
-  VALUES (p_user_id, 0.00, 0.00, 'INR')
+  INSERT INTO public.wallets (id, user_id, available_balance, reserved_balance, currency)
+  VALUES (gen_random_uuid(), p_user_id, 0.00, 0.00, 'INR')
   RETURNING id INTO v_wallet_id;
 
   IF NOT EXISTS (SELECT 1 FROM public.referral_codes WHERE user_id = p_user_id) THEN

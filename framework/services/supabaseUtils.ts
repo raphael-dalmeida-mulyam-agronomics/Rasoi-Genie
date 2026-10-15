@@ -20,16 +20,24 @@ export function isMissingSchemaError(err: any): boolean {
   const message: string = (err.message ?? '').toLowerCase();
   const hint: string = (err.hint ?? '').toLowerCase();
 
-  // PostgREST "relation does not exist", schema cache miss, or table not found (PGRST205)
-  if (code === 'PGRST200' || code === 'PGRST205' || code === 'PGRST301' || code === '42P01')
+  // PostgREST "relation does not exist", schema cache miss, function missing (PGRST202), or table not found (PGRST205)
+  if (
+    code === 'PGRST200' ||
+    code === 'PGRST202' ||
+    code === 'PGRST205' ||
+    code === 'PGRST301' ||
+    code === '42P01'
+  )
     return true;
   // "could not find a relationship" (foreign key schema cache miss)
   if (code === 'PGRST116') return true;
-  // PostgREST "could not find the table ... in the schema cache"
+  // PostgREST schema cache misses for tables, relations, and functions
   if (
     code !== '42883' &&
     (message.includes('could not find the table') ||
-      message.includes('could not find the relation'))
+      message.includes('could not find the relation') ||
+      message.includes('could not find the function') ||
+      message.includes('in the schema cache'))
   ) {
     return true;
   }

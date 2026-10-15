@@ -16,6 +16,7 @@ export interface MemberOptionsSheetProps {
   onClose: () => void;
   onActionComplete?: () => void;
   onOpenTransfer?: () => void;
+  onOpenPreferences?: (member: FamilyMember) => void;
 }
 
 export const MemberOptionsSheet: React.FC<MemberOptionsSheetProps> = ({
@@ -24,9 +25,10 @@ export const MemberOptionsSheet: React.FC<MemberOptionsSheetProps> = ({
   onClose,
   onActionComplete,
   onOpenTransfer,
+  onOpenPreferences,
 }) => {
   const { colors, radii, isDark } = useTheme();
-  const { promoteOrDemoteCoOwner, removeFamilyMember, reissueLink, members } = useFamily();
+  const { promoteOrDemoteCoOwner, removeFamilyMember, members } = useFamily();
 
   const [loadingAction, setLoadingAction] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -54,26 +56,6 @@ export const MemberOptionsSheet: React.FC<MemberOptionsSheetProps> = ({
         setErrorMsg(res.error || 'Failed to update co-owner role.');
       } else {
         onClose();
-        onActionComplete?.();
-      }
-    } finally {
-      setLoadingAction(null);
-    }
-  };
-
-  const handleReissue = async () => {
-    setErrorMsg(null);
-    setLoadingAction('reissue');
-    try {
-      const res = await reissueLink(member.user_id);
-      if (!res.success) {
-        setErrorMsg(res.error || 'Failed to re-issue join link.');
-      } else {
-        Alert.alert(
-          'Fresh Link Created',
-          `A new 24-hour join link has been generated for ${member.display_name}.`,
-          [{ text: 'OK', onPress: onClose }],
-        );
         onActionComplete?.();
       }
     } finally {
@@ -169,8 +151,8 @@ export const MemberOptionsSheet: React.FC<MemberOptionsSheetProps> = ({
           </TouchableOpacity>
         )}
 
-        {/* Option 2: Re-issue Join Link (Dependents) */}
-        {isDependent && (
+        {/* Option 2: View Taste Profile & Recommendations (Dependents) */}
+        {isDependent && onOpenPreferences && (
           <TouchableOpacity
             style={[
               styles.actionRow,
@@ -180,21 +162,25 @@ export const MemberOptionsSheet: React.FC<MemberOptionsSheetProps> = ({
                 backgroundColor: isDark ? 'rgba(255, 255, 255, 0.02)' : colors.bgSurface,
               },
             ]}
-            onPress={handleReissue}
+            onPress={() => {
+              onClose();
+              onOpenPreferences(member);
+            }}
             disabled={loadingAction !== null}
             activeOpacity={0.7}
             accessibilityRole="button"
-            accessibilityLabel={t.reissueLink}
+            accessibilityLabel="Taste Profile & Recommendations"
+            testID="open-taste-profile-option"
           >
             <View style={[styles.iconWrap, { backgroundColor: '#D1FAE5' }]}>
-              <Icon name="link" size={18} color="#059669" />
+              <Icon name="sparkles" size={18} color="#059669" />
             </View>
             <View style={{ flex: 1 }}>
               <Text style={[styles.actionTitle, { color: colors.textPrimary }]}>
-                {t.reissueLink}
+                Taste Profile & Recommendations
               </Text>
               <Text style={[styles.actionDesc, { color: colors.textSecondary }]}>
-                {t.reissueLinkDesc}
+                View and customize diets, cuisines, allergies & meal kit recommendations
               </Text>
             </View>
             <Icon name="chevron-right" size={18} color={colors.textMuted} />

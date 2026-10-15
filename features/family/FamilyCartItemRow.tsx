@@ -13,11 +13,13 @@ export interface FamilyCartItemRowProps {
   canEdit?: boolean;
   canRemove?: boolean;
   canApprove?: boolean;
+  canMoveToPersonal?: boolean;
   isCityUnavailable?: boolean;
   onQuantityChange?: (newQuantity: number) => void;
   onRemove?: () => void;
   onApprove?: () => void;
   onReject?: () => void;
+  onMoveToPersonal?: () => void;
   testID?: string;
 }
 
@@ -26,11 +28,13 @@ export const FamilyCartItemRow: React.FC<FamilyCartItemRowProps> = ({
   canEdit = false,
   canRemove = false,
   canApprove = false,
+  canMoveToPersonal = false,
   isCityUnavailable = false,
   onQuantityChange,
   onRemove,
   onApprove,
   onReject,
+  onMoveToPersonal,
   testID,
 }) => {
   const { colors, radii, isDark } = useTheme();
@@ -87,9 +91,10 @@ export const FamilyCartItemRow: React.FC<FamilyCartItemRowProps> = ({
                 style={styles.removeBtn}
                 accessibilityRole="button"
                 accessibilityLabel={`Remove ${kitName} from basket`}
-                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                testID={`remove-family-item-${item.id}`}
               >
-                <Icon name="trash" size={16} color={colors.textMuted} />
+                <Icon name="trash" size={17} color={colors.textSecondary} />
               </TouchableOpacity>
             )}
           </View>
@@ -150,6 +155,30 @@ export const FamilyCartItemRow: React.FC<FamilyCartItemRowProps> = ({
               </Text>
             )}
           </View>
+
+          {/* Move to Personal Basket Action */}
+          {canMoveToPersonal && onMoveToPersonal && (
+            <View style={[styles.moveRow, { borderTopColor: colors.borderLight }]}>
+              <TouchableOpacity
+                style={[
+                  styles.moveBasketBtn,
+                  {
+                    backgroundColor: colors.primaryLight,
+                    borderColor: colors.primary + '30',
+                    borderRadius: radii.pill,
+                  },
+                ]}
+                onPress={onMoveToPersonal}
+                activeOpacity={0.7}
+                testID={`move-to-personal-cart-${item.id}`}
+              >
+                <Icon name="swap-horizontal" size={13} color={colors.primary} />
+                <Text style={[styles.moveBasketBtnText, { color: colors.primary }]}>
+                  Move to Personal Basket
+                </Text>
+              </TouchableOpacity>
+            </View>
+          )}
         </View>
       </View>
 
@@ -279,5 +308,24 @@ const styles = StyleSheet.create({
     color: '#991B1B',
     fontSize: 11,
     fontWeight: '500',
+  },
+  moveRow: {
+    marginTop: 6,
+    paddingTop: 6,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+  },
+  moveBasketBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderWidth: 1,
+  },
+  moveBasketBtnText: {
+    fontSize: 11,
+    fontWeight: '700',
   },
 });

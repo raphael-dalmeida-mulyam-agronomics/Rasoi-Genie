@@ -13,6 +13,8 @@ import { router } from 'expo-router';
 import { useTheme } from '../../framework/theme/ThemeContext';
 import { useFamily } from '../../framework/context/FamilyContext';
 import { useAuth } from '../../framework/context/AuthContext';
+import { useCart } from '../../framework/context/CartContext';
+import { getMealKitById } from '../../framework/services/mealKitsService';
 import { can } from '../../framework/family/permissions';
 import { familyStrings } from '../../framework/family/familyStrings';
 import {
@@ -38,6 +40,7 @@ export const FamilyCartView: React.FC<FamilyCartViewProps> = ({ onProceedToCheck
   const isWebSplit = width >= 768;
 
   const { user } = useAuth();
+  const { addItem } = useCart();
   const {
     family,
     role,
@@ -60,6 +63,25 @@ export const FamilyCartView: React.FC<FamilyCartViewProps> = ({ onProceedToCheck
 
   const [rejectItemTarget, setRejectItemTarget] = useState<FamilyCartItem | null>(null);
   const [isProcessingCheckout, setIsProcessingCheckout] = useState(false);
+
+  const handleMoveToPersonalCart = async (item: FamilyCartItem) => {
+    const kit = getMealKitById(item.kit_id);
+    if (kit) {
+      addItem(kit, item.quantity, item.servings, item.spice_level);
+    }
+    await removeFamilyItem(item.id);
+  };
+
+  const handleRemoveFamilyItem = async (itemId: string) => {
+    try {
+      const res = await removeFamilyItem(itemId);
+      if (res && !res.success) {
+        Alert.alert('Cannot Remove Item', res.error || 'Failed to remove item from basket.');
+      }
+    } catch (err: any) {
+      Alert.alert('Error', err?.message || 'Could not remove item.');
+    }
+  };
 
   const t = familyStrings.cart;
   const isOwner = role === 'owner';
@@ -293,6 +315,7 @@ export const FamilyCartView: React.FC<FamilyCartViewProps> = ({ onProceedToCheck
                   ? can(role, 'remove_any_item')
                   : !isCartLocked && isOwnItem && can(role, 'remove_own_item');
                 const canApproveItem = isOwner && can(role, 'approve_item');
+                const canMoveToPersonal = !isDependent && (isOwner || (!isCartLocked && isOwnItem));
 
                 return (
                   <FamilyCartItemRow
@@ -301,10 +324,12 @@ export const FamilyCartView: React.FC<FamilyCartViewProps> = ({ onProceedToCheck
                     canEdit={canEditItem}
                     canRemove={canRemoveItem}
                     canApprove={canApproveItem}
+                    canMoveToPersonal={canMoveToPersonal}
                     onQuantityChange={(qty) => editFamilyItem(item, qty)}
-                    onRemove={() => removeFamilyItem(item.id)}
+                    onRemove={() => handleRemoveFamilyItem(item.id)}
                     onApprove={() => approveDependentItem(item.id)}
                     onReject={() => handleRejectPrompt(item)}
+                    onMoveToPersonal={() => handleMoveToPersonalCart(item)}
                     testID={`family-item-${item.id}`}
                   />
                 );

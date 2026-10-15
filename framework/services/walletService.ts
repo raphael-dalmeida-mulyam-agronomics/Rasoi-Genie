@@ -246,11 +246,17 @@ export async function initializeWallet(
     });
 
     if (error) {
-      if (!isMissingSchemaError(error)) {
+      const isNullIdError = error.message?.includes('null value in column "id"');
+      if (!isMissingSchemaError(error) && !isNullIdError) {
         console.warn('[WalletService] create_wallet_for_user RPC error:', error.message);
         return { success: false, error: error.message };
       }
-      // Schema cache fallback: use local persistent wallet store
+      if (isNullIdError) {
+        console.warn(
+          '[WalletService] create_wallet_for_user: wallets table id default is missing in DB; falling back to local wallet store until migration runs.',
+        );
+      }
+      // Schema cache / constraint fallback: use local persistent wallet store
       await ensureLocalStoreLoaded();
       const existing = localWalletsCache.get(userId);
       if (existing) {

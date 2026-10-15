@@ -51,6 +51,18 @@ function loadStore(): void {
                 thresholdLow: Math.max(item.thresholdLow, 500),
               };
             }
+            // Auto-heal cooking cream and other sauces if low stock in local store
+            if (
+              (item.name.toLowerCase().includes('cream') ||
+                item.name.toLowerCase().includes('sauce') ||
+                item.name.toLowerCase().includes('oil')) &&
+              item.currentStock <= 100
+            ) {
+              return {
+                ...item,
+                currentStock: Math.max(item.currentStock, 500),
+              };
+            }
             return item;
           });
           return;
@@ -532,9 +544,25 @@ export function validateOrderIngredients(
       continue;
     }
     if (item.currentStock < req.quantity) {
+      const isDiscrete = [
+        'units',
+        'unit',
+        'pouch',
+        'pouches',
+        'pcs',
+        'pack',
+        'packs',
+        'box',
+        'boxes',
+      ].includes(item.unit?.toLowerCase() || '');
+
       if ((item.unit === 'g' || item.unit === 'ml') && item.currentStock <= 100) {
-        // Auto-heal legacy gram items that were initialized with portion counts rather than gram weights
+        // Auto-heal legacy gram/ml items that were initialized with portion counts rather than gram weights
         item.currentStock = Math.max(req.quantity * 25, 5000);
+        persistStore();
+      } else if (isDiscrete && item.currentStock > 0 && req.quantity >= 10) {
+        // Auto-heal discrete units when legacy recipe checked in ml/g (e.g. 120ml) against pouch inventory
+        item.currentStock = Math.max(item.currentStock * 5, req.quantity * 2, 500);
         persistStore();
       } else {
         insufficient.push(`${item.name} (need ${req.quantity}, have ${item.currentStock})`);

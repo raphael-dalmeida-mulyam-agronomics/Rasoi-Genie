@@ -70,6 +70,35 @@ export interface CreateOrderParams {
 // Local fallback cache if Supabase network is unavailable
 const localOrdersMemory: Order[] = [];
 
+function calculateRequiredIngredientQuantity(
+  orderQuantity: number,
+  recipeQuantity: string | undefined,
+  inventoryUnit: string | undefined,
+): number {
+  const parsed = parseFloat(recipeQuantity || '1') || 1;
+  const unit = (inventoryUnit || '').toLowerCase();
+  const isDiscreteUnit = [
+    'units',
+    'unit',
+    'pouch',
+    'pouches',
+    'pcs',
+    'pack',
+    'packs',
+    'box',
+    'boxes',
+    'bottle',
+    'bottles',
+  ].includes(unit);
+  const isLiquidOrWeightInRecipe = /[a-z]*(ml|g|kg|l)\b/i.test(recipeQuantity || '');
+
+  // If warehouse stock is tracked in discrete units/pouches/bottles, each meal kit consumes 1 pouch/unit
+  if (isDiscreteUnit && isLiquidOrWeightInRecipe) {
+    return orderQuantity;
+  }
+  return Math.max(1, Math.round(orderQuantity * parsed));
+}
+
 /**
  * Creates a new order in Supabase.
  * Sets initial status to 'Placed' (awaiting admin approval).
@@ -100,7 +129,7 @@ export async function createOrderInSupabase(
           if (inv) {
             required.push({
               itemId: inv.id,
-              quantity: Math.round(it.quantity * (parseFloat(ing.quantity) || 1)),
+              quantity: calculateRequiredIngredientQuantity(it.quantity, ing.quantity, inv.unit),
               region: fulfillmentRegion,
             });
           }
@@ -143,7 +172,7 @@ export async function createOrderInSupabase(
             if (inv) {
               deductIngredientStock(
                 inv.id,
-                Math.round(it.quantity * (parseFloat(ing.quantity) || 1)),
+                calculateRequiredIngredientQuantity(it.quantity, ing.quantity, inv.unit),
                 fulfillmentRegion,
               );
             }
@@ -435,7 +464,7 @@ export async function updateOrderStatusInSupabase(
                 if (inv) {
                   restoreIngredientStock(
                     inv.id,
-                    Math.round(it.quantity * (parseFloat(ing.quantity) || 1)),
+                    calculateRequiredIngredientQuantity(it.quantity, ing.quantity, inv.unit),
                     fulfillmentRegion,
                   );
                 }

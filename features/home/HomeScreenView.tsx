@@ -39,13 +39,21 @@ import { Button } from '../../framework/ui/Button';
 import { AppIconName, Icon } from '../../framework/ui/Icon';
 import { seedKitsForCityIfNeeded } from '../admin/cityKitsSeederService';
 import { MealDetailModal } from '../meal-detail/MealDetailModal';
+import { CartDestinationModal } from '../cart/CartDestinationModal';
 import { DietaryPreferencesModal } from '../onboarding/DietaryPreferencesModal';
 import { LocationPickerModal } from '../onboarding/LocationPickerModal';
 import { useCookMode } from '../../framework/context/CookModeContext';
 import { useFamily } from '../../framework/context/FamilyContext';
+import { FamilyMember } from '../../framework/services/familyService';
 import { RoleBadge } from '../../framework/ui/RoleBadge';
 import { ResumeCookingBanner } from '../cook/components/ResumeCookingBanner';
 import { ActiveOrdersSelectorModal } from '../../framework/ui/ActiveOrdersSelectorModal';
+
+export interface DependentRecommendationGroup {
+  member: FamilyMember;
+  type: 'child' | 'senior';
+  kits: MealKit[];
+}
 
 const { width } = Dimensions.get('window');
 
@@ -345,6 +353,7 @@ const CatalogSections = React.memo(function CatalogSections({
   trendingKits,
   foreignKits,
   recommendedKits,
+  dependentRecommendations,
   dietFilterTags,
   selectedCuisine,
   selectedDishCategory,
@@ -364,6 +373,7 @@ const CatalogSections = React.memo(function CatalogSections({
   trendingKits: MealKit[];
   foreignKits: MealKit[];
   recommendedKits: MealKit[];
+  dependentRecommendations?: DependentRecommendationGroup[];
   dietFilterTags: Set<DietTag>;
   selectedCuisine: CuisineType | 'All';
   selectedDishCategory: DishCategory | 'All';
@@ -644,6 +654,133 @@ const CatalogSections = React.memo(function CatalogSections({
         </View>
       )}
 
+      {/* SECTION 2.5: Recommended for Dependents (Children & Seniors) - Shown on Owner's Home Page */}
+      {dietFilterTags.size === 0 &&
+        selectedCuisine === 'All' &&
+        dependentRecommendations &&
+        dependentRecommendations.map((group) => {
+          const { member, type, kits } = group;
+          const isChild = type === 'child';
+          const prefs = member.preferences || {};
+          const memberDiets: string[] = prefs.dietTypes || [];
+          const memberAllergies: string[] = prefs.allergies || [];
+          const memberCuisines: string[] = prefs.preferredCuisines || [];
+
+          let subtitle = `Personalized for ${member.display_name}`;
+          if (memberDiets.length > 0) {
+            subtitle = `Curated for ${member.display_name}'s ${memberDiets.join(', ').toUpperCase()} profile`;
+            if (memberAllergies.length > 0) {
+              subtitle += ` • ${memberAllergies.length} allergy filter${memberAllergies.length > 1 ? 's' : ''}`;
+            }
+          } else if (memberCuisines.length > 0) {
+            subtitle = `Featuring ${member.display_name}'s favorite ${memberCuisines.slice(0, 2).join(' & ')} dishes`;
+          }
+
+          return (
+            <View
+              key={member.user_id || `${type}-${member.display_name}`}
+              style={styles.catalogSection}
+              testID={`recommended-section-${member.display_name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`}
+            >
+              <View style={styles.sectionHeaderRow}>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.sectionHeading, { color: colors.textPrimary }]}>
+                    Recommended for {member.display_name}
+                  </Text>
+                  <View
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      gap: 6,
+                      marginTop: 3,
+                      flexWrap: 'wrap',
+                    }}
+                  >
+                    <Badge
+                      label={isChild ? 'Child Profile' : 'Senior Profile'}
+                      variant={isChild ? 'info' : 'neutral'}
+                      size="sm"
+                    />
+                    <Text
+                      style={[styles.sectionSubtitle, { color: colors.textSecondary }]}
+                      numberOfLines={1}
+                    >
+                      {subtitle}
+                    </Text>
+                  </View>
+                </View>
+                <TouchableOpacity
+                  onPress={() => router.push('/family')}
+                  style={{ alignSelf: 'flex-start', paddingTop: 2 }}
+                >
+                  <Text style={[styles.editPrefLink, { color: colors.primary }]}>
+                    Family Profile
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              {kits.length === 0 ? (
+                <View
+                  style={{
+                    padding: 20,
+                    backgroundColor: colors.bgSurface,
+                    borderRadius: radii.lg,
+                    borderColor: colors.borderLight,
+                    borderWidth: 1,
+                    alignItems: 'center',
+                    marginHorizontal: 16,
+                    marginTop: 8,
+                  }}
+                >
+                  <Icon name="restaurant" size={28} color={colors.textMuted} />
+                  <Text
+                    style={{
+                      fontSize: 14,
+                      fontWeight: '700',
+                      color: colors.textPrimary,
+                      marginTop: 8,
+                    }}
+                  >
+                    No Dishes in Preferred Categories
+                  </Text>
+                  <Text
+                    style={{
+                      fontSize: 12,
+                      color: colors.textSecondary,
+                      textAlign: 'center',
+                      marginTop: 4,
+                    }}
+                  >
+                    No meal kits currently match all dietary preferences and allergen exclusions for{' '}
+                    {member.display_name}.
+                  </Text>
+                </View>
+              ) : (
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.horizontalCardRow}
+                >
+                  {kits
+                    .filter((k): k is MealKit => Boolean(k && k.id))
+                    .slice(0, 10)
+                    .map((kit) => (
+                      <MealKitHorizontalCard
+                        key={kit.id}
+                        kit={kit}
+                        currentCity={currentCity}
+                        onPress={onOpenDetail}
+                        onQuickAdd={onQuickAdd}
+                        isFavorite={kit?.id ? (isInWishlist?.(kit.id) ?? false) : false}
+                        onToggleFavorite={onToggleFavorite}
+                      />
+                    ))}
+                </ScrollView>
+              )}
+            </View>
+          );
+        })}
+
       {/* SECTION 3: All Available Kits Grid — shown at bottom when no dish category filter active */}
       {selectedDishCategory === 'All' && (
         <View style={styles.catalogSection}>
@@ -721,8 +858,12 @@ export const HomeScreenView: React.FC = () => {
   const { addItem, totalCount } = useCart();
   const { isInWishlist, toggleWishlist, wishlistCount } = useWishlist();
   const { preferences } = usePreferences();
-  const { family, role, members, dependentType } = useFamily();
+  const { family, role, members, isOwner, dependentType, addFamilyItem } = useFamily();
   const isDependent = role === 'dependent';
+
+  // Basket Destination Chooser Modal
+  const [destinationModalVisible, setDestinationModalVisible] = useState(false);
+  const [pendingQuickAddKit, setPendingQuickAddKit] = useState<MealKit | null>(null);
 
   // Selected filters
   const [dietFilterTags, setDietFilterTags] = useState<Set<DietTag>>(new Set());
@@ -1014,16 +1155,145 @@ export const HomeScreenView: React.FC = () => {
       );
   }, [allKits]);
 
+  // Helper to check if a kit contains allergens configured for a dependent
+  const matchesDependentAllergens = (kit: MealKit, allergies?: string[]): boolean => {
+    if (!allergies || allergies.length === 0) return true;
+    const kitAllergens = (kit.allergens || []).map((a) => a.toLowerCase().trim());
+    return !allergies.some((userAllergy) => {
+      const u = userAllergy.toLowerCase().trim();
+      return kitAllergens.some((a) => a.includes(u) || u.includes(a));
+    });
+  };
+
+  // Helper to check if a kit matches preferred diet types for a dependent
+  const matchesDependentDiet = (kit: MealKit, dietTypes?: string[]): boolean => {
+    if (!dietTypes || dietTypes.length === 0) return true;
+    return dietTypes.some((diet) => {
+      if (diet === 'veg') {
+        return (
+          kit.diet === 'veg' || (Array.isArray(kit.dietaryTags) && kit.dietaryTags.includes('veg'))
+        );
+      }
+      if (diet === 'nonveg') return kit.diet === 'nonveg';
+      return Array.isArray(kit.dietaryTags) && kit.dietaryTags.includes(diet as DietTag);
+    });
+  };
+
+  // Recommendations for family dependents (children & seniors) - strictly for Owner Home Page
+  const dependentRecommendations = useMemo<DependentRecommendationGroup[]>(() => {
+    const effectiveIsOwner = isOwner || role === 'owner';
+    if (!effectiveIsOwner || !members || members.length === 0) return [];
+
+    const dependents = members.filter(
+      (m) => m.dependent_type === 'child' || m.dependent_type === 'senior',
+    );
+
+    if (dependents.length === 0) return [];
+
+    // Sort children first, then seniors
+    const sorted = [...dependents].sort((a, b) => {
+      const isAChild = a.dependent_type === 'child';
+      const isBChild = b.dependent_type === 'child';
+      if (isAChild && !isBChild) return -1;
+      if (!isAChild && isBChild) return 1;
+      return 0;
+    });
+
+    return sorted.map((member) => {
+      const isChild = member.dependent_type === 'child';
+      const type: 'child' | 'senior' = isChild ? 'child' : 'senior';
+      const prefs = member.preferences || {};
+      const dietTypes: string[] = prefs.dietTypes || [];
+      const allergies: string[] = prefs.allergies || [];
+      const preferredCuisines: string[] =
+        prefs.preferredCuisines && prefs.preferredCuisines.length > 0
+          ? prefs.preferredCuisines
+          : isChild
+            ? ['Italian', 'North Indian']
+            : ['North Indian', 'South Indian'];
+      const preferredSet = new Set(preferredCuisines.map((c) => c.toLowerCase().trim()));
+
+      const kits = allKits
+        .filter((k): k is MealKit => Boolean(k && k.id))
+        .filter((k) => matchesDependentAllergens(k, allergies))
+        .filter((k) => matchesDependentDiet(k, dietTypes))
+        // Strictly show ONLY meal kits matching the dependent's preferred cuisines
+        .filter((k) => {
+          if (!k.cuisine) return false;
+          if (preferredSet.size === 0) return true;
+          return preferredSet.has(k.cuisine.toLowerCase().trim());
+        })
+        .sort((a, b) => {
+          let scoreA = 0;
+          let scoreB = 0;
+
+          if (a.cuisine && preferredSet.has(a.cuisine.toLowerCase().trim())) scoreA += 10;
+          if (b.cuisine && preferredSet.has(b.cuisine.toLowerCase().trim())) scoreB += 10;
+
+          if (isChild) {
+            if (a.spiceLevel === 'Mild') scoreA += 8;
+            if (b.spiceLevel === 'Mild') scoreB += 8;
+          } else {
+            if (a.spiceLevel === 'Mild' || a.spiceLevel === 'Medium') scoreA += 6;
+            if (b.spiceLevel === 'Mild' || b.spiceLevel === 'Medium') scoreB += 6;
+          }
+
+          scoreA += a.rating || 0;
+          scoreB += b.rating || 0;
+
+          return scoreB - scoreA;
+        });
+
+      return {
+        member,
+        type,
+        kits,
+      };
+    });
+  }, [isOwner, role, members, allKits]);
+
   const handleOpenDetail = useCallback((kit: MealKit) => {
     setSelectedKit(kit);
     setDetailModalVisible(true);
   }, []);
 
-  const handleQuickAdd = useCallback((kit: MealKit) => {
-    // Open meal kit detail modal so user can customize servings, spice level, etc.
-    setSelectedKit(kit);
-    setDetailModalVisible(true);
-  }, []);
+  const handleQuickAdd = useCallback(
+    (kit: MealKit) => {
+      if (family && !isDependent) {
+        setPendingQuickAddKit(kit);
+        setDestinationModalVisible(true);
+      } else if (isDependent) {
+        addFamilyItem(kit, 1, kit.servings || 2, kit.spiceLevel || 'Medium');
+      } else {
+        addItem(kit, 1, kit.servings || 2, kit.spiceLevel || 'Medium');
+      }
+    },
+    [family, isDependent, addFamilyItem, addItem],
+  );
+
+  const handleSelectDestination = useCallback(
+    async (destination: 'personal' | 'family') => {
+      if (!pendingQuickAddKit) return;
+      if (destination === 'family') {
+        await addFamilyItem(
+          pendingQuickAddKit,
+          1,
+          pendingQuickAddKit.servings || 2,
+          pendingQuickAddKit.spiceLevel || 'Medium',
+        );
+      } else {
+        addItem(
+          pendingQuickAddKit,
+          1,
+          pendingQuickAddKit.servings || 2,
+          pendingQuickAddKit.spiceLevel || 'Medium',
+        );
+      }
+      setDestinationModalVisible(false);
+      setPendingQuickAddKit(null);
+    },
+    [pendingQuickAddKit, addFamilyItem, addItem],
+  );
 
   const handleToggleFavorite = useCallback(
     (kitId: string) => {
@@ -1608,6 +1878,7 @@ export const HomeScreenView: React.FC = () => {
           trendingKits={trendingKits}
           foreignKits={foreignKits}
           recommendedKits={recommendedKits}
+          dependentRecommendations={dependentRecommendations}
           dietFilterTags={dietFilterTags}
           selectedCuisine={selectedCuisine}
           selectedDishCategory={selectedDishCategory}
@@ -1634,6 +1905,17 @@ export const HomeScreenView: React.FC = () => {
           setReviewKit(kit);
           setReviewModalVisible(true);
         }}
+      />
+
+      {/* Explicit Basket Destination Modal (Personal vs Family) */}
+      <CartDestinationModal
+        visible={destinationModalVisible}
+        kit={pendingQuickAddKit}
+        onClose={() => {
+          setDestinationModalVisible(false);
+          setPendingQuickAddKit(null);
+        }}
+        onSelectDestination={handleSelectDestination}
       />
 
       {/* Dietary Preferences Modal */}

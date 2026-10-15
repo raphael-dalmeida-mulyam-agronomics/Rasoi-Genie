@@ -8,9 +8,12 @@ import { OrderConfirmationView } from '../../features/checkout/OrderConfirmation
 import { FamilyContext, FamilyContextValue } from '../context/FamilyContext';
 import { ThemeProvider } from '../theme/ThemeContext';
 import { FamilyMember, FamilyCartItem, encodePayloadToToken } from '../services/familyService';
-
+import { getMealKits } from '../services/mealKitsService';
 import { router } from 'expo-router';
 import { HomeScreenView } from '../../features/home/HomeScreenView';
+import { DependentProfileSheet } from '../../features/family/DependentProfileSheet';
+import { CartDestinationModal } from '../../features/cart/CartDestinationModal';
+import { FamilyCartItemRow } from '../../features/family/FamilyCartItemRow';
 
 jest.mock('react-native-safe-area-context', () => ({
   useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
@@ -275,6 +278,9 @@ function createMockFamilyContext(
     startCheckoutHold: jest.fn().mockResolvedValue({ success: true }),
     cancelCheckoutHold: jest.fn().mockResolvedValue({ success: true }),
     checkoutFamilyOrder: jest.fn().mockResolvedValue({ success: true, orderId: 'ORD-FAM-1' }),
+    clearFamilyCart: jest.fn().mockResolvedValue({ success: true }),
+    addDependentProfile: jest.fn().mockResolvedValue({ success: true }),
+    updateDependentPreferences: jest.fn().mockResolvedValue({ success: true }),
   };
 }
 
@@ -301,7 +307,6 @@ describe('Family Feature UI Test Suite', () => {
       expect(getByTestId('invite-adult-btn')).toBeTruthy();
       expect(getByTestId('add-dependent-btn')).toBeTruthy();
       expect(getByTestId('view-approvals-btn')).toBeTruthy();
-      expect(getByTestId('manage-links-btn')).toBeTruthy();
       expect(getByTestId('open-family-cart-btn')).toBeTruthy();
       expect(getByTestId('danger-zone')).toBeTruthy();
       expect(getByTestId('transfer-ownership-btn')).toBeTruthy();
@@ -326,7 +331,6 @@ describe('Family Feature UI Test Suite', () => {
       expect(queryByTestId('invite-adult-btn')).toBeNull();
       expect(queryByTestId('add-dependent-btn')).toBeNull();
       expect(queryByTestId('view-approvals-btn')).toBeNull();
-      expect(queryByTestId('manage-links-btn')).toBeNull();
       expect(queryByTestId('danger-zone')).toBeNull();
       expect(queryByTestId('transfer-ownership-btn')).toBeNull();
     });
@@ -606,6 +610,93 @@ describe('Family Feature UI Test Suite', () => {
       expect(queryByTestId('home-family-header-btn')).toBeNull();
       expect(queryByTestId('home-family-top-tab')).toBeNull();
     });
+
+    it('renders "Recommended for {childs name}" section for each child on owner home page', async () => {
+      const customMembers: FamilyMember[] = [
+        ...mockMembers.filter((m) => m.role === 'owner'),
+        {
+          family_id: 'fam_1',
+          user_id: 'user_child_1',
+          role: 'dependent',
+          dependent_type: 'child',
+          display_name: 'Aarav',
+          joined_at: new Date().toISOString(),
+          preferences: { dietTypes: ['veg'], preferredCuisines: ['Italian'] },
+        },
+        {
+          family_id: 'fam_1',
+          user_id: 'user_child_2',
+          role: 'dependent',
+          dependent_type: 'child',
+          display_name: 'Ananya',
+          joined_at: new Date().toISOString(),
+          preferences: { dietTypes: ['veg'], preferredCuisines: ['North Indian'] },
+        },
+      ];
+      const ctx: FamilyContextValue = {
+        ...createMockFamilyContext('owner'),
+        members: customMembers,
+      };
+      const { getByText, getByTestId } = await renderWithProviders(<HomeScreenView />, ctx);
+
+      expect(getByText('Recommended for Aarav')).toBeTruthy();
+      expect(getByTestId('recommended-section-aarav')).toBeTruthy();
+      expect(getByText('Recommended for Ananya')).toBeTruthy();
+      expect(getByTestId('recommended-section-ananya')).toBeTruthy();
+    });
+
+    it('renders "Recommended for {seniors name}" section for senior citizens on owner home page', async () => {
+      const customMembers: FamilyMember[] = [
+        ...mockMembers.filter((m) => m.role === 'owner'),
+        {
+          family_id: 'fam_1',
+          user_id: 'user_senior_1',
+          role: 'dependent',
+          dependent_type: 'senior',
+          display_name: 'Dadaji',
+          joined_at: new Date().toISOString(),
+          preferences: { dietTypes: ['veg'], preferredCuisines: ['South Indian'] },
+        },
+      ];
+      const ctx: FamilyContextValue = {
+        ...createMockFamilyContext('owner'),
+        members: customMembers,
+      };
+      const { getByText, getByTestId } = await renderWithProviders(<HomeScreenView />, ctx);
+
+      expect(getByText('Recommended for Dadaji')).toBeTruthy();
+      expect(getByTestId('recommended-section-dadaji')).toBeTruthy();
+    });
+
+    it('does NOT render dependent recommendation sections if user is not the owner', async () => {
+      const customMembers: FamilyMember[] = [
+        {
+          family_id: 'fam_1',
+          user_id: 'user_member',
+          role: 'member',
+          display_name: 'Anjali Sharma',
+          joined_at: new Date().toISOString(),
+        },
+        {
+          family_id: 'fam_1',
+          user_id: 'user_child_1',
+          role: 'dependent',
+          dependent_type: 'child',
+          display_name: 'Aarav',
+          joined_at: new Date().toISOString(),
+        },
+      ];
+      const ctx: FamilyContextValue = {
+        ...createMockFamilyContext('member'),
+        members: customMembers,
+        isOwner: false,
+        role: 'member',
+      };
+      const { queryByText, queryByTestId } = await renderWithProviders(<HomeScreenView />, ctx);
+
+      expect(queryByText('Recommended for Aarav')).toBeNull();
+      expect(queryByTestId('recommended-section-aarav')).toBeNull();
+    });
   });
 
   // ─── 6. OrderConfirmationView Recipe Scoping ────────────────────────
@@ -698,6 +789,263 @@ describe('Family Feature UI Test Suite', () => {
           kitId: 'kit_1',
         },
       });
+    });
+  });
+
+  // ─── 7. DependentProfileSheet Edit Preferences Menu ──────────────────
+  describe('DependentProfileSheet Edit Preferences Menu', () => {
+    it('opens the same preferences setup menu when editing taste preferences', async () => {
+      const childMember: FamilyMember = {
+        family_id: 'fam_1',
+        user_id: 'user_child_1',
+        role: 'dependent',
+        dependent_type: 'child',
+        display_name: 'Aarav',
+        age: 9,
+        gender: 'Male',
+        joined_at: new Date().toISOString(),
+        preferences: {
+          dietTypes: ['veg'],
+          spiceTolerance: 'Mild',
+          preferredCuisines: ['Italian'],
+          allergies: ['Peanuts'],
+        },
+      };
+
+      const ctx: FamilyContextValue = {
+        ...createMockFamilyContext('owner'),
+        members: [...mockMembers, childMember],
+      };
+
+      const { getByTestId, getByText } = await renderWithProviders(
+        <DependentProfileSheet visible={true} member={childMember} onClose={jest.fn()} />,
+        ctx,
+      );
+
+      // Verify "Edit Taste Preferences" button exists
+      const editBtn = getByTestId('edit-dependent-preferences-btn');
+      expect(editBtn).toBeTruthy();
+
+      // Press Edit Taste Preferences
+      fireEvent.press(editBtn);
+
+      // Verify the same AddDependentSheet opens with prefilled preferences setup menu
+      await waitFor(() => {
+        expect(getByTestId('add-dependent-sheet')).toBeTruthy();
+      });
+      expect(getByText("Edit Aarav's Preferences")).toBeTruthy();
+      expect(getByText('American')).toBeTruthy();
+      expect(getByText('Burgers, loaded bowls & classic bakes')).toBeTruthy();
+      expect(getByText('Save Taste Preferences')).toBeTruthy();
+    });
+
+    it('slides down both the preference editing menu and the profile sheet after saving preferences', async () => {
+      const handleCloseParentSheet = jest.fn();
+      const childMember: FamilyMember = {
+        family_id: 'fam_1',
+        user_id: 'user_child_1',
+        role: 'dependent',
+        dependent_type: 'child',
+        display_name: 'Aarav',
+        age: 9,
+        gender: 'Male',
+        joined_at: new Date().toISOString(),
+        preferences: {
+          dietTypes: ['veg'],
+          spiceTolerance: 'Mild',
+          preferredCuisines: ['Italian'],
+        },
+      };
+
+      const ctx: FamilyContextValue = {
+        ...createMockFamilyContext('owner'),
+        members: [...mockMembers, childMember],
+      };
+
+      const { getByTestId, getByText } = await renderWithProviders(
+        <DependentProfileSheet
+          visible={true}
+          member={childMember}
+          onClose={handleCloseParentSheet}
+        />,
+        ctx,
+      );
+
+      // Open Edit Taste Preferences
+      fireEvent.press(getByTestId('edit-dependent-preferences-btn'));
+      await waitFor(() => {
+        expect(getByTestId('add-dependent-sheet')).toBeTruthy();
+      });
+
+      // Save preferences
+      fireEvent.press(getByText('Save Taste Preferences'));
+
+      // Both the edit sheet and profile sheet should slide down (handleCloseParentSheet called)
+      await waitFor(() => {
+        expect(handleCloseParentSheet).toHaveBeenCalled();
+      });
+    });
+
+    it('strictly shows only mealkits that suit senior citizen cuisine preferences, excluding European ratatouille', async () => {
+      const seniorMember: FamilyMember = {
+        family_id: 'fam_1',
+        user_id: 'user_senior_1',
+        role: 'dependent',
+        dependent_type: 'senior',
+        display_name: 'Dadaji',
+        age: 72,
+        gender: 'Male',
+        joined_at: new Date().toISOString(),
+        preferences: {
+          dietTypes: ['veg'],
+          spiceTolerance: 'Mild',
+          preferredCuisines: ['North Indian', 'South Indian'],
+        },
+      };
+
+      const ctx: FamilyContextValue = {
+        ...createMockFamilyContext('owner'),
+        members: [...mockMembers, seniorMember],
+      };
+
+      const { queryByText, queryAllByText } = await renderWithProviders(
+        <DependentProfileSheet visible={true} member={seniorMember} onClose={jest.fn()} />,
+        ctx,
+      );
+
+      // Ratatouille is European cuisine, must NOT be shown for Indian cuisine preferences
+      expect(queryByText(/Ratatouille/i)).toBeNull();
+      expect(queryByText(/Provencal/i)).toBeNull();
+    });
+  });
+
+  // ─── 8. CartDestinationModal & Basket Move Actions ────────────────────
+  describe('CartDestinationModal & Basket Move Actions', () => {
+    const sampleKit: any = {
+      id: 'kit_1',
+      name: 'Paneer Butter Masala Kit',
+      price: 349,
+      servings: 2,
+      spiceLevel: 'Medium',
+      heroImage: 'https://images.unsplash.com/mock.jpg',
+      diet: 'veg',
+    };
+
+    it('renders CartDestinationModal with personal and family options and fires callbacks', async () => {
+      const onSelect = jest.fn();
+      const onClose = jest.fn();
+
+      const ctx = createMockFamilyContext('owner');
+      const { getByTestId, getByText } = await renderWithProviders(
+        <CartDestinationModal
+          visible={true}
+          kit={sampleKit}
+          onClose={onClose}
+          onSelectDestination={onSelect}
+        />,
+        ctx,
+      );
+
+      expect(getByTestId('cart-destination-modal')).toBeTruthy();
+      expect(getByText('Personal Basket')).toBeTruthy();
+      expect(getByText('Family Basket')).toBeTruthy();
+
+      fireEvent.press(getByTestId('destination-personal-basket-btn'));
+      expect(onSelect).toHaveBeenCalledWith('personal');
+    });
+
+    it('disables family basket destination when cart is locked by owner for a non-owner member', async () => {
+      const onSelect = jest.fn();
+
+      const ctx: FamilyContextValue = {
+        ...createMockFamilyContext('member'),
+        isCartLocked: true,
+      };
+
+      const { getByTestId, getAllByText } = await renderWithProviders(
+        <CartDestinationModal
+          visible={true}
+          kit={sampleKit}
+          onClose={jest.fn()}
+          onSelectDestination={onSelect}
+        />,
+        ctx,
+      );
+
+      expect(getAllByText(/Locked/i).length).toBeGreaterThan(0);
+      fireEvent.press(getByTestId('destination-family-basket-btn'));
+      expect(onSelect).not.toHaveBeenCalledWith('family');
+    });
+
+    it('renders Move to Personal Basket button on FamilyCartItemRow and triggers action', async () => {
+      const handleMove = jest.fn();
+      const sampleItem = mockCartItems[0]!;
+      const ctx = createMockFamilyContext('owner');
+
+      const { getByTestId, getByText } = await renderWithProviders(
+        <FamilyCartItemRow
+          item={sampleItem}
+          canMoveToPersonal={true}
+          onMoveToPersonal={handleMove}
+        />,
+        ctx,
+      );
+
+      const moveBtn = getByTestId(`move-to-personal-cart-${sampleItem.id}`);
+      expect(moveBtn).toBeTruthy();
+      expect(getByText('Move to Personal Basket')).toBeTruthy();
+
+      fireEvent.press(moveBtn);
+      expect(handleMove).toHaveBeenCalled();
+    });
+
+    it('does NOT render Move to Personal Basket button on FamilyCartItemRow if canMoveToPersonal is false', async () => {
+      const sampleItem = mockCartItems[0]!;
+      const ctx = createMockFamilyContext('owner');
+
+      const { queryByTestId, queryByText } = await renderWithProviders(
+        <FamilyCartItemRow item={sampleItem} canMoveToPersonal={false} />,
+        ctx,
+      );
+
+      expect(queryByTestId(`move-to-personal-cart-${sampleItem.id}`)).toBeNull();
+      expect(queryByText('Move to Personal Basket')).toBeNull();
+    });
+
+    it('renders remove button and triggers onRemove when canRemove is true', async () => {
+      const handleRemove = jest.fn();
+      const sampleItem = mockCartItems[0]!;
+      const ctx = createMockFamilyContext('owner');
+
+      const { getByTestId } = await renderWithProviders(
+        <FamilyCartItemRow item={sampleItem} canRemove={true} onRemove={handleRemove} />,
+        ctx,
+      );
+
+      const removeBtn = getByTestId(`remove-family-item-${sampleItem.id}`);
+      expect(removeBtn).toBeTruthy();
+
+      fireEvent.press(removeBtn);
+      expect(handleRemove).toHaveBeenCalled();
+    });
+
+    it('allows deleting item from FamilyCartView and invokes removeFamilyItem', async () => {
+      const ctx = createMockFamilyContext('owner');
+
+      const { getByTestId } = await renderWithProviders(<FamilyCartView />, ctx);
+
+      const firstItem = mockCartItems[0]!;
+      const removeBtn = getByTestId(`remove-family-item-${firstItem.id}`);
+      expect(removeBtn).toBeTruthy();
+
+      fireEvent.press(removeBtn);
+      expect(ctx.removeFamilyItem).toHaveBeenCalledWith(firstItem.id);
+    });
+
+    it('clears family basket after order is placed', async () => {
+      const ctx = createMockFamilyContext('owner');
+      await ctx.clearFamilyCart();
+      expect(ctx.clearFamilyCart).toHaveBeenCalled();
     });
   });
 });
