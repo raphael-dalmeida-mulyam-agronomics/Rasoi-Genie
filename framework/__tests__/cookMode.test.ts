@@ -65,7 +65,7 @@ describe('Cook Mode & Kitchen Companion Suite', () => {
       expect(Notifications.scheduleNotificationAsync).toHaveBeenCalledWith(
         expect.objectContaining({
           content: expect.objectContaining({
-            title: 'Timer Complete! 🍳',
+            title: 'Timer Complete!',
             body: expect.stringContaining('Simmer Gravy'),
           }),
           trigger: expect.objectContaining({

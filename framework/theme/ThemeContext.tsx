@@ -1,4 +1,4 @@
-﻿import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
 import { Platform } from 'react-native';
 import {
   PALETTES,
@@ -89,6 +89,19 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       root.style.setProperty('--color-success', colors.success);
       root.style.setProperty('--color-warning', colors.warning);
       root.style.setProperty('--color-danger', colors.danger);
+
+      root.style.setProperty('--color-bg-danger-subtle', colors.bgDangerSubtle);
+      root.style.setProperty('--color-text-danger', colors.textDanger);
+      root.style.setProperty('--color-border-danger-subtle', colors.borderDangerSubtle);
+      root.style.setProperty('--color-bg-success-subtle', colors.bgSuccessSubtle);
+      root.style.setProperty('--color-text-success', colors.textSuccess);
+      root.style.setProperty('--color-border-success-subtle', colors.borderSuccessSubtle);
+      root.style.setProperty('--color-bg-warning-subtle', colors.bgWarningSubtle);
+      root.style.setProperty('--color-text-warning', colors.textWarning);
+      root.style.setProperty('--color-border-warning-subtle', colors.borderWarningSubtle);
+      root.style.setProperty('--color-bg-info-subtle', colors.bgInfoSubtle);
+      root.style.setProperty('--color-text-info', colors.textInfo);
+      root.style.setProperty('--color-border-info-subtle', colors.borderInfoSubtle);
 
       // Set attribute and class on <html>
       root.setAttribute('data-theme', colorMode);

@@ -446,9 +446,7 @@ export const CookModeView: React.FC<CookModeViewProps> = ({ orderId, initialKitI
               <Text style={[styles.headerCenterTitle, { color: colors.textPrimary }]}>
                 Cooking Guide Complete
               </Text>
-              <Text style={[styles.headerCenterSub, { color: colors.primary }]}>
-                ✨ Bon Appétit
-              </Text>
+              <Text style={[styles.headerCenterSub, { color: colors.primary }]}>Bon Appétit</Text>
             </View>
             <TouchableOpacity
               testID="cook-mode-close-btn"
@@ -513,20 +511,27 @@ export const CookModeView: React.FC<CookModeViewProps> = ({ orderId, initialKitI
                 {kit.name}
               </Text>
               <View style={styles.headerMetaRow}>
-                <Text style={[styles.headerOrderId, { color: colors.primary }]}>
-                  #{order.id.slice(-6)}
+                <Text style={[styles.headerOrderId, { color: colors.primary, fontWeight: '700' }]}>
+                  Step {currentStepIndex + 1} of {totalSteps}
                 </Text>
-                <Badge
-                  label={order.status === 'Delivered' ? 'Ready to Cook' : order.status}
-                  variant={
-                    order.status === 'Confirmed' || order.status === 'Delivered'
-                      ? 'success'
-                      : order.status === 'Preparing'
-                        ? 'warning'
-                        : 'accent'
-                  }
-                  size="sm"
-                />
+                <View
+                  style={{
+                    width: 50,
+                    height: 4,
+                    backgroundColor: colors.bgSubtle,
+                    borderRadius: radii.pill,
+                    overflow: 'hidden',
+                  }}
+                >
+                  <View
+                    style={{
+                      width: `${progressFraction * 100}%`,
+                      height: '100%',
+                      backgroundColor: colors.primary,
+                      borderRadius: radii.pill,
+                    }}
+                  />
+                </View>
               </View>
             </View>
           </View>
@@ -547,28 +552,36 @@ export const CookModeView: React.FC<CookModeViewProps> = ({ orderId, initialKitI
               </TouchableOpacity>
             )}
 
-            {/* Kitchen Text Size Toggle: A / A+ */}
+            {/* Kitchen Text Size Toggle: A (Standard) / A+ (Large) / A++ (Counter Distance) */}
             <TouchableOpacity
               testID="kitchen-text-size-toggle"
               style={[
                 styles.textSizeToggle,
                 {
-                  backgroundColor: textSize === 'large' ? colors.primary : colors.bgSubtle,
+                  backgroundColor:
+                    textSize === 'counter'
+                      ? colors.accent
+                      : textSize === 'large'
+                        ? colors.primary
+                        : colors.bgSubtle,
                   borderColor: colors.borderLight,
                   borderRadius: radii.pill,
                 },
               ]}
               onPress={toggleTextSize}
               accessibilityRole="button"
-              accessibilityLabel={`Kitchen text size is currently ${textSize}. Tap to toggle.`}
+              accessibilityLabel={`Kitchen text size is currently ${textSize}. Tap to switch between standard, large, and counter distance.`}
             >
               <Text
                 style={[
                   styles.textSizeToggleText,
-                  { color: textSize === 'large' ? '#FFFFFF' : colors.textPrimary },
+                  {
+                    color: textSize === 'standard' ? colors.textPrimary : '#FFFFFF',
+                    fontWeight: '800',
+                  },
                 ]}
               >
-                {textSize === 'large' ? 'A+' : 'A'}
+                {textSize === 'counter' ? 'A++' : textSize === 'large' ? 'A+' : 'A'}
               </Text>
             </TouchableOpacity>
 
@@ -746,9 +759,13 @@ export const CookModeView: React.FC<CookModeViewProps> = ({ orderId, initialKitI
             accessibilityLabel={currentStepIndex + 1 >= totalSteps ? 'Finish cooking' : 'Next step'}
           >
             <Text style={styles.nextBtnText}>
-              {currentStepIndex + 1 >= totalSteps ? 'Finish Cooking 🎉' : 'Next Step'}
+              {currentStepIndex + 1 >= totalSteps ? 'Finish Cooking' : 'Next Step'}
             </Text>
-            <Icon name="arrow-forward" size={16} color="#FFFFFF" />
+            <Icon
+              name={currentStepIndex + 1 >= totalSteps ? 'checkmark-circle' : 'arrow-forward'}
+              size={18}
+              color="#FFFFFF"
+            />
           </TouchableOpacity>
         </View>
 
@@ -837,7 +854,7 @@ export const CookModeView: React.FC<CookModeViewProps> = ({ orderId, initialKitI
                         </Text>
                         {st.timerSeconds ? (
                           <Text style={[styles.stepOverviewTimer, { color: colors.textMuted }]}>
-                            ⏱ {Math.round(st.timerSeconds / 60)} min timer
+                            {Math.round(st.timerSeconds / 60)} min timer
                           </Text>
                         ) : null}
                       </View>
@@ -1030,8 +1047,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 12,
-    gap: 6,
+    minHeight: 52,
+    paddingVertical: 14,
+    gap: 8,
   },
   prevBtn: {
     flex: 1,

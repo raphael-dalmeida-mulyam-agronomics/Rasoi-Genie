@@ -13,6 +13,8 @@ import { useTheme } from '../../framework/theme/ThemeContext';
 import { Icon } from '../../framework/ui/Icon';
 import { Badge } from '../../framework/ui/Badge';
 import { Button } from '../../framework/ui/Button';
+import { SkeletonRowItem } from '../../framework/ui/Skeleton';
+import { EmptyState } from '../../framework/ui/EmptyState';
 import {
   WalletTransaction,
   creditSourceLabel,
@@ -312,29 +314,23 @@ export const WalletView: React.FC<WalletViewProps> = ({ onBack, onNavigateToRefe
 
         {/* Transactions List */}
         {isLoading && transactions.length === 0 ? (
-          <View style={styles.loadingWrap}>
-            <ActivityIndicator size="large" color={colors.primary} />
-            <Text style={[styles.loadingText, { color: colors.textSecondary }]}>
-              Loading wallet history...
-            </Text>
+          <View style={{ gap: 10, marginTop: 4 }}>
+            <SkeletonRowItem />
+            <SkeletonRowItem />
+            <SkeletonRowItem />
           </View>
         ) : filteredTransactions.length === 0 ? (
-          <View
-            style={[
-              styles.emptyWrap,
-              { backgroundColor: colors.bgSurface, borderColor: colors.borderLight },
-            ]}
-          >
-            <Icon name="receipt-outline" size={40} color={colors.textMuted} />
-            <Text style={[styles.emptyTitle, { color: colors.textPrimary }]}>
-              No Transactions Found
-            </Text>
-            <Text style={[styles.emptySub, { color: colors.textSecondary }]}>
-              {activeTab === 'ALL'
+          <EmptyState
+            icon="wallet-outline"
+            title="No Transactions Found"
+            description={
+              activeTab === 'ALL'
                 ? 'Your wallet ledger is currently empty. Earn credits by referring friends!'
-                : `No ${activeTab.toLowerCase()} transactions found.`}
-            </Text>
-          </View>
+                : `No ${activeTab.toLowerCase()} transactions found in your records.`
+            }
+            actionTitle={activeTab === 'ALL' && onNavigateToReferral ? 'Invite Friends' : undefined}
+            onAction={onNavigateToReferral}
+          />
         ) : (
           <View style={styles.transactionsList}>
             {filteredTransactions.map((txn) => {

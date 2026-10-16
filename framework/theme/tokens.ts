@@ -41,6 +41,20 @@ export interface ThemeColors {
   danger: string;
   info: string;
   star: string;
+
+  // Semantic subtle feedback tokens (dark mode safe)
+  bgDangerSubtle: string;
+  textDanger: string;
+  borderDangerSubtle: string;
+  bgSuccessSubtle: string;
+  textSuccess: string;
+  borderSuccessSubtle: string;
+  bgWarningSubtle: string;
+  textWarning: string;
+  borderWarningSubtle: string;
+  bgInfoSubtle: string;
+  textInfo: string;
+  borderInfoSubtle: string;
 }
 
 export interface ColorPalette {
@@ -52,7 +66,38 @@ export interface ColorPalette {
   dark: ThemeColors;
 }
 
+const LIGHT_SUBTLE_TOKENS = {
+  bgDangerSubtle: '#FEF2F2',
+  textDanger: '#B91C1C',
+  borderDangerSubtle: '#FECACA',
+  bgSuccessSubtle: '#F0FDF4',
+  textSuccess: '#15803D',
+  borderSuccessSubtle: '#BBF7D0',
+  bgWarningSubtle: '#FFFBEB',
+  textWarning: '#B45309',
+  borderWarningSubtle: '#FDE68A',
+  bgInfoSubtle: '#F0F9FF',
+  textInfo: '#0369A1',
+  borderInfoSubtle: '#BAE6FD',
+};
+
+const DARK_SUBTLE_TOKENS = {
+  bgDangerSubtle: '#450A0A',
+  textDanger: '#FCA5A5',
+  borderDangerSubtle: '#7F1D1D',
+  bgSuccessSubtle: '#052E16',
+  textSuccess: '#86EFAC',
+  borderSuccessSubtle: '#14532D',
+  bgWarningSubtle: '#451A03',
+  textWarning: '#FCD34D',
+  borderWarningSubtle: '#78350F',
+  bgInfoSubtle: '#082F49',
+  textInfo: '#7DD3FC',
+  borderInfoSubtle: '#0C4A6E',
+};
+
 const SAFFRON_LIGHT: ThemeColors = {
+  ...LIGHT_SUBTLE_TOKENS,
   primary: '#E05626',
   primaryHover: '#C8461B',
   primaryLight: '#FFF1EB',
@@ -88,6 +133,7 @@ const SAFFRON_LIGHT: ThemeColors = {
 };
 
 const SAFFRON_DARK: ThemeColors = {
+  ...DARK_SUBTLE_TOKENS,
   primary: '#F97316',
   primaryHover: '#FB923C',
   primaryLight: '#3D1C12',
@@ -123,6 +169,7 @@ const SAFFRON_DARK: ThemeColors = {
 };
 
 const CARDAMOM_LIGHT: ThemeColors = {
+  ...LIGHT_SUBTLE_TOKENS,
   primary: '#0F766E',
   primaryHover: '#115E59',
   primaryLight: '#F0FDFA',
@@ -158,6 +205,7 @@ const CARDAMOM_LIGHT: ThemeColors = {
 };
 
 const CARDAMOM_DARK: ThemeColors = {
+  ...DARK_SUBTLE_TOKENS,
   primary: '#2DD4BF',
   primaryHover: '#5EEAD4',
   primaryLight: '#0B2F2B',
@@ -193,6 +241,7 @@ const CARDAMOM_DARK: ThemeColors = {
 };
 
 const PAPRIKA_LIGHT: ThemeColors = {
+  ...LIGHT_SUBTLE_TOKENS,
   primary: '#C2410C',
   primaryHover: '#9A3412',
   primaryLight: '#FFF7ED',
@@ -228,6 +277,7 @@ const PAPRIKA_LIGHT: ThemeColors = {
 };
 
 const PAPRIKA_DARK: ThemeColors = {
+  ...DARK_SUBTLE_TOKENS,
   primary: '#FB923C',
   primaryHover: '#FDBA74',
   primaryLight: '#3E1807',
@@ -263,6 +313,7 @@ const PAPRIKA_DARK: ThemeColors = {
 };
 
 const CRIMSON_LIGHT: ThemeColors = {
+  ...LIGHT_SUBTLE_TOKENS,
   primary: '#BE123C',
   primaryHover: '#9F1239',
   primaryLight: '#FFF1F2',
@@ -298,6 +349,7 @@ const CRIMSON_LIGHT: ThemeColors = {
 };
 
 const CRIMSON_DARK: ThemeColors = {
+  ...DARK_SUBTLE_TOKENS,
   primary: '#FB7185',
   primaryHover: '#FDA4AF',
   primaryLight: '#430816',
@@ -332,7 +384,80 @@ const CRIMSON_DARK: ThemeColors = {
   star: '#FBBF24',
 };
 
+const TURMERIC_LIGHT: ThemeColors = {
+  ...LIGHT_SUBTLE_TOKENS,
+  primary: '#D97706',
+  primaryHover: '#B45309',
+  primaryLight: '#FEF3C7',
+  primaryDark: '#92400E',
+
+  accent: '#0D9488',
+  accentHover: '#0F766E',
+  accentLight: '#CCFBF1',
+  accentDark: '#115E59',
+
+  bgPrimary: '#FFFDF7',
+  bgSurface: '#FFFFFF',
+  bgSubtle: '#FEFCE8',
+  bgCard: '#FFFFFF',
+
+  textPrimary: '#1C1917',
+  textSecondary: '#57534E',
+  textMuted: '#A8A29E',
+  textInverse: '#FFFFFF',
+
+  border: '#FDE68A',
+  borderLight: '#FEF3C7',
+
+  veg: '#15803D',
+  vegLight: '#DCFCE7',
+  nonVeg: '#B91C1C',
+  nonVegLight: '#FEE2E2',
+  success: '#16A34A',
+  warning: '#F59E0B',
+  danger: '#DC2626',
+  info: '#0284C7',
+  star: '#F59E0B',
+};
+
+const TURMERIC_DARK: ThemeColors = {
+  ...DARK_SUBTLE_TOKENS,
+  primary: '#F59E0B',
+  primaryHover: '#FBBF24',
+  primaryLight: '#451A03',
+  primaryDark: '#B45309',
+
+  accent: '#2DD4BF',
+  accentHover: '#5EEAD4',
+  accentLight: '#042F2E',
+  accentDark: '#0F766E',
+
+  bgPrimary: '#141008',
+  bgSurface: '#1F1A0F',
+  bgSubtle: '#2C2417',
+  bgCard: '#1F1A0F',
+
+  textPrimary: '#FEF9C3',
+  textSecondary: '#FDE68A',
+  textMuted: '#8D7A58',
+  textInverse: '#141008',
+
+  border: '#3B311E',
+  borderLight: '#2C2417',
+
+  veg: '#22C55E',
+  vegLight: '#052E16',
+  nonVeg: '#EF4444',
+  nonVegLight: '#450A0A',
+  success: '#22C55E',
+  warning: '#FBBF24',
+  danger: '#EF4444',
+  info: '#38BDF8',
+  star: '#FBBF24',
+};
+
 export const PALETTES: Record<string, ColorPalette> = {
+  // Canonical 5 Spec Spices
   saffronSpice: {
     id: 'saffronSpice',
     name: 'Warm Saffron Spice',
@@ -351,15 +476,23 @@ export const PALETTES: Record<string, ColorPalette> = {
   },
   smokedPaprika: {
     id: 'smokedPaprika',
-    name: 'Smoked Paprika & Honey',
+    name: 'Tangy Tamarind & Honey',
     description: 'Rich Kashmiri chili paprika paired with amber honey accents',
     colors: PAPRIKA_LIGHT,
     light: PAPRIKA_LIGHT,
     dark: PAPRIKA_DARK,
   },
+  turmeric: {
+    id: 'turmeric',
+    name: 'Golden Turmeric & Coriander',
+    description: 'Warm golden turmeric with cooling coriander teal accents',
+    colors: TURMERIC_LIGHT,
+    light: TURMERIC_LIGHT,
+    dark: TURMERIC_DARK,
+  },
   masalaCrimson: {
     id: 'masalaCrimson',
-    name: 'Masala Crimson & Mint',
+    name: 'Masala Clove & Mint',
     description: 'Deep royal crimson ruby paired with refreshing mint leaves',
     colors: CRIMSON_LIGHT,
     light: CRIMSON_LIGHT,
@@ -367,12 +500,51 @@ export const PALETTES: Record<string, ColorPalette> = {
   },
 };
 
+// Spec aliases for exact 5 spec names (saffron, cardamom, tamarind, turmeric, clove)
+PALETTES.saffron = PALETTES.saffronSpice!;
+PALETTES.cardamom = PALETTES.royalCardamom!;
+PALETTES.tamarind = PALETTES.smokedPaprika!;
+PALETTES.clove = PALETTES.masalaCrimson!;
+
 export const DEFAULT_PALETTE_KEY = 'saffronSpice';
 
 export function getPaletteColors(paletteKey: string, mode: ColorMode = 'light'): ThemeColors {
   const pal = PALETTES[paletteKey] || PALETTES[DEFAULT_PALETTE_KEY]!;
   return mode === 'dark' ? pal.dark : pal.light;
 }
+
+export const TYPOGRAPHY = {
+  display: {
+    fontSize: 28,
+    fontWeight: '800' as const,
+    letterSpacing: -0.5,
+  },
+  title: {
+    fontSize: 20,
+    fontWeight: '700' as const,
+    letterSpacing: -0.2,
+  },
+  subtitle: {
+    fontSize: 16,
+    fontWeight: '600' as const,
+  },
+  body: {
+    fontSize: 14,
+    fontWeight: '400' as const,
+  },
+  bodyMedium: {
+    fontSize: 14,
+    fontWeight: '500' as const,
+  },
+  caption: {
+    fontSize: 12,
+    fontWeight: '500' as const,
+  },
+  captionBold: {
+    fontSize: 12,
+    fontWeight: '700' as const,
+  },
+};
 
 export const SPACING = {
   xs: 4,

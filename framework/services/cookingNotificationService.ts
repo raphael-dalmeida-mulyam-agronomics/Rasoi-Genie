@@ -98,7 +98,7 @@ export async function scheduleCookingTimerNotification(params: {
         activeWebTimeouts.delete(key);
         try {
           if ('Notification' in window && Notification.permission === 'granted') {
-            new Notification(`Timer Finished! 🍳`, {
+            new Notification(`Timer Finished!`, {
               body: `Step ${stepNumber}: ${stepTitle} is ready!`,
             });
           }
@@ -114,7 +114,7 @@ export async function scheduleCookingTimerNotification(params: {
     if (!nativeNotifications) return `mock_notif_${Date.now()}`;
     const notificationId = await nativeNotifications.scheduleNotificationAsync({
       content: {
-        title: 'Timer Complete! 🍳',
+        title: 'Timer Complete!',
         body: `Step ${stepNumber}: ${stepTitle} - time to move to the next step!`,
         sound: true,
         data: {
@@ -171,7 +171,7 @@ export function notifyTimerFinishedInForeground(stepNumber: number, stepTitle: s
   } catch {}
 
   Alert.alert(
-    'Timer Finished! 🍳',
+    'Timer Finished!',
     `Step ${stepNumber}: "${stepTitle}" is ready. Check your pan and move to the next step!`,
     [{ text: 'Got it!' }],
   );

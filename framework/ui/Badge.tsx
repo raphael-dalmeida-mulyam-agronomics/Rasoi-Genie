@@ -1,4 +1,4 @@
-﻿import React from 'react';
+import React from 'react';
 import { View, Text, StyleSheet, ViewStyle, TextStyle } from 'react-native';
 import { useTheme } from '../theme/ThemeContext';
 
@@ -69,21 +69,45 @@ export const Badge: React.FC<BadgeProps> = ({
       case 'nonveg':
         return { bg: colors.nonVegLight, text: colors.nonVeg, border: colors.nonVeg + '40' };
       case 'vegan':
-        return { bg: '#DCFCE7', text: '#15803D', border: '#86EFAC' };
+        return {
+          bg: colors.bgSuccessSubtle,
+          text: colors.textSuccess,
+          border: colors.borderSuccessSubtle,
+        };
       case 'keto':
-        return { bg: '#FEF3C7', text: '#B45309', border: '#FDE68A' };
+        return {
+          bg: colors.bgWarningSubtle,
+          text: colors.textWarning,
+          border: colors.borderWarningSubtle,
+        };
       case 'jain':
-        return { bg: '#F0FDF4', text: '#059669', border: '#6EE7B7' };
+        return {
+          bg: colors.bgSuccessSubtle,
+          text: colors.textSuccess,
+          border: colors.borderSuccessSubtle,
+        };
       case 'gluten-free':
-        return { bg: '#E0F2FE', text: '#0284C7', border: '#7DD3FC' };
+        return { bg: colors.bgInfoSubtle, text: colors.textInfo, border: colors.borderInfoSubtle };
       case 'warning':
-        return { bg: '#FEF3C7', text: '#92400E', border: '#FDE68A' };
+        return {
+          bg: colors.bgWarningSubtle,
+          text: colors.textWarning,
+          border: colors.borderWarningSubtle,
+        };
       case 'info':
-        return { bg: '#E0F2FE', text: '#0369A1', border: '#BAE6FD' };
+        return { bg: colors.bgInfoSubtle, text: colors.textInfo, border: colors.borderInfoSubtle };
       case 'success':
-        return { bg: '#DCFCE7', text: '#15803D', border: '#BBF7D0' };
+        return {
+          bg: colors.bgSuccessSubtle,
+          text: colors.textSuccess,
+          border: colors.borderSuccessSubtle,
+        };
       case 'danger':
-        return { bg: '#FEE2E2', text: '#B91C1C', border: '#FECACA' };
+        return {
+          bg: colors.bgDangerSubtle,
+          text: colors.textDanger,
+          border: colors.borderDangerSubtle,
+        };
       case 'outline':
         return { bg: 'transparent', text: colors.textSecondary, border: colors.border };
       default:

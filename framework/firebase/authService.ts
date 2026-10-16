@@ -128,7 +128,7 @@ export async function sendEmailOTP(email: string): Promise<AuthResult> {
       // Silent catch for email link dispatch when running in local dev / sandbox without SMTP backend
     }
 
-    console.log(`[RasoiGenie Auth] 📧 Email OTP code for ${cleanEmail}: ${generatedOtp}`);
+    console.log(`[RasoiGenie Auth] Email OTP code for ${cleanEmail}: ${generatedOtp}`);
 
     const mockVerificationId = `email_verif_${Date.now()}_${Math.floor(Math.random() * 10000)}`;
 
@@ -251,7 +251,7 @@ export async function sendPhoneOTP(phoneNumber: string): Promise<AuthResult> {
     const formattedPhone = cleanPhone.replace(/\D/g, '');
     activePhoneOTPMap.set(formattedPhone, { code: generatedOtp, expiresAt });
 
-    console.log(`[RasoiGenie Auth] 📱 Phone OTP code for ${cleanPhone}: ${generatedOtp}`);
+    console.log(`[RasoiGenie Auth] Phone OTP code for ${cleanPhone}: ${generatedOtp}`);
 
     const mockVerificationId = `verif_${Date.now()}_${Math.floor(Math.random() * 10000)}`;
 

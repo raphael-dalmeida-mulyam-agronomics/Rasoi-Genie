@@ -153,7 +153,7 @@ export const ReviewModal: React.FC<ReviewModalProps> = ({
       );
 
       Alert.alert(
-        'Review Published! ⭐',
+        'Review Published!',
         'Thank you for rating this meal kit. Your feedback inspires our culinary team!',
       );
 
@@ -212,14 +212,14 @@ export const ReviewModal: React.FC<ReviewModalProps> = ({
                 <RatingStars rating={rating} size={34} interactive onRatingChange={setRating} />
                 <Text style={[styles.ratingLabelText, { color: colors.primary }]}>
                   {rating === 5
-                    ? 'Outstanding! ⭐⭐⭐⭐⭐'
+                    ? 'Outstanding (5 Stars)'
                     : rating === 4
-                      ? 'Very Tasty! ⭐⭐⭐⭐'
+                      ? 'Very Tasty (4 Stars)'
                       : rating === 3
-                        ? 'Good Experience ⭐⭐⭐'
+                        ? 'Good Experience (3 Stars)'
                         : rating === 2
-                          ? 'Could Be Better ⭐⭐'
-                          : 'Needs Improvement ⭐'}
+                          ? 'Could Be Better (2 Stars)'
+                          : 'Needs Improvement (1 Star)'}
                 </Text>
               </View>
 

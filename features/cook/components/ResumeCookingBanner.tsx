@@ -46,8 +46,9 @@ export const ResumeCookingBanner: React.FC = () => {
       style={[
         styles.container,
         {
-          backgroundColor: isDark ? '#1C1917' : '#FEF3C7',
-          borderColor: colors.primary,
+          backgroundColor: colors.bgWarningSubtle,
+          borderColor: colors.borderWarningSubtle,
+          borderWidth: 1,
           borderRadius: radii.xl,
           ...shadows.card,
         },

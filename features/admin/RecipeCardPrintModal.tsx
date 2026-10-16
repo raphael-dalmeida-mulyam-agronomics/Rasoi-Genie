@@ -1,4 +1,4 @@
-﻿import React, { useState } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -48,7 +48,7 @@ export function triggerRecipeCardPrint(
     .map(
       (ing) => `
       <div class="ing-item ${ing.isMasalaSachet ? 'sachet' : 'fresh'}">
-        <div class="ing-bullet">${ing.isMasalaSachet ? '✦' : '•'}</div>
+        <div class="ing-bullet">•</div>
         <div class="ing-info">
           <div class="ing-name">${ing.name}</div>
           <div class="ing-sub">${ing.isMasalaSachet ? 'Chef Secret Masala Sachet' : 'Fresh Produce / Base'}</div>
@@ -705,9 +705,7 @@ export const RecipeCardFrontView: React.FC<{
                   },
                 ]}
               >
-                <Text style={{ fontSize: 13, marginRight: 6 }}>
-                  {ing.isMasalaSachet ? '✦' : '•'}
-                </Text>
+                <Text style={{ fontSize: 13, marginRight: 6 }}>•</Text>
                 <View style={{ flex: 1 }}>
                   <Text
                     style={[
@@ -775,7 +773,7 @@ export const RecipeCardBackView: React.FC<{
           <Text style={styles.cardHeaderBrand}>STEP-BY-STEP RECIPE INSTRUCTIONS</Text>
           <Text style={styles.cardHeaderSub}>{kit.name} • Master Chef Home Prep Guide</Text>
         </View>
-        <Badge label={`⏱️ ${kit.cookTimeMinutes} mins total`} variant="accent" size="sm" />
+        <Badge label={`${kit.cookTimeMinutes} mins total`} variant="accent" size="sm" />
       </View>
 
       <ScrollView style={{ padding: 12, maxHeight: 380 }} showsVerticalScrollIndicator={true}>

@@ -184,14 +184,12 @@ export function installInAppAlertInterceptors() {
     showInAppAlert(title, message, buttons);
   };
 
-  // Intercept browser window.alert and window.confirm
+  // Intercept browser window.alert to route to in-app dialog
+  // Note: We do NOT override window.confirm with a synchronous 'return true'
+  // to prevent accidental destructive operations without user consent.
   if (typeof window !== 'undefined') {
     (window as any).alert = (msg?: string) => {
       showInAppAlert('Notice', msg ? String(msg) : '');
-    };
-    (window as any).confirm = (msg?: string) => {
-      showInAppAlert('Confirm Action', msg ? String(msg) : '');
-      return true;
     };
   }
 }

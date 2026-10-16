@@ -1,4 +1,4 @@
-﻿import React from 'react';
+import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ViewStyle } from 'react-native';
 import { useTheme } from '../theme/ThemeContext';
 
@@ -62,6 +62,9 @@ export const QuantityStepper: React.FC<QuantityStepperProps> = ({
         onPress={handleDecrement}
         disabled={value <= min}
         activeOpacity={0.7}
+        accessibilityRole="button"
+        accessibilityLabel="Decrease quantity"
+        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
       >
         <Text
           style={[
@@ -102,6 +105,9 @@ export const QuantityStepper: React.FC<QuantityStepperProps> = ({
         onPress={handleIncrement}
         disabled={value >= max}
         activeOpacity={0.7}
+        accessibilityRole="button"
+        accessibilityLabel="Increase quantity"
+        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
       >
         <Text
           style={[

@@ -236,7 +236,7 @@ export async function notifyRegionalAdminsOutOfStock(alert: OutOfStockAlertPaylo
   if (Platform.OS === 'web' && typeof window !== 'undefined' && 'Notification' in window) {
     if (Notification.permission === 'granted') {
       try {
-        const title = `⚠️ OUT OF STOCK: ${alert.kitName}`;
+        const title = `OUT OF STOCK: ${alert.kitName}`;
         const regionText = alert.region ? ` in ${alert.region} Region` : '';
         const body = `"${alert.kitName}" has reached 0 units${regionText}! It has been automatically set to OUT OF STOCK. Restocking required.`;
         new Notification(title, {
@@ -256,7 +256,7 @@ export async function notifyRegionalAdminsOutOfStock(alert: OutOfStockAlertPaylo
     await supabase.from('admin_notifications').insert({
       id: alertWithMeta.id,
       type: 'out_of_stock',
-      title: `⚠️ OUT OF STOCK: ${alert.kitName}`,
+      title: `OUT OF STOCK: ${alert.kitName}`,
       message: `Meal kit "${alert.kitName}" (ID: ${alert.kitId}) is now OUT OF STOCK${regionText}. Item automatically marked out of stock. Immediate replenishment required.`,
       region: alert.region || 'North',
       is_read: false,
@@ -266,4 +266,3 @@ export async function notifyRegionalAdminsOutOfStock(alert: OutOfStockAlertPaylo
     console.warn('[NotificationService] Supabase out-of-stock notification insert error:', err);
   }
 }
-

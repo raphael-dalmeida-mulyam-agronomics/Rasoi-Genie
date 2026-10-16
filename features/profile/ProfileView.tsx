@@ -17,6 +17,7 @@ import { PaymentMethod } from '../../framework/context/CartContext';
 import { Badge } from '../../framework/ui/Badge';
 import { Button } from '../../framework/ui/Button';
 import { Icon, AppIconName } from '../../framework/ui/Icon';
+import { useHeaderTopPadding } from '../../framework/ui/ScreenHeader';
 import { AddressBookView } from './AddressBookView';
 import { DietaryPreferencesModal } from '../onboarding/DietaryPreferencesModal';
 import { NotificationsView } from '../notifications/NotificationsView';
@@ -30,6 +31,8 @@ import { Avatar } from '../../framework/ui/Avatar';
 import { CreateFamilySheet } from '../family/CreateFamilySheet';
 import { WalletView } from '../wallet/WalletView';
 import { ReferralView } from '../referral/ReferralView';
+import { WishlistView } from '../wishlist/WishlistView';
+import { ScreenHeader } from '../../framework/ui/ScreenHeader';
 
 export const ProfileView: React.FC = () => {
   const { user, isAdmin, isChef, logout } = useAuth();
@@ -49,34 +52,49 @@ export const ProfileView: React.FC = () => {
 
   // Subview navigation states
   const [subView, setSubView] = useState<
-    'main' | 'addresses' | 'notifications' | 'support' | 'subscription' | 'wallet' | 'referral'
+    | 'main'
+    | 'addresses'
+    | 'notifications'
+    | 'support'
+    | 'subscription'
+    | 'wallet'
+    | 'referral'
+    | 'wishlist'
   >('main');
   const [dietModalVisible, setDietModalVisible] = useState(false);
 
   const handleReferFriend = () => {
-    const code = 'RASOI-FRIEND-50';
-    Alert.alert(
-      'Refer a Cooking Friend',
-      `Share your referral code "${code}" with family and friends. When they order their first chef box, both of you get ₹150 in cooking wallet credits!`,
-      [
-        { text: 'Copy Code & Share', onPress: () => {} },
-        { text: 'Done', style: 'cancel' },
-      ],
-    );
+    setSubView('referral');
   };
 
   const handleDeleteAccount = () => {
     Alert.alert(
-      'Delete Account',
-      'Are you sure you want to permanently delete your RasoiGenie profile and order history?',
+      'Permanent Account Deletion',
+      'This action is irreversible. All your past orders, culinary preferences, family settings, and Rasoi credits will be permanently deleted.\n\nDo you wish to proceed?',
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: 'Keep My Account', style: 'cancel' },
         {
-          text: 'Delete',
+          text: 'Proceed with Deletion',
           style: 'destructive',
           onPress: () => {
-            logout();
-            Alert.alert('Account Deleted', 'Your profile has been removed.');
+            Alert.alert(
+              'Final Confirmation',
+              'Please confirm that you want to delete your RasoiGenie account now.',
+              [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                  text: 'Permanently Delete',
+                  style: 'destructive',
+                  onPress: () => {
+                    logout();
+                    Alert.alert(
+                      'Account Deleted',
+                      'Your profile and associated data have been removed.',
+                    );
+                  },
+                },
+              ],
+            );
           },
         },
       ],
@@ -117,8 +135,19 @@ export const ProfileView: React.FC = () => {
     );
   }
 
+  if (subView === 'wishlist') {
+    return (
+      <View style={{ flex: 1, backgroundColor: colors.bgPrimary }}>
+        <ScreenHeader title="Saved Meal Kits" onBack={() => setSubView('main')} />
+        <WishlistView />
+      </View>
+    );
+  }
+
   const userDisplayName = user?.displayName || user?.email?.split('@')[0] || 'Gourmet Home Chef';
   const userContact = user?.email || user?.phoneNumber || '+91 98765 43210';
+
+  const headerPaddingTop = useHeaderTopPadding(6);
 
   return (
     <View style={[styles.container, { backgroundColor: colors.bgPrimary }]}>
@@ -126,7 +155,11 @@ export const ProfileView: React.FC = () => {
       <View
         style={[
           styles.header,
-          { backgroundColor: colors.bgSurface, borderBottomColor: colors.borderLight },
+          {
+            backgroundColor: colors.bgSurface,
+            borderBottomColor: colors.borderLight,
+            paddingTop: headerPaddingTop,
+          },
         ]}
       >
         <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>Account & Profile</Text>
@@ -211,6 +244,55 @@ export const ProfileView: React.FC = () => {
               onPress={() => router.push('/(tabs)/admin' as any)}
             />
           )}
+        </View>
+
+        {/* Top Shortcut Tiles: Wallet Balance & Order History */}
+        <View style={styles.topShortcutRow}>
+          <TouchableOpacity
+            style={[
+              styles.shortcutTile,
+              {
+                backgroundColor: colors.bgSurface,
+                borderRadius: radii.xl,
+                borderColor: colors.borderLight,
+                ...shadows.soft,
+              },
+            ]}
+            onPress={() => setSubView('wallet')}
+            activeOpacity={0.8}
+          >
+            <View style={[styles.shortcutIconWrap, { backgroundColor: colors.primaryLight }]}>
+              <Icon name="wallet" size={20} color={colors.primary} />
+            </View>
+            <Text style={[styles.shortcutValue, { color: colors.primary }]}>
+              ₹{Math.round(availableBalance).toLocaleString('en-IN')}
+            </Text>
+            <Text style={[styles.shortcutLabel, { color: colors.textSecondary }]}>
+              Rasoi Credits
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.shortcutTile,
+              {
+                backgroundColor: colors.bgSurface,
+                borderRadius: radii.xl,
+                borderColor: colors.borderLight,
+                ...shadows.soft,
+              },
+            ]}
+            onPress={() => router.push('/(tabs)/orders' as any)}
+            activeOpacity={0.8}
+          >
+            <View style={[styles.shortcutIconWrap, { backgroundColor: colors.accentLight }]}>
+              <Icon name="package" size={20} color={colors.accent} />
+            </View>
+            <Text style={[styles.shortcutValue, { color: colors.accent }]}>Orders</Text>
+            <Text style={[styles.shortcutLabel, { color: colors.textSecondary }]}>
+              Track & History
+            </Text>
+          </TouchableOpacity>
         </View>
 
         {/* SECTION: Family Card (Screen A) */}
@@ -373,7 +455,10 @@ export const ProfileView: React.FC = () => {
           </View>
         </View>
 
-        {/* SECTION: Linked Menu Options */}
+        {/* GROUP 1: Wallet & Payments */}
+        <Text style={[styles.groupSectionTitle, { color: colors.textMuted }]}>
+          WALLET & PAYMENTS
+        </Text>
         <View
           style={[
             styles.menuList,
@@ -391,70 +476,96 @@ export const ProfileView: React.FC = () => {
             subtitle={`Available: ₹${Math.round(availableBalance).toLocaleString('en-IN')} — View details & ledger`}
             onPress={() => setSubView('wallet')}
           />
-
           <MenuRow
             icon="gift"
             title="Refer & Earn Rewards"
             subtitle="Give ₹200, Get ₹300 in credits — Invite friends"
-            onPress={() => setSubView('referral')}
+            onPress={handleReferFriend}
           />
-
-          <MenuRow
-            icon="location"
-            title="Saved Delivery Addresses"
-            subtitle={`${defaultAddress?.flatAndStreet || 'Manage your delivery locations'}`}
-            onPress={() => setSubView('addresses')}
-          />
-
           <MenuRow
             icon="card"
             title="Preferred Payment Method"
             subtitle={`Default: ${preferredPaymentMethod} — Tap to switch`}
             onPress={() => setPaymentModalVisible(true)}
+            isLast
           />
+        </View>
 
+        {/* GROUP 2: Kitchen & Delivery Settings */}
+        <Text style={[styles.groupSectionTitle, { color: colors.textMuted }]}>
+          KITCHEN & PREFERENCES
+        </Text>
+        <View
+          style={[
+            styles.menuList,
+            {
+              backgroundColor: colors.bgSurface,
+              borderRadius: radii.xl,
+              borderColor: colors.borderLight,
+              ...shadows.card,
+            },
+          ]}
+        >
           <MenuRow
             icon="restaurant"
             title="Dietary & Cooking Preferences"
             subtitle="Diet type, spice tolerance, allergies, cuisines"
             onPress={() => setDietModalVisible(true)}
           />
-
           <MenuRow
-            icon={isDark ? 'moon' : 'sun'}
-            title={`Appearance: ${isDark ? 'Dark Mode' : 'Light Mode'}`}
-            subtitle={`Currently in ${isDark ? 'Dark (Obsidian)' : 'Light (Warm Cream)'} — Tap to switch`}
-            onPress={toggleColorMode}
+            icon="location"
+            title="Saved Delivery Addresses"
+            subtitle={`${defaultAddress?.flatAndStreet || 'Manage your delivery locations'}`}
+            onPress={() => setSubView('addresses')}
           />
-
-          <MenuRow
-            icon="package"
-            title="Order History & Live Tracking"
-            subtitle="Past boxes, recipes cooked, invoices"
-            onPress={() => router.push('/(tabs)/orders' as any)}
-          />
-
-          <MenuRow
-            icon="heart"
-            title="Wishlist / Favorite Kits"
-            subtitle="Saved recipes for upcoming meals"
-            onPress={() => router.push('/(tabs)/orders' as any)}
-          />
-
-          <MenuRow
-            icon="refresh"
-            title="Recurring Meal Plan (Phase 2)"
-            subtitle="Weekly automatic fresh kit box"
-            onPress={() => setSubView('subscription')}
-          />
-
           <MenuRow
             icon="bell"
             title="Notification Settings"
             subtitle="Push, SMS & Email communication"
             onPress={() => setSubView('notifications')}
           />
+          <MenuRow
+            icon={isDark ? 'moon' : 'sun'}
+            title={`Appearance: ${isDark ? 'Dark Mode' : 'Light Mode'}`}
+            subtitle={`Currently in ${isDark ? 'Dark (Obsidian)' : 'Light (Warm Cream)'} — Tap to switch`}
+            onPress={toggleColorMode}
+            isLast
+          />
+        </View>
 
+        {/* GROUP 3: Orders, Plans & Support */}
+        <Text style={[styles.groupSectionTitle, { color: colors.textMuted }]}>
+          ORDERS & SUPPORT
+        </Text>
+        <View
+          style={[
+            styles.menuList,
+            {
+              backgroundColor: colors.bgSurface,
+              borderRadius: radii.xl,
+              borderColor: colors.borderLight,
+              ...shadows.card,
+            },
+          ]}
+        >
+          <MenuRow
+            icon="package"
+            title="Order History & Live Tracking"
+            subtitle="Past boxes, recipes cooked, invoices"
+            onPress={() => router.push('/(tabs)/orders' as any)}
+          />
+          <MenuRow
+            icon="heart"
+            title="Wishlist / Favorite Kits"
+            subtitle="Saved recipes for upcoming meals"
+            onPress={() => setSubView('wishlist')}
+          />
+          <MenuRow
+            icon="refresh"
+            title="Recurring Meal Plan"
+            subtitle="Weekly automatic fresh kit box"
+            onPress={() => setSubView('subscription')}
+          />
           <MenuRow
             icon="chat"
             title="Help & Support Desk"
@@ -621,9 +732,45 @@ const styles = StyleSheet.create({
   },
   header: {
     paddingHorizontal: 16,
-    paddingTop: 45,
+    paddingTop: 12,
     paddingBottom: 12,
     borderBottomWidth: 1,
+  },
+  topShortcutRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 16,
+  },
+  shortcutTile: {
+    flex: 1,
+    padding: 14,
+    borderWidth: 1,
+    alignItems: 'center',
+  },
+  shortcutIconWrap: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
+  },
+  shortcutValue: {
+    fontSize: 16,
+    fontWeight: '800',
+    marginBottom: 2,
+  },
+  shortcutLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  groupSectionTitle: {
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.6,
+    marginBottom: 8,
+    marginLeft: 4,
+    marginTop: 6,
   },
   headerTitle: {
     fontSize: 20,

@@ -381,7 +381,7 @@ const CITY_KIT_TEMPLATES: KitTemplate[] = [
     cookTimeMinutes: 15,
     price: 199,
     heroImage:
-      'https://images.unsplash.com/photo-1601050690597-df0568f70950?auto=format&fit=crop&w=1000&q=80',
+      'https://images.unsplash.com/photo-1606491956689-2ea866880c84?auto=format&fit=crop&w=1000&q=80',
     ingredients: [
       { name: 'Sprouted Organic Matki', quantity: '200g' },
       { name: 'Fresh Pune Bakery Ladi Pav', quantity: '4 pcs' },
@@ -427,7 +427,7 @@ const CITY_KIT_TEMPLATES: KitTemplate[] = [
     cookTimeMinutes: 18,
     price: 219,
     heroImage:
-      'https://images.unsplash.com/photo-1626777552726-4a6b54c97e46?auto=format&fit=crop&w=1000&q=80',
+      'https://images.unsplash.com/photo-1601050690597-df0568f70950?auto=format&fit=crop&w=1000&q=80',
     ingredients: [
       { name: 'Chana Besan (Gram Flour)', quantity: '120g' },
       { name: 'Jowar Bhakri Flour', quantity: '200g' },
@@ -576,7 +576,7 @@ const CITY_KIT_TEMPLATES: KitTemplate[] = [
     cookTimeMinutes: 20,
     price: 219,
     heroImage:
-      'https://images.unsplash.com/photo-1547592180-85f173990554?auto=format&fit=crop&w=1000&q=80',
+      'https://images.unsplash.com/photo-1603105037880-880cd4edfb0d?auto=format&fit=crop&w=1000&q=80',
     ingredients: [
       { name: 'Red Masoor Dal', quantity: '120g' },
       { name: 'Fresh Tomatoes', quantity: '200g' },
@@ -625,7 +625,7 @@ const CITY_KIT_TEMPLATES: KitTemplate[] = [
     cookTimeMinutes: 20,
     price: 259,
     heroImage:
-      'https://images.unsplash.com/photo-1585937421612-70a008356fbe?auto=format&fit=crop&w=1000&q=80',
+      'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=1000&q=80',
     ingredients: [
       { name: 'Pre-cooked Chickpeas', quantity: '240g' },
       { name: 'Fresh Baby Spinach', quantity: '100g' },
@@ -675,7 +675,7 @@ const CITY_KIT_TEMPLATES: KitTemplate[] = [
     cookTimeMinutes: 30,
     price: 299,
     heroImage:
-      'https://images.unsplash.com/photo-1565299507177-b0ac66763828?auto=format&fit=crop&w=1000&q=80',
+      'https://images.unsplash.com/photo-1572453800999-e8d2d1589b7c?auto=format&fit=crop&w=1000&q=80',
     ingredients: [
       { name: 'Zucchini / Courgette', quantity: '150g' },
       { name: 'Eggplant (Brinjal)', quantity: '150g' },
@@ -727,7 +727,7 @@ const CITY_KIT_TEMPLATES: KitTemplate[] = [
     cookTimeMinutes: 20,
     price: 319,
     heroImage:
-      'https://images.unsplash.com/photo-1563379091339-03b21ab4a4f8?auto=format&fit=crop&w=1000&q=80',
+      'https://images.unsplash.com/photo-1551183053-bf91a1d81141?auto=format&fit=crop&w=1000&q=80',
     ingredients: [
       { name: 'Pappardelle Pasta', quantity: '200g' },
       { name: 'Mixed Wild Mushrooms', quantity: '200g' },
@@ -832,7 +832,7 @@ const CITY_KIT_TEMPLATES: KitTemplate[] = [
     cookTimeMinutes: 15,
     price: 249,
     heroImage:
-      'https://images.unsplash.com/photo-1626777552726-4a6b54c97e46?auto=format&fit=crop&w=1000&q=80',
+      'https://images.unsplash.com/photo-1585032226651-759b368d7246?auto=format&fit=crop&w=1000&q=80',
     ingredients: [
       { name: 'Mixed Veg Dumpling Mix', quantity: '200g' },
       { name: 'Cornflour', quantity: '30g' },

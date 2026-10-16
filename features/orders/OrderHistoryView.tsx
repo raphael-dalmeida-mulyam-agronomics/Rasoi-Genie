@@ -20,6 +20,8 @@ import {
 import { Badge, BadgeVariant } from '../../framework/ui/Badge';
 import { Button } from '../../framework/ui/Button';
 import { Icon } from '../../framework/ui/Icon';
+import { SkeletonRowItem } from '../../framework/ui/Skeleton';
+import { useHeaderTopPadding } from '../../framework/ui/ScreenHeader';
 import { LiveTrackingModal } from './LiveTrackingModal';
 import { getGuestOrders } from '../../framework/services/guestService';
 import { useFamily } from '../../framework/context/FamilyContext';
@@ -28,7 +30,7 @@ import { WishlistView } from '../wishlist/WishlistView';
 
 export const OrderHistoryView: React.FC = () => {
   const { user } = useAuth();
-  const { colors, radii, shadows } = useTheme();
+  const { colors, radii, shadows, isDark } = useTheme();
   const { reorderItems } = useCart();
   const { family, members, isDependent } = useFamily();
 
@@ -40,6 +42,7 @@ export const OrderHistoryView: React.FC = () => {
   const [dismissedOrderIds, setDismissedOrderIds] = useState<Set<string>>(new Set());
   const [cancelledModalOrder, setCancelledModalOrder] = useState<Order | null>(null);
   const [cancellationModalVisible, setCancellationModalVisible] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     if (!user) {
@@ -60,6 +63,10 @@ export const OrderHistoryView: React.FC = () => {
         const local = await loadPersistedOrders();
         if (isMounted) {
           setOrders(local.filter((o) => !MOCK_ORDER_IDS.has(o.id)));
+        }
+      } finally {
+        if (isMounted) {
+          setIsLoading(false);
         }
       }
     };
@@ -84,8 +91,8 @@ export const OrderHistoryView: React.FC = () => {
       window.addEventListener('storage', handleStorageChange);
     }
 
-    // Short reactive sync interval (2s) to guarantee fast cross-tab and cross-view sync
-    const interval = setInterval(loadOrders, 2000);
+    // Quiet fallback sync interval (30s) as backup to Supabase Realtime and storage events
+    const interval = setInterval(loadOrders, 30000);
 
     return () => {
       isMounted = false;
@@ -300,51 +307,82 @@ export const OrderHistoryView: React.FC = () => {
         ) : isActive ? (
           <View
             style={[
-              styles.livePulseBanner,
+              styles.orderTrackerContainer,
               {
-                backgroundColor:
-                  order.status === 'Confirmed'
-                    ? '#DCFCE7'
-                    : order.status === 'Preparing'
-                      ? '#DBEAFE'
-                      : order.status === 'Out for Delivery'
-                        ? '#D1FAE5'
-                        : colors.primaryLight,
-                borderColor:
-                  order.status === 'Confirmed'
-                    ? '#86EFAC'
-                    : order.status === 'Preparing'
-                      ? '#93C5FD'
-                      : order.status === 'Out for Delivery'
-                        ? '#6EE7B7'
-                        : colors.primary + '30',
-                borderWidth: 1,
+                backgroundColor: colors.bgSubtle,
+                borderRadius: radii.lg,
+                borderColor: colors.borderLight,
               },
             ]}
           >
-            <Text
-              style={[
-                styles.pulseText,
-                {
-                  color:
-                    order.status === 'Confirmed'
-                      ? '#15803D'
+            <View style={styles.trackerStepsRow}>
+              {[
+                { label: 'Placed', icon: 'document' },
+                { label: 'Confirmed', icon: 'checkmark' },
+                { label: 'Preparing', icon: 'restaurant' },
+                { label: 'On Way', icon: 'car' },
+                { label: 'Delivered', icon: 'home' },
+              ].map((step, idx) => {
+                const currentIdx =
+                  order.status === 'Delivered'
+                    ? 4
+                    : order.status === 'Out for Delivery'
+                      ? 3
                       : order.status === 'Preparing'
-                        ? '#1D4ED8'
-                        : order.status === 'Out for Delivery'
-                          ? '#047857'
-                          : colors.primary,
-                  fontWeight: '700',
-                },
-              ]}
-            >
-              {order.status === 'Confirmed'
-                ? 'Order Confirmed by Kitchen • Chefs are packing fresh ingredients'
-                : order.status === 'Preparing'
-                  ? 'Kitchen is Preparing Your Meal Kit'
-                  : order.status === 'Out for Delivery'
-                    ? 'Out for Cold-Chain Delivery'
-                    : `Order Placed • Awaiting Kitchen Confirmation (${order.deliverySlot})`}
+                        ? 2
+                        : order.status === 'Confirmed'
+                          ? 1
+                          : 0;
+                const isDone = idx <= currentIdx;
+                const isCurrent = idx === currentIdx;
+
+                return (
+                  <View key={step.label} style={styles.trackerStepCol}>
+                    <View
+                      style={[
+                        styles.trackerStepCircle,
+                        {
+                          backgroundColor: isDone ? colors.primary : isDark ? '#332E28' : '#E2E8F0',
+                          borderColor: isCurrent ? colors.primary : 'transparent',
+                        },
+                      ]}
+                    >
+                      <Icon
+                        name={step.icon as any}
+                        size={12}
+                        color={isDone ? '#FFFFFF' : colors.textMuted}
+                      />
+                    </View>
+                    <Text
+                      style={[
+                        styles.trackerStepLabel,
+                        {
+                          color: isCurrent
+                            ? colors.primary
+                            : isDone
+                              ? colors.textPrimary
+                              : colors.textMuted,
+                          fontWeight: isCurrent ? '800' : '600',
+                        },
+                      ]}
+                    >
+                      {step.label}
+                    </Text>
+                  </View>
+                );
+              })}
+            </View>
+            <Text style={[styles.trackerEtaText, { color: colors.primary }]}>
+              {order.status === 'Delivered'
+                ? 'Delivered • Ready to cook!'
+                : order.status === 'Out for Delivery'
+                  ? 'Cold-chain delivery driver is en route to your doorstep'
+                  : order.status === 'Preparing'
+                    ? 'Chefs are packing your fresh recipe kit & spice sachets'
+                    : order.status === 'Confirmed'
+                      ? 'Order confirmed by kitchen • Scheduled for ' +
+                        (order.deliverySlot || 'dinner')
+                      : 'Order placed • Awaiting kitchen confirmation'}
             </Text>
           </View>
         ) : null}
@@ -468,13 +506,19 @@ export const OrderHistoryView: React.FC = () => {
     );
   };
 
+  const headerPaddingTop = useHeaderTopPadding(6);
+
   return (
     <View style={[styles.container, { backgroundColor: colors.bgPrimary }]}>
       {/* Top Header */}
       <View
         style={[
           styles.header,
-          { backgroundColor: colors.bgSurface, borderBottomColor: colors.borderLight },
+          {
+            backgroundColor: colors.bgSurface,
+            borderBottomColor: colors.borderLight,
+            paddingTop: headerPaddingTop,
+          },
         ]}
       >
         <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>My Orders & History</Text>
@@ -641,7 +685,13 @@ export const OrderHistoryView: React.FC = () => {
             </TouchableOpacity>
           )}
 
-          {activeTabOrders.length === 0 ? (
+          {isLoading && userOrders.length === 0 ? (
+            <View style={{ gap: 12, marginTop: 4 }}>
+              <SkeletonRowItem />
+              <SkeletonRowItem />
+              <SkeletonRowItem />
+            </View>
+          ) : activeTabOrders.length === 0 ? (
             <View
               style={[
                 styles.emptyBox,
@@ -812,9 +862,43 @@ const styles = StyleSheet.create({
   },
   header: {
     paddingHorizontal: 16,
-    paddingTop: 45,
+    paddingTop: 12,
     paddingBottom: 14,
     borderBottomWidth: 1,
+  },
+  orderTrackerContainer: {
+    padding: 12,
+    marginBottom: 12,
+    borderWidth: 1,
+  },
+  trackerStepsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  trackerStepCol: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  trackerStepCircle: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 4,
+    borderWidth: 1.5,
+  },
+  trackerStepLabel: {
+    fontSize: 10,
+    textAlign: 'center',
+  },
+  trackerEtaText: {
+    fontSize: 12,
+    fontWeight: '700',
+    textAlign: 'center',
+    marginTop: 4,
   },
   headerTitle: {
     fontSize: 20,

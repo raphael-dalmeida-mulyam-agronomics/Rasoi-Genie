@@ -37,6 +37,9 @@ import { ThemeSwitcher } from '../../framework/theme/ThemeSwitcher';
 import { Badge, getDietBadgeInfo } from '../../framework/ui/Badge';
 import { Button } from '../../framework/ui/Button';
 import { AppIconName, Icon } from '../../framework/ui/Icon';
+import { DietMark } from '../../framework/ui/DietMark';
+import { SkeletonRecipeCard } from '../../framework/ui/Skeleton';
+import { useHeaderTopPadding } from '../../framework/ui/ScreenHeader';
 import { seedKitsForCityIfNeeded } from '../admin/cityKitsSeederService';
 import { MealDetailModal } from '../meal-detail/MealDetailModal';
 import { CartDestinationModal } from '../cart/CartDestinationModal';
@@ -140,12 +143,18 @@ const MealKitCard = React.memo(function MealKitCard({
   onQuickAdd,
   isFavorite,
   onToggleFavorite,
+  cartQuantity = 0,
+  onIncrement,
+  onDecrement,
 }: {
   kit: MealKit;
   onPress: (kit: MealKit) => void;
   onQuickAdd: (kit: MealKit) => void;
   isFavorite: boolean;
   onToggleFavorite: (id: string) => void;
+  cartQuantity?: number;
+  onIncrement?: (kit: MealKit) => void;
+  onDecrement?: (kit: MealKit) => void;
 }) {
   const { colors, radii, shadows } = useTheme();
 
@@ -153,7 +162,6 @@ const MealKitCard = React.memo(function MealKitCard({
 
   const prepTime = (kit.prepTimeMinutes || 0) + (kit.cookTimeMinutes || 0);
   const servings = kit.servings || 2;
-  const sachetsCount = Array.isArray(kit.masalaSachets) ? kit.masalaSachets.length : 0;
   const dietBadge = getDietBadgeInfo(kit.diet);
 
   return (
@@ -178,7 +186,8 @@ const MealKitCard = React.memo(function MealKitCard({
           <View style={[styles.cardImg, { backgroundColor: colors.bgSubtle }]} />
         )}
         <View style={styles.cardBadgeRow}>
-          <View style={{ flexDirection: 'row', gap: 4, flexWrap: 'wrap' }}>
+          <View style={{ flexDirection: 'row', gap: 4, alignItems: 'center', flexWrap: 'wrap' }}>
+            <DietMark diet={kit.diet} size={15} />
             <Badge label={dietBadge.label} variant={dietBadge.variant} size="sm" />
             {kit.isTrending ? <Badge label="TRENDING" variant="warning" size="sm" /> : null}
             {kit.isOutOfStock ? <Badge label="OUT OF STOCK" variant="danger" size="sm" /> : null}
@@ -187,6 +196,12 @@ const MealKitCard = React.memo(function MealKitCard({
             style={styles.cardFavBtn}
             onPress={() => onToggleFavorite(kit.id)}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            accessibilityRole="button"
+            accessibilityLabel={
+              isFavorite
+                ? `Remove ${kit.name || 'kit'} from wishlist`
+                : `Add ${kit.name || 'kit'} to wishlist`
+            }
           >
             <Icon
               name={isFavorite ? 'heart' : 'heart-outline'}
@@ -214,15 +229,21 @@ const MealKitCard = React.memo(function MealKitCard({
           {kit.description || kit.tagline || ''}
         </Text>
 
-        <View style={styles.sachetsPillRow}>
-          <Text
-            style={[
-              styles.sachetsPillText,
-              { color: colors.primary, backgroundColor: colors.primaryLight },
-            ]}
-          >
-            {sachetsCount} Fresh Spice Sachets Included
-          </Text>
+        {/* Clean Meta Line: Rating, Cook Time, Servings */}
+        <View style={styles.cardMetaRow}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+            <Icon name="star" size={13} color={colors.star} />
+            <Text style={[styles.cardMetaText, { color: colors.textSecondary }]}>
+              {kit.rating ? kit.rating.toFixed(1) : '4.8'}
+            </Text>
+          </View>
+          <Text style={[styles.cardMetaDot, { color: colors.textMuted }]}>•</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+            <Icon name="time" size={13} color={colors.textMuted} />
+            <Text style={[styles.cardMetaText, { color: colors.textMuted }]}>{prepTime}m</Text>
+          </View>
+          <Text style={[styles.cardMetaDot, { color: colors.textMuted }]}>•</Text>
+          <Text style={[styles.cardMetaText, { color: colors.textMuted }]}>{servings} serv</Text>
         </View>
 
         <View style={styles.cardFooter}>
@@ -243,6 +264,33 @@ const MealKitCard = React.memo(function MealKitCard({
               variant="secondary"
               style={{ paddingHorizontal: 12, opacity: 0.6 }}
             />
+          ) : cartQuantity > 0 ? (
+            <View
+              style={[
+                styles.cardInlineStepper,
+                { backgroundColor: colors.primaryLight, borderColor: colors.primary + '40' },
+              ]}
+            >
+              <TouchableOpacity
+                onPress={() => (onDecrement ? onDecrement(kit) : undefined)}
+                hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                accessibilityRole="button"
+                accessibilityLabel={`Decrease ${kit.name} quantity`}
+                style={styles.cardStepperBtn}
+              >
+                <Icon name="remove" size={13} color={colors.primary} />
+              </TouchableOpacity>
+              <Text style={[styles.cardStepperQty, { color: colors.primary }]}>{cartQuantity}</Text>
+              <TouchableOpacity
+                onPress={() => (onIncrement ? onIncrement(kit) : onQuickAdd(kit))}
+                hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                accessibilityRole="button"
+                accessibilityLabel={`Increase ${kit.name} quantity`}
+                style={styles.cardStepperBtn}
+              >
+                <Icon name="add" size={13} color={colors.primary} />
+              </TouchableOpacity>
+            </View>
           ) : (
             <Button
               title="+ Add"
@@ -368,6 +416,9 @@ const CatalogSections = React.memo(function CatalogSections({
   onOpenPreferencesModal,
   onResetFilters,
   onResetDishCategory,
+  getCartQuantity,
+  onIncrement,
+  onDecrement,
 }: {
   filteredKits: MealKit[];
   trendingKits: MealKit[];
@@ -388,6 +439,9 @@ const CatalogSections = React.memo(function CatalogSections({
   onOpenPreferencesModal: () => void;
   onResetFilters: () => void;
   onResetDishCategory: () => void;
+  getCartQuantity?: (kitId: string) => number;
+  onIncrement?: (kit: MealKit) => void;
+  onDecrement?: (kit: MealKit) => void;
 }) {
   const { colors, radii } = useTheme();
   const [visibleCount, setVisibleCount] = useState(32);
@@ -451,6 +505,9 @@ const CatalogSections = React.memo(function CatalogSections({
                     onQuickAdd={onQuickAdd}
                     isFavorite={kit?.id ? (isInWishlist?.(kit.id) ?? false) : false}
                     onToggleFavorite={onToggleFavorite}
+                    cartQuantity={getCartQuantity ? getCartQuantity(kit.id) : 0}
+                    onIncrement={onIncrement}
+                    onDecrement={onDecrement}
                   />
                 ))}
               </View>
@@ -791,7 +848,14 @@ const CatalogSections = React.memo(function CatalogSections({
             Includes fresh ingredients, whole spices & authentic masala sachets
           </Text>
 
-          {filteredKits.length === 0 ? (
+          {isSeedingCity ? (
+            <View style={styles.kitsGrid}>
+              <SkeletonRecipeCard />
+              <SkeletonRecipeCard />
+              <SkeletonRecipeCard />
+              <SkeletonRecipeCard />
+            </View>
+          ) : filteredKits.length === 0 ? (
             <View
               style={[
                 styles.emptyKitsContainer,
@@ -827,6 +891,9 @@ const CatalogSections = React.memo(function CatalogSections({
                     onQuickAdd={onQuickAdd}
                     isFavorite={kit?.id ? (isInWishlist?.(kit.id) ?? false) : false}
                     onToggleFavorite={onToggleFavorite}
+                    cartQuantity={getCartQuantity ? getCartQuantity(kit.id) : 0}
+                    onIncrement={onIncrement}
+                    onDecrement={onDecrement}
                   />
                 ))}
               </View>
@@ -855,7 +922,7 @@ const CatalogSections = React.memo(function CatalogSections({
 export const HomeScreenView: React.FC = () => {
   const { user, isAdmin, isChef } = useAuth();
   const { colors, radii, shadows, isDark, toggleColorMode } = useTheme();
-  const { addItem, totalCount } = useCart();
+  const { addItem, updateQuantity, removeItem, items: cartItems, totalCount } = useCart();
   const { isInWishlist, toggleWishlist, wishlistCount } = useWishlist();
   const { preferences } = usePreferences();
   const { family, role, members, isOwner, dependentType, addFamilyItem } = useFamily();
@@ -872,6 +939,9 @@ export const HomeScreenView: React.FC = () => {
   const [selectedSpice, setSelectedSpice] = useState<SpiceLevel | 'All'>('All');
   const [selectedDietTag, setSelectedDietTag] = useState<DietTag | 'all'>('all');
   const [maxPrepTime, setMaxPrepTime] = useState<number | undefined>(undefined);
+  const [quickIntent, setQuickIntent] = useState<
+    'under20' | 'highProtein' | 'kidFriendly' | 'chefSpecial' | null
+  >(null);
   const [sortBy, setSortBy] = useState<'popularity' | 'priceLowHigh' | 'priceHighLow' | 'prepTime'>(
     'popularity',
   );
@@ -1044,6 +1114,25 @@ export const HomeScreenView: React.FC = () => {
       );
     }
 
+    // Quick Intent filter (under20, highProtein, kidFriendly, chefSpecial)
+    if (quickIntent === 'under20') {
+      results = results.filter((k) => (k.prepTimeMinutes || 0) + (k.cookTimeMinutes || 0) <= 20);
+    } else if (quickIntent === 'highProtein') {
+      results = results.filter(
+        (k) =>
+          (k.nutrition?.protein || 0) >= 15 ||
+          (Array.isArray(k.tags) && k.tags.some((t) => t.toLowerCase().includes('protein'))),
+      );
+    } else if (quickIntent === 'kidFriendly') {
+      results = results.filter(
+        (k) =>
+          k.spiceLevel === 'Mild' ||
+          (Array.isArray(k.tags) && k.tags.some((t) => t.toLowerCase().includes('kid'))),
+      );
+    } else if (quickIntent === 'chefSpecial') {
+      results = results.filter((k) => Boolean(k.isChefSpecial || k.isTrending));
+    }
+
     // Sort
     switch (sortBy) {
       case 'priceLowHigh':
@@ -1084,6 +1173,7 @@ export const HomeScreenView: React.FC = () => {
     selectedSpice,
     selectedDietTag,
     maxPrepTime,
+    quickIntent,
     sortBy,
     preferences.currentCity,
     allKits,
@@ -1310,11 +1400,44 @@ export const HomeScreenView: React.FC = () => {
     setDietFilterTags(new Set());
     setSelectedCuisine('All');
     setSelectedDishCategory('All');
+    setQuickIntent(null);
   }, []);
 
   const handleResetDishCategory = useCallback(() => {
     setSelectedDishCategory('All');
   }, []);
+
+  const headerPaddingTop = useHeaderTopPadding(6);
+
+  const getCartQuantity = useCallback(
+    (kitId: string) => {
+      return cartItems
+        .filter((it) => it.kit.id === kitId)
+        .reduce((sum, it) => sum + it.quantity, 0);
+    },
+    [cartItems],
+  );
+
+  const handleCardIncrement = useCallback(
+    (kit: MealKit) => {
+      addItem(kit, 1);
+    },
+    [addItem],
+  );
+
+  const handleCardDecrement = useCallback(
+    (kit: MealKit) => {
+      const match = cartItems.find((it) => it.kit.id === kit.id);
+      if (match) {
+        if (match.quantity > 1) {
+          updateQuantity(kit.id, match.quantity - 1, match.servings, match.spiceLevel);
+        } else {
+          removeItem(kit.id, match.servings, match.spiceLevel);
+        }
+      }
+    },
+    [cartItems, updateQuantity, removeItem],
+  );
 
   return (
     <View style={[styles.container, { backgroundColor: colors.bgPrimary }]}>
@@ -1322,7 +1445,11 @@ export const HomeScreenView: React.FC = () => {
       <View
         style={[
           styles.topHeader,
-          { backgroundColor: colors.bgSurface, borderBottomColor: colors.borderLight },
+          {
+            backgroundColor: colors.bgSurface,
+            borderBottomColor: colors.borderLight,
+            paddingTop: headerPaddingTop,
+          },
         ]}
       >
         <View style={styles.headerLeft}>
@@ -1454,8 +1581,10 @@ export const HomeScreenView: React.FC = () => {
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollBody}>
-        {/* Family Hub Top Tab/Banner (only shown if user created or is in a family) */}
-        {family && (
+        {/* SINGLE PRIORITY BANNER SLOT (Resume Cooking > Family Hub > Kitchen Preferences) */}
+        {pendingCookingOrders.length > 0 ? (
+          <ResumeCookingBanner />
+        ) : family ? (
           <View style={styles.familyBannerWrapper}>
             <TouchableOpacity
               testID="home-family-top-tab"
@@ -1502,132 +1631,7 @@ export const HomeScreenView: React.FC = () => {
               </View>
             </TouchableOpacity>
           </View>
-        )}
-
-        {/* Resume Cooking Guide Banner if active undismissed order exists */}
-        <ResumeCookingBanner />
-
-        {/* Search Bar Banner Link */}
-        <View style={styles.searchBarWrapper}>
-          <TouchableOpacity
-            style={[
-              styles.fakeSearchBar,
-              {
-                backgroundColor: colors.bgSurface,
-                borderColor: colors.border,
-                borderRadius: radii.xl,
-                ...shadows.soft,
-              },
-            ]}
-            onPress={() => router.push('/(tabs)/search' as any)}
-            activeOpacity={0.85}
-          >
-            <View style={{ marginRight: 8 }}>
-              <Icon name="search" size={18} color={colors.textMuted} />
-            </View>
-            <Text style={[styles.searchPlaceholder, { color: colors.textMuted }]}>
-              Search by recipe or ingredient (e.g. Paneer, Biryani, Ghee)...
-            </Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Chef Studio Quick Launcher for Chefs */}
-        {isChef && !isAdmin && (
-          <View style={{ marginHorizontal: 20, marginBottom: 14 }}>
-            <TouchableOpacity
-              onPress={() => router.push('/(tabs)/chef' as any)}
-              style={{
-                flexDirection: 'row',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                backgroundColor: '#D97706',
-                borderRadius: radii.xl,
-                paddingHorizontal: 16,
-                paddingVertical: 12,
-                ...shadows.soft,
-              }}
-              activeOpacity={0.88}
-            >
-              <View
-                style={{
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  gap: 12,
-                  flex: 1,
-                  marginRight: 10,
-                }}
-              >
-                <View
-                  style={{
-                    width: 38,
-                    height: 38,
-                    borderRadius: 19,
-                    backgroundColor: 'rgba(255,255,255,0.25)',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                  }}
-                >
-                  <Icon name="chef" size={22} color="#FFFFFF" />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={{ color: '#FFFFFF', fontSize: 14, fontWeight: '800' }}>
-                    Chef Studio — Author Meal Kits
-                  </Text>
-                  <Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 12 }}>
-                    Create and edit signature recipes for admin review
-                  </Text>
-                </View>
-              </View>
-              <View
-                style={{
-                  backgroundColor: '#FFFFFF',
-                  paddingHorizontal: 12,
-                  paddingVertical: 6,
-                  borderRadius: radii.pill,
-                }}
-              >
-                <Text style={{ color: '#D97706', fontSize: 12, fontWeight: '800' }}>
-                  Open Studio →
-                </Text>
-              </View>
-            </TouchableOpacity>
-          </View>
-        )}
-
-        {/* Promotional Offers Carousel */}
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.promoCarousel}
-        >
-          {PROMO_BANNERS.map((promo) => (
-            <View
-              key={promo.id}
-              style={[
-                styles.promoCard,
-                { backgroundColor: promo.gradientBg, borderRadius: radii.xl, ...shadows.medium },
-              ]}
-            >
-              <View style={styles.promoContent}>
-                <View style={styles.promoTagBadge}>
-                  <Text style={styles.promoTagText}>{promo.tag}</Text>
-                </View>
-                <Text style={styles.promoTitle}>{promo.title}</Text>
-                <Text style={styles.promoSubtitle}>{promo.subtitle}</Text>
-                <TouchableOpacity
-                  style={styles.promoButton}
-                  onPress={() => router.push('/(tabs)/cart' as any)}
-                >
-                  <Text style={styles.promoButtonText}>Apply Code {promo.code}</Text>
-                </TouchableOpacity>
-              </View>
-              <Image source={{ uri: promo.image }} style={styles.promoImg} resizeMode="cover" />
-            </View>
-          ))}
-        </ScrollView>
-
-        {/* Optional Dismissible Dietary Preferences Prompt */}
-        {!isDietPromptDismissed && (
+        ) : !isDietPromptDismissed ? (
           <View
             testID="dietary-preferences-prompt"
             style={[
@@ -1674,7 +1678,63 @@ export const HomeScreenView: React.FC = () => {
               </TouchableOpacity>
             </View>
           </View>
-        )}
+        ) : null}
+
+        {/* Search Bar Banner Link */}
+        <View style={styles.searchBarWrapper}>
+          <TouchableOpacity
+            style={[
+              styles.fakeSearchBar,
+              {
+                backgroundColor: colors.bgSurface,
+                borderColor: colors.border,
+                borderRadius: radii.xl,
+                ...shadows.soft,
+              },
+            ]}
+            onPress={() => router.push('/(tabs)/search' as any)}
+            activeOpacity={0.85}
+          >
+            <View style={{ marginRight: 8 }}>
+              <Icon name="search" size={18} color={colors.textMuted} />
+            </View>
+            <Text style={[styles.searchPlaceholder, { color: colors.textMuted }]}>
+              Search by recipe or ingredient (e.g. Paneer, Biryani, Ghee)...
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Promotional Offers Carousel (Slim and Food-Forward) */}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.promoCarousel}
+        >
+          {PROMO_BANNERS.map((promo) => (
+            <View
+              key={promo.id}
+              style={[
+                styles.promoCard,
+                { backgroundColor: promo.gradientBg, borderRadius: radii.xl, ...shadows.medium },
+              ]}
+            >
+              <View style={styles.promoContent}>
+                <View style={styles.promoTagBadge}>
+                  <Text style={styles.promoTagText}>{promo.tag}</Text>
+                </View>
+                <Text style={styles.promoTitle}>{promo.title}</Text>
+                <Text style={styles.promoSubtitle}>{promo.subtitle}</Text>
+                <TouchableOpacity
+                  style={styles.promoButton}
+                  onPress={() => router.push('/(tabs)/cart' as any)}
+                >
+                  <Text style={styles.promoButtonText}>Apply Code {promo.code}</Text>
+                </TouchableOpacity>
+              </View>
+              <Image source={{ uri: promo.image }} style={styles.promoImg} resizeMode="cover" />
+            </View>
+          ))}
+        </ScrollView>
 
         {/* Minimalist 3-Filter Buttons Bar */}
         <View style={styles.minimalistFilterBar}>
@@ -1775,6 +1835,144 @@ export const HomeScreenView: React.FC = () => {
               <Icon name="chevron-down" size={12} color={colors.textMuted} />
             </View>
           </TouchableOpacity>
+        </View>
+
+        {/* Active Filter Pills Bar (Removable chips with clear all) */}
+        {(dietFilterTags.size > 0 ||
+          selectedCuisine !== 'All' ||
+          selectedDishCategory !== 'All') && (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.activeFiltersScroll}
+          >
+            <View style={styles.activeFilterCountBadge}>
+              <Text style={[styles.activeFilterCountText, { color: colors.primary }]}>
+                {dietFilterTags.size +
+                  (selectedCuisine !== 'All' ? 1 : 0) +
+                  (selectedDishCategory !== 'All' ? 1 : 0)}{' '}
+                Active
+              </Text>
+            </View>
+            {[...dietFilterTags].map((tag) => (
+              <TouchableOpacity
+                key={tag}
+                style={[
+                  styles.activeFilterPill,
+                  { backgroundColor: colors.primaryLight, borderColor: colors.primary + '35' },
+                ]}
+                onPress={() => {
+                  setDietFilterTags((prev) => {
+                    const next = new Set(prev);
+                    next.delete(tag);
+                    return next;
+                  });
+                }}
+              >
+                <Text style={[styles.activeFilterPillText, { color: colors.primary }]}>
+                  {tag.toUpperCase()}
+                </Text>
+                <Icon name="close" size={12} color={colors.primary} />
+              </TouchableOpacity>
+            ))}
+            {selectedCuisine !== 'All' && (
+              <TouchableOpacity
+                style={[
+                  styles.activeFilterPill,
+                  { backgroundColor: colors.primaryLight, borderColor: colors.primary + '35' },
+                ]}
+                onPress={() => setSelectedCuisine('All')}
+              >
+                <Text style={[styles.activeFilterPillText, { color: colors.primary }]}>
+                  {selectedCuisine}
+                </Text>
+                <Icon name="close" size={12} color={colors.primary} />
+              </TouchableOpacity>
+            )}
+            {selectedDishCategory !== 'All' && (
+              <TouchableOpacity
+                style={[
+                  styles.activeFilterPill,
+                  { backgroundColor: colors.primaryLight, borderColor: colors.primary + '35' },
+                ]}
+                onPress={() => setSelectedDishCategory('All')}
+              >
+                <Text style={[styles.activeFilterPillText, { color: colors.primary }]}>
+                  {selectedDishCategory}
+                </Text>
+                <Icon name="close" size={12} color={colors.primary} />
+              </TouchableOpacity>
+            )}
+            {quickIntent && (
+              <TouchableOpacity
+                style={[
+                  styles.activeFilterPill,
+                  { backgroundColor: colors.primaryLight, borderColor: colors.primary + '35' },
+                ]}
+                onPress={() => setQuickIntent(null)}
+              >
+                <Text style={[styles.activeFilterPillText, { color: colors.primary }]}>
+                  {quickIntent === 'under20'
+                    ? 'Under 20 min'
+                    : quickIntent === 'highProtein'
+                      ? 'High Protein'
+                      : quickIntent === 'kidFriendly'
+                        ? 'Kid-Friendly'
+                        : "Chef's Special"}
+                </Text>
+                <Icon name="close" size={12} color={colors.primary} />
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity style={styles.clearAllFiltersBtn} onPress={handleResetFilters}>
+              <Text style={[styles.clearAllFiltersText, { color: colors.danger }]}>Clear all</Text>
+            </TouchableOpacity>
+          </ScrollView>
+        )}
+
+        {/* Quick-Intent Occasion Chips */}
+        <View style={{ marginHorizontal: 16, marginTop: 10, marginBottom: 4 }}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={{ gap: 8, paddingVertical: 2 }}
+          >
+            {[
+              { id: 'under20', label: 'Under 20 min' },
+              { id: 'highProtein', label: 'High Protein' },
+              { id: 'kidFriendly', label: 'Kid-Friendly' },
+              { id: 'chefSpecial', label: "Chef's Special" },
+            ].map((intent) => {
+              const isSelected = quickIntent === intent.id;
+              return (
+                <TouchableOpacity
+                  key={intent.id}
+                  onPress={() =>
+                    setQuickIntent((prev) => (prev === intent.id ? null : (intent.id as any)))
+                  }
+                  style={{
+                    paddingHorizontal: 14,
+                    paddingVertical: 7,
+                    borderRadius: radii.pill,
+                    borderWidth: 1,
+                    backgroundColor: isSelected ? colors.primary : colors.bgSurface,
+                    borderColor: isSelected ? colors.primary : colors.borderLight,
+                    ...shadows.soft,
+                  }}
+                  activeOpacity={0.75}
+                >
+                  <Text
+                    style={{
+                      fontSize: 12,
+                      fontWeight: isSelected ? '700' : '600',
+                      color: isSelected ? '#FFFFFF' : colors.textPrimary,
+                    }}
+                  >
+                    {intent.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
         </View>
 
         {/* Sort Bar with Dropdown List */}
@@ -1893,6 +2091,9 @@ export const HomeScreenView: React.FC = () => {
           onOpenPreferencesModal={handleOpenPreferencesModal}
           onResetFilters={handleResetFilters}
           onResetDishCategory={handleResetDishCategory}
+          getCartQuantity={getCartQuantity}
+          onIncrement={handleCardIncrement}
+          onDecrement={handleCardDecrement}
         />
       </ScrollView>
 
@@ -2224,7 +2425,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingTop: 45,
+    paddingTop: 12,
     paddingBottom: 12,
     borderBottomWidth: 1,
   },
@@ -2695,15 +2896,81 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   cardDescription: {
-    fontSize: 11,
+    fontSize: 12,
     lineHeight: 16,
     marginBottom: 6,
+  },
+  cardMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginBottom: 8,
+  },
+  cardMetaText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  cardMetaDot: {
+    fontSize: 12,
+  },
+  cardInlineStepper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 20,
+    borderWidth: 1,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    gap: 8,
+  },
+  cardStepperBtn: {
+    padding: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cardStepperQty: {
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  activeFiltersScroll: {
+    paddingHorizontal: 16,
+    paddingVertical: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  activeFilterCountBadge: {
+    paddingRight: 4,
+  },
+  activeFilterCountText: {
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  activeFilterPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+  activeFilterPillText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  clearAllFiltersBtn: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  clearAllFiltersText: {
+    fontSize: 12,
+    fontWeight: '700',
   },
   sachetsPillRow: {
     marginBottom: 8,
   },
   sachetsPillText: {
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: '700',
     paddingHorizontal: 6,
     paddingVertical: 3,

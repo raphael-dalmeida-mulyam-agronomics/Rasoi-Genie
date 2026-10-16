@@ -29,6 +29,7 @@ import { RatingStars } from '../../framework/ui/RatingStars';
 import { QuantityStepper } from '../../framework/ui/QuantityStepper';
 import { SegmentedControl } from '../../framework/ui/SegmentedControl';
 import { Icon } from '../../framework/ui/Icon';
+import { EmptyState } from '../../framework/ui/EmptyState';
 import { getReviewsByKit } from '../../framework/services/reviewsService';
 
 export interface MealDetailModalProps {
@@ -168,7 +169,7 @@ export const MealDetailModal: React.FC<MealDetailModalProps> = ({
     setRunningTimers((prev) => ({ ...prev, [stepNumber]: !prev[stepNumber] }));
   };
 
-  const handleAddToCart = async () => {
+  const executeAddToCart = async () => {
     if (!kit) return;
     if (isDependent || targetCart === 'family') {
       const res = await addFamilyItem(kit, quantity, selectedServings, selectedSpiceLevel);
@@ -181,6 +182,28 @@ export const MealDetailModal: React.FC<MealDetailModalProps> = ({
     }
     // Smooth drop-down animation to reveal the home screen again
     handleDropDownAndClose();
+  };
+
+  const handleAddToCart = () => {
+    if (!kit) return;
+    if (matchingUserAllergens.length > 0) {
+      Alert.alert(
+        'Allergen Advisory Warning',
+        `This kit contains ${matchingUserAllergens.join(', ')}, which you flagged in your dietary profile.\n\nDo you still wish to add it to your cart?`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Add Anyway',
+            style: 'destructive',
+            onPress: () => {
+              executeAddToCart();
+            },
+          },
+        ],
+      );
+      return;
+    }
+    executeAddToCart();
   };
 
   const reviews = getReviewsByKit(kit.id);
@@ -391,17 +414,19 @@ export const MealDetailModal: React.FC<MealDetailModalProps> = ({
                   marginTop: 10,
                   paddingHorizontal: 12,
                   paddingVertical: 8,
-                  backgroundColor: '#ECFDF5',
+                  backgroundColor: colors.bgSuccessSubtle,
                   borderRadius: radii.md,
                   borderWidth: 1,
-                  borderColor: '#A7F3D0',
+                  borderColor: colors.borderSuccessSubtle,
                   flexDirection: 'row',
                   alignItems: 'center',
                   gap: 8,
                 }}
               >
-                <Icon name="shield-checkmark" size={16} color="#059669" />
-                <Text style={{ fontSize: 12, color: '#065F46', flex: 1, fontWeight: '600' }}>
+                <Icon name="shield-checkmark" size={16} color={colors.textSuccess} />
+                <Text
+                  style={{ fontSize: 12, color: colors.textSuccess, flex: 1, fontWeight: '600' }}
+                >
                   Freshness Assured: Vacuum-packed fresh daily.{' '}
                   {kit.shelfLife ||
                     `${kit.shelfLifeDays || 4} days shelf life (${kit.storageCondition || 'Keep refrigerated at 2-5°C'})`}
@@ -448,14 +473,16 @@ export const MealDetailModal: React.FC<MealDetailModalProps> = ({
                       gap: 8,
                       marginTop: 10,
                       padding: 10,
-                      backgroundColor: '#FEF2F2',
-                      borderColor: '#F87171',
+                      backgroundColor: colors.bgDangerSubtle,
+                      borderColor: colors.borderDangerSubtle,
                       borderWidth: 1,
                       borderRadius: radii.md,
                     }}
                   >
-                    <Icon name="warning" size={18} color="#DC2626" />
-                    <Text style={{ flex: 1, fontSize: 12, fontWeight: '700', color: '#B91C1C' }}>
+                    <Icon name="warning" size={18} color={colors.danger} />
+                    <Text
+                      style={{ flex: 1, fontSize: 12, fontWeight: '700', color: colors.textDanger }}
+                    >
                       Allergen Advisory: This kit contains {matchingUserAllergens.join(', ')}, which
                       you flagged in your profile preferences.
                     </Text>
@@ -592,19 +619,61 @@ export const MealDetailModal: React.FC<MealDetailModalProps> = ({
               </View>
             </View>
 
-            {/* Tab Navigation */}
+            {/* Horizontally Scrollable Ergonomic Tab Navigation Strip */}
             <View style={styles.tabBarSection}>
-              <SegmentedControl<TabType>
-                options={[
-                  { value: 'overview', label: 'Overview' },
-                  { value: 'recipe', label: 'Recipe Guide' },
-                  { value: 'ingredients', label: 'Masala Box' },
-                  { value: 'nutrition', label: 'Nutrition' },
-                  { value: 'reviews', label: 'Reviews', badgeCount: reviews.length },
-                ]}
-                selectedValue={activeTab}
-                onSelect={setActiveTab}
-              />
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={{ gap: 8, paddingHorizontal: 4 }}
+              >
+                {[
+                  { value: 'overview' as const, label: 'Overview', icon: 'restaurant' as const },
+                  { value: 'recipe' as const, label: 'Recipe Guide', icon: 'time' as const },
+                  { value: 'ingredients' as const, label: 'Masala Box', icon: 'flame' as const },
+                  { value: 'nutrition' as const, label: 'Nutrition', icon: 'nutrition' as const },
+                  {
+                    value: 'reviews' as const,
+                    label: `Reviews (${reviews.length})`,
+                    icon: 'star' as const,
+                  },
+                ].map((t) => {
+                  const isSelected = activeTab === t.value;
+                  return (
+                    <TouchableOpacity
+                      key={t.value}
+                      onPress={() => setActiveTab(t.value)}
+                      accessibilityRole="button"
+                      accessibilityLabel={`View ${t.label}`}
+                      style={{
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        gap: 6,
+                        paddingHorizontal: 16,
+                        paddingVertical: 10,
+                        borderRadius: radii.pill,
+                        backgroundColor: isSelected ? colors.primary : colors.bgSubtle,
+                        borderWidth: 1,
+                        borderColor: isSelected ? colors.primary : colors.borderLight,
+                      }}
+                    >
+                      <Icon
+                        name={t.icon}
+                        size={15}
+                        color={isSelected ? '#FFFFFF' : colors.textSecondary}
+                      />
+                      <Text
+                        style={{
+                          fontSize: 13,
+                          fontWeight: isSelected ? '700' : '600',
+                          color: isSelected ? '#FFFFFF' : colors.textPrimary,
+                        }}
+                      >
+                        {t.label}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
             </View>
 
             {/* TAB 1: OVERVIEW */}
@@ -640,11 +709,20 @@ export const MealDetailModal: React.FC<MealDetailModalProps> = ({
                   <View
                     style={[
                       styles.allergenBox,
-                      { backgroundColor: '#FEF3C7', borderRadius: radii.md },
+                      {
+                        backgroundColor: colors.bgWarningSubtle,
+                        borderColor: colors.borderWarningSubtle,
+                        borderWidth: 1,
+                        borderRadius: radii.md,
+                      },
                     ]}
                   >
-                    <Text style={styles.allergenTitle}>Allergen Information:</Text>
-                    <Text style={styles.allergenText}>{kit.allergens.join(', ')}</Text>
+                    <Text style={[styles.allergenTitle, { color: colors.textWarning }]}>
+                      Allergen Information:
+                    </Text>
+                    <Text style={[styles.allergenText, { color: colors.textPrimary }]}>
+                      {kit.allergens.join(', ')}
+                    </Text>
                   </View>
                 )}
               </View>
@@ -888,9 +966,34 @@ export const MealDetailModal: React.FC<MealDetailModalProps> = ({
                     <Text style={[styles.macroUnit, { color: colors.textMuted }]}>grams</Text>
                     <Text style={[styles.macroLabel, { color: colors.textSecondary }]}>Fats</Text>
                   </View>
+
+                  <View
+                    style={[
+                      styles.macroCard,
+                      { backgroundColor: colors.bgSubtle, borderRadius: radii.lg },
+                    ]}
+                  >
+                    <Text style={[styles.macroVal, { color: colors.textPrimary }]}>
+                      {kit.nutrition.fiber || 0}g
+                    </Text>
+                    <Text style={[styles.macroUnit, { color: colors.textMuted }]}>grams</Text>
+                    <Text style={[styles.macroLabel, { color: colors.textSecondary }]}>Fiber</Text>
+                  </View>
                 </View>
 
-                <View style={[styles.dietTagsRow, { marginTop: 16 }]}>
+                <Text
+                  style={{
+                    fontSize: 11,
+                    color: colors.textMuted,
+                    marginTop: 10,
+                    textAlign: 'center',
+                    fontStyle: 'italic',
+                  }}
+                >
+                  * Values are calculated estimates based on standardized culinary yields.
+                </Text>
+
+                <View style={[styles.dietTagsRow, { marginTop: 14 }]}>
                   <Text style={[styles.specLabel, { color: colors.textMuted, marginBottom: 8 }]}>
                     DIETARY TAGS:
                   </Text>
@@ -926,38 +1029,76 @@ export const MealDetailModal: React.FC<MealDetailModalProps> = ({
                   />
                 </View>
 
-                {reviews.map((rev) => (
-                  <View
-                    key={rev.id}
-                    style={[styles.reviewItem, { borderBottomColor: colors.borderLight }]}
-                  >
-                    <View style={styles.reviewerMeta}>
-                      <View style={styles.avatarCircle}>
-                        <Text style={styles.avatarLetter}>{rev.userName.charAt(0)}</Text>
+                {reviews.length === 0 ? (
+                  <EmptyState
+                    icon="star-outline"
+                    title="No Reviews Yet"
+                    description="Be the first home chef to cook and rate this gourmet meal kit!"
+                    actionTitle="Write a Review"
+                    onAction={() => onOpenReviewsModal?.(kit)}
+                  />
+                ) : (
+                  reviews.map((rev) => (
+                    <View
+                      key={rev.id}
+                      style={[styles.reviewItem, { borderBottomColor: colors.borderLight }]}
+                    >
+                      <View style={styles.reviewerMeta}>
+                        <View style={styles.avatarCircle}>
+                          <Text style={styles.avatarLetter}>{rev.userName.charAt(0)}</Text>
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <Text style={[styles.reviewerName, { color: colors.textPrimary }]}>
+                            {rev.userName}
+                          </Text>
+                          <Text style={[styles.reviewerCity, { color: colors.textMuted }]}>
+                            {rev.userCity} • {rev.date}
+                          </Text>
+                        </View>
+                        <RatingStars rating={rev.rating} size={13} />
                       </View>
-                      <View style={{ flex: 1 }}>
-                        <Text style={[styles.reviewerName, { color: colors.textPrimary }]}>
-                          {rev.userName}
-                        </Text>
-                        <Text style={[styles.reviewerCity, { color: colors.textMuted }]}>
-                          {rev.userCity} • {rev.date}
-                        </Text>
-                      </View>
-                      <RatingStars rating={rev.rating} size={13} />
+
+                      <Text style={[styles.reviewComment, { color: colors.textSecondary }]}>
+                        {rev.comment}
+                      </Text>
+
+                      {rev.photoUrl && (
+                        <Image source={{ uri: rev.photoUrl }} style={styles.reviewPhoto} />
+                      )}
                     </View>
-
-                    <Text style={[styles.reviewComment, { color: colors.textSecondary }]}>
-                      {rev.comment}
-                    </Text>
-
-                    {rev.photoUrl && (
-                      <Image source={{ uri: rev.photoUrl }} style={styles.reviewPhoto} />
-                    )}
-                  </View>
-                ))}
+                  ))
+                )}
               </View>
             )}
           </ScrollView>
+
+          {/* Allergen Warning Banner directly above bottom action bar */}
+          {matchingUserAllergens.length > 0 && (
+            <View
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: 8,
+                paddingHorizontal: 16,
+                paddingVertical: 10,
+                backgroundColor: colors.bgDangerSubtle,
+                borderTopWidth: 1,
+                borderTopColor: colors.borderDangerSubtle,
+              }}
+            >
+              <Icon name="warning" size={16} color={colors.textDanger} />
+              <Text
+                style={{
+                  flex: 1,
+                  fontSize: 12,
+                  fontWeight: '700',
+                  color: colors.textDanger,
+                }}
+              >
+                Contains {matchingUserAllergens.join(', ')} (flagged in your dietary preferences).
+              </Text>
+            </View>
+          )}
 
           {/* Bottom Checkout CTA Bar */}
           <View

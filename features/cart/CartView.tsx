@@ -23,6 +23,7 @@ import { Card } from '../../framework/ui/Card';
 import { Badge } from '../../framework/ui/Badge';
 import { QuantityStepper } from '../../framework/ui/QuantityStepper';
 import { Icon } from '../../framework/ui/Icon';
+import { useHeaderTopPadding } from '../../framework/ui/ScreenHeader';
 import { CheckoutView } from '../checkout/CheckoutView';
 import { OrderConfirmationView } from '../checkout/OrderConfirmationView';
 import { SegmentedControl } from '../../framework/ui/SegmentedControl';
@@ -64,25 +65,12 @@ export const CartView: React.FC = () => {
   const { addresses, addAddress, defaultAddress } = usePreferences();
 
   const [couponInput, setCouponInput] = useState('');
-  const [selectedAddressId, setSelectedAddressId] = useState<string>(
-    defaultAddress?.id || addresses[0]?.id || '',
-  );
-  const [addressModalVisible, setAddressModalVisible] = useState(false);
-  const [newFlat, setNewFlat] = useState('');
-  const [newArea, setNewArea] = useState('');
-  const [newCity, setNewCity] = useState('');
-  const [newPincode, setNewPincode] = useState('560103');
-  const [newTag, setNewTag] = useState<'Home' | 'Work' | 'Other'>('Home');
 
-  // UPI Input
-  const [upiId, setUpiId] = useState('');
-
-  // Checkout flow states
+  // Checkout flow states (delegated to CheckoutView)
   const [flowStep, setFlowStep] = useState<'cart' | 'checkout' | 'confirmation'>('cart');
   const [walletCreditsApplied, setWalletCreditsApplied] = useState(0);
   const [payableAmount, setPayableAmount] = useState(0);
   const [deliveryInstructions, setDeliveryInstructions] = useState('');
-  const [isCheckingOut, setIsCheckingOut] = useState(false);
   const [confirmedOrder, setConfirmedOrder] = useState<Order | null>(null);
 
   const {
@@ -122,104 +110,11 @@ export const CartView: React.FC = () => {
     }
   }, [params?.step, params?.type, setActiveCartType]);
 
-  const activeAddress =
-    addresses.find((a) => a.id === selectedAddressId) || defaultAddress || addresses[0];
-
   const handleApplyCoupon = () => {
     if (!couponInput.trim()) return;
     const res = applyCouponCode(couponInput);
     if (!res.success) {
       Alert.alert('Coupon Alert', res.message);
-    }
-  };
-
-  const handleAddNewAddress = () => {
-    if (!newFlat.trim() || !newArea.trim()) {
-      Alert.alert('Address Incomplete', 'Please provide flat/house no and area.');
-      return;
-    }
-
-    addAddress({
-      name: user?.displayName || 'Customer',
-      phone: user?.phoneNumber || '+91 98765 43210',
-      flatAndStreet: newFlat.trim(),
-      areaAndLandmark: newArea.trim(),
-      city: newCity.trim(),
-      pincode: newPincode.trim(),
-      tag: newTag,
-      isDefault: true,
-    });
-
-    setAddressModalVisible(false);
-    setNewFlat('');
-    setNewArea('');
-  };
-
-  const handlePlaceOrder = async () => {
-    if (items.length === 0) return;
-    if (!activeAddress) {
-      Alert.alert('Address Required', 'Please select or add a delivery address.');
-      return;
-    }
-
-    setIsCheckingOut(true);
-    try {
-      const stableGuestId = await getOrCreateGuestId();
-      const sharedTxnId = `TXN-${Math.random().toString(36).substring(2, 10).toUpperCase()}`;
-      const orderData = {
-        userId: user?.uid || stableGuestId,
-        customerPhone: user?.phoneNumber || activeAddress.phone || '+91 9876543210',
-        customerName: user?.displayName || activeAddress.name || 'Valued Chef',
-        customerEmail: user?.email || undefined,
-        deliveryAddress: `${activeAddress.flatAndStreet}, ${activeAddress.areaAndLandmark}, ${activeAddress.city} - ${activeAddress.pincode}`,
-        deliverySlot: selectedSlot,
-        items: items.map((i) => ({
-          kitId: i.kit.id,
-          name: i.kit.name,
-          quantity: i.quantity,
-          price: i.unitPrice ?? i.kit.price,
-          servings: i.servings,
-          spiceLevel: i.spiceLevel,
-          masalaSachets: i.kit.masalaSachets,
-          imageUrl: i.kit.heroImage,
-        })),
-        subtotal,
-        discount,
-        couponCode: appliedCoupon?.code,
-        deliveryFee,
-        totalAmount: total,
-        paymentMethod: selectedPaymentMethod,
-        transactionId: sharedTxnId,
-      };
-
-      // 1. Create order in Supabase backend (triggers real-time alert, sound chime, admin_notifications)
-      const sbResult = await createOrderInSupabase(orderData);
-      const sharedOrderId = sbResult?.orderId;
-
-      // 2. Also keep local store in sync with the exact same order ID
-      const order = await createOrder({
-        ...orderData,
-        id: sharedOrderId,
-        orderId: sharedOrderId,
-        addressTag: activeAddress.tag,
-        items: orderData.items.map((it) => ({
-          id: it.kitId,
-          name: it.name,
-          quantity: it.quantity,
-          price: it.price,
-          servings: it.servings,
-          spiceLevel: it.spiceLevel,
-          masalaSachets: it.masalaSachets || [],
-          imageUrl: it.imageUrl,
-        })),
-      });
-
-      setConfirmedOrder(order);
-      clearCart();
-    } catch (err) {
-      Alert.alert('Order Placement Failed', 'Could not complete order. Please try again.');
-    } finally {
-      setIsCheckingOut(false);
     }
   };
 
@@ -430,13 +325,19 @@ export const CartView: React.FC = () => {
     );
   }
 
+  const headerPaddingTop = useHeaderTopPadding(6);
+
   return (
     <View style={[styles.container, { backgroundColor: colors.bgPrimary }]}>
       {/* App Bar */}
       <View
         style={[
           styles.appBar,
-          { backgroundColor: colors.bgSurface, borderBottomColor: colors.borderLight },
+          {
+            backgroundColor: colors.bgSurface,
+            borderBottomColor: colors.borderLight,
+            paddingTop: headerPaddingTop,
+          },
         ]}
       >
         {family && !isDependent ? (
@@ -478,6 +379,82 @@ export const CartView: React.FC = () => {
           <FamilyCartView />
         ) : (
           <>
+            {/* FREE COLD-CHAIN DELIVERY PROGRESS TRACKER */}
+            <View
+              testID="cart-free-delivery-tracker"
+              style={[
+                styles.deliveryTrackerCard,
+                {
+                  backgroundColor: colors.bgSurface,
+                  borderRadius: radii.xl,
+                  borderColor: colors.borderLight,
+                  borderWidth: 1,
+                  ...shadows.soft,
+                },
+              ]}
+            >
+              <View
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  marginBottom: 8,
+                }}
+              >
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 }}>
+                  <View
+                    style={{
+                      width: 28,
+                      height: 28,
+                      borderRadius: 14,
+                      backgroundColor:
+                        subtotal >= 499 ? colors.bgSuccessSubtle : colors.primaryLight,
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                  >
+                    <Icon
+                      name="car"
+                      size={15}
+                      color={subtotal >= 499 ? colors.textSuccess : colors.primary}
+                    />
+                  </View>
+                  <Text style={{ fontSize: 13, fontWeight: '700', color: colors.textPrimary }}>
+                    {subtotal >= 499
+                      ? 'Free Cold-Chain Delivery Unlocked!'
+                      : `Add ₹${499 - subtotal} more for FREE delivery`}
+                  </Text>
+                </View>
+                <Text
+                  style={{
+                    fontSize: 12,
+                    fontWeight: '700',
+                    color: subtotal >= 499 ? colors.textSuccess : colors.textSecondary,
+                  }}
+                >
+                  {subtotal >= 499 ? 'FREE' : '₹49 fee'}
+                </Text>
+              </View>
+              {/* Progress Track */}
+              <View
+                style={[
+                  styles.deliveryTrackBg,
+                  { backgroundColor: colors.bgSubtle, borderRadius: radii.pill },
+                ]}
+              >
+                <View
+                  style={[
+                    styles.deliveryTrackFill,
+                    {
+                      width: `${Math.min(100, Math.round((subtotal / 499) * 100))}%`,
+                      backgroundColor: subtotal >= 499 ? colors.success : colors.primary,
+                      borderRadius: radii.pill,
+                    },
+                  ]}
+                />
+              </View>
+            </View>
+
             {/* LINE ITEMS LIST */}
             <View style={styles.section}>
               <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
@@ -512,6 +489,8 @@ export const CartView: React.FC = () => {
                       <TouchableOpacity
                         onPress={() => removeItem(kit.id, servings, spiceLevel)}
                         hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Remove ${kit.name} from basket`}
                       >
                         <Icon name="close" size={16} color={colors.textMuted} />
                       </TouchableOpacity>
@@ -704,115 +683,170 @@ export const CartView: React.FC = () => {
               )}
 
               <View style={styles.popularCoupons}>
-                <Text style={[styles.popularCouponsLabel, { color: colors.textMuted }]}>
-                  Available:
+                <Text
+                  style={[styles.popularCouponsLabel, { color: colors.textMuted, marginBottom: 8 }]}
+                >
+                  Available Coupons:
                 </Text>
-                <TouchableOpacity onPress={() => applyCouponCode('RASOI100')}>
-                  <Text
-                    testID="cart-coupon-rasoi100"
-                    style={[
-                      styles.couponPill,
-                      { color: colors.primary, borderColor: colors.primary + '40' },
-                    ]}
-                  >
-                    RASOI100 (₹100 OFF)
+
+                {/* Coupon 1: RASOI100 */}
+                <TouchableOpacity
+                  style={[
+                    styles.couponCard,
+                    {
+                      backgroundColor:
+                        appliedCoupon?.code === 'RASOI100' ? colors.primaryLight : colors.bgSubtle,
+                      borderColor:
+                        appliedCoupon?.code === 'RASOI100' ? colors.primary : colors.borderLight,
+                      borderRadius: radii.lg,
+                    },
+                  ]}
+                  onPress={() => applyCouponCode('RASOI100')}
+                >
+                  <View style={{ flex: 1 }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                      <Text
+                        testID="cart-coupon-rasoi100"
+                        style={[styles.couponCardCode, { color: colors.primary }]}
+                      >
+                        RASOI100
+                      </Text>
+                      {subtotal < 499 ? (
+                        <Badge
+                          label={`Add ₹${499 - subtotal} to unlock`}
+                          variant="neutral"
+                          size="sm"
+                        />
+                      ) : (
+                        <Badge label="Eligible" variant="success" size="sm" />
+                      )}
+                    </View>
+                    <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 2 }}>
+                      ₹100 flat discount on chef boxes above ₹499
+                    </Text>
+                  </View>
+                  <Text style={[styles.couponApplyAction, { color: colors.primary }]}>
+                    {appliedCoupon?.code === 'RASOI100' ? 'APPLIED ✓' : 'APPLY'}
                   </Text>
                 </TouchableOpacity>
-                <TouchableOpacity onPress={() => applyCouponCode('FREEDEL')}>
-                  <Text
-                    testID="cart-coupon-freedel"
-                    style={[
-                      styles.couponPill,
-                      { color: colors.accent, borderColor: colors.accent + '40' },
-                    ]}
-                  >
-                    FREEDEL (Free Delivery)
+
+                {/* Coupon 2: FREEDEL */}
+                <TouchableOpacity
+                  style={[
+                    styles.couponCard,
+                    {
+                      backgroundColor:
+                        appliedCoupon?.code === 'FREEDEL' ? colors.accentLight : colors.bgSubtle,
+                      borderColor:
+                        appliedCoupon?.code === 'FREEDEL' ? colors.accent : colors.borderLight,
+                      borderRadius: radii.lg,
+                    },
+                  ]}
+                  onPress={() => applyCouponCode('FREEDEL')}
+                >
+                  <View style={{ flex: 1 }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                      <Text
+                        testID="cart-coupon-freedel"
+                        style={[styles.couponCardCode, { color: colors.accent }]}
+                      >
+                        FREEDEL
+                      </Text>
+                      {subtotal < 299 ? (
+                        <Badge
+                          label={`Add ₹${299 - subtotal} to unlock`}
+                          variant="neutral"
+                          size="sm"
+                        />
+                      ) : (
+                        <Badge label="Eligible" variant="success" size="sm" />
+                      )}
+                    </View>
+                    <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 2 }}>
+                      Free delivery on chef boxes above ₹299
+                    </Text>
+                  </View>
+                  <Text style={[styles.couponApplyAction, { color: colors.accent }]}>
+                    {appliedCoupon?.code === 'FREEDEL' ? 'APPLIED ✓' : 'APPLY'}
                   </Text>
                 </TouchableOpacity>
               </View>
-
-              {!user && (
-                <View
-                  testID="cart-guest-wallet-notice"
-                  style={{
-                    marginTop: 12,
-                    padding: 10,
-                    backgroundColor: colors.bgSubtle,
-                    borderRadius: radii.md,
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    gap: 8,
-                  }}
-                >
-                  <Icon name="wallet" size={16} color={colors.textSecondary} />
-                  <Text style={{ fontSize: 12, color: colors.textSecondary, flex: 1 }}>
-                    Wallet credits & referrals:{' '}
-                    <Text
-                      style={{ color: colors.primary, fontWeight: '700' }}
-                      onPress={() => router.push('/login' as any)}
-                    >
-                      Sign in to use
-                    </Text>
-                  </Text>
-                </View>
-              )}
             </View>
 
-            {/* DELIVERY ADDRESS SELECTION */}
+            {/* SEPARATE SECTION: RASOI CREDITS WALLET */}
             <View
+              testID="cart-guest-wallet-notice"
               style={[
                 styles.sectionCard,
-                { backgroundColor: colors.bgSurface, borderRadius: radii.xl },
+                {
+                  backgroundColor: colors.bgSurface,
+                  borderRadius: radii.xl,
+                  borderColor: colors.borderLight,
+                  borderWidth: 1,
+                  ...shadows.card,
+                },
               ]}
             >
-              <View style={styles.sectionHeaderRow}>
-                <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
-                  3. Delivery Address
-                </Text>
-                <TouchableOpacity onPress={() => setAddressModalVisible(true)}>
-                  <Text style={[styles.addAddressLink, { color: colors.primary }]}>+ Add New</Text>
-                </TouchableOpacity>
-              </View>
-
-              {addresses.map((addr) => {
-                const isSelected = addr.id === (activeAddress?.id || selectedAddressId);
-                return (
-                  <TouchableOpacity
-                    key={addr.id}
-                    style={[
-                      styles.addressCard,
-                      {
-                        borderColor: isSelected ? colors.primary : colors.borderLight,
-                        backgroundColor: isSelected ? colors.primaryLight + '35' : colors.bgSubtle,
-                        borderRadius: radii.lg,
-                      },
-                    ]}
-                    onPress={() => setSelectedAddressId(addr.id)}
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                <View
+                  style={{
+                    width: 40,
+                    height: 40,
+                    borderRadius: 20,
+                    backgroundColor: colors.primaryLight,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  <Icon name="wallet" size={20} color={colors.primary} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text
+                    style={[styles.sectionTitle, { color: colors.textPrimary, marginBottom: 2 }]}
                   >
-                    <View style={styles.addressTop}>
-                      <Badge label={addr.tag} variant="accent" size="sm" />
-                      {addr.isDefault && <Badge label="Default" variant="neutral" size="sm" />}
-                    </View>
-                    <Text style={[styles.addressText, { color: colors.textPrimary }]}>
-                      {addr.flatAndStreet}, {addr.areaAndLandmark}
-                    </Text>
-                    <Text style={[styles.addressCity, { color: colors.textSecondary }]}>
-                      {addr.city} - {addr.pincode} • {addr.phone}
+                    Rasoi Cooking Credits
+                  </Text>
+                  <Text style={{ fontSize: 12, color: colors.textSecondary }}>
+                    {user
+                      ? 'Apply available wallet credits directly on the Checkout screen.'
+                      : 'Sign in to redeem cashback, cooking credits, and referral rewards.'}
+                  </Text>
+                </View>
+                {!user && (
+                  <TouchableOpacity
+                    onPress={() => router.push('/login' as any)}
+                    accessibilityRole="button"
+                    accessibilityLabel="Sign in to use wallet credits"
+                    style={{
+                      paddingHorizontal: 12,
+                      paddingVertical: 6,
+                      borderRadius: radii.pill,
+                      backgroundColor: colors.primaryLight,
+                    }}
+                  >
+                    <Text style={{ color: colors.primary, fontSize: 12, fontWeight: '700' }}>
+                      Sign In
                     </Text>
                   </TouchableOpacity>
-                );
-              })}
+                )}
+              </View>
             </View>
 
-            {/* DELIVERY SLOT PICKER */}
+            {/* PREFERRED DELIVERY SLOT */}
             <View
               style={[
                 styles.sectionCard,
-                { backgroundColor: colors.bgSurface, borderRadius: radii.xl },
+                {
+                  backgroundColor: colors.bgSurface,
+                  borderRadius: radii.xl,
+                  borderColor: colors.borderLight,
+                  borderWidth: 1,
+                  ...shadows.card,
+                },
               ]}
             >
               <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
-                4. Delivery Slot
+                3. Delivery Slot
               </Text>
 
               {DELIVERY_SLOTS.map((slot) => {
@@ -829,6 +863,8 @@ export const CartView: React.FC = () => {
                       },
                     ]}
                     onPress={() => setSelectedSlot(slot.title)}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Select delivery slot ${slot.title}`}
                   >
                     <View style={{ flex: 1 }}>
                       <Text
@@ -848,90 +884,6 @@ export const CartView: React.FC = () => {
                   </TouchableOpacity>
                 );
               })}
-            </View>
-
-            {/* PAYMENT METHOD SELECTION */}
-            <View
-              style={[
-                styles.sectionCard,
-                { backgroundColor: colors.bgSurface, borderRadius: radii.xl },
-              ]}
-            >
-              <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
-                5. Payment Method
-              </Text>
-
-              {(['UPI', 'Card', 'Cash on Delivery'] as PaymentMethod[]).map((method) => {
-                const isSelected = selectedPaymentMethod === method;
-                return (
-                  <TouchableOpacity
-                    key={method}
-                    style={[
-                      styles.paymentOption,
-                      {
-                        borderColor: isSelected ? colors.primary : colors.borderLight,
-                        backgroundColor: isSelected ? colors.primaryLight + '30' : colors.bgSubtle,
-                        borderRadius: radii.md,
-                      },
-                    ]}
-                    onPress={() => setSelectedPaymentMethod(method)}
-                  >
-                    <View style={{ marginRight: 12 }}>
-                      <Icon
-                        name={method === 'UPI' ? 'flash' : method === 'Card' ? 'card' : 'cash'}
-                        size={22}
-                        color={isSelected ? colors.primary : colors.textSecondary}
-                      />
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <Text
-                        style={[
-                          styles.paymentTitle,
-                          { color: isSelected ? colors.primary : colors.textPrimary },
-                        ]}
-                      >
-                        {method === 'UPI'
-                          ? 'Instant UPI (Google Pay / PhonePe / Paytm / Amazon Pay)'
-                          : method === 'Card'
-                            ? 'Credit / Debit Card (Visa, MasterCard, RuPay)'
-                            : 'Cash on Delivery (Pay upon doorstep handover)'}
-                      </Text>
-                    </View>
-                    <View
-                      style={[
-                        styles.radioDot,
-                        {
-                          borderColor: isSelected ? colors.primary : colors.border,
-                          backgroundColor: isSelected ? colors.primary : 'transparent',
-                        },
-                      ]}
-                    />
-                  </TouchableOpacity>
-                );
-              })}
-
-              {selectedPaymentMethod === 'UPI' && (
-                <View style={styles.upiSubBox}>
-                  <Text style={[styles.upiLabel, { color: colors.textSecondary }]}>
-                    UPI VPA ID:
-                  </Text>
-                  <TextInput
-                    style={[
-                      styles.upiInput,
-                      {
-                        backgroundColor: colors.bgSubtle,
-                        borderColor: colors.border,
-                        borderRadius: radii.md,
-                        color: colors.textPrimary,
-                      },
-                    ]}
-                    value={upiId}
-                    onChangeText={setUpiId}
-                    placeholder="name@okaxis or name@upi"
-                    placeholderTextColor={colors.textMuted}
-                  />
-                </View>
-              )}
             </View>
 
             {/* ORDER SUMMARY */}
@@ -1025,206 +977,6 @@ export const CartView: React.FC = () => {
       <Modal visible={familyHubVisible} animationType="slide">
         <FamilyManagementView onClose={() => setFamilyHubVisible(false)} />
       </Modal>
-
-      {/* NEW ADDRESS MODAL */}
-      <Modal visible={addressModalVisible} transparent animationType="fade">
-        <View style={styles.modalOverlay}>
-          <View
-            style={[
-              styles.addressModalBox,
-              {
-                backgroundColor: colors.bgSurface,
-                borderRadius: radii.xl,
-                ...shadows.card,
-              },
-            ]}
-          >
-            <View style={styles.modalHeader}>
-              <Text style={[styles.modalTitle, { color: colors.textPrimary }]}>
-                Add New Address
-              </Text>
-              <TouchableOpacity
-                onPress={() => setAddressModalVisible(false)}
-                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-              >
-                <Icon name="close" size={20} color={colors.textMuted} />
-              </TouchableOpacity>
-            </View>
-
-            <TextInput
-              style={[
-                styles.modalInput,
-                {
-                  backgroundColor: colors.bgSubtle,
-                  borderColor: colors.border,
-                  borderRadius: radii.md,
-                },
-              ]}
-              placeholder="Flat / House No., Apartment Name"
-              value={newFlat}
-              onChangeText={setNewFlat}
-            />
-
-            <TextInput
-              style={[
-                styles.modalInput,
-                {
-                  backgroundColor: colors.bgSubtle,
-                  borderColor: colors.border,
-                  borderRadius: radii.md,
-                },
-              ]}
-              placeholder="Street, Landmark, Area"
-              value={newArea}
-              onChangeText={setNewArea}
-            />
-
-            <View style={{ flexDirection: 'row', gap: 10 }}>
-              <TextInput
-                style={[
-                  styles.modalInput,
-                  {
-                    flex: 1,
-                    backgroundColor: colors.bgSubtle,
-                    borderColor: colors.border,
-                    borderRadius: radii.md,
-                  },
-                ]}
-                placeholder="City"
-                value={newCity}
-                onChangeText={setNewCity}
-              />
-              <TextInput
-                style={[
-                  styles.modalInput,
-                  {
-                    flex: 1,
-                    backgroundColor: colors.bgSubtle,
-                    borderColor: colors.border,
-                    borderRadius: radii.md,
-                  },
-                ]}
-                placeholder="Pincode"
-                value={newPincode}
-                onChangeText={setNewPincode}
-                keyboardType="numeric"
-              />
-            </View>
-
-            <View style={{ flexDirection: 'row', gap: 8, marginVertical: 10 }}>
-              {(['Home', 'Work', 'Other'] as const).map((tag) => (
-                <TouchableOpacity
-                  key={tag}
-                  style={[
-                    styles.tagChoice,
-                    {
-                      backgroundColor: newTag === tag ? colors.primary : colors.bgSubtle,
-                      borderColor: newTag === tag ? colors.primary : colors.border,
-                      borderRadius: radii.pill,
-                    },
-                  ]}
-                  onPress={() => setNewTag(tag)}
-                >
-                  <Text
-                    style={{
-                      color: newTag === tag ? '#fff' : colors.textPrimary,
-                      fontWeight: '700',
-                    }}
-                  >
-                    {tag}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            <Button title="Save Address" onPress={handleAddNewAddress} />
-          </View>
-        </View>
-      </Modal>
-
-      {/* ORDER CONFIRMATION MODAL */}
-      {confirmedOrder && (
-        <Modal visible={!!confirmedOrder} animationType="slide">
-          <View style={[styles.successContainer, { backgroundColor: colors.bgPrimary }]}>
-            <View style={styles.successContent}>
-              <View style={{ marginBottom: 16 }}>
-                <Icon name="check-circle" size={64} color="#16A34A" />
-              </View>
-              <Text style={[styles.successTitle, { color: colors.textPrimary }]}>
-                Order Successfully Placed!
-              </Text>
-              <Text style={[styles.successSubtitle, { color: colors.textSecondary }]}>
-                Your fresh ingredient kit is now being portioned and packed in our cold-chain
-                kitchen.
-              </Text>
-
-              <View
-                style={[
-                  styles.successCard,
-                  {
-                    backgroundColor: colors.bgSurface,
-                    borderRadius: radii.xl,
-                    borderColor: colors.borderLight,
-                    ...shadows.card,
-                  },
-                ]}
-              >
-                <View style={styles.successRow}>
-                  <Text style={[styles.successLabel, { color: colors.textMuted }]}>ORDER ID</Text>
-                  <Text style={[styles.successVal, { color: colors.textPrimary }]}>
-                    {confirmedOrder.id}
-                  </Text>
-                </View>
-
-                <View style={styles.successRow}>
-                  <Text style={[styles.successLabel, { color: colors.textMuted }]}>TOTAL PAID</Text>
-                  <Text style={[styles.successVal, { color: colors.primary }]}>
-                    ₹{confirmedOrder.totalAmount}
-                  </Text>
-                </View>
-
-                <View style={styles.successRow}>
-                  <Text style={[styles.successLabel, { color: colors.textMuted }]}>SLOT</Text>
-                  <Text style={[styles.successVal, { color: colors.textPrimary }]}>
-                    {confirmedOrder.deliverySlot}
-                  </Text>
-                </View>
-
-                <View style={styles.successRow}>
-                  <Text style={[styles.successLabel, { color: colors.textMuted }]}>ADDRESS</Text>
-                  <Text
-                    style={[styles.successVal, { color: colors.textPrimary }]}
-                    numberOfLines={2}
-                  >
-                    {confirmedOrder.deliveryAddress}
-                  </Text>
-                </View>
-              </View>
-
-              <View style={styles.successBtnCol}>
-                <Button
-                  title="Track Live Delivery"
-                  icon={<Icon name="delivery" size={20} color="#FFFFFF" />}
-                  size="lg"
-                  onPress={() => {
-                    setConfirmedOrder(null);
-                    router.push('/(tabs)/orders' as any);
-                  }}
-                  style={{ marginBottom: 12 }}
-                />
-                <Button
-                  title="Return to Home Catalog"
-                  variant="outline"
-                  onPress={() => {
-                    setConfirmedOrder(null);
-                    router.push('/' as any);
-                  }}
-                />
-              </View>
-            </View>
-          </View>
-        </Modal>
-      )}
     </View>
   );
 };
@@ -1238,7 +990,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingTop: 45,
+    paddingTop: 12,
     paddingBottom: 12,
     borderBottomWidth: 1,
   },
@@ -1370,6 +1122,39 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: 999,
+  },
+  deliveryTrackerCard: {
+    marginHorizontal: 16,
+    marginTop: 12,
+    marginBottom: 4,
+    padding: 14,
+  },
+  deliveryTrackBg: {
+    height: 6,
+    width: '100%',
+    overflow: 'hidden',
+  },
+  deliveryTrackFill: {
+    height: '100%',
+  },
+  couponCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 12,
+    borderWidth: 1,
+    marginBottom: 8,
+    width: '100%',
+  },
+  couponCardCode: {
+    fontSize: 14,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
+  couponApplyAction: {
+    fontSize: 12,
+    fontWeight: '800',
+    marginLeft: 10,
   },
   addAddressLink: {
     fontSize: 13,

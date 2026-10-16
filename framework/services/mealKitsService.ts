@@ -354,32 +354,41 @@ const BASE_INITIAL_MEAL_KITS: MealKit[] = [
         stepNumber: 1,
         title: 'Temper Whole Spices in Butter',
         instruction:
-          'Heat 1 tbsp butter and 1 tsp oil in a pan over medium heat. Empty Sachet 1 (Whole Khada Masala) and stir until fragrant crackles begin.',
+          'Melt the pre-portioned White Butter (20g) in a wide non-stick pan over medium heat. Empty Sachet 1: Whole Khada Masala (Cardamom, Clove, Cinnamon, Bayleaf) and sauté for 45 seconds until fragrant crackles release.',
         timerSeconds: 45,
-        tip: 'Keep flame on medium to avoid burning the green cardamoms.',
+        imageUrl:
+          'https://images.unsplash.com/photo-1505576399279-565b52d4ac71?auto=format&fit=crop&w=800&q=80',
+        tip: 'Keep the flame on medium to avoid scorching the whole green cardamoms.',
       },
       {
         stepNumber: 2,
         title: 'Sauté Tomato Puree & Cashew Paste',
         instruction:
-          'Pour the tomato puree and cashew paste pouch into the pan. Stir vigorously for 4 minutes until the butter starts separating gently at the edges.',
+          'Pour the fresh Tomato Puree Pouch (180g) and Cashew & Melon Seed Paste (45g) into the pan. Cook for 4 minutes, stirring continuously until the butter gently glistens at the edges.',
         timerSeconds: 240,
-        tip: 'Stirring continuously keeps the cashew paste silky smooth.',
+        imageUrl:
+          'https://images.unsplash.com/photo-1547592180-85f173990554?auto=format&fit=crop&w=800&q=80',
+        tip: 'Stirring continuously keeps the velvety cashew paste from catching at the bottom.',
       },
       {
         stepNumber: 3,
-        title: 'Add Shahi Gravy Sachet & Simmer',
+        title: 'Simmer with Shahi Gravy Premix',
         instruction:
-          'Add 1/2 cup warm water along with Sachet 2 (Shahi Gravy Premix). Stir well and bring to a gentle rolling simmer.',
+          'Add 1/2 cup warm water along with Sachet 2: Shahi Gravy Premix. Stir thoroughly to dissolve any lumps and bring to a gentle rolling simmer for 3 minutes.',
         timerSeconds: 180,
+        imageUrl:
+          'https://images.unsplash.com/photo-1547592180-85f173990554?auto=format&fit=crop&w=800&q=80',
+        tip: 'Add a splash more warm water if you prefer a lighter gravy consistency.',
       },
       {
         stepNumber: 4,
         title: 'Fold in Paneer & Aroma Finish',
         instruction:
-          'Gently slide the fresh paneer cubes into the sauce. Simmer for 3 minutes. Finish by rubbing Sachet 3 (Kasuri Methi & Garam Masala) between your palms and sprinkling over the gravy with cream.',
+          'Gently slide in the Fresh Malai Paneer Cubes (250g) and drizzle the Fresh Cream (10g). Simmer for 3 minutes. Finish by crushing Sachet 3: Roasted Kasuri Methi & Garam Masala Aroma Finish between your palms and sprinkling over the hot gravy.',
         timerSeconds: 180,
-        tip: 'Do not overcook the paneer so it stays soft and tender.',
+        imageUrl:
+          'https://images.unsplash.com/photo-1540420773420-3366772f4999?auto=format&fit=crop&w=800&q=80',
+        tip: 'Avoid vigorous stirring once paneer is added so the tender cubes remain intact.',
       },
     ],
     reviews: [
@@ -426,7 +435,8 @@ const BASE_INITIAL_MEAL_KITS: MealKit[] = [
       'https://images.unsplash.com/photo-1563379091339-03b21ab4a4f8?auto=format&fit=crop&w=1000&q=80',
     galleryImages: [
       'https://images.unsplash.com/photo-1563379091339-03b21ab4a4f8?auto=format&fit=crop&w=1000&q=80',
-      'https://images.unsplash.com/photo-1589302168068-964664d93dc0?auto=format&fit=crop&w=1000&q=80',
+      'https://images.unsplash.com/photo-1589301760014-d929f3979dbc?auto=format&fit=crop&w=1000&q=80',
+      'https://images.unsplash.com/photo-1546833999-b9f581a1996d?auto=format&fit=crop&w=1000&q=80',
     ],
     price: 399,
     originalPrice: 479,
@@ -483,31 +493,41 @@ const BASE_INITIAL_MEAL_KITS: MealKit[] = [
         stepNumber: 1,
         title: 'Parboil the Aged Basmati Rice',
         instruction:
-          'Boil 1.5 litres water with Sachet 2 (Rice Parboiling Spices) and 1 tbsp salt. Add soaked rice and cook to 70% done (about 6 minutes). Drain immediately.',
-        timerSeconds: 360,
-        tip: 'The rice grain should break into three parts when pinched.',
+          'Bring 4 cups of water to a rolling boil with 1 tsp salt. Add the pre-soaked Aged Basmati Rice (250g) and parboil for exactly 5 minutes until 70% cooked (grain breaks into 3 pieces). Drain completely.',
+        timerSeconds: 300,
+        imageUrl:
+          'https://images.unsplash.com/photo-1546549032-9571cd6b27df?auto=format&fit=crop&w=800&q=80',
+        tip: 'Do not overcook the rice during parboiling, as it finishes cooking during the dum stage.',
       },
       {
         stepNumber: 2,
-        title: 'Layer Chicken in Heavy-Bottom Handi',
+        title: 'Layer Marinated Chicken in Handi',
         instruction:
-          'Arrange marinated chicken in the base of a heavy pot. Sprinkle half the fried onions and Sachet 1 Booster.',
-        timerSeconds: 60,
+          'In a heavy-bottom handi or pot, heat 1 tbsp Desi Ghee. Layer the Marinated Farm Chicken (350g) evenly across the base. Sprinkle half of Sachet 1: Hyderabadi Khada Masala and Sachet 2: Royal Dum Masala over the chicken.',
+        timerSeconds: 180,
+        imageUrl:
+          'https://images.unsplash.com/photo-1505576399279-565b52d4ac71?auto=format&fit=crop&w=800&q=80',
+        tip: 'Spreading the chicken in a single layer ensures even cooking under dum.',
       },
       {
         stepNumber: 3,
-        title: 'Layer Rice, Saffron & Desi Ghee',
+        title: 'Layer Rice, Saffron Milk & Desi Ghee',
         instruction:
-          'Spread the parboiled rice over the chicken evenly. Drizzle saffron ghee, remaining barista onions, and sprinkle Sachet 3 & 4.',
+          'Spread the parboiled basmati rice evenly over the chicken. Drizzle Sachet 3: Kashmiri Saffron Milk & Kewra Essence along with Golden Fried Onions (Birista, 40g) and remaining Desi Ghee (25g).',
         timerSeconds: 120,
+        imageUrl:
+          'https://images.unsplash.com/photo-1563379091339-03b21ab4a4f8?auto=format&fit=crop&w=800&q=80',
+        tip: 'Drizzle the saffron milk in concentric circles for picturesque contrasting white and golden rice grains.',
       },
       {
         stepNumber: 4,
-        title: 'Seal & Dum Cook',
+        title: 'Seal & Dum Cook to Perfection',
         instruction:
-          'Cover tightly with lid and place on high flame for 5 minutes, then reduce to lowest simmer for 18 minutes. Rest for 10 minutes before opening.',
-        timerSeconds: 1080,
-        tip: 'Keep lid tightly closed to let the trapped aromatic steam tenderize the chicken.',
+          'Cover the handi tightly with the provided heatproof foil or tight lid. Cook on high flame for 4 minutes, then lower heat to minimum (or place over a tawa) and dum cook for 15 minutes. Rest 5 minutes before opening.',
+        timerSeconds: 900,
+        imageUrl:
+          'https://images.unsplash.com/photo-1540420773420-3366772f4999?auto=format&fit=crop&w=800&q=80',
+        tip: 'Letting the biryani rest for 5 minutes after turning off heat redistributes the aromatic juices.',
       },
     ],
     reviews: [
@@ -543,6 +563,8 @@ const BASE_INITIAL_MEAL_KITS: MealKit[] = [
       'https://images.unsplash.com/photo-1546833999-b9f581a1996d?auto=format&fit=crop&w=1000&q=80',
     galleryImages: [
       'https://images.unsplash.com/photo-1546833999-b9f581a1996d?auto=format&fit=crop&w=1000&q=80',
+      'https://images.unsplash.com/photo-1585937421612-70a008356fbe?auto=format&fit=crop&w=1000&q=80',
+      'https://images.unsplash.com/photo-1631452180519-c014fe946bc7?auto=format&fit=crop&w=1000&q=80',
     ],
     price: 249,
     originalPrice: 299,
@@ -595,31 +617,43 @@ const BASE_INITIAL_MEAL_KITS: MealKit[] = [
     recipeSteps: [
       {
         stepNumber: 1,
-        title: 'Sauté Aromatics in Butter',
+        title: 'Sauté Aromatics in White Butter',
         instruction:
-          'Melt half the white butter in a saucepan. Add the tomato garlic reduction and Sachet 1. Cook for 3 minutes.',
-        timerSeconds: 180,
+          'Melt half of the Artisanal White Butter (25g) in a heavy pan. Empty Sachet 1: Ginger-Garlic Confit & Cumin Sachet and sauté on medium flame for 1 minute until fragrant.',
+        timerSeconds: 60,
+        imageUrl:
+          'https://images.unsplash.com/photo-1505576399279-565b52d4ac71?auto=format&fit=crop&w=800&q=80',
+        tip: 'Fresh ginger-garlic paste should sizzle gently without turning brown.',
       },
       {
         stepNumber: 2,
-        title: 'Add Lentils & Slow Mash',
+        title: 'Add Slow-Cooked Lentils & Tomato Puree',
         instruction:
-          'Add pre-cooked lentils with 1/2 cup water. Lightly mash with back of spoon to release starches and create velvety body.',
-        timerSeconds: 300,
+          'Pour the slow-cooked Black Urad Lentils & Rajma Pouch (300g) along with the Smoked Tomato Puree (120g). Mash 30% of the lentils using the back of a ladle to release natural starch.',
+        timerSeconds: 240,
+        imageUrl:
+          'https://images.unsplash.com/photo-1547592180-85f173990554?auto=format&fit=crop&w=800&q=80',
+        tip: 'Mashing a small portion of the black lentils creates that signature velvety restaurant texture.',
       },
       {
         stepNumber: 3,
-        title: 'Simmer with White Butter & Spice Dust',
+        title: 'Simmer with Makhani Spice Blend & Butter',
         instruction:
-          'Stir in Sachet 2, remaining white butter, and fresh cream. Simmer gently for 12 minutes until lustrous and thick.',
+          'Stir in 1/2 cup warm water, Sachet 2: Slow-Brew Makhani Spice Dust, and remaining White Butter (25g). Simmer on low heat for 12 minutes, stirring occasionally as the gravy thickens.',
         timerSeconds: 720,
+        imageUrl:
+          'https://images.unsplash.com/photo-1547592180-85f173990554?auto=format&fit=crop&w=800&q=80',
+        tip: 'Dal Makhani loves slow simmering on gentle heat—the longer it simmers, the creamier it gets.',
       },
       {
         stepNumber: 4,
-        title: 'Kasuri Methi Garnish',
+        title: 'Finish with Dairy Cream & Kasuri Methi',
         instruction:
-          'Crush Sachet 3 between fingertips and swirl in. Serve with warm naan or jeera rice.',
-        timerSeconds: 30,
+          'Swirl in the Fresh Dairy Cream (30ml) and sprinkle Sachet 3: Roasted Kasuri Methi & Green Cardamom. Simmer for 1 minute and serve hot with garlic naan or steamed basmati.',
+        timerSeconds: 60,
+        imageUrl:
+          'https://images.unsplash.com/photo-1540420773420-3366772f4999?auto=format&fit=crop&w=800&q=80',
+        tip: 'Reserve a spoonful of fresh cream to drizzle on top right before serving.',
       },
     ],
     reviews: [
@@ -653,6 +687,8 @@ const BASE_INITIAL_MEAL_KITS: MealKit[] = [
       'https://images.unsplash.com/photo-1559847844-5315695dadae?auto=format&fit=crop&w=1000&q=80',
     galleryImages: [
       'https://images.unsplash.com/photo-1559847844-5315695dadae?auto=format&fit=crop&w=1000&q=80',
+      'https://images.unsplash.com/photo-1546833999-b9f581a1996d?auto=format&fit=crop&w=1000&q=80',
+      'https://images.unsplash.com/photo-1631452180519-c014fe946bc7?auto=format&fit=crop&w=1000&q=80',
     ],
     price: 499,
     originalPrice: 569,
@@ -700,31 +736,43 @@ const BASE_INITIAL_MEAL_KITS: MealKit[] = [
     recipeSteps: [
       {
         stepNumber: 1,
-        title: 'Sear Prawns in Ghee',
+        title: 'Sear Coastal Prawns in Desi Ghee',
         instruction:
-          'Heat 2 tbsp desi ghee in a heavy pan. Sear prawns on high flame for 1.5 minutes per side until pink. Set aside.',
-        timerSeconds: 180,
+          'Heat 1 tbsp Pure Desi Ghee (from the 40g ghee pouch) in a heavy tawa or skillet. Sear the Fresh Cleaned Prawns (250g) on high heat for 90 seconds until they turn pink and firm. Remove and set aside.',
+        timerSeconds: 90,
+        imageUrl:
+          'https://images.unsplash.com/photo-1555939594-58d7cb561ad1?auto=format&fit=crop&w=800&q=80',
+        tip: 'Do not overcook prawns in step 1; they will finish cooking in the spicy ghee roast paste.',
       },
       {
         stepNumber: 2,
-        title: 'Roast Byadgi Masala Paste',
+        title: 'Roast Kundapur Byadgi Masala Paste',
         instruction:
-          'In remaining ghee, add curry leaves and Byadgi chili paste. Cook on low heat until glistening red oil separates.',
-        timerSeconds: 300,
+          'In the same pan with remaining Desi Ghee, add Sachet 1: Kundapur Stone-Ground Byadgi Chilli Paste (50g) and minced garlic. Roast over medium flame for 4 minutes until ghee separates.',
+        timerSeconds: 240,
+        imageUrl:
+          'https://images.unsplash.com/photo-1505576399279-565b52d4ac71?auto=format&fit=crop&w=800&q=80',
+        tip: 'Byadgi chillies provide brilliant ruby red color and deep smoky aroma with mild, sweet heat.',
       },
       {
         stepNumber: 3,
-        title: 'Glaze with Tamarind & Spice Sachets',
+        title: 'Glaze with Tamarind & Spice Sachet',
         instruction:
-          'Add tamarind extract, Sachet 1, and 2 tbsp water. Simmer until sauce is thick and coats the back of a spoon.',
-        timerSeconds: 180,
+          'Stir in Sachet 2: Ghee Roast Finishing Spices (roasted coriander, cumin, fennel, black pepper) and the Tangy Tamarind Glaze Pouch (20g). Sauté for 2 minutes into a glossy masala.',
+        timerSeconds: 120,
+        imageUrl:
+          'https://images.unsplash.com/photo-1547592180-85f173990554?auto=format&fit=crop&w=800&q=80',
+        tip: 'Tamarind balances the rich ghee and intensifies the spice profile.',
       },
       {
         stepNumber: 4,
-        title: 'Toss Prawns in Fiery Masala',
+        title: 'Toss Prawns in Fiery Masala & Curry Leaves',
         instruction:
-          'Return seared prawns to the pan. Toss continuously on high heat for 2 minutes. Dust with Sachet 2 and serve piping hot.',
+          'Return the seared prawns to the pan along with fresh coastal curry leaves. Toss vigorously on high heat for 2 minutes until every prawn is coated in a thick, roasted ghee glaze.',
         timerSeconds: 120,
+        imageUrl:
+          'https://images.unsplash.com/photo-1540420773420-3366772f4999?auto=format&fit=crop&w=800&q=80',
+        tip: 'Serve immediately with soft neer dosas or warm parottas.',
       },
     ],
     reviews: [
@@ -755,9 +803,11 @@ const BASE_INITIAL_MEAL_KITS: MealKit[] = [
     description:
       'Iconic Park Street street-food right at home. 4 layered flaky laccha parathas, spiced cottage cheese strips, pickled red onion salad, and signature mustard-kasundi drizzle.',
     heroImage:
-      'https://images.unsplash.com/photo-1626777552726-4a6b54c97e46?auto=format&fit=crop&w=1000&q=80',
+      'https://images.unsplash.com/photo-1626700051175-6818013e1d4f?auto=format&fit=crop&w=1000&q=80',
     galleryImages: [
-      'https://images.unsplash.com/photo-1626777552726-4a6b54c97e46?auto=format&fit=crop&w=1000&q=80',
+      'https://images.unsplash.com/photo-1626700051175-6818013e1d4f?auto=format&fit=crop&w=1000&q=80',
+      'https://images.unsplash.com/photo-1601050690597-df0568f70950?auto=format&fit=crop&w=1000&q=80',
+      'https://images.unsplash.com/photo-1631452180519-c014fe946bc7?auto=format&fit=crop&w=1000&q=80',
     ],
     price: 279,
     originalPrice: 329,
@@ -799,24 +849,33 @@ const BASE_INITIAL_MEAL_KITS: MealKit[] = [
     recipeSteps: [
       {
         stepNumber: 1,
-        title: 'Toss Paneer on Hot Tawa',
+        title: 'Toss Paneer with Kolkata Chaat Masala',
         instruction:
-          'Sear spiced paneer batons on a greased griddle for 3 minutes until lightly charred edges form.',
+          'Heat 1 tsp oil in a cast iron skillet. Add Diced Paneer Cubes (200g) and Sliced Bell Peppers & Onions (80g). Sprinkle Sachet 1: Kolkata Street Style Chaat Masala & Kasundi Mustard Blend and toss over high heat for 3 minutes until lightly charred.',
         timerSeconds: 180,
+        imageUrl:
+          'https://images.unsplash.com/photo-1555939594-58d7cb561ad1?auto=format&fit=crop&w=800&q=80',
+        tip: 'A quick toss on high heat gives that authentic street-side smoky tawa flavor.',
       },
       {
         stepNumber: 2,
-        title: 'Crisp the Flaky Parathas',
+        title: 'Crisp the Flaky Layered Parathas',
         instruction:
-          'Cook parathas on medium-high heat with a dab of butter until golden spots appear on both sides.',
-        timerSeconds: 180,
+          'Place the Pre-Rolled Flaky Parathas (2 pcs) on a hot tawa. Drizzle with 1 tsp ghee or butter per side and toast for 2 minutes on each side until blistered, golden, and flaky.',
+        timerSeconds: 240,
+        imageUrl:
+          'https://images.unsplash.com/photo-1586190848861-99aa4a171e90?auto=format&fit=crop&w=800&q=80',
+        tip: 'Gently scrunch the hot paratha between your hands to fluff up the flaky layers.',
       },
       {
         stepNumber: 3,
-        title: 'Assemble & Roll',
+        title: 'Assemble with Chutney & Roll',
         instruction:
-          'Place paneer in center of paratha, top with pickled onions, sprinkle Sachet 1, and drizzle tangy Kasundi. Roll snugly in butter paper.',
-        timerSeconds: 60,
+          'Spread Sachet 2: Tangy Kolkata Mint-Coriander Chutney across each paratha. Lay the spiced paneer filling down the center, top with Pickled Red Onions and a squeeze of fresh lemon, then roll tightly into parchment paper.',
+        timerSeconds: 90,
+        imageUrl:
+          'https://images.unsplash.com/photo-1540420773420-3366772f4999?auto=format&fit=crop&w=800&q=80',
+        tip: 'Rolling firmly in parchment paper makes it easy to eat without any drips.',
       },
     ],
     reviews: [
@@ -846,9 +905,11 @@ const BASE_INITIAL_MEAL_KITS: MealKit[] = [
     description:
       'Ultra low-carb gourmet Indian comfort food. Fresh crisp cauliflower florets pre-tossed in smoked paprika tikka marinade, simmered with silky almond milk cream sauce.',
     heroImage:
-      'https://images.unsplash.com/photo-1589301760014-d929f3979dbc?auto=format&fit=crop&w=1000&q=80',
+      'https://images.unsplash.com/photo-1565557623262-b51c2513a641?auto=format&fit=crop&w=1000&q=80',
     galleryImages: [
-      'https://images.unsplash.com/photo-1589301760014-d929f3979dbc?auto=format&fit=crop&w=1000&q=80',
+      'https://images.unsplash.com/photo-1565557623262-b51c2513a641?auto=format&fit=crop&w=1000&q=80',
+      'https://images.unsplash.com/photo-1546833999-b9f581a1996d?auto=format&fit=crop&w=1000&q=80',
+      'https://images.unsplash.com/photo-1631452180519-c014fe946bc7?auto=format&fit=crop&w=1000&q=80',
     ],
     price: 259,
     originalPrice: 319,
@@ -889,17 +950,33 @@ const BASE_INITIAL_MEAL_KITS: MealKit[] = [
     recipeSteps: [
       {
         stepNumber: 1,
-        title: 'Roast Florets',
+        title: 'Roast Spiced Cauliflower Florets',
         instruction:
-          'Pan-roast the spiced cauliflower in 1 tbsp olive oil or butter for 6 minutes until tender-crisp.',
-        timerSeconds: 360,
+          'Toss Fresh Cauliflower Florets (300g) with 1 tbsp olive oil and Sachet 1: Tandoori Tikka Marinade Powder (roasted cumin, Kashmiri mirch, dry mango powder). Roast in a preheated oven at 200°C or pan-sear on medium-high heat for 7 minutes until edges char golden.',
+        timerSeconds: 420,
+        imageUrl:
+          'https://images.unsplash.com/photo-1555939594-58d7cb561ad1?auto=format&fit=crop&w=800&q=80',
+        tip: 'Golden charred edges on the florets mimic the intense flavor of a clay tandoor oven.',
       },
       {
         stepNumber: 2,
-        title: 'Simmer Cream Gravy',
+        title: 'Simmer Keto Tikka Masala Sauce',
         instruction:
-          'Pour in the almond-coconut cream base with Sachet 1. Simmer for 5 minutes until thick.',
+          'In a saucepan, heat 1 tsp butter. Add Low-Carb Tomato Confit Puree (120g), Sachet 2: Tikka Masala Gravy Seasoning, and Coconut Cream (60ml). Simmer on low heat for 5 minutes until creamy and fragrant.',
         timerSeconds: 300,
+        imageUrl:
+          'https://images.unsplash.com/photo-1547592180-85f173990554?auto=format&fit=crop&w=800&q=80',
+        tip: 'Coconut cream keeps this recipe 100% keto-compliant while providing luxurious richness.',
+      },
+      {
+        stepNumber: 3,
+        title: 'Fold Florets & Kasuri Methi Garnish',
+        instruction:
+          'Fold the roasted cauliflower florets into the simmering tikka gravy. Cook for 2 minutes to let flavors infuse. Sprinkle Sachet 3: Toasted Kasuri Methi & Ginger Juliennes and serve hot.',
+        timerSeconds: 120,
+        imageUrl:
+          'https://images.unsplash.com/photo-1540420773420-3366772f4999?auto=format&fit=crop&w=800&q=80',
+        tip: 'Do not overcook the florets in the sauce so they retain a satisfying tender-crisp bite.',
       },
     ],
     reviews: [
@@ -931,8 +1008,9 @@ const BASE_INITIAL_MEAL_KITS: MealKit[] = [
     description:
       'Gourmet diner quality burgers at home in 15 minutes! Includes freshly baked buttery brioche buns, pre-seasoned mushroom smash patties, aged cheddar slices, slow-caramelized onion jam, and artisanal black truffle garlic aioli.',
     heroImage:
-      'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=1000&q=80',
+      'https://images.unsplash.com/photo-1586190848861-99aa4a171e90?auto=format&fit=crop&w=1000&q=80',
     galleryImages: [
+      'https://images.unsplash.com/photo-1586190848861-99aa4a171e90?auto=format&fit=crop&w=1000&q=80',
       'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=1000&q=80',
       'https://images.unsplash.com/photo-1550547660-d9450f859349?auto=format&fit=crop&w=1000&q=80',
     ],
@@ -981,31 +1059,43 @@ const BASE_INITIAL_MEAL_KITS: MealKit[] = [
     recipeSteps: [
       {
         stepNumber: 1,
-        title: 'Toast the Brioche Buns',
+        title: 'Toast the Brioche Buns in Butter',
         instruction:
-          'Slice brioche buns and toast cut-side down on a medium hot skillet with a dab of butter for 90 seconds until golden brown.',
-        timerSeconds: 90,
+          'Halve the Artisanal Brioche Buns (2 pcs). Spread with the provided Herb Butter (15g) and toast cut-side down in a hot skillet for 2 minutes until golden brown and crisp.',
+        timerSeconds: 120,
+        imageUrl:
+          'https://images.unsplash.com/photo-1586190848861-99aa4a171e90?auto=format&fit=crop&w=800&q=80',
+        tip: 'A crisp toasted surface prevents the bun from getting soggy when aioli is spread.',
       },
       {
         stepNumber: 2,
-        title: 'Sear & Smash the Patties',
+        title: 'Sear & Hard Smash the Patties',
         instruction:
-          'Place patties on hot pan. Press down firmly with a spatula. Sear for 3 minutes per side until crispy browned crust forms.',
-        timerSeconds: 180,
+          'Heat a heavy cast iron skillet until smoking hot. Place the Plant/Gourmet Mushroom Burger Patties (2x 110g) in the pan. Sprinkle Sachet 1: Smoked Sea Salt & Cracked Pepper Blend and smash flat using a firm spatula. Sear for 2.5 minutes until a deep brown caramelized crust forms.',
+        timerSeconds: 150,
+        imageUrl:
+          'https://images.unsplash.com/photo-1555939594-58d7cb561ad1?auto=format&fit=crop&w=800&q=80',
+        tip: 'Smash firmly only during the first 30 seconds to lock in natural savory juices.',
       },
       {
         stepNumber: 3,
-        title: 'Melt Cheddar on Patties',
+        title: 'Melt Swiss Cheese & Sauté Mushrooms',
         instruction:
-          'Place cheddar slice atop each patty. Cover pan with lid for 45 seconds to let cheese melt luxuriously over edges.',
-        timerSeconds: 45,
+          'Flip the patties. Immediately top each patty with Sautéed Portobello Mushrooms (60g) and Aged Swiss Cheese Slices (2 pcs). Cover with a pan lid for 1 minute to melt the cheese completely.',
+        timerSeconds: 60,
+        imageUrl:
+          'https://images.unsplash.com/photo-1555939594-58d7cb561ad1?auto=format&fit=crop&w=800&q=80',
+        tip: 'Covering with a lid traps steam and melts the cheese rapidly without burning the crust.',
       },
       {
         stepNumber: 4,
-        title: 'Assemble with Truffle Aioli',
+        title: 'Assemble with Black Truffle Aioli',
         instruction:
-          'Spread black truffle aioli generously on bottom bun, add melted patty, top with caramelized onion jam, sprinkle Sachet 1, and crown with top bun.',
-        timerSeconds: 30,
+          'Generously spread Sachet 2: Artisanal Black Truffle Aioli on both bottom and top buns. Lay down fresh arugula leaves, stack the mushroom-cheese smash patty, crown with top bun and enjoy immediately.',
+        timerSeconds: 60,
+        imageUrl:
+          'https://images.unsplash.com/photo-1540420773420-3366772f4999?auto=format&fit=crop&w=800&q=80',
+        tip: 'Serve with crisp shoestring fries or sweet potato wedges.',
       },
     ],
     reviews: [
@@ -1040,7 +1130,8 @@ const BASE_INITIAL_MEAL_KITS: MealKit[] = [
       'https://images.unsplash.com/photo-1513104890138-7c749659a591?auto=format&fit=crop&w=1000&q=80',
     galleryImages: [
       'https://images.unsplash.com/photo-1513104890138-7c749659a591?auto=format&fit=crop&w=1000&q=80',
-      'https://images.unsplash.com/photo-1574071318508-1cdbab80d002?auto=format&fit=crop&w=1000&q=80',
+      'https://images.unsplash.com/photo-1628840042765-356cda07504e?auto=format&fit=crop&w=1000&q=80',
+      'https://images.unsplash.com/photo-1565299585323-38d6b0865b47?auto=format&fit=crop&w=1000&q=80',
     ],
     price: 389,
     originalPrice: 469,
@@ -1091,32 +1182,43 @@ const BASE_INITIAL_MEAL_KITS: MealKit[] = [
     recipeSteps: [
       {
         stepNumber: 1,
-        title: 'Stretch the Sourdough Crust',
+        title: 'Stretch the Fermented Sourdough Crust',
         instruction:
-          'Dust counter with flour. Gently stretch the dough ball from center outwards with fingertips, leaving a puffy 1/2 inch outer cornicione crust.',
-        timerSeconds: 120,
+          'Dust your kitchen counter with the Semolina Dusting Flour (30g). Gently press and stretch the 48-Hour Fermented Sourdough Dough Ball (260g) from the center outward into an 11-inch disc, preserving an airy outer crust rim.',
+        timerSeconds: 180,
+        imageUrl:
+          'https://images.unsplash.com/photo-1556910103-1c02745aae4d?auto=format&fit=crop&w=800&q=80',
+        tip: 'Do not use a rolling pin; using your fingers preserves the fermented airy bubbles in the cornicione.',
       },
       {
         stepNumber: 2,
-        title: 'Ladle Sauce & Mozzarella',
+        title: 'Ladle San Marzano Sauce & Mozzarella',
         instruction:
-          'Spread San Marzano tomato sugo in spiral circles. Scatter diced mozzarella evenly across base.',
-        timerSeconds: 60,
+          'Ladle the crushed San Marzano Tomato Sauce Pouch (90g) in spiral motions over the dough. Scatter Sachet 1: Italian Oregano & Sea Salt Blend followed by Shredded Low-Moisture Mozzarella (100g).',
+        timerSeconds: 120,
+        imageUrl:
+          'https://images.unsplash.com/photo-1556910103-1c02745aae4d?auto=format&fit=crop&w=800&q=80',
+        tip: 'Leave a 1/2-inch border bare around the edges for that dramatic artisanal blistered puff.',
       },
       {
         stepNumber: 3,
         title: 'Bake Until Blistered & Bubbly',
         instruction:
-          'Bake at highest oven temperature (250°C / 480°F) or on preheated cast iron tawa with lid for 8-10 minutes until cheese bubbles and crust blisters.',
-        timerSeconds: 540,
-        tip: 'High heat creates the iconic charred leopard spots on the sourdough crust.',
+          'Slide pizza onto a preheated baking steel or heavy baking tray in an oven preheated to maximum heat (240°C-250°C). Bake for 7-8 minutes until the crust is blistered and the cheese is melted and bubbling.',
+        timerSeconds: 480,
+        imageUrl:
+          'https://images.unsplash.com/photo-1513104890138-7c749659a591?auto=format&fit=crop&w=800&q=80',
+        tip: 'Bake on the highest oven rack position or use broil for the final 2 minutes for authentic wood-fired char marks.',
       },
       {
         stepNumber: 4,
-        title: 'Tear Burrata & Basil Finish',
+        title: 'Tear Fresh Burrata & Basil Finish',
         instruction:
-          'Transfer pizza to board. Tear fresh burrata over center, scatter fresh basil, sprinkle Sachet 1, and drizzle garlic olive oil.',
-        timerSeconds: 30,
+          'Remove the pizza from the oven. Tear the Fresh Creamy Burrata Ball (125g) over the center so the rich stracciatella flows across the slices. Scatter Fresh Genovese Basil Leaves and drizzle with Extra Virgin Olive Oil.',
+        timerSeconds: 90,
+        imageUrl:
+          'https://images.unsplash.com/photo-1540420773420-3366772f4999?auto=format&fit=crop&w=800&q=80',
+        tip: 'Always add fresh burrata after baking so it stays creamy and cool against the piping hot crust.',
       },
     ],
     reviews: [
@@ -1152,6 +1254,7 @@ const BASE_INITIAL_MEAL_KITS: MealKit[] = [
     galleryImages: [
       'https://images.unsplash.com/photo-1551504734-5ee1c4a1479b?auto=format&fit=crop&w=1000&q=80',
       'https://images.unsplash.com/photo-1565299585323-38d6b0865b47?auto=format&fit=crop&w=1000&q=80',
+      'https://images.unsplash.com/photo-1543339308-43e59d6b73a6?auto=format&fit=crop&w=1000&q=80',
     ],
     price: 329,
     originalPrice: 389,
@@ -1199,31 +1302,43 @@ const BASE_INITIAL_MEAL_KITS: MealKit[] = [
     recipeSteps: [
       {
         stepNumber: 1,
-        title: 'Pan-Sear the Avocado Wedges',
+        title: 'Pan-Sear Panko Crusted Avocado Wedges',
         instruction:
-          'Heat 1 tbsp oil in skillet. Sear panko-crusted avocado wedges for 2 minutes on each side until crisp golden and warm.',
-        timerSeconds: 180,
+          'Heat 2 tbsp oil in a skillet. Coat the Fresh Avocado Wedges (160g) with Sachet 1: Baja Crispy Tempura-Panko Dredge. Pan-fry for 2 minutes per side until golden brown and super crunchy. Drain on paper towels.',
+        timerSeconds: 240,
+        imageUrl:
+          'https://images.unsplash.com/photo-1555939594-58d7cb561ad1?auto=format&fit=crop&w=800&q=80',
+        tip: 'Gentle handling ensures the avocado stays luscious inside while developing a crunchy shell.',
       },
       {
         stepNumber: 2,
-        title: 'Warm the Corn Tortillas',
+        title: 'Warm the White Corn Tortillas',
         instruction:
-          'Toast each tortilla directly on dry hot skillet for 20 seconds per side until soft and pliable with slight char marks.',
+          'Heat a dry tawa or skillet over high flame. Warm each Artisanal White Corn Tortilla (4 pcs) for 30 seconds per side until soft, pliable, and lightly toasted.',
         timerSeconds: 120,
+        imageUrl:
+          'https://images.unsplash.com/photo-1586190848861-99aa4a171e90?auto=format&fit=crop&w=800&q=80',
+        tip: 'Stack warmed tortillas in a clean kitchen towel to keep them soft and steamy.',
       },
       {
         stepNumber: 3,
-        title: 'Warm the Black Beans',
+        title: 'Warm Seasoned Black Beans',
         instruction:
-          'Empty black bean mash into small pot or microwave for 60 seconds until steaming hot.',
-        timerSeconds: 60,
+          'Empty the Seasoned Black Beans Pouch (150g) with Sachet 2: Cumin & Smoked Lime Spice Blend into a small pot. Warm over medium heat for 2 minutes until hot.',
+        timerSeconds: 120,
+        imageUrl:
+          'https://images.unsplash.com/photo-1547592180-85f173990554?auto=format&fit=crop&w=800&q=80',
+        tip: 'A squeeze of fresh lime into the beans brightens up the earthy flavors.',
       },
       {
         stepNumber: 4,
-        title: 'Build Tacos & Crema Drizzle',
+        title: 'Build Tacos with Chipotle Crema Drizzle',
         instruction:
-          'Spoon black beans onto each tortilla, layer crispy avocado, top with pickled slaw, salsa, drizzle chipotle crema, and dust with Sachet 2.',
-        timerSeconds: 45,
+          'Spoon warm black beans onto each tortilla, lay down crispy avocado wedges, top with Crunchy Pickled Cabbage Slaw (60g), and drizzle generously with Sachet 3: Smoky Chipotle Crema.',
+        timerSeconds: 90,
+        imageUrl:
+          'https://images.unsplash.com/photo-1540420773420-3366772f4999?auto=format&fit=crop&w=800&q=80',
+        tip: 'Serve with fresh lime wedges and spicy jalapeño slices.',
       },
     ],
     reviews: [
@@ -1258,7 +1373,8 @@ const BASE_INITIAL_MEAL_KITS: MealKit[] = [
       'https://images.unsplash.com/photo-1543339308-43e59d6b73a6?auto=format&fit=crop&w=1000&q=80',
     galleryImages: [
       'https://images.unsplash.com/photo-1543339308-43e59d6b73a6?auto=format&fit=crop&w=1000&q=80',
-      'https://images.unsplash.com/photo-1626700051175-6818013e1d4f?auto=format&fit=crop&w=1000&q=80',
+      'https://images.unsplash.com/photo-1512621776951-a57141f2eefd?auto=format&fit=crop&w=1000&q=80',
+      'https://images.unsplash.com/photo-1565299585323-38d6b0865b47?auto=format&fit=crop&w=1000&q=80',
     ],
     price: 399,
     originalPrice: 479,
@@ -1304,30 +1420,43 @@ const BASE_INITIAL_MEAL_KITS: MealKit[] = [
     recipeSteps: [
       {
         stepNumber: 1,
-        title: 'Sear Adobo Chicken',
+        title: 'Sear Smoky Chipotle Chicken Breasts',
         instruction:
-          'Heat 1 tbsp oil on high. Sear marinated chicken strips for 5 minutes until beautifully charred on edges and cooked through.',
-        timerSeconds: 300,
+          'Heat 1 tbsp oil in a skillet or grill pan. Rub Chicken Breast Strips (280g) with Sachet 1: Smoky Chipotle & Mexican Oregano Rub. Sear over high heat for 3-4 minutes per side until deeply browned and thoroughly cooked through.',
+        timerSeconds: 240,
+        imageUrl:
+          'https://images.unsplash.com/photo-1555939594-58d7cb561ad1?auto=format&fit=crop&w=800&q=80',
+        tip: 'Let the seared chicken rest for 2 minutes on a cutting board before slicing into bite-sized medallions.',
       },
       {
         stepNumber: 2,
-        title: 'Char the Fajita Veggies',
+        title: 'Char the Fajita Sweet Peppers & Corn',
         instruction:
-          'In same skillet, flash-sauté bell peppers and red onions with Sachet 2 for 3 minutes until tender-crisp.',
+          'In the same hot pan, toss Sliced Bell Peppers & Red Onions (100g) and Sweet Corn (60g) with Sachet 2: Char-Grill Seasoning. Flash-sear for 3 minutes until blistered with charred edges.',
         timerSeconds: 180,
+        imageUrl:
+          'https://images.unsplash.com/photo-1555939594-58d7cb561ad1?auto=format&fit=crop&w=800&q=80',
+        tip: 'High heat creates delicious restaurant-style charred fajita flavor.',
       },
       {
         stepNumber: 3,
-        title: 'Warm the Cilantro Lime Rice',
-        instruction: 'Microwave rice pouch for 60 seconds or steam in pan with 1 tbsp water.',
-        timerSeconds: 60,
+        title: 'Warm Cilantro Lime Rice & Black Beans',
+        instruction:
+          'Warm the Steamed Cilantro-Lime Rice Pouch (220g) and Cuban Black Beans (150g) in a saucepan or microwave for 2 minutes with a splash of water.',
+        timerSeconds: 120,
+        imageUrl:
+          'https://images.unsplash.com/photo-1546549032-9571cd6b27df?auto=format&fit=crop&w=800&q=80',
+        tip: 'Fluff the rice gently with a fork to keep grains separate and light.',
       },
       {
         stepNumber: 4,
-        title: 'Assemble Burrito Bowls',
+        title: 'Assemble Chipotle Burrito Bowls',
         instruction:
-          'Divide rice into two deep bowls. Arrange grilled chicken, charred peppers, roasted corn black bean salsa, sprinkle Monterey Jack cheese, and dollop salsa verde.',
-        timerSeconds: 45,
+          'Divide warm rice and black beans between two bowls. Top with sliced chipotle chicken, charred fajita veggies, Fire-Roasted Tomato Salsa (60g), diced avocado, and Sachet 3: Lime Crema Dressing.',
+        timerSeconds: 90,
+        imageUrl:
+          'https://images.unsplash.com/photo-1540420773420-3366772f4999?auto=format&fit=crop&w=800&q=80',
+        tip: 'Garnish with fresh cilantro sprigs and a lime wedge.',
       },
     ],
     reviews: [
@@ -1362,6 +1491,8 @@ const BASE_INITIAL_MEAL_KITS: MealKit[] = [
       'https://images.unsplash.com/photo-1621996346565-e3d5d6281699?auto=format&fit=crop&w=1000&q=80',
     galleryImages: [
       'https://images.unsplash.com/photo-1621996346565-e3d5d6281699?auto=format&fit=crop&w=1000&q=80',
+      'https://images.unsplash.com/photo-1551183053-bf91a1d81141?auto=format&fit=crop&w=1000&q=80',
+      'https://images.unsplash.com/photo-1546549032-9571cd6b27df?auto=format&fit=crop&w=1000&q=80',
     ],
     price: 319,
     originalPrice: 379,
@@ -1408,32 +1539,43 @@ const BASE_INITIAL_MEAL_KITS: MealKit[] = [
     recipeSteps: [
       {
         stepNumber: 1,
-        title: 'Boil Fresh Fettuccine Al Dente',
+        title: 'Boil Fresh Bronze-Die Fettuccine',
         instruction:
-          'Boil 2 litres water with 1 tbsp salt. Drop fresh fettuccine nests and boil for 3.5 minutes. Reserve 1/2 cup pasta water, then drain.',
+          'Bring 3 liters of salted water to a rolling boil. Drop the Fresh Bronze-Die Fettuccine Ribbons (240g) and cook for exactly 3.5 minutes until perfectly al dente. Reserve 1/2 cup starchy pasta cooking water and drain.',
         timerSeconds: 210,
-        tip: 'Fresh pasta cooks much faster than dried pasta! Keep it strictly al dente.',
+        imageUrl:
+          'https://images.unsplash.com/photo-1546549032-9571cd6b27df?auto=format&fit=crop&w=800&q=80',
+        tip: 'Never rinse freshly cooked pasta; the natural starch helps the luscious sauce cling to each ribbon.',
       },
       {
         stepNumber: 2,
-        title: 'Warm the Sun-Dried Tomato Pesto',
+        title: 'Warm Sun-Dried Tomato Pesto & Garlic Oil',
         instruction:
-          'In skillet, heat Sachet 2 olive oil. Add sun-dried tomato pesto pouch and 3 tbsp reserved starchy pasta water. Simmer on low for 2 minutes.',
-        timerSeconds: 120,
+          'In a wide sauté pan, heat Extra Virgin Olive Oil (20ml) over gentle heat. Empty Sachet 1: Sun-Dried Tomato & Sweet Basil Pesto Base (70g) and minced garlic. Warm for 90 seconds until fragrant.',
+        timerSeconds: 90,
+        imageUrl:
+          'https://images.unsplash.com/photo-1505576399279-565b52d4ac71?auto=format&fit=crop&w=800&q=80',
+        tip: 'Keep flame low so the aromatic Mediterranean herbs and garlic gently infuse without scorching.',
       },
       {
         stepNumber: 3,
-        title: 'Gloss Pasta in Velvety Sauce',
+        title: 'Emulsify Pasta with Velvety Sauce',
         instruction:
-          'Toss drained fettuccine ribbons directly into simmering sauce. Swirl vigorously until every strand is coated in glossy red-gold pesto.',
-        timerSeconds: 90,
+          'Add the drained fettuccine directly to the warm pesto along with 4 tbsp of reserved pasta cooking water. Toss and swirl vigorously for 2 minutes until a silky glossy emulsion coats every strand.',
+        timerSeconds: 120,
+        imageUrl:
+          'https://images.unsplash.com/photo-1547592180-85f173990554?auto=format&fit=crop&w=800&q=80',
+        tip: 'Vigorous tossing binds the olive oil and starchy pasta water into a glossy restaurant-quality emulsion.',
       },
       {
         stepNumber: 4,
-        title: 'Parmigiano & Pine Nut Finish',
+        title: 'Parmigiano-Reggiano & Toasted Pine Nut Finish',
         instruction:
-          'Plate into pasta bowls. Grate fresh Parmigiano Reggiano on top, scatter toasted pine nuts, and dust with Sachet 1.',
-        timerSeconds: 30,
+          'Remove pan from heat. Fold in Sachet 2: 24-Month Aged Parmigiano-Reggiano Grated Cheese (30g) and Sachet 3: Toasted Mediterranean Pine Nuts & Torn Fresh Basil Leaves. Serve immediately in warm bowls.',
+        timerSeconds: 60,
+        imageUrl:
+          'https://images.unsplash.com/photo-1540420773420-3366772f4999?auto=format&fit=crop&w=800&q=80',
+        tip: 'Adding cheese off the heat prevents clumping and creates a mirror-smooth sauce.',
       },
     ],
     reviews: [
@@ -1465,8 +1607,9 @@ const BASE_INITIAL_MEAL_KITS: MealKit[] = [
     description:
       'The ultimate diner smash burger! Two seasoned patties that sear to crispy-edged perfection in minutes. Includes artisanal brioche buns, 4 thick slices of aged sharp cheddar, crinkle-cut dill pickles, caramelized diced onions, and our signature secret smash burger sauce pouch.',
     heroImage:
-      'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=1000&q=80',
+      'https://images.unsplash.com/photo-1550547660-d9450f859349?auto=format&fit=crop&w=1000&q=80',
     galleryImages: [
+      'https://images.unsplash.com/photo-1550547660-d9450f859349?auto=format&fit=crop&w=1000&q=80',
       'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=1000&q=80',
       'https://images.unsplash.com/photo-1586190848861-99aa4a171e90?auto=format&fit=crop&w=1000&q=80',
     ],
@@ -1512,31 +1655,43 @@ const BASE_INITIAL_MEAL_KITS: MealKit[] = [
     recipeSteps: [
       {
         stepNumber: 1,
-        title: 'Toast the Brioche Buns',
+        title: 'Toast the Potato Brioche Buns',
         instruction:
-          'Melt butter in a heavy skillet over medium heat. Toast cut side of brioche buns for 90 seconds until golden and glossy.',
-        timerSeconds: 90,
+          'Slice the Potato Brioche Buns (2 pcs). Lightly butter the cut sides with 15g butter and toast in a cast-iron skillet on medium heat for 2 minutes until deep golden brown.',
+        timerSeconds: 120,
+        imageUrl:
+          'https://images.unsplash.com/photo-1586190848861-99aa4a171e90?auto=format&fit=crop&w=800&q=80',
+        tip: 'Toasting builds a crispy barrier so the bottom bun stays sturdy against the juicy smashed patties.',
       },
       {
         stepNumber: 2,
-        title: 'Hard Smash the Patties',
+        title: 'Hard Smash Dual Beef/Veg Patties',
         instruction:
-          'Place cold patties on smoking hot skillet. Press down hard with spatula for 10 seconds. Dust with Sachet 2. Sear 2.5 minutes until crust forms.',
-        timerSeconds: 150,
+          'Heat skillet over maximum heat until smoking hot. Divide ground blend into 4 loose balls (75g each). Place two balls onto the dry pan, sprinkle Sachet 1: Texas Steakhouse Char Seasoning, and smash ultra-thin with parchment paper and a heavy press. Sear for 2 minutes for crispy lacy edges.',
+        timerSeconds: 120,
+        imageUrl:
+          'https://images.unsplash.com/photo-1555939594-58d7cb561ad1?auto=format&fit=crop&w=800&q=80',
+        tip: 'A hard smash creates maximum surface contact for that prized crispy Maillard crust.',
       },
       {
         stepNumber: 3,
-        title: 'Melt Twin Cheddar Slices',
+        title: 'Melt Twin American Cheddar Slices',
         instruction:
-          'Flip patties, immediately top each with cheddar slice. Stack two patties together and cover skillet for 40 seconds to melt cheese.',
-        timerSeconds: 40,
+          'Flip the smashed patties. Immediately top each patty with an American Cheddar Cheese Slice (4 slices total). Stack two patties on top of each other and cover pan for 45 seconds to melt into gooey perfection.',
+        timerSeconds: 45,
+        imageUrl:
+          'https://images.unsplash.com/photo-1555939594-58d7cb561ad1?auto=format&fit=crop&w=800&q=80',
+        tip: 'Stacking the patties while melting holds in residual heat and creates double-decker decadence.',
       },
       {
         stepNumber: 4,
-        title: 'Stack & Sauce the Burgers',
+        title: 'Stack & Sauce with Texas BBQ Crema',
         instruction:
-          'Slather bottom buns with secret relish sauce, lay caramelized onions, place double cheesy patty stack, crown with pickles, sauce, and top bun.',
-        timerSeconds: 30,
+          'Spread Sachet 2: Smoky Texas Sweet BBQ & Mustard Secret Sauce on both buns. Lay down Dill Pickle Chips (6 pcs) and sliced red onions, stack the double cheesy smash patties, top with bun and press gently.',
+        timerSeconds: 60,
+        imageUrl:
+          'https://images.unsplash.com/photo-1540420773420-3366772f4999?auto=format&fit=crop&w=800&q=80',
+        tip: 'Enjoy hot with crispy onion rings or salted fries.',
       },
     ],
     reviews: [
@@ -1572,6 +1727,7 @@ const BASE_INITIAL_MEAL_KITS: MealKit[] = [
     galleryImages: [
       'https://images.unsplash.com/photo-1628840042765-356cda07504e?auto=format&fit=crop&w=1000&q=80',
       'https://images.unsplash.com/photo-1513104890138-7c749659a591?auto=format&fit=crop&w=1000&q=80',
+      'https://images.unsplash.com/photo-1565299585323-38d6b0865b47?auto=format&fit=crop&w=1000&q=80',
     ],
     price: 419,
     originalPrice: 499,
@@ -1617,31 +1773,43 @@ const BASE_INITIAL_MEAL_KITS: MealKit[] = [
     recipeSteps: [
       {
         stepNumber: 1,
-        title: 'Stretch Sourdough Crust',
+        title: 'Stretch the Fermented Sourdough Crust',
         instruction:
-          'Press fermented dough ball outward on floured surface to form a 10-inch round with slightly raised cornicione rim.',
-        timerSeconds: 120,
+          'Dust your work surface with the coarse Semolina Flour (30g). Stretch the 48-Hour Fermented Dough Ball (260g) into an 11-inch round pizza base, leaving a 1-inch puffy raised crust along the border.',
+        timerSeconds: 180,
+        imageUrl:
+          'https://images.unsplash.com/photo-1556910103-1c02745aae4d?auto=format&fit=crop&w=800&q=80',
+        tip: 'Handle dough gently from underneath to avoid deflating natural fermentation air pockets.',
       },
       {
         stepNumber: 2,
-        title: 'Top with Sauce, Mozzarella & Pepperoni',
+        title: 'Ladle Sauce, Mozzarella & Artisan Pepperoni',
         instruction:
-          'Spread marinara lightly, scatter mozzarella, and distribute pepperoni slices across the entire surface.',
-        timerSeconds: 90,
+          'Spread the Herbed San Marzano Tomato Sauce (90g) evenly across the base. Scatter Whole Milk Shredded Mozzarella (110g), Sachet 1: Italian Herb Dust, and arrange Artisanal Smoked Pepperoni Slices (24 pcs) edge-to-edge.',
+        timerSeconds: 120,
+        imageUrl:
+          'https://images.unsplash.com/photo-1556910103-1c02745aae4d?auto=format&fit=crop&w=800&q=80',
+        tip: 'Spacing pepperoni slices evenly allows each slice to cup and crisp up in the oven heat.',
       },
       {
         stepNumber: 3,
-        title: 'Bake Until Pepperoni Cups Crisp',
+        title: 'Bake Until Pepperoni Cups Crisp & Blister',
         instruction:
-          'Bake at 250°C (or max oven setting) for 9-11 minutes until crust blisters and pepperoni curls into charred little cups filled with savory oil.',
-        timerSeconds: 600,
+          'Bake on a preheated pizza stone or baking tray at maximum oven temperature (240°C-250°C) for 7-9 minutes until the cheese is deeply browned and pepperoni edges cup into crispy bowls.',
+        timerSeconds: 500,
+        imageUrl:
+          'https://images.unsplash.com/photo-1513104890138-7c749659a591?auto=format&fit=crop&w=800&q=80',
+        tip: 'Pepperoni fat renders into the crust creating rich savory depth.',
       },
       {
         stepNumber: 4,
-        title: 'Hot Honey Drizzle & Slice',
+        title: 'Hot Honey Drizzle & Fresh Basil Finish',
         instruction:
-          'Remove from oven. Immediately drizzle warm Sachet 1 Hot Honey zigzag across pizza and dust with Sachet 2 Sicilian oregano. Slice and enjoy!',
-        timerSeconds: 30,
+          'Remove pizza from oven and transfer to a cutting board. Drizzle Sachet 2: Calabrian Chili Infused Hot Honey (30ml) in zig-zags all over the hot pizza, finish with fresh basil leaves and slice.',
+        timerSeconds: 90,
+        imageUrl:
+          'https://images.unsplash.com/photo-1540420773420-3366772f4999?auto=format&fit=crop&w=800&q=80',
+        tip: 'The sweet and spicy contrast of hot honey cut through the smoky pepperoni is sublime.',
       },
     ],
     reviews: [
@@ -1677,6 +1845,7 @@ const BASE_INITIAL_MEAL_KITS: MealKit[] = [
     galleryImages: [
       'https://images.unsplash.com/photo-1565299585323-38d6b0865b47?auto=format&fit=crop&w=1000&q=80',
       'https://images.unsplash.com/photo-1551504734-5ee1c4a1479b?auto=format&fit=crop&w=1000&q=80',
+      'https://images.unsplash.com/photo-1543339308-43e59d6b73a6?auto=format&fit=crop&w=1000&q=80',
     ],
     price: 369,
     originalPrice: 439,
@@ -1721,31 +1890,43 @@ const BASE_INITIAL_MEAL_KITS: MealKit[] = [
     recipeSteps: [
       {
         stepNumber: 1,
-        title: 'Warm the Dipping Consomé',
+        title: 'Warm the Spiced Birria Consomé',
         instruction:
-          'Pour rich birria consomé broth into small saucepan. Simmer gently for 3 minutes until steaming fragrant.',
+          'Empty the Guajillo-Ancho Chilli Braising Broth (200ml) into a saucepan. Add Sachet 1: Mexican Oregano & Roasted Cumin Seasoning and simmer on low for 3 minutes until steaming and rich red.',
         timerSeconds: 180,
+        imageUrl:
+          'https://images.unsplash.com/photo-1547592180-85f173990554?auto=format&fit=crop&w=800&q=80',
+        tip: 'Keep the consomé hot on low flame; you will dip the tortillas into this rich broth before searing.',
       },
       {
         stepNumber: 2,
-        title: 'Dip & Crisp Tortillas',
+        title: 'Dip Tortillas in Consomé & Place on Tawa',
         instruction:
-          'Dip each corn tortilla in Sachet 1 spiced chili oil. Place flat on hot griddle/skillet. Top half with shredded cheese and birria chicken.',
-        timerSeconds: 120,
+          'Heat a wide cast iron skillet over medium-high heat. Using tongs, quickly dip each White Corn Tortilla (4 pcs) into the surface of the hot broth, then lay flat onto the hot skillet.',
+        timerSeconds: 60,
+        imageUrl:
+          'https://images.unsplash.com/photo-1586190848861-99aa4a171e90?auto=format&fit=crop&w=800&q=80',
+        tip: 'Dipping tortillas in the oily top layer of broth gives them that famous crimson crispy exterior.',
       },
       {
         stepNumber: 3,
-        title: 'Fold & Sear Crispy',
+        title: 'Stuff with Oaxaca Cheese & Pulled Chicken',
         instruction:
-          'Fold tortillas in half like quesadillas. Press down and cook for 2 minutes per side until shell is deep golden, crispy and cheese is gooey.',
+          'Immediately top one half of each tortilla with Shredded Oaxaca Melting Cheese (80g) and Slow-Braised Shredded Birria Chicken (200g). Fold the other half over to form a taco. Sear for 2 minutes per side until ultra crispy.',
         timerSeconds: 240,
+        imageUrl:
+          'https://images.unsplash.com/photo-1555939594-58d7cb561ad1?auto=format&fit=crop&w=800&q=80',
+        tip: 'Press gently with a spatula so the cheese melts and glues the taco firmly together.',
       },
       {
         stepNumber: 4,
         title: 'Garnish, Dip in Consomé & Devour',
         instruction:
-          'Open tacos slightly, scatter fresh onions and cilantro. Serve hot with a bowl of warm consomé for dipping each bite!',
-        timerSeconds: 30,
+          'Ladle the hot birria consomé into two small dipping bowls. Top the hot tacos with Sachet 2: Chopped White Onions & Fresh Cilantro Garnish, serve with lime wedges, and dip each bite into the hot consomé.',
+        timerSeconds: 60,
+        imageUrl:
+          'https://images.unsplash.com/photo-1540420773420-3366772f4999?auto=format&fit=crop&w=800&q=80',
+        tip: 'Dip each taco deep into the warm consomé broth before every single bite!',
       },
     ],
     reviews: [
@@ -1777,10 +1958,11 @@ const BASE_INITIAL_MEAL_KITS: MealKit[] = [
     description:
       'A fiesta in a bowl! Fluffy cilantro-lime infused brown rice topped with fire-roasted fajita bell peppers, simmered Cuban black beans, charred sweet corn, tangy Pico de Gallo, and our signature cooling avocado-lime crema drizzle.',
     heroImage:
-      'https://images.unsplash.com/photo-1543339308-43e59d6b73a6?auto=format&fit=crop&w=1000&q=80',
-    galleryImages: [
-      'https://images.unsplash.com/photo-1543339308-43e59d6b73a6?auto=format&fit=crop&w=1000&q=80',
       'https://images.unsplash.com/photo-1512621776951-a57141f2eefd?auto=format&fit=crop&w=1000&q=80',
+    galleryImages: [
+      'https://images.unsplash.com/photo-1512621776951-a57141f2eefd?auto=format&fit=crop&w=1000&q=80',
+      'https://images.unsplash.com/photo-1543339308-43e59d6b73a6?auto=format&fit=crop&w=1000&q=80',
+      'https://images.unsplash.com/photo-1551504734-5ee1c4a1479b?auto=format&fit=crop&w=1000&q=80',
     ],
     price: 279,
     originalPrice: 329,
@@ -1839,29 +2021,41 @@ const BASE_INITIAL_MEAL_KITS: MealKit[] = [
         stepNumber: 1,
         title: 'Steam Cilantro-Lime Rice',
         instruction:
-          'Warm pre-seasoned cilantro-lime brown rice in a saucepan with 3 tbsp water on low heat for 3 minutes until steaming and fluffy.',
-        timerSeconds: 180,
+          'Warm the Pre-Steamed Basmati Rice Pouch (220g) in a covered pan with 2 tbsp water for 2 minutes. Stir in the Lime Juice Sachet and fresh chopped cilantro until fragrant.',
+        timerSeconds: 120,
+        imageUrl:
+          'https://images.unsplash.com/photo-1546549032-9571cd6b27df?auto=format&fit=crop&w=800&q=80',
+        tip: 'Fluff gently with a fork to maintain light and fluffy grains.',
       },
       {
         stepNumber: 2,
         title: 'Sizzle Fajita Veggies on High Heat',
         instruction:
-          'Heat 1 tbsp oil in a skillet on high. Toss sliced tri-color peppers and onions with Sachet 1 for 4 minutes until charred at the edges but crisp-tender.',
-        timerSeconds: 240,
-        tip: 'High heat creates authentic smoky Mexican cantina flavors.',
+          'Heat 1 tbsp oil in a skillet until smoking. Add Sliced Trio Bell Peppers & Red Onions (140g) and Sweet Corn (60g). Sprinkle Sachet 1: Smoky Fajita Char Seasoning (Smoked Paprika, Mexican Oregano, Chipotle) and sauté on high heat for 3.5 minutes until tender-crisp with charred blisters.',
+        timerSeconds: 210,
+        imageUrl:
+          'https://images.unsplash.com/photo-1555939594-58d7cb561ad1?auto=format&fit=crop&w=800&q=80',
+        tip: 'Do not crowd the skillet so the vegetables sear rather than steam.',
       },
       {
         stepNumber: 3,
         title: 'Warm Smoky Black Beans',
-        instruction: 'Warm the seasoned black beans with fire-roasted tomato salsa for 2 minutes.',
+        instruction:
+          'In a small pan, simmer Seasoned Black Beans (160g) with 2 tbsp water and Sachet 2: Toasted Cumin & Garlic Powder Blend for 2 minutes until piping hot.',
         timerSeconds: 120,
+        imageUrl:
+          'https://images.unsplash.com/photo-1547592180-85f173990554?auto=format&fit=crop&w=800&q=80',
+        tip: 'Black beans provide satisfying plant-based protein and fiber.',
       },
       {
         stepNumber: 4,
-        title: 'Assemble Fiesta Bowls',
+        title: 'Assemble Fiesta Bowls with Salsa',
         instruction:
-          'Divide rice between two wide bowls. Arrange charred fajita veggies and warm black beans in sections. Drizzle avocado-lime crema and top with crunchy tortilla strips.',
-        timerSeconds: 60,
+          'Divide rice between two bowls. Arrange charred fajita veggies, warm black beans, Roasted Tomato & Jalapeño Salsa (80g), and sliced fresh avocado. Drizzle with Lime Crema and sprinkle toasted pepitas.',
+        timerSeconds: 90,
+        imageUrl:
+          'https://images.unsplash.com/photo-1540420773420-3366772f4999?auto=format&fit=crop&w=800&q=80',
+        tip: 'Serve with crispy tortilla chips for extra crunch.',
       },
     ],
     reviews: [
@@ -1893,10 +2087,11 @@ const BASE_INITIAL_MEAL_KITS: MealKit[] = [
     description:
       'An opulent Italian classic. Velvety wide ribbon pappardelle nests tossed in a rich, buttery sauce infused with black summer truffle oil, wild porcini and cremini mushrooms, finished with freshly grated aged Pecorino Romano cheese.',
     heroImage:
-      'https://images.unsplash.com/photo-1556761223-4c4282c73f77?auto=format&fit=crop&w=1000&q=80',
+      'https://images.unsplash.com/photo-1551183053-bf91a1d81141?auto=format&fit=crop&w=1000&q=80',
     galleryImages: [
-      'https://images.unsplash.com/photo-1556761223-4c4282c73f77?auto=format&fit=crop&w=1000&q=80',
+      'https://images.unsplash.com/photo-1551183053-bf91a1d81141?auto=format&fit=crop&w=1000&q=80',
       'https://images.unsplash.com/photo-1621996346565-e3d5d6281699?auto=format&fit=crop&w=1000&q=80',
+      'https://images.unsplash.com/photo-1546549032-9571cd6b27df?auto=format&fit=crop&w=1000&q=80',
     ],
     price: 339,
     originalPrice: 389,
@@ -1954,30 +2149,41 @@ const BASE_INITIAL_MEAL_KITS: MealKit[] = [
         stepNumber: 1,
         title: 'Boil Fresh Pappardelle Ribbons',
         instruction:
-          'Drop fresh pappardelle into a pot of rolling salted water. Boil for 3.5 minutes until al dente. Reserve 1/3 cup pasta water, then drain.',
-        timerSeconds: 210,
-        tip: 'Never rinse cooked fresh pasta; the surface starch helps the truffle sauce cling to the ribbons.',
+          'Bring 3.5 liters of salted water to a rolling boil. Drop the Handcrafted Egg Pappardelle Ribbons (240g) and boil for 4 minutes until al dente. Reserve 1/2 cup starchy pasta cooking water and drain.',
+        timerSeconds: 240,
+        imageUrl:
+          'https://images.unsplash.com/photo-1546549032-9571cd6b27df?auto=format&fit=crop&w=800&q=80',
+        tip: 'Egg pappardelle cooks quickly; test a ribbon at 3.5 minutes for that perfect toothsome bite.',
       },
       {
         stepNumber: 2,
-        title: 'Caramelize Wild Mushrooms',
+        title: 'Caramelize Wild Forest Mushrooms in Butter',
         instruction:
-          'Melt butter in a wide skillet, add sliced mushrooms and Sachet 1. Sauté over medium-high heat for 4 minutes until golden and deeply caramelized.',
+          'Melt Artisanal Butter (25g) in a wide skillet over medium-high heat. Add Sliced Porcini, Cremini & Shiitake Mushrooms (160g). Sprinkle Sachet 1: Tuscan Rosemary, Garlic & Cracked Pepper Dust. Sauté for 4 minutes until deeply caramelized.',
         timerSeconds: 240,
+        imageUrl:
+          'https://images.unsplash.com/photo-1505576399279-565b52d4ac71?auto=format&fit=crop&w=800&q=80',
+        tip: 'Resist stirring mushrooms for the first 90 seconds to allow deep golden browning.',
       },
       {
         stepNumber: 3,
-        title: 'Simmer Silky Truffle Cream',
+        title: 'Simmer Silky Black Truffle Cream',
         instruction:
-          'Pour in cooking cream and reserved pasta water. Simmer for 2 minutes, then take off heat and stir in the fragrant truffle oil.',
+          'Pour the Heavy Dairy Cream Pouch (100ml) and Sachet 2: Black Truffle Reduction Infusion into the pan with mushrooms. Simmer gently for 2 minutes until the sauce coats the back of a spoon.',
         timerSeconds: 120,
+        imageUrl:
+          'https://images.unsplash.com/photo-1547592180-85f173990554?auto=format&fit=crop&w=800&q=80',
+        tip: 'Keep heat medium-low to prevent the decadent cream from reducing too quickly.',
       },
       {
         stepNumber: 4,
         title: 'Coat Pappardelle & Grate Pecorino',
         instruction:
-          'Toss drained pappardelle ribbons in the pan until thoroughly coated. Plate into pasta bowls and shower with freshly grated Pecorino Romano.',
-        timerSeconds: 60,
+          'Toss the boiled pappardelle into the hot truffle mushroom cream along with 3 tbsp reserved pasta water. Swirl vigorously until each ribbon is cloaked in sauce. Top with Sachet 3: Aged Pecorino Romano (30g) and fresh Italian parsley.',
+        timerSeconds: 90,
+        imageUrl:
+          'https://images.unsplash.com/photo-1540420773420-3366772f4999?auto=format&fit=crop&w=800&q=80',
+        tip: 'Serve immediately in warmed pasta bowls for the ultimate fine-dining experience.',
       },
     ],
     reviews: [
@@ -2009,10 +2215,11 @@ const BASE_INITIAL_MEAL_KITS: MealKit[] = [
     description:
       'Warm up with this comforting Mediterranean chickpea and spinach stew inspired by Andalusian potaje. Packed with wholesome plant protein, simmered in a velvety San Marzano tomato broth infused with cold-pressed olive oil, toasted cumin, and Spanish smoked pimentón.',
     heroImage:
-      'https://images.unsplash.com/photo-1547592180-85f173990554?auto=format&fit=crop&w=1000&q=80',
+      'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=1000&q=80',
     galleryImages: [
+      'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=1000&q=80',
       'https://images.unsplash.com/photo-1547592180-85f173990554?auto=format&fit=crop&w=1000&q=80',
-      'https://images.unsplash.com/photo-1585937421612-70a008356fbe?auto=format&fit=crop&w=1000&q=80',
+      'https://images.unsplash.com/photo-1540420773420-3366772f4999?auto=format&fit=crop&w=1000&q=80',
     ],
     price: 269,
     originalPrice: 319,
@@ -2082,32 +2289,43 @@ const BASE_INITIAL_MEAL_KITS: MealKit[] = [
     recipeSteps: [
       {
         stepNumber: 1,
-        title: 'Infuse Olive Oil with Garlic',
+        title: 'Infuse Extra Virgin Olive Oil with Garlic',
         instruction:
-          'Warm olive oil in a heavy saucepan over medium-low heat. Add thinly sliced garlic and sauté gently for 1 minute until fragrant and lightly golden.',
-        timerSeconds: 60,
-        tip: 'Keep the flame gentle so the garlic infuses without browning or turning bitter.',
+          'Heat Extra Virgin Olive Oil (25ml) in a heavy casserole over medium heat. Empty Sachet 1: Smoked Paprika & Cumin Infusion along with minced garlic and diced yellow onions (60g). Sauté for 2 minutes until fragrant and translucent.',
+        timerSeconds: 120,
+        imageUrl:
+          'https://images.unsplash.com/photo-1505576399279-565b52d4ac71?auto=format&fit=crop&w=800&q=80',
+        tip: 'Low-to-medium heat extracts the maximum aroma from Spanish smoked pimentón without bitterness.',
       },
       {
         stepNumber: 2,
         title: 'Build the Smoky Tomato Broth',
         instruction:
-          'Pour in the San Marzano passata and empty Sachet 1 (Smoked Paprika & Cumin Infusion). Stir and simmer for 4 minutes until the sauce deepens to a rich ruby hue.',
+          'Add Crushed Mediterranean Tomatoes Pouch (160g), Sachet 2: Toasted Garlic Herb Salt, and 1 cup warm vegetable stock. Bring to a bubbling simmer for 4 minutes.',
         timerSeconds: 240,
+        imageUrl:
+          'https://images.unsplash.com/photo-1547592180-85f173990554?auto=format&fit=crop&w=800&q=80',
+        tip: 'Crushing the tomatoes slightly enhances the rustic texture of this classic stew.',
       },
       {
         stepNumber: 3,
-        title: 'Simmer Chickpeas in Broth',
+        title: 'Simmer Chickpeas in Rich Broth',
         instruction:
-          'Add the tender chickpeas and 150ml warm water. Bring to a gentle simmer, cover, and cook for 12 minutes to allow the chickpeas to absorb the smoky aromatic spices.',
-        timerSeconds: 720,
+          'Add the Cooked Organic Chickpeas (250g) into the simmering tomato broth. Cover and simmer on low heat for 8 minutes so the chickpeas absorb all the smoked paprika and cumin notes.',
+        timerSeconds: 480,
+        imageUrl:
+          'https://images.unsplash.com/photo-1547592180-85f173990554?auto=format&fit=crop&w=800&q=80',
+        tip: 'Simmering covered keeps the broth rich and allows spices to penetrate the chickpeas.',
       },
       {
         stepNumber: 4,
-        title: 'Wilt Spinach & Season',
+        title: 'Wilt Baby Spinach & Season with Herbs',
         instruction:
-          'Fold in the fresh baby spinach leaves and season with Sachet 2. Cook for 2 minutes until just wilted. Ladle into warm bowls and drizzle with finishing olive oil.',
-        timerSeconds: 120,
+          'Uncover and fold in Fresh Baby Spinach Leaves (120g). Cook for 90 seconds just until wilted and vibrant green. Drizzle with cold-pressed olive oil, sprinkle fresh oregano, and serve with toasted sourdough or warm pita bread.',
+        timerSeconds: 90,
+        imageUrl:
+          'https://images.unsplash.com/photo-1540420773420-3366772f4999?auto=format&fit=crop&w=800&q=80',
+        tip: 'Add spinach right at the end to keep its vibrant emerald color and nutrients.',
       },
     ],
     reviews: [
@@ -2139,10 +2357,11 @@ const BASE_INITIAL_MEAL_KITS: MealKit[] = [
     description:
       'A fragrant, hearty vegetable stew from the sun-drenched hills of Provence. Tender layers of golden zucchini, sweet bell peppers, and silky aubergine braised slowly in crushed plum tomatoes with garlic, thyme, and fragrant rosemary.',
     heroImage:
-      'https://images.unsplash.com/photo-1565299507177-b0ac66763828?auto=format&fit=crop&w=1000&q=80',
+      'https://images.unsplash.com/photo-1572453800999-e8d2d1589b7c?auto=format&fit=crop&w=1000&q=80',
     galleryImages: [
-      'https://images.unsplash.com/photo-1565299507177-b0ac66763828?auto=format&fit=crop&w=1000&q=80',
-      'https://images.unsplash.com/photo-1547592180-85f173990554?auto=format&fit=crop&w=1000&q=80',
+      'https://images.unsplash.com/photo-1572453800999-e8d2d1589b7c?auto=format&fit=crop&w=1000&q=80',
+      'https://images.unsplash.com/photo-1540420773420-3366772f4999?auto=format&fit=crop&w=1000&q=80',
+      'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=1000&q=80',
     ],
     price: 299,
     originalPrice: 349,
@@ -2199,32 +2418,43 @@ const BASE_INITIAL_MEAL_KITS: MealKit[] = [
     recipeSteps: [
       {
         stepNumber: 1,
-        title: 'Sauté Onions & Sweet Peppers',
+        title: 'Sauté Onions & Sweet Peppers with Herbes de Provence',
         instruction:
-          'Warm 2 tbsp olive oil in a wide skillet. Sauté diced onions and bell peppers for 4 minutes until tender and glossy.',
-        timerSeconds: 240,
+          'Heat 2 tbsp Olive Oil in a large pan. Sauté Diced Sweet Bell Peppers & Yellow Onions (140g) with Sachet 1: Herbes de Provence & Brittany Sea Salt Blend for 3 minutes until tender.',
+        timerSeconds: 180,
+        imageUrl:
+          'https://images.unsplash.com/photo-1505576399279-565b52d4ac71?auto=format&fit=crop&w=800&q=80',
+        tip: 'French thyme, rosemary and marjoram blossom when bloomed gently in warm olive oil.',
       },
       {
         stepNumber: 2,
-        title: 'Sear Zucchini & Aubergine',
+        title: 'Sear Zucchini & Aubergine Rounds',
         instruction:
-          'Add cubed aubergine and zucchini rounds. Stir on medium heat for 5 minutes until lightly browned on edges.',
-        timerSeconds: 300,
-        tip: 'Do not crowd the vegetables so each piece caramelizes beautifully.',
+          'Add Sliced Zucchini Rounds (120g) and Aubergine / Eggplant Cubes (120g). Sauté over medium-high flame for 4 minutes until golden on edges.',
+        timerSeconds: 240,
+        imageUrl:
+          'https://images.unsplash.com/photo-1555939594-58d7cb561ad1?auto=format&fit=crop&w=800&q=80',
+        tip: 'Searing the vegetables first ensures each retains its distinct texture rather than turning into mush.',
       },
       {
         stepNumber: 3,
-        title: 'Simmer with Crushed Tomatoes',
+        title: 'Simmer with Provencal Crushed Tomatoes',
         instruction:
-          'Pour in crushed plum tomatoes and empty Sachet 1 (Herbes de Provence). Reduce heat to low, cover, and gently simmer for 15 minutes.',
-        timerSeconds: 900,
+          'Pour the Rustic Crushed Tomatoes Pouch (180g) and minced garlic over the vegetables. Stir gently, cover, and let slow-simmer on low heat for 10 minutes until meltingly tender.',
+        timerSeconds: 600,
+        imageUrl:
+          'https://images.unsplash.com/photo-1547592180-85f173990554?auto=format&fit=crop&w=800&q=80',
+        tip: 'Low, slow simmering melds the sweet summer vegetable flavors together.',
       },
       {
         stepNumber: 4,
-        title: 'Rest & Serve with Crusty Bread',
+        title: 'Rest & Serve with Crusty French Baguette',
         instruction:
-          'Uncover, let rest for 2 minutes to allow flavours to meld, and finish with a swirl of extra virgin olive oil.',
-        timerSeconds: 120,
+          'Remove lid and let rest off heat for 3 minutes. Finish with a drizzle of cold-pressed olive oil, cracked black pepper, and torn fresh basil leaves. Serve warm alongside toasted crusty baguette.',
+        timerSeconds: 180,
+        imageUrl:
+          'https://images.unsplash.com/photo-1540420773420-3366772f4999?auto=format&fit=crop&w=800&q=80',
+        tip: 'Ratatouille actually tastes even richer after resting for a few minutes.',
       },
     ],
     reviews: [
@@ -2255,9 +2485,11 @@ const BASE_INITIAL_MEAL_KITS: MealKit[] = [
     description:
       'A soothing, aromatic Indian shorba uniting fire-roasted tomatoes with protein-rich pink masoor dal. Tempered with a sizzled tadka of cumin, curry leaves, and grated fresh ginger, finished with a zesty squeeze of fresh lime.',
     heroImage:
-      'https://images.unsplash.com/photo-1547592180-85f173990554?auto=format&fit=crop&w=1000&q=80',
+      'https://images.unsplash.com/photo-1603105037880-880cd4edfb0d?auto=format&fit=crop&w=1000&q=80',
     galleryImages: [
-      'https://images.unsplash.com/photo-1547592180-85f173990554?auto=format&fit=crop&w=1000&q=80',
+      'https://images.unsplash.com/photo-1603105037880-880cd4edfb0d?auto=format&fit=crop&w=1000&q=80',
+      'https://images.unsplash.com/photo-1546833999-b9f581a1996d?auto=format&fit=crop&w=1000&q=80',
+      'https://images.unsplash.com/photo-1547592166-23ac45744acd?auto=format&fit=crop&w=1000&q=80',
     ],
     price: 219,
     originalPrice: 259,
@@ -2313,32 +2545,43 @@ const BASE_INITIAL_MEAL_KITS: MealKit[] = [
     recipeSteps: [
       {
         stepNumber: 1,
-        title: 'Boil Lentils & Tomato Puree',
+        title: 'Boil Split Red Lentils & Tomato Puree',
         instruction:
-          'Rinse red masoor dal. In a soup pot, add dal, roasted tomato puree, and 3 cups water. Bring to a rolling boil.',
-        timerSeconds: 180,
+          'In a soup pot, bring 2.5 cups of water to a boil. Add the washed Red Masoor Dal (150g), Ripe Tomato Confit Puree (120g), and turmeric. Simmer on medium heat for 10 minutes until lentils are soft.',
+        timerSeconds: 600,
+        imageUrl:
+          'https://images.unsplash.com/photo-1546549032-9571cd6b27df?auto=format&fit=crop&w=800&q=80',
+        tip: 'Red masoor lentils cook quickly and break down into a naturally silky smooth base.',
       },
       {
         stepNumber: 2,
-        title: 'Simmer until Velvety',
+        title: 'Whisk into Silky Velvety Shorba',
         instruction:
-          'Lower heat, stir in ginger-garlic paste, and simmer for 12 minutes until lentils are soft and soup turns velvety.',
-        timerSeconds: 720,
-        tip: 'Whisk lightly or blend for 10 seconds for a silky restaurant consistency.',
+          'Whisk the cooked lentils vigorously with a hand whisk (or immersion blender) for 1 minute until completely smooth and velvety. Adjust consistency with 1/2 cup warm water.',
+        timerSeconds: 60,
+        imageUrl:
+          'https://images.unsplash.com/photo-1547592180-85f173990554?auto=format&fit=crop&w=800&q=80',
+        tip: 'A quick whisk creates that classic lightweight royal shorba broth texture.',
       },
       {
         stepNumber: 3,
-        title: 'Prepare Aromatic Tadka',
+        title: 'Prepare Sizzling Aromatic Desi Ghee Tadka',
         instruction:
-          'In a small tadka pan, heat oil, add Sachet 1, let spices crackle for 20 seconds, and pour sizzling tadka into the soup.',
+          'In a small tadka pan, heat Desi Ghee (20g). Empty Sachet 1: Roasted Cumin & Black Salt Tadka (Bhuna Jeera, Kala Namak, Garam Masala) and sizzle for 30 seconds until aromatic.',
         timerSeconds: 30,
+        imageUrl:
+          'https://images.unsplash.com/photo-1505576399279-565b52d4ac71?auto=format&fit=crop&w=800&q=80',
+        tip: 'Pour the sizzling tadka immediately into the soup while still crackling hot.',
       },
       {
         stepNumber: 4,
-        title: 'Garnish & Serve Warm',
+        title: 'Pour Tadka & Garnish with Lemon',
         instruction:
-          'Garnish with freshly chopped coriander and a squeeze of fresh lime juice. Serve piping hot with toasted bread or papad.',
+          'Pour the sizzling tadka into the shorba with a loud hiss! Cover for 1 minute to trap the smoke and aroma. Ladle into bowls, squeeze fresh lemon juice, and garnish with chopped fresh coriander.',
         timerSeconds: 60,
+        imageUrl:
+          'https://images.unsplash.com/photo-1540420773420-3366772f4999?auto=format&fit=crop&w=800&q=80',
+        tip: 'Covering the pot right after pouring the tadka infuses the whole soup with roasted cumin aroma.',
       },
     ],
     reviews: [
@@ -2373,6 +2616,8 @@ const BASE_INITIAL_MEAL_KITS: MealKit[] = [
       'https://images.unsplash.com/photo-1603894584373-5ac82b2ae398?auto=format&fit=crop&w=1000&q=80',
     galleryImages: [
       'https://images.unsplash.com/photo-1603894584373-5ac82b2ae398?auto=format&fit=crop&w=1000&q=80',
+      'https://images.unsplash.com/photo-1546833999-b9f581a1996d?auto=format&fit=crop&w=1000&q=80',
+      'https://images.unsplash.com/photo-1631452180519-c014fe946bc7?auto=format&fit=crop&w=1000&q=80',
     ],
     price: 349,
     originalPrice: 399,
@@ -2444,30 +2689,41 @@ const BASE_INITIAL_MEAL_KITS: MealKit[] = [
         stepNumber: 1,
         title: 'Sauté Shallots in Gingelly Oil',
         instruction:
-          'Heat sesame oil in a kadai. Add sliced shallots and fresh curry leaves, frying until shallots turn caramelized and sweet.',
-        timerSeconds: 240,
+          'Heat Cold-Pressed Sesame/Gingelly Oil (30ml) in a heavy pot. Add Sliced Small Sambar Shallots (80g) and Fresh Curry Leaves. Sauté for 3 minutes until translucent and golden.',
+        timerSeconds: 180,
+        imageUrl:
+          'https://images.unsplash.com/photo-1505576399279-565b52d4ac71?auto=format&fit=crop&w=800&q=80',
+        tip: 'Authentic Chettinad flavor begins with cold-pressed gingelly oil and small shallots.',
       },
       {
         stepNumber: 2,
-        title: 'Roast Chicken with Chettinad Spices',
+        title: 'Roast Chicken with Chettinad Stone-Ground Masala',
         instruction:
-          'Add chicken cuts and empty Sachet 1. Sauté briskly on high flame for 5 minutes until chicken is sealed in fragrant spice crust.',
-        timerSeconds: 300,
-        tip: 'High heat searing locks all the natural juices inside the chicken cuts.',
+          'Add Farm-Fresh Bone-in Chicken Pieces (350g) and Sachet 1: Stone-Ground Karaikudi Masala (roasted coriander, Guntur chillies, star anise, kalpasi stone flower). Sear on high heat for 4 minutes until spices coat the meat.',
+        timerSeconds: 240,
+        imageUrl:
+          'https://images.unsplash.com/photo-1555939594-58d7cb561ad1?auto=format&fit=crop&w=800&q=80',
+        tip: 'Kalpasi (black stone flower) lends that signature earthy wood-fired Chettinad aroma.',
       },
       {
         stepNumber: 3,
-        title: 'Simmer with Coconut Paste',
+        title: 'Simmer with Fresh Coconut Paste',
         instruction:
-          'Add coconut paste and 150ml water. Cover and simmer on medium flame for 10 minutes until chicken is tender.',
-        timerSeconds: 600,
+          'Pour the Fresh Coconut & Poppy Seed Paste (50g) along with 1 cup warm water. Bring to a boil, cover, and simmer over medium-low flame for 12 minutes until chicken is tender.',
+        timerSeconds: 720,
+        imageUrl:
+          'https://images.unsplash.com/photo-1547592180-85f173990554?auto=format&fit=crop&w=800&q=80',
+        tip: 'The poppy seeds in the coconut paste create thick, luxurious restaurant body.',
       },
       {
         stepNumber: 4,
         title: 'Finish with Tellicherry Black Pepper Tadka',
         instruction:
-          'Stir in Sachet 2 (Crushed Tellicherry Pepper & Fennel), simmer for 2 minutes to unleash that signature South Indian pepper heat.',
-        timerSeconds: 120,
+          'In a small pan, heat 1 tsp oil with Sachet 2: Tellicherry Black Pepper & Fennel Tadka. Sizzle for 30 seconds and pour over the simmering curry. Stir well and serve hot with steamed rice or parotta.',
+        timerSeconds: 60,
+        imageUrl:
+          'https://images.unsplash.com/photo-1540420773420-3366772f4999?auto=format&fit=crop&w=800&q=80',
+        tip: 'Tellicherry black pepper provides pungent lingering warmth that defines true Chettinad cuisine.',
       },
     ],
     reviews: [
@@ -2499,9 +2755,11 @@ const BASE_INITIAL_MEAL_KITS: MealKit[] = [
     description:
       'Indias favorite street-food fusion! Crisp hand-rolled veggie dumplings tossed in a sizzling ginger-garlic and dark soya Manchurian gravy, served with springy eggless Hakka noodles and toasted sesame.',
     heroImage:
-      'https://images.unsplash.com/photo-1626777552726-4a6b54c97e46?auto=format&fit=crop&w=1000&q=80',
+      'https://images.unsplash.com/photo-1585032226651-759b368d7246?auto=format&fit=crop&w=1000&q=80',
     galleryImages: [
+      'https://images.unsplash.com/photo-1585032226651-759b368d7246?auto=format&fit=crop&w=1000&q=80',
       'https://images.unsplash.com/photo-1626777552726-4a6b54c97e46?auto=format&fit=crop&w=1000&q=80',
+      'https://images.unsplash.com/photo-1546549032-9571cd6b27df?auto=format&fit=crop&w=1000&q=80',
     ],
     price: 289,
     originalPrice: 339,
@@ -2573,32 +2831,43 @@ const BASE_INITIAL_MEAL_KITS: MealKit[] = [
     recipeSteps: [
       {
         stepNumber: 1,
-        title: 'Boil Hakka Noodles',
+        title: 'Boil Hakka Noodles with Wok Seasoning',
         instruction:
-          'Drop noodles into boiling salted water for 4 minutes. Drain, rinse under cold tap water, and toss with 1 tsp oil.',
-        timerSeconds: 240,
+          'Boil 4 cups water with 1 tsp oil. Drop the Springy Hakka Wheat Noodles (180g) and cook for 3.5 minutes until tender. Drain, rinse in cold water, and toss with Sachet 2: Indo-Chinese Wok Seasoning (white pepper, garlic salt, toasted sesame oil).',
+        timerSeconds: 210,
+        imageUrl:
+          'https://images.unsplash.com/photo-1546549032-9571cd6b27df?auto=format&fit=crop&w=800&q=80',
+        tip: 'Rinsing noodles in cold water immediately stops cooking and prevents sticking.',
       },
       {
         stepNumber: 2,
-        title: 'Roll & Crisp Manchurian Balls',
+        title: 'Pan-Fry Pre-Rolled Vegetable Manchurian Balls',
         instruction:
-          'Shape seasoned veggie mix into 8 bite-sized balls. Shallow fry in 3 tbsp oil for 5 minutes until crispy and golden brown.',
-        timerSeconds: 300,
-        tip: 'Ensure the oil is hot before adding balls to avoid excess oil absorption.',
+          'Heat 2 tbsp oil in a skillet over medium-high heat. Place the Pre-Formed Vegetable Manchurian Balls (8 pcs) in the pan. Roll and pan-fry for 4 minutes until crisp and golden brown on all sides. Set aside.',
+        timerSeconds: 240,
+        imageUrl:
+          'https://images.unsplash.com/photo-1555939594-58d7cb561ad1?auto=format&fit=crop&w=800&q=80',
+        tip: 'Medium-high heat ensures a crunchy outer crust while keeping the vegetable center tender.',
       },
       {
         stepNumber: 3,
-        title: 'Wok-Toss the Sizzling Sauce',
+        title: 'Wok-Toss the Sizzling Manchurian Sauce',
         instruction:
-          'In the wok, flash-fry ginger, garlic, and spring onions for 1 minute. Pour in Manchurian Sauce Sachet with 50ml water and bring to a glaze.',
-        timerSeconds: 90,
+          'In a smoking hot wok or skillet, add 1 tbsp oil, minced garlic, ginger, and diced bell peppers (60g). Pour Sachet 1: Tangy Manchurian Dark Sauce Pouch (dark soy, chilli garlic, vinegar) with 1/2 cup water. Bring to a rapid bubbling glaze.',
+        timerSeconds: 150,
+        imageUrl:
+          'https://images.unsplash.com/photo-1505576399279-565b52d4ac71?auto=format&fit=crop&w=800&q=80',
+        tip: 'A smoking wok imparts the essential wok-hei char to the garlic and peppers.',
       },
       {
         stepNumber: 4,
-        title: 'Combine & Serve with Noodles',
+        title: 'Glaze Manchurian Balls & Serve with Noodles',
         instruction:
-          'Toss crispy Manchurian balls into the simmering sauce. Dust Hakka noodles with Sachet 2 seasoning and serve side-by-side.',
+          'Toss the crisp Manchurian balls into the simmering sauce for 1 minute until glistening and coated. Garnish with chopped spring onion greens and serve piping hot alongside the seasoned hakka noodles.',
         timerSeconds: 60,
+        imageUrl:
+          'https://images.unsplash.com/photo-1540420773420-3366772f4999?auto=format&fit=crop&w=800&q=80',
+        tip: 'Toss Manchurian balls right before serving so they stay delightfully crispy on the outside.',
       },
     ],
     reviews: [
@@ -2629,9 +2898,11 @@ const BASE_INITIAL_MEAL_KITS: MealKit[] = [
     description:
       'A royal Nawabi feast prepared with the slow-dum technique. Aged basmati rice scented with Kashmiri saffron and royal zafran, layered over marinated malai paneer, fried golden onions, and crushed cardamom.',
     heroImage:
-      'https://images.unsplash.com/photo-1563379091339-03b21ab4a4f8?auto=format&fit=crop&w=1000&q=80',
+      'https://images.unsplash.com/photo-1633945274405-b6c8069047b0?auto=format&fit=crop&w=1000&q=80',
     galleryImages: [
+      'https://images.unsplash.com/photo-1633945274405-b6c8069047b0?auto=format&fit=crop&w=1000&q=80',
       'https://images.unsplash.com/photo-1563379091339-03b21ab4a4f8?auto=format&fit=crop&w=1000&q=80',
+      'https://images.unsplash.com/photo-1589301760014-d929f3979dbc?auto=format&fit=crop&w=1000&q=80',
     ],
     price: 329,
     originalPrice: 379,
@@ -2703,32 +2974,43 @@ const BASE_INITIAL_MEAL_KITS: MealKit[] = [
     recipeSteps: [
       {
         stepNumber: 1,
-        title: 'Parboil Basmati with Khada Masala',
+        title: 'Parboil Royal Basmati with Awadhi Potli Spices',
         instruction:
-          'Boil aged basmati in salted water with Sachet 1 (potli spices) for 6 minutes until 70% cooked. Drain and set aside.',
-        timerSeconds: 360,
-        tip: 'Do not overcook the rice in this stage; it finishes steaming during dum.',
+          'In 5 cups boiling salted water, drop Sachet 1: Awadhi Khada Potli Masala (green & black cardamom, mace, cinnamon, cloves, shahi jeera). Add Aged Long-Grain Basmati Rice (250g) and parboil for 5 minutes until 70% done. Drain and remove potli.',
+        timerSeconds: 300,
+        imageUrl:
+          'https://images.unsplash.com/photo-1546549032-9571cd6b27df?auto=format&fit=crop&w=800&q=80',
+        tip: 'The potli pouch infuses whole spice fragrance without leaving whole spices in the teeth.',
       },
       {
         stepNumber: 2,
-        title: 'Sear Malai Paneer in Shahi Masala',
+        title: 'Sear Malai Paneer in Shahi Zafrani Masala',
         instruction:
-          'In handi, melt desi ghee, add paneer cubes and Sachet 2. Sauté for 3 minutes until paneer is coated in fragrant shahi gravy.',
+          'In a heavy handi, heat 1 tbsp Pure Desi Ghee. Sear Fresh Malai Paneer Cubes (220g) with Greek Yogurt (50g) and Sachet 2: Royal Zafrani Shahi Spice Blend (saffron, cashew powder, rose petal dust) for 3 minutes over gentle flame.',
         timerSeconds: 180,
+        imageUrl:
+          'https://images.unsplash.com/photo-1505576399279-565b52d4ac71?auto=format&fit=crop&w=800&q=80',
+        tip: 'Gentle heat prevents yogurt from splitting and allows saffron notes to develop.',
       },
       {
         stepNumber: 3,
-        title: 'Layer Basmati, Birista & Saffron',
+        title: 'Layer Basmati, Saffron Milk & Golden Birista',
         instruction:
-          'Layer the parboiled rice over the paneer. Top with golden birista, drizzle Saffron-Kewra infusion, and dot with remaining ghee.',
+          'Spread the fragrant parboiled rice evenly over the paneer base. Drizzle Saffron Infused Milk (30ml), Kewra Essence, and scatter Golden Fried Onions (Birista, 40g) and fresh mint leaves.',
         timerSeconds: 120,
+        imageUrl:
+          'https://images.unsplash.com/photo-1563379091339-03b21ab4a4f8?auto=format&fit=crop&w=800&q=80',
+        tip: 'Layering creates distinct white, yellow, and saffron rice grains prized in Awadhi banquet cooking.',
       },
       {
         stepNumber: 4,
-        title: 'Dum Cook on Sealed Flame',
+        title: 'Slow Dum Cook on Sealed Low Flame',
         instruction:
-          'Cover handi tightly with lid. Cook on low flame (dum) for 15 minutes. Rest 5 minutes, gently fluff with a fork and serve.',
-        timerSeconds: 900,
+          'Seal handi tightly with lid or aluminum foil. Place over low flame (or atop a hot tawa) and dum cook for 14 minutes. Rest for 5 minutes before gently fluffing with a flat spoon.',
+        timerSeconds: 840,
+        imageUrl:
+          'https://images.unsplash.com/photo-1540420773420-3366772f4999?auto=format&fit=crop&w=800&q=80',
+        tip: 'Always fluff biryani from the edges inward to avoid breaking long rice grains.',
       },
     ],
     reviews: [
@@ -2760,9 +3042,11 @@ const BASE_INITIAL_MEAL_KITS: MealKit[] = [
     description:
       'The soul of Gujarati comfort cuisine. Nutritious pigeon pea dal cooked with jaggery, kokum, and roasted peanuts, into which spiced whole-wheat dumplings are simmered to chewy perfection with ghee-tempered mustard seeds.',
     heroImage:
-      'https://images.unsplash.com/photo-1546833999-b9f581a1996d?auto=format&fit=crop&w=1000&q=80',
+      'https://images.unsplash.com/photo-1546833998-877b37c2e5c6?auto=format&fit=crop&w=1000&q=80',
     galleryImages: [
+      'https://images.unsplash.com/photo-1546833998-877b37c2e5c6?auto=format&fit=crop&w=1000&q=80',
       'https://images.unsplash.com/photo-1546833999-b9f581a1996d?auto=format&fit=crop&w=1000&q=80',
+      'https://images.unsplash.com/photo-1589301760014-d929f3979dbc?auto=format&fit=crop&w=1000&q=80',
     ],
     price: 249,
     originalPrice: 289,
@@ -2818,32 +3102,43 @@ const BASE_INITIAL_MEAL_KITS: MealKit[] = [
     recipeSteps: [
       {
         stepNumber: 1,
-        title: 'Simmer Toor Dal Base',
+        title: 'Simmer Gujarati Toor Dal Base',
         instruction:
-          'In a deep pot, add toor dal base with 350ml water, roasted peanuts, and Jaggery-Kokum pouch. Bring to a rolling boil.',
+          'In a pot, bring Cooked Gujarati Toor Dal (250g) and 1.5 cups water to a boil. Stir in Jaggery Powder (20g), Kokum Pouch, and Roasted Peanuts (30g). Simmer for 3 minutes for that signature sweet and tangy Gujarati base.',
         timerSeconds: 180,
+        imageUrl:
+          'https://images.unsplash.com/photo-1547592180-85f173990554?auto=format&fit=crop&w=800&q=80',
+        tip: 'Kokum and jaggery together create the authentic khatta-meetha Gujarati balance.',
       },
       {
         stepNumber: 2,
-        title: 'Drop Fresh Spiced Dhokli Pieces',
+        title: 'Drop Fresh Spiced Wheat Dhokli Ribbons',
         instruction:
-          'Drop individual spiced whole wheat dhokli diamond cuts into the boiling dal one by one so they do not stick.',
+          'Drop the Fresh Diamond-Cut Spiced Whole Wheat Dhokli Strips (140g) one by one into the bubbling dal. Stir very gently once so dhoklis do not stick together.',
         timerSeconds: 120,
-        tip: 'Keep the dal boiling vigorously when dropping dhoklis to ensure they set immediately.',
+        imageUrl:
+          'https://images.unsplash.com/photo-1546549032-9571cd6b27df?auto=format&fit=crop&w=800&q=80',
+        tip: 'Drop dhoklis one at a time into rapidly boiling dal so they cook individually.',
       },
       {
         stepNumber: 3,
-        title: 'Simmer to Tender Perfection',
+        title: 'Simmer Dhoklis to Tender Perfection',
         instruction:
-          'Simmer on medium flame for 12 minutes until the dhokli dumplings are tender, silky, and float to the top.',
-        timerSeconds: 720,
+          'Cover and simmer on medium flame for 7 minutes. The dhoklis will cook through, float to the top, and thicken the golden dal stew into a comforting consistency.',
+        timerSeconds: 420,
+        imageUrl:
+          'https://images.unsplash.com/photo-1547592180-85f173990554?auto=format&fit=crop&w=800&q=80',
+        tip: 'Cook until a dhokli cut in half shows no raw dough in the center.',
       },
       {
         stepNumber: 4,
-        title: 'Sizzle Desi Ghee Tadka',
+        title: 'Sizzle Kathiyawadi Rai-Hing Desi Ghee Tadka',
         instruction:
-          'Melt cow ghee in a tadka spoon, crackle Sachet 1 (mustard, hing, chillies), and pour over the hot dal dhokli. Serve hot.',
+          'In a tadka pan, heat Desi Ghee (20g). Empty Sachet 1: Kathiyawadi Rai-Hing Tadka Masala (mustard seeds, hing, cumin, fenugreek, dry red chillies). Sizzle for 30 seconds and pour over the hot dal. Garnish with fresh coriander.',
         timerSeconds: 60,
+        imageUrl:
+          'https://images.unsplash.com/photo-1540420773420-3366772f4999?auto=format&fit=crop&w=800&q=80',
+        tip: 'Serve piping hot in deep bowls with an extra dollop of desi ghee.',
       },
     ],
     reviews: [
@@ -2875,9 +3170,11 @@ const BASE_INITIAL_MEAL_KITS: MealKit[] = [
     description:
       'A rich, comforting Continental chowder loaded with sweet golden corn kernels and pan-seared earthy mushrooms. Simmered in herb-infused cream and served with crispy herb-garlic croutons.',
     heroImage:
-      'https://images.unsplash.com/photo-1547592180-85f173990554?auto=format&fit=crop&w=1000&q=80',
+      'https://images.unsplash.com/photo-1547592166-23ac45744acd?auto=format&fit=crop&w=1000&q=80',
     galleryImages: [
+      'https://images.unsplash.com/photo-1547592166-23ac45744acd?auto=format&fit=crop&w=1000&q=80',
       'https://images.unsplash.com/photo-1547592180-85f173990554?auto=format&fit=crop&w=1000&q=80',
+      'https://images.unsplash.com/photo-1603105037880-880cd4edfb0d?auto=format&fit=crop&w=1000&q=80',
     ],
     price: 259,
     originalPrice: 299,
@@ -2933,32 +3230,43 @@ const BASE_INITIAL_MEAL_KITS: MealKit[] = [
     recipeSteps: [
       {
         stepNumber: 1,
-        title: 'Sauté Sliced Mushrooms in Butter',
+        title: 'Sauté Sliced Wild Mushrooms in Butter',
         instruction:
-          'Melt butter in a soup pot over medium heat. Add sliced mushrooms and sauté for 4 minutes until golden brown and aromatic.',
-        timerSeconds: 240,
+          'Melt Fresh Butter (25g) in a soup pot over medium heat. Sauté Sliced Cremini & Shiitake Mushrooms (150g) and diced onions (50g) for 3.5 minutes until golden brown.',
+        timerSeconds: 210,
+        imageUrl:
+          'https://images.unsplash.com/photo-1505576399279-565b52d4ac71?auto=format&fit=crop&w=800&q=80',
+        tip: 'Caramelizing mushrooms in butter builds deep savory umami broth foundation.',
       },
       {
         stepNumber: 2,
-        title: 'Add Sweet Corn & Broth',
+        title: 'Add Sweet Corn & Velvety Broth',
         instruction:
-          'Add sweet corn kernels, 250ml water, and Sachet 1. Bring to a gentle boil and simmer for 8 minutes.',
-        timerSeconds: 480,
+          'Add Golden Sweet Corn Kernels (120g), Sachet 1: French Thyme & White Pepper Chowder Dust, and 1.5 cups vegetable broth. Bring to a gentle boil for 5 minutes.',
+        timerSeconds: 300,
+        imageUrl:
+          'https://images.unsplash.com/photo-1547592180-85f173990554?auto=format&fit=crop&w=800&q=80',
+        tip: 'French thyme and mild white pepper infuse delicate herbal warmth without darkening the creamy chowder.',
       },
       {
         stepNumber: 3,
-        title: 'Enrich with Cooking Cream',
+        title: 'Enrich with Heavy Cooking Cream',
         instruction:
-          'Stir in the rich cooking cream on low heat. Simmer gently for 4 minutes until the chowder thickens to a velvety coat.',
-        timerSeconds: 240,
-        tip: 'Do not let the chowder boil rapidly after adding cream to keep it silky smooth.',
+          'Lower heat to gentle simmer. Pour in the Heavy Cooking Cream (80ml). Simmer for 3 minutes, stirring constantly until chowder turns velvety, rich, and lightly thickened.',
+        timerSeconds: 180,
+        imageUrl:
+          'https://images.unsplash.com/photo-1547592180-85f173990554?auto=format&fit=crop&w=800&q=80',
+        tip: 'Keep the heat low after adding cream so it stays smooth and silky.',
       },
       {
         stepNumber: 4,
-        title: 'Top with Garlic Croutons & Serve',
+        title: 'Crown with Garlic Herb Croutons & Serve',
         instruction:
-          'Ladle into heated soup bowls, scatter crisp garlic croutons on top, and finish with a sprinkle of cracked black pepper.',
+          'Ladle hot chowder into warmed soup bowls. Scatter Sachet 2: Crunchy Roasted Garlic Herb Croutons (40g) and chopped fresh chives on top right before serving.',
         timerSeconds: 60,
+        imageUrl:
+          'https://images.unsplash.com/photo-1540420773420-3366772f4999?auto=format&fit=crop&w=800&q=80',
+        tip: 'Add croutons at the table so they maintain maximum crisp crunch.',
       },
     ],
     reviews: [
@@ -2990,8 +3298,9 @@ const BASE_INITIAL_MEAL_KITS: MealKit[] = [
     description:
       'The crown jewel of Pune street cuisine! Sprouted organic matki (moth beans) slow-simmered in an aromatic, fiery-red Puneri "kat" rassa made with roasted coconut and authentic goda masala. Layered with crunchy Kolhapuri farsan, chopped red onions, and lemon, served with buttered ladi pav.',
     heroImage:
-      'https://images.unsplash.com/photo-1601050690597-df0568f70950?auto=format&fit=crop&w=1000&q=80',
+      'https://images.unsplash.com/photo-1606491956689-2ea866880c84?auto=format&fit=crop&w=1000&q=80',
     galleryImages: [
+      'https://images.unsplash.com/photo-1606491956689-2ea866880c84?auto=format&fit=crop&w=1000&q=80',
       'https://images.unsplash.com/photo-1601050690597-df0568f70950?auto=format&fit=crop&w=1000&q=80',
       'https://images.unsplash.com/photo-1626777552726-4a6b54c97e46?auto=format&fit=crop&w=1000&q=80',
     ],
@@ -3065,32 +3374,43 @@ const BASE_INITIAL_MEAL_KITS: MealKit[] = [
     recipeSteps: [
       {
         stepNumber: 1,
-        title: 'Boil Sprouted Matki Usal',
+        title: 'Boil Sprouted Organic Matki Usal',
         instruction:
-          'Boil sprouted matki in 1.5 cups water with a pinch of salt and turmeric for 5 minutes until tender yet retaining a light bite.',
+          'In a saucepan, boil the Sprouted Organic Matki (200g) in 1.5 cups water with 1/2 tsp turmeric and salt for 5 minutes until tender-soft yet retaining its shape. Drain and reserve cooking water.',
         timerSeconds: 300,
+        imageUrl:
+          'https://images.unsplash.com/photo-1546549032-9571cd6b27df?auto=format&fit=crop&w=800&q=80',
+        tip: 'Do not overboil the sprouts; tender matki with a slight bite creates the best misal texture.',
       },
       {
         stepNumber: 2,
-        title: 'Cook Fragrant Kat Tarri Gravy',
+        title: 'Cook Fragrant Fiery Kat Tarri Gravy',
         instruction:
-          'Heat 2 tbsp oil in a deep kadai. Stir in Sachet 1 until aromatic (30 sec), then blend in Sachet 2 paste. Add 2 cups water and simmer for 6 minutes until the fiery red oil layer (tarri/kat) rises to the surface.',
+          'Heat 2 tbsp oil in a deep kadai. Add Sachet 1: Puneri Goda Masala & Hing Tadka and Sachet 2: Teja Kat Tarri Gravy Paste (charred onion-coconut paste with Byadgi chillies). Cook for 3 minutes, then add 2 cups water and simmer on medium flame for 6 minutes until fiery red oil (tarri) separates on top.',
         timerSeconds: 360,
-        tip: 'Pune misal is celebrated for its spicy, aromatic, thin tarri rassa.',
+        imageUrl:
+          'https://images.unsplash.com/photo-1505576399279-565b52d4ac71?auto=format&fit=crop&w=800&q=80',
+        tip: 'Letting the gravy simmer gently allows the vibrant red tarri layer to float naturally to the surface.',
       },
       {
         stepNumber: 3,
-        title: 'Toast Pav & Assemble Misal Bowls',
+        title: 'Butter-Toast Fresh Pune Ladi Pav',
         instruction:
-          'Lightly toast the ladi pav in butter on a tava. In serving bowls, spoon a hearty base of boiled matki usal, ladle boiling-hot kat rassa over it, then crown with generous crispy farsan, diced onions, and fresh coriander.',
-        timerSeconds: 180,
+          'Warm Fresh Pune Bakery Ladi Pav (4 pcs) on a hot tawa with 1 tbsp butter for 2 minutes until warm, soft, and lightly toasted.',
+        timerSeconds: 120,
+        imageUrl:
+          'https://images.unsplash.com/photo-1586190848861-99aa4a171e90?auto=format&fit=crop&w=800&q=80',
+        tip: 'Buttered ladi pav is the classic pairing to cut through the fiery misal tarri.',
       },
       {
         stepNumber: 4,
-        title: 'Squeeze Lemon & Relish Hot',
+        title: 'Assemble Misal Bowls with Crunchy Farsan',
         instruction:
-          'Squeeze fresh lemon over the bowl and dunk the hot buttered pav into the spicy kat broth immediately for peak crunch and savoriness.',
-        timerSeconds: 60,
+          'Layer boiled matki usal in deep bowls. Ladle generous amounts of boiling spicy kat tarri gravy over the sprouts. Top with Crispy Puneri Farsan (90g), finely chopped red onions, and fresh coriander. Squeeze fresh lemon and serve piping hot with warm pav.',
+        timerSeconds: 90,
+        imageUrl:
+          'https://images.unsplash.com/photo-1540420773420-3366772f4999?auto=format&fit=crop&w=800&q=80',
+        tip: 'Serve extra kat tarri in a small metal wati on the side for authentic Pune street style!',
       },
     ],
     reviews: [
@@ -3122,9 +3442,11 @@ const BASE_INITIAL_MEAL_KITS: MealKit[] = [
     description:
       'The rustic soul of Maharashtra! Comforting, velvety gram flour (besan) seasoned with mustard seeds, curry leaves, garlic, and fresh green chillies. Served alongside wholesome stone-ground jowar bhakri flour and freshly pounded spicy green chilli garlic kharda (thecha).',
     heroImage:
-      'https://images.unsplash.com/photo-1626777552726-4a6b54c97e46?auto=format&fit=crop&w=1000&q=80',
+      'https://images.unsplash.com/photo-1601050690597-df0568f70950?auto=format&fit=crop&w=1000&q=80',
     galleryImages: [
+      'https://images.unsplash.com/photo-1601050690597-df0568f70950?auto=format&fit=crop&w=1000&q=80',
       'https://images.unsplash.com/photo-1626777552726-4a6b54c97e46?auto=format&fit=crop&w=1000&q=80',
+      'https://images.unsplash.com/photo-1589301760014-d929f3979dbc?auto=format&fit=crop&w=1000&q=80',
     ],
     price: 219,
     originalPrice: 269,
@@ -3196,31 +3518,43 @@ const BASE_INITIAL_MEAL_KITS: MealKit[] = [
     recipeSteps: [
       {
         stepNumber: 1,
-        title: 'Whisk Besan Batter',
+        title: 'Whisk Lump-Free Besan Batter',
         instruction:
-          'In a bowl, whisk the besan with 1.5 cups water and turmeric until completely smooth and lump-free.',
+          'In a bowl, whisk Stone-Ground Gram Flour (Besan, 100g) with 1.5 cups water until completely smooth, lump-free, and pouring consistency.',
         timerSeconds: 120,
+        imageUrl:
+          'https://images.unsplash.com/photo-1556910103-1c02745aae4d?auto=format&fit=crop&w=800&q=80',
+        tip: 'Whisking besan with water before adding to the pan ensures lump-free, velvety pithla.',
       },
       {
         stepNumber: 2,
-        title: 'Cook Velvety Pithla',
+        title: 'Temper Aromatics & Cook Velvety Pithla',
         instruction:
-          'Heat 2 tbsp oil, crackle mustard seeds, curry leaves, and green chillies. Pour in the besan batter, stirring continuously on medium flame for 6 minutes until thick, glossy, and fragrant.',
-        timerSeconds: 360,
+          'Heat 2 tbsp peanut oil in a kadai. Add Sachet 1: Puneri Pithla Tempering Spice Blend (mustard, cumin, turmeric, hing) along with sliced garlic and green chillies. Pour in the besan batter, stir continuously on medium heat for 5 minutes until glossy and thick, then cover and steam for 3 minutes.',
+        timerSeconds: 480,
+        imageUrl:
+          'https://images.unsplash.com/photo-1547592180-85f173990554?auto=format&fit=crop&w=800&q=80',
+        tip: 'Continuous stirring prevents lumps and creates that coveted glossy Maharashtrian texture.',
       },
       {
         stepNumber: 3,
         title: 'Prepare Pounded Garlic Thecha',
         instruction:
-          'Heat 1 tbsp oil in a small pan, roast green chillies and garlic until blistered. Coarsely crush with Sachet 2 using a mortar or back of a spoon with a splash of lemon.',
-        timerSeconds: 180,
+          'In a small bowl, mix Sachet 2: Authentic Maharashtrian Thecha Masala (roasted peanuts, dry garlic, coarse cumin) with 1 tsp hot oil or ghee into a coarse, fiery green chutney condiment.',
+        timerSeconds: 60,
+        imageUrl:
+          'https://images.unsplash.com/photo-1505576399279-565b52d4ac71?auto=format&fit=crop&w=800&q=80',
+        tip: 'Pounded thecha brings spicy rustic pungency that cuts through comforting pithla.',
       },
       {
         stepNumber: 4,
-        title: 'Pan-Cook Jowar Bhakris',
+        title: 'Toast Jowar Bhakris on Cast Iron Tawa',
         instruction:
-          'Knead the jowar flour with warm water into soft dough. Pat out round bhakris on a dry tava, splash water on the surface, flip and roast until puffed and charred.',
-        timerSeconds: 360,
+          'Place Traditional Jowar Bhakris (2 pcs) on a hot cast iron tawa. Sprinkle a few drops of water, flip and roast for 2 minutes per side until puffed and charred with golden spots. Serve hot with pithla, thecha, and raw onion wedges.',
+        timerSeconds: 240,
+        imageUrl:
+          'https://images.unsplash.com/photo-1586190848861-99aa4a171e90?auto=format&fit=crop&w=800&q=80',
+        tip: 'A little fresh white butter (loni) melted over hot bhakri is heaven on a plate.',
       },
     ],
     reviews: [
@@ -3252,9 +3586,11 @@ const BASE_INITIAL_MEAL_KITS: MealKit[] = [
     description:
       'Handcrafted from authentic 5-grain roasted Bhajani flour (jowar, bajra, chana dal, rice, coriander seeds & cumin). Mixed with finely diced red onions, cilantro, and roasted sesame seeds, cooked crisp with a dollop of white homemade makkhan and peanut garlic chutney.',
     heroImage:
-      'https://images.unsplash.com/photo-1589301760014-d929f3979dbc?auto=format&fit=crop&w=1000&q=80',
+      'https://images.unsplash.com/photo-1565557623262-b51c2513a641?auto=format&fit=crop&w=1000&q=80',
     galleryImages: [
+      'https://images.unsplash.com/photo-1565557623262-b51c2513a641?auto=format&fit=crop&w=1000&q=80',
       'https://images.unsplash.com/photo-1589301760014-d929f3979dbc?auto=format&fit=crop&w=1000&q=80',
+      'https://images.unsplash.com/photo-1601050690597-df0568f70950?auto=format&fit=crop&w=1000&q=80',
     ],
     price: 209,
     originalPrice: 249,
@@ -3324,31 +3660,43 @@ const BASE_INITIAL_MEAL_KITS: MealKit[] = [
     recipeSteps: [
       {
         stepNumber: 1,
-        title: 'Knead Bhajani Dough',
+        title: 'Knead Spiced Bhajani Dough',
         instruction:
-          'In a bowl, combine Bhajani flour, chopped onions, sesame seeds, and Sachet 1. Add warm water gradually to knead into a pliable, soft dough.',
+          'In a mixing bowl, combine Roasted Multigrain Bhajani Flour (200g, roasted jowar, bajra, chana, wheat, rice), Finely Chopped Onions (60g), Fresh Coriander, and Sachet 1: Puneri Thalipeeth Seasoning Sachet (ajwain, cumin, turmeric, red chilli, rock salt). Gradually add 1/2 cup warm water to knead into a soft, pliable dough.',
         timerSeconds: 180,
+        imageUrl:
+          'https://images.unsplash.com/photo-1556910103-1c02745aae4d?auto=format&fit=crop&w=800&q=80',
+        tip: 'The dough should be soft and moist—not stiff—so it pats out easily without cracking.',
       },
       {
         stepNumber: 2,
-        title: 'Pat Out Thalipeeth on Wet Cloth',
+        title: 'Pat Out Thalipeeth with Traditional Center Holes',
         instruction:
-          'Place a damp muslin cloth or butter paper on your counter. Take a ball of dough and pat it evenly thin with wet fingers, making 3 small holes in the center.',
-        timerSeconds: 180,
+          'Grease a sheet of butter paper or clean damp cloth with a few drops of oil. Take a lemon-sized portion of dough and pat it out gently with wet fingers into a 6-inch round flatbread. Make 3 small holes using your finger to let ghee circulate during roasting.',
+        timerSeconds: 120,
+        imageUrl:
+          'https://images.unsplash.com/photo-1556910103-1c02745aae4d?auto=format&fit=crop&w=800&q=80',
+        tip: 'The iconic center holes allow ghee to circulate and crisp the flatbread evenly from the inside out.',
       },
       {
         stepNumber: 3,
-        title: 'Roast with Ghee Until Crisp',
+        title: 'Roast with Pure Desi Ghee Until Crisp',
         instruction:
-          'Flip the thalipeeth gently onto a medium-hot greased tava. Drizzle ghee into the holes and around the edges. Cover and cook on medium flame for 3 minutes per side until golden and crispy.',
-        timerSeconds: 360,
+          'Carefully invert thalipeeth onto a medium-hot cast iron tawa. Drizzle 1 tsp Pure Desi Ghee around edges and into the holes. Cover and cook on medium flame for 2.5 minutes, flip, drizzle ghee, and roast uncovered for 2 minutes until crispy and golden brown.',
+        timerSeconds: 270,
+        imageUrl:
+          'https://images.unsplash.com/photo-1586190848861-99aa4a171e90?auto=format&fit=crop&w=800&q=80',
+        tip: 'Cast iron tawa gives that signature authentic Maharashtrian roasted aroma.',
       },
       {
         stepNumber: 4,
-        title: 'Serve with Fresh Loni & Peanut Chutney',
+        title: 'Serve with Fresh White Loni & Peanut Chutney',
         instruction:
-          'Plate steaming hot with a generous scoop of fresh white loni butter and Shengdana garlic chutney from Sachet 2.',
+          'Transfer hot crispy thalipeeth to plate. Place a generous scoop of Fresh White Butter (Loni, 30g) in the center, and serve with Sachet 2: Shengdana (Peanut) Garlic Chutney and cool curd.',
         timerSeconds: 60,
+        imageUrl:
+          'https://images.unsplash.com/photo-1540420773420-3366772f4999?auto=format&fit=crop&w=800&q=80',
+        tip: 'The white butter melting into the hot thalipeeth is an unforgettable breakfast indulgence.',
       },
     ],
     reviews: [
@@ -3380,9 +3728,11 @@ const BASE_INITIAL_MEAL_KITS: MealKit[] = [
     description:
       'The iconic Pune breakfast favorite. Pre-soaked premium non-sticky sago pearls roasted in pure cow ghee with coarse roasted peanuts, cumin, diced potatoes, and spicy green chillies. Served with chilled spiced curd and sweet cucumber koshimbir.',
     heroImage:
-      'https://images.unsplash.com/photo-1589301760014-d929f3979dbc?auto=format&fit=crop&w=1000&q=80',
+      'https://images.unsplash.com/photo-1596797038530-2c107229654b?auto=format&fit=crop&w=1000&q=80',
     galleryImages: [
+      'https://images.unsplash.com/photo-1596797038530-2c107229654b?auto=format&fit=crop&w=1000&q=80',
       'https://images.unsplash.com/photo-1589301760014-d929f3979dbc?auto=format&fit=crop&w=1000&q=80',
+      'https://images.unsplash.com/photo-1546833999-b9f581a1996d?auto=format&fit=crop&w=1000&q=80',
     ],
     price: 189,
     originalPrice: 229,
@@ -3439,32 +3789,43 @@ const BASE_INITIAL_MEAL_KITS: MealKit[] = [
     recipeSteps: [
       {
         stepNumber: 1,
-        title: 'Coat Sabudana with Peanuts & Seasoning',
+        title: 'Coat Sabudana with Roasted Peanuts & Seasoning',
         instruction:
-          'In a large mixing bowl, gently toss the drained sabudana pearls with the crushed roasted peanuts, rock salt, and sugar from Sachet 1 until each pearl is coated.',
+          'In a bowl, take the perfectly soaked, fluffy Non-Sticky Sabudana Pearls (250g). Mix in the Coarsely Crushed Roasted Peanuts (70g) and Sachet 1: Puneri Khichdi Jeera & Sendha Namak Blend (whole jeera, rock salt, raw cane sugar). Mix gently with your fingers so every pearl is coated.',
         timerSeconds: 120,
+        imageUrl:
+          'https://images.unsplash.com/photo-1556910103-1c02745aae4d?auto=format&fit=crop&w=800&q=80',
+        tip: 'Mixing peanuts and rock salt with soaked sabudana beforehand prevents pearls from sticking together during cooking.',
       },
       {
         stepNumber: 2,
-        title: 'Temper Aromatics in Desi Ghee',
+        title: 'Temper Cumin & Green Chillies in Desi Ghee',
         instruction:
-          'Melt desi ghee in a heavy non-stick kadai over medium heat. Crackle cumin, sliced green chillies, and curry leaves for 30 seconds, then toss in diced potatoes.',
-        timerSeconds: 90,
+          'Heat 2 tbsp Pure Desi Ghee in a heavy kadai over medium heat. Add Whole Cumin Seeds (1 tsp) and Slit Green Chillies (2 pcs). Sauté for 45 seconds until chillies blister lightly and ghee is fragrant.',
+        timerSeconds: 45,
+        imageUrl:
+          'https://images.unsplash.com/photo-1505576399279-565b52d4ac71?auto=format&fit=crop&w=800&q=80',
+        tip: 'Desi ghee is traditional and gives sabudana khichdi its rich festive fragrance.',
       },
       {
         stepNumber: 3,
-        title: 'Gentle Steam Roast Khichdi',
+        title: 'Gentle Steam-Roast Khichdi on Low Flame',
         instruction:
-          'Lower heat, add the coated sabudana mixture. Cover with a tight lid and steam for 4 minutes until the pearls turn translucent and soft. Avoid excessive stirring to keep grains separate.',
-        timerSeconds: 240,
-        tip: 'Pune-style khichdi is always non-sticky and fluffy.',
+          'Add the coated sabudana mixture and Diced Boiled Potatoes (60g) to the pan. Sauté gently on low-medium flame for 3 minutes, then cover tightly with lid and steam for 3 minutes until sabudana pearls turn soft and beautifully translucent.',
+        timerSeconds: 360,
+        imageUrl:
+          'https://images.unsplash.com/photo-1547592180-85f173990554?auto=format&fit=crop&w=800&q=80',
+        tip: 'Cook on low heat; sabudana turns completely translucent when fully cooked and tender.',
       },
       {
         stepNumber: 4,
-        title: 'Garnish with Coriander & Lemon',
+        title: 'Finish with Lemon Juice & Fresh Coriander',
         instruction:
-          'Turn off flame, squeeze fresh lemon juice, fold in chopped cilantro, and serve immediately alongside chilled curd.',
+          'Remove lid, squeeze fresh lemon juice all over the hot khichdi, and toss gently with finely chopped fresh coriander leaves. Serve hot with a bowl of sweet spiced dahi.',
         timerSeconds: 60,
+        imageUrl:
+          'https://images.unsplash.com/photo-1540420773420-3366772f4999?auto=format&fit=crop&w=800&q=80',
+        tip: 'A squeeze of fresh lemon balances the rich roasted peanuts and ghee.',
       },
     ],
     reviews: [

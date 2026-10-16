@@ -413,13 +413,7 @@ export const FamilyManagementView: React.FC<FamilyManagementViewProps> = ({ onCl
             <View style={styles.roleBadgeRow}>
               <Badge
                 label={
-                  isOwner
-                    ? '👑 Owner'
-                    : isCoOwner
-                      ? '⭐ Co-Owner'
-                      : isDependent
-                        ? '👶 Dependent'
-                        : 'Member'
+                  isOwner ? 'Owner' : isCoOwner ? 'Co-Owner' : isDependent ? 'Dependent' : 'Member'
                 }
                 variant={isOwner ? 'primary' : isCoOwner ? 'accent' : 'neutral'}
                 style={styles.badge}

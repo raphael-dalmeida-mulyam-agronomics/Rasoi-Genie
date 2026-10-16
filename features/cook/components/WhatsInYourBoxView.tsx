@@ -13,6 +13,31 @@ export const WhatsInYourBoxView: React.FC<WhatsInYourBoxViewProps> = ({ kit }) =
   const { colors, radii, shadows, isDark } = useTheme();
   const [expanded, setExpanded] = useState(false);
 
+  const [checkedIngredients, setCheckedIngredients] = useState<Set<number>>(new Set());
+
+  const toggleIngredientCheck = (idx: number) => {
+    setCheckedIngredients((prev) => {
+      const next = new Set(prev);
+      if (next.has(idx)) {
+        next.delete(idx);
+      } else {
+        next.add(idx);
+      }
+      return next;
+    });
+  };
+
+  const totalIngredients = kit.ingredients?.length || 0;
+  const isAllChecked = totalIngredients > 0 && checkedIngredients.size === totalIngredients;
+
+  const handleToggleAll = () => {
+    if (isAllChecked) {
+      setCheckedIngredients(new Set());
+    } else {
+      setCheckedIngredients(new Set(Array.from({ length: totalIngredients }, (_, i) => i)));
+    }
+  };
+
   const allergensText =
     kit.allergens && kit.allergens.length > 0 ? kit.allergens.join(', ') : 'None reported';
 
@@ -39,9 +64,17 @@ export const WhatsInYourBoxView: React.FC<WhatsInYourBoxViewProps> = ({ kit }) =
         <View style={styles.headerTitleRow}>
           <Icon name="basket" size={18} color={colors.primary} />
           <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>
-            What's in your box
+            What's in your box (Mise en Place)
           </Text>
-          <Badge label={`${kit.ingredients?.length || 0} items`} variant="neutral" size="sm" />
+          <Badge
+            label={
+              checkedIngredients.size > 0
+                ? `${checkedIngredients.size}/${totalIngredients} Ready`
+                : `${totalIngredients} items`
+            }
+            variant={isAllChecked ? 'success' : 'neutral'}
+            size="sm"
+          />
         </View>
         <Icon
           name={expanded ? 'chevron-up' : 'chevron-down'}
@@ -147,61 +180,97 @@ export const WhatsInYourBoxView: React.FC<WhatsInYourBoxViewProps> = ({ kit }) =
             </View>
           )}
 
-          {/* Ingredients list reusing RecipeCardFrontView distinct masala sachets styling */}
-          <Text style={[styles.sectionSubtitle, { color: colors.textSecondary }]}>
-            Pre-portioned Ingredients & Spice Sachets
-          </Text>
+          {/* Interactive Mise en Place Checklist */}
+          <View
+            style={{
+              flexDirection: 'row',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              marginBottom: 8,
+            }}
+          >
+            <Text
+              style={[styles.sectionSubtitle, { color: colors.textSecondary, marginBottom: 0 }]}
+            >
+              Pre-portioned Ingredients & Masalas
+            </Text>
+            <TouchableOpacity
+              onPress={handleToggleAll}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Text style={{ fontSize: 12, fontWeight: '700', color: colors.primary }}>
+                {isAllChecked ? 'Uncheck All' : 'Check All'}
+              </Text>
+            </TouchableOpacity>
+          </View>
 
           <View style={styles.ingredientsGrid}>
-            {(kit.ingredients || []).map((ing, idx) => (
-              <View
-                key={idx}
-                style={[
-                  styles.ingItemRow,
-                  {
-                    backgroundColor: ing.isMasalaSachet
-                      ? isDark
-                        ? '#451A03'
-                        : '#FFF7ED'
-                      : isDark
-                        ? '#1E293B'
-                        : colors.bgSubtle,
-                    borderColor: ing.isMasalaSachet
-                      ? isDark
-                        ? '#B45309'
-                        : '#FED7AA'
-                      : colors.borderLight,
-                    borderRadius: radii.sm,
-                  },
-                ]}
-              >
-                <Text
-                  style={{
-                    fontSize: 12,
-                    marginRight: 6,
-                    color: ing.isMasalaSachet ? '#F59E0B' : colors.textMuted,
-                  }}
+            {(kit.ingredients || []).map((ing, idx) => {
+              const isChecked = checkedIngredients.has(idx);
+              return (
+                <TouchableOpacity
+                  key={idx}
+                  onPress={() => toggleIngredientCheck(idx)}
+                  activeOpacity={0.7}
+                  accessibilityRole="checkbox"
+                  accessibilityState={{ checked: isChecked }}
+                  accessibilityLabel={`${ing.name}, ${ing.quantity}. ${isChecked ? 'Checked' : 'Unchecked'}`}
+                  style={[
+                    styles.ingItemRow,
+                    {
+                      backgroundColor: isChecked
+                        ? colors.bgSuccessSubtle
+                        : ing.isMasalaSachet
+                          ? isDark
+                            ? '#451A03'
+                            : '#FFF7ED'
+                          : isDark
+                            ? '#1E293B'
+                            : colors.bgSubtle,
+                      borderColor: isChecked
+                        ? colors.borderSuccessSubtle
+                        : ing.isMasalaSachet
+                          ? isDark
+                            ? '#B45309'
+                            : '#FED7AA'
+                          : colors.borderLight,
+                      borderRadius: radii.sm,
+                    },
+                  ]}
                 >
-                  {ing.isMasalaSachet ? '✦' : '•'}
-                </Text>
-                <View style={{ flex: 1 }}>
-                  <Text
-                    style={[
-                      styles.ingName,
-                      {
-                        color: ing.isMasalaSachet ? colors.primary : colors.textPrimary,
-                        fontWeight: ing.isMasalaSachet ? '700' : '500',
-                      },
-                    ]}
-                    numberOfLines={1}
-                  >
-                    {ing.name}
-                    {ing.isMasalaSachet ? ' (Masala Sachet)' : ''}
+                  <View style={{ marginRight: 8 }}>
+                    <Icon
+                      name={isChecked ? 'checkmark-circle' : 'ellipse-outline'}
+                      size={16}
+                      color={isChecked ? colors.textSuccess : colors.textMuted}
+                    />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text
+                      style={[
+                        styles.ingName,
+                        {
+                          color: isChecked
+                            ? colors.textSecondary
+                            : ing.isMasalaSachet
+                              ? colors.primary
+                              : colors.textPrimary,
+                          fontWeight: ing.isMasalaSachet ? '700' : '500',
+                          textDecorationLine: isChecked ? 'line-through' : 'none',
+                        },
+                      ]}
+                      numberOfLines={1}
+                    >
+                      {ing.name}
+                      {ing.isMasalaSachet ? ' (Masala Sachet)' : ''}
+                    </Text>
+                  </View>
+                  <Text style={[styles.ingQty, { color: colors.textSecondary }]}>
+                    {ing.quantity}
                   </Text>
-                </View>
-                <Text style={[styles.ingQty, { color: colors.textSecondary }]}>{ing.quantity}</Text>
-              </View>
-            ))}
+                </TouchableOpacity>
+              );
+            })}
           </View>
         </View>
       )}

@@ -17,6 +17,7 @@ import { useWallet } from '../../framework/context/WalletContext';
 import { Icon } from '../../framework/ui/Icon';
 import { Badge } from '../../framework/ui/Badge';
 import { Button } from '../../framework/ui/Button';
+import { EmptyState } from '../../framework/ui/EmptyState';
 import {
   getCustomerReferralStats,
   getCustomerReferralsList,
@@ -449,14 +450,14 @@ export const ReferralView: React.FC<ReferralViewProps> = ({ onBack, onNavigateTo
         </View>
 
         {/* Recent Referrals List */}
-        {referralsList.length > 0 && (
-          <View style={styles.activitySection}>
-            <View style={styles.sectionHeader}>
-              <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
-                Recent Referrals
-              </Text>
-            </View>
+        <View style={styles.activitySection}>
+          <View style={styles.sectionHeader}>
+            <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
+              Recent Referrals
+            </Text>
+          </View>
 
+          {referralsList.length > 0 ? (
             <View style={styles.referralsList}>
               {referralsList.map((ref) => {
                 const isRewarded = ref.status === 'REWARDED';
@@ -500,8 +501,16 @@ export const ReferralView: React.FC<ReferralViewProps> = ({ onBack, onNavigateTo
                 );
               })}
             </View>
-          </View>
-        )}
+          ) : (
+            <EmptyState
+              icon="gift-outline"
+              title="No Referrals Yet"
+              description="Share your unique referral code with fellow food lovers to start earning wallet credits!"
+              actionTitle="Share Invite Code"
+              onAction={handleShareNative}
+            />
+          )}
+        </View>
       </ScrollView>
     </View>
   );

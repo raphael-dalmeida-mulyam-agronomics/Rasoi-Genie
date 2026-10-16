@@ -4035,7 +4035,7 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
                   </View>
 
                   <Text style={[styles.userStats, { color: colors.textSecondary, marginTop: 8 }]}>
-                    📞 {u.phone} • ✉️ {u.email} • 📍 {u.city} • 📅 Joined {u.joinedDate}
+                    Phone: {u.phone} • Email: {u.email} • City: {u.city} • Joined {u.joinedDate}
                   </Text>
 
                   <Text style={[styles.userStats, { color: colors.textMuted, marginTop: 2 }]}>
@@ -5081,7 +5081,7 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
                     color: refundMethod === 'WALLET' ? colors.primary : colors.textPrimary,
                   }}
                 >
-                  ⚡ Rasoi Wallet Credits
+                  Rasoi Wallet Credits
                 </Text>
                 <Text style={{ fontSize: 10, color: colors.textSecondary, marginTop: 2 }}>
                   Instant • Never Expires
@@ -5115,7 +5115,7 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
                       refundMethod === 'ORIGINAL_PAYMENT' ? colors.primary : colors.textPrimary,
                   }}
                 >
-                  💳 Original Payment
+                  Original Payment
                 </Text>
                 <Text style={{ fontSize: 10, color: colors.textSecondary, marginTop: 2 }}>
                   Gateway (5-7 days)

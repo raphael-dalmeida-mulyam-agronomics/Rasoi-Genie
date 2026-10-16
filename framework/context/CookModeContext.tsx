@@ -22,7 +22,7 @@ import {
   notifyTimerFinishedInForeground,
 } from '../services/cookingNotificationService';
 
-export type CookTextSize = 'standard' | 'large';
+export type CookTextSize = 'standard' | 'large' | 'counter';
 
 export interface CookingTimerState {
   stepNumber: number;
@@ -334,9 +334,10 @@ export const CookModeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     [dismissedOrderIds, progressMap],
   );
 
-  // Text size toggle
+  // Text size toggle across 3 states: standard -> large -> counter distance
   const toggleTextSize = useCallback(async () => {
-    const nextSize: CookTextSize = textSize === 'standard' ? 'large' : 'standard';
+    const nextSize: CookTextSize =
+      textSize === 'standard' ? 'large' : textSize === 'large' ? 'counter' : 'standard';
     setTextSize(nextSize);
     try {
       await AsyncStorage.setItem(STORAGE_KEYS.TEXT_SIZE, nextSize);

@@ -125,7 +125,7 @@ export const AdminFamilyManagementView: React.FC = () => {
                 {f.name}
               </Text>
               <Text style={[styles.familyMeta, { color: colors.textSecondary }]}>
-                {f.is_locked ? '🔒 Locked' : 'Active'}
+                {f.is_locked ? 'Locked' : 'Active'}
               </Text>
             </TouchableOpacity>
           );

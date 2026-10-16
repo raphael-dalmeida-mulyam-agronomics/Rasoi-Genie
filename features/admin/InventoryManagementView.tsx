@@ -2,31 +2,29 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-    Alert,
-    Modal,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View
+  Alert,
+  Modal,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import { useAuth } from '../../framework/context/AuthContext';
 import {
-    addInventoryItem,
-    calculateShelfLifeStatus,
-    deleteInventoryItem,
-    getInventoryItems,
-    InventoryItem,
-    InventorySection,
-    restockInventoryItem,
-    ShelfLifeStatus,
-    subscribeToInventory,
-    updateInventoryItem
+  addInventoryItem,
+  calculateShelfLifeStatus,
+  deleteInventoryItem,
+  getInventoryItems,
+  InventoryItem,
+  InventorySection,
+  restockInventoryItem,
+  ShelfLifeStatus,
+  subscribeToInventory,
+  updateInventoryItem,
 } from '../../framework/services/inventoryService';
-import {
-    notifyRegionalAdminsOutOfStock
-} from '../../framework/services/notificationService';
+import { notifyRegionalAdminsOutOfStock } from '../../framework/services/notificationService';
 import { seedInventoryFromMealKits } from '../../framework/services/seedInventoryFromMealKits';
 import { useTheme } from '../../framework/theme/ThemeContext';
 import { Badge, BadgeVariant } from '../../framework/ui/Badge';
@@ -58,8 +56,12 @@ export const InventoryManagementView: React.FC = () => {
   const { colors, radii, shadows } = useTheme();
 
   const [items, setItems] = useState<InventoryItem[]>(getInventoryItems());
-  const [filter, setFilter] = useState<'all' | 'raw_ingredients' | 'packaging' | 'seasonings'>('all');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'fresh' | 'expiring_soon' | 'expired'>('all');
+  const [filter, setFilter] = useState<'all' | 'raw_ingredients' | 'packaging' | 'seasonings'>(
+    'all',
+  );
+  const [statusFilter, setStatusFilter] = useState<'all' | 'fresh' | 'expiring_soon' | 'expired'>(
+    'all',
+  );
   const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>('all');
   // Debounced search to reduce lag
   const [searchQuery, setSearchQuery] = useState('');
@@ -107,9 +109,15 @@ export const InventoryManagementView: React.FC = () => {
       console.log('[Inventory] Seeded meal-kit ingredients:', added);
       // Refresh items after seed writes to store
       setItems(getInventoryItems());
-    } catch (e) { console.error('[Inventory] Seed error:', e); }
-    const unsub = subscribeToInventory(() => { setItems(getInventoryItems()); });
-    return () => { unsub(); };
+    } catch (e) {
+      console.error('[Inventory] Seed error:', e);
+    }
+    const unsub = subscribeToInventory(() => {
+      setItems(getInventoryItems());
+    });
+    return () => {
+      unsub();
+    };
   }, [getInventoryItems]);
 
   const filteredItems = useMemo(() => {
@@ -120,7 +128,7 @@ export const InventoryManagementView: React.FC = () => {
       // Regional admin sees only their region's inventory
       if (!isSuper && adminRegions.length > 0 && item.region) {
         const regionMatch = adminRegions.some(
-          (r) => r.toString().toLowerCase() === item.region!.toLowerCase()
+          (r) => r.toString().toLowerCase() === item.region!.toLowerCase(),
         );
         if (!regionMatch) return false;
       }
@@ -128,27 +136,59 @@ export const InventoryManagementView: React.FC = () => {
         const inferSection = (name: string): string => {
           const n = name.toLowerCase();
           if (
-            n.includes('sachet') || n.includes('masala') || n.includes('spice') ||
-            n.includes('powder') || n.includes('blend') || n.includes('dust') ||
-            n.includes('tadka') || n.includes('seasoning') || n.includes('tempering') ||
-            n.includes('premix') || n.includes('turmeric') || n.includes('cumin') ||
-            n.includes('saffron') || n.includes('cardamom') || n.includes('clove') ||
-            n.includes('nutmeg') || n.includes('cinnamon') || n.includes('bayleaf') ||
-            n.includes('bay leaf') || n.includes('curry leaves') || n.includes('curry leaf') ||
-            n.includes('fresh coriander') || n.includes('fresh cilantro') ||
-            n.includes('fresh mint') || n.includes('fresh basil') ||
-            n.includes('fresh thyme') || n.includes('fresh oregano') ||
-            n.includes('fresh chilli') || n.includes('fresh chili') ||
-            n.includes('green chilli') || n.includes('green chili') ||
-            n.includes('kasuri methi') || n.includes('methi')
-          ) return 'seasonings';
+            n.includes('sachet') ||
+            n.includes('masala') ||
+            n.includes('spice') ||
+            n.includes('powder') ||
+            n.includes('blend') ||
+            n.includes('dust') ||
+            n.includes('tadka') ||
+            n.includes('seasoning') ||
+            n.includes('tempering') ||
+            n.includes('premix') ||
+            n.includes('turmeric') ||
+            n.includes('cumin') ||
+            n.includes('saffron') ||
+            n.includes('cardamom') ||
+            n.includes('clove') ||
+            n.includes('nutmeg') ||
+            n.includes('cinnamon') ||
+            n.includes('bayleaf') ||
+            n.includes('bay leaf') ||
+            n.includes('curry leaves') ||
+            n.includes('curry leaf') ||
+            n.includes('fresh coriander') ||
+            n.includes('fresh cilantro') ||
+            n.includes('fresh mint') ||
+            n.includes('fresh basil') ||
+            n.includes('fresh thyme') ||
+            n.includes('fresh oregano') ||
+            n.includes('fresh chilli') ||
+            n.includes('fresh chili') ||
+            n.includes('green chilli') ||
+            n.includes('green chili') ||
+            n.includes('kasuri methi') ||
+            n.includes('methi')
+          )
+            return 'seasonings';
           if (
-            n.includes('paper cup') || n.includes('foil tray') || n.includes('foil container') ||
-            n.includes('cling wrap') || n.includes('cling film') || n.includes('parchment') ||
-            n.includes('meal kit box') || n.includes('insulated box') || n.includes('delivery box') ||
-            n.includes('zip-lock') || n.includes('ziplock') || n.includes('heat-seal') ||
-            n.includes('tamper seal') || n.includes('sticker label') || n.includes('food tray')
-          ) return 'packaging';
+            n.includes('paper cup') ||
+            n.includes('foil tray') ||
+            n.includes('foil container') ||
+            n.includes('cling wrap') ||
+            n.includes('cling film') ||
+            n.includes('parchment') ||
+            n.includes('meal kit box') ||
+            n.includes('insulated box') ||
+            n.includes('delivery box') ||
+            n.includes('zip-lock') ||
+            n.includes('ziplock') ||
+            n.includes('heat-seal') ||
+            n.includes('tamper seal') ||
+            n.includes('sticker label') ||
+            n.includes('food tray')
+          )
+            return 'packaging';
           return 'raw_ingredients';
         };
         const s = item.section || inferSection(item.name);
@@ -170,7 +210,7 @@ export const InventoryManagementView: React.FC = () => {
         const terms = q.split(/\s+/).filter(Boolean);
         if (terms.length > 1) {
           const allMatch = terms.every(
-            (term) => rawName.includes(term) || cleanName.includes(term)
+            (term) => rawName.includes(term) || cleanName.includes(term),
           );
           if (allMatch) return true;
         }
@@ -192,7 +232,9 @@ export const InventoryManagementView: React.FC = () => {
     const total = items.length;
     const lowStock = items.filter((i) => i.currentStock <= i.thresholdLow).length;
     const outOfStock = items.filter((i) => i.currentStock === 0).length;
-    const expiring = items.filter((i) => calculateShelfLifeStatus(i).status === 'expiring_soon').length;
+    const expiring = items.filter(
+      (i) => calculateShelfLifeStatus(i).status === 'expiring_soon',
+    ).length;
     const expired = items.filter((i) => calculateShelfLifeStatus(i).status === 'expired').length;
     return { total, lowStock, outOfStock, expiring, expired };
   }, [items]);
@@ -201,27 +243,59 @@ export const InventoryManagementView: React.FC = () => {
     const inferSection = (name: string): string => {
       const n = name.toLowerCase();
       if (
-        n.includes('sachet') || n.includes('masala') || n.includes('spice') ||
-        n.includes('powder') || n.includes('blend') || n.includes('dust') ||
-        n.includes('tadka') || n.includes('seasoning') || n.includes('tempering') ||
-        n.includes('premix') || n.includes('turmeric') || n.includes('cumin') ||
-        n.includes('saffron') || n.includes('cardamom') || n.includes('clove') ||
-        n.includes('nutmeg') || n.includes('cinnamon') || n.includes('bayleaf') ||
-        n.includes('bay leaf') || n.includes('curry leaves') || n.includes('curry leaf') ||
-        n.includes('fresh coriander') || n.includes('fresh cilantro') ||
-        n.includes('fresh mint') || n.includes('fresh basil') ||
-        n.includes('fresh thyme') || n.includes('fresh oregano') ||
-        n.includes('fresh chilli') || n.includes('fresh chili') ||
-        n.includes('green chilli') || n.includes('green chili') ||
-        n.includes('kasuri methi') || n.includes('methi')
-      ) return 'seasonings';
+        n.includes('sachet') ||
+        n.includes('masala') ||
+        n.includes('spice') ||
+        n.includes('powder') ||
+        n.includes('blend') ||
+        n.includes('dust') ||
+        n.includes('tadka') ||
+        n.includes('seasoning') ||
+        n.includes('tempering') ||
+        n.includes('premix') ||
+        n.includes('turmeric') ||
+        n.includes('cumin') ||
+        n.includes('saffron') ||
+        n.includes('cardamom') ||
+        n.includes('clove') ||
+        n.includes('nutmeg') ||
+        n.includes('cinnamon') ||
+        n.includes('bayleaf') ||
+        n.includes('bay leaf') ||
+        n.includes('curry leaves') ||
+        n.includes('curry leaf') ||
+        n.includes('fresh coriander') ||
+        n.includes('fresh cilantro') ||
+        n.includes('fresh mint') ||
+        n.includes('fresh basil') ||
+        n.includes('fresh thyme') ||
+        n.includes('fresh oregano') ||
+        n.includes('fresh chilli') ||
+        n.includes('fresh chili') ||
+        n.includes('green chilli') ||
+        n.includes('green chili') ||
+        n.includes('kasuri methi') ||
+        n.includes('methi')
+      )
+        return 'seasonings';
       if (
-        n.includes('paper cup') || n.includes('foil tray') || n.includes('foil container') ||
-        n.includes('cling wrap') || n.includes('cling film') || n.includes('parchment') ||
-        n.includes('meal kit box') || n.includes('insulated box') || n.includes('delivery box') ||
-        n.includes('zip-lock') || n.includes('ziplock') || n.includes('heat-seal') ||
-        n.includes('tamper seal') || n.includes('sticker label') || n.includes('food tray')
-      ) return 'packaging';
+        n.includes('paper cup') ||
+        n.includes('foil tray') ||
+        n.includes('foil container') ||
+        n.includes('cling wrap') ||
+        n.includes('cling film') ||
+        n.includes('parchment') ||
+        n.includes('meal kit box') ||
+        n.includes('insulated box') ||
+        n.includes('delivery box') ||
+        n.includes('zip-lock') ||
+        n.includes('ziplock') ||
+        n.includes('heat-seal') ||
+        n.includes('tamper seal') ||
+        n.includes('sticker label') ||
+        n.includes('food tray')
+      )
+        return 'packaging';
       return 'raw_ingredients';
     };
 
@@ -232,9 +306,24 @@ export const InventoryManagementView: React.FC = () => {
 
     return [
       { key: 'all' as const, label: 'All Items', icon: 'cube' as AppIconName, count: items.length },
-      { key: 'raw_ingredients' as const, label: 'Raw Ingredients', icon: 'basket' as AppIconName, count: rawCount },
-      { key: 'packaging' as const, label: 'Packaging', icon: 'package' as AppIconName, count: packCount },
-      { key: 'seasonings' as const, label: 'Seasonings & Herbs', icon: 'sparkles' as AppIconName, count: seasonCount },
+      {
+        key: 'raw_ingredients' as const,
+        label: 'Raw Ingredients',
+        icon: 'basket' as AppIconName,
+        count: rawCount,
+      },
+      {
+        key: 'packaging' as const,
+        label: 'Packaging',
+        icon: 'package' as AppIconName,
+        count: packCount,
+      },
+      {
+        key: 'seasonings' as const,
+        label: 'Seasonings & Herbs',
+        icon: 'sparkles' as AppIconName,
+        count: seasonCount,
+      },
     ];
   }, [items]);
 
@@ -246,8 +335,34 @@ export const InventoryManagementView: React.FC = () => {
       if (filter === 'all') return true;
       const inferSection = (name: string): string => {
         const n = name.toLowerCase();
-        if (n.includes('sachet') || n.includes('masala') || n.includes('spice') || n.includes('powder') || n.includes('blend') || n.includes('seasoning') || n.includes('turmeric') || n.includes('cumin') || n.includes('cardamom') || n.includes('cinnamon') || n.includes('bay leaf') || n.includes('curry leaf') || n.includes('kasuri') || n.includes('methi')) return 'seasonings';
-        if (n.includes('paper cup') || n.includes('foil tray') || n.includes('cling wrap') || n.includes('meal kit box') || n.includes('zip-lock') || n.includes('ziplock') || n.includes('food tray') || n.includes('sticker label')) return 'packaging';
+        if (
+          n.includes('sachet') ||
+          n.includes('masala') ||
+          n.includes('spice') ||
+          n.includes('powder') ||
+          n.includes('blend') ||
+          n.includes('seasoning') ||
+          n.includes('turmeric') ||
+          n.includes('cumin') ||
+          n.includes('cardamom') ||
+          n.includes('cinnamon') ||
+          n.includes('bay leaf') ||
+          n.includes('curry leaf') ||
+          n.includes('kasuri') ||
+          n.includes('methi')
+        )
+          return 'seasonings';
+        if (
+          n.includes('paper cup') ||
+          n.includes('foil tray') ||
+          n.includes('cling wrap') ||
+          n.includes('meal kit box') ||
+          n.includes('zip-lock') ||
+          n.includes('ziplock') ||
+          n.includes('food tray') ||
+          n.includes('sticker label')
+        )
+          return 'packaging';
         return 'raw_ingredients';
       };
       return (item.section || inferSection(item.name)) === filter;
@@ -417,7 +532,10 @@ export const InventoryManagementView: React.FC = () => {
             return (
               <TouchableOpacity
                 key={t.key}
-                onPress={() => { setFilter(t.key); setCategoryFilter('all'); }}
+                onPress={() => {
+                  setFilter(t.key);
+                  setCategoryFilter('all');
+                }}
                 activeOpacity={0.7}
                 accessibilityRole="tab"
                 accessibilityState={{ selected: isSelected }}
@@ -451,9 +569,7 @@ export const InventoryManagementView: React.FC = () => {
                   style={[
                     styles.tabBadge,
                     {
-                      backgroundColor: isSelected
-                        ? 'rgba(255, 255, 255, 0.25)'
-                        : colors.bgSubtle,
+                      backgroundColor: isSelected ? 'rgba(255, 255, 255, 0.25)' : colors.bgSubtle,
                     },
                   ]}
                 >
@@ -488,7 +604,9 @@ export const InventoryManagementView: React.FC = () => {
         ]}
       >
         <Icon name="filter" size={16} color={colors.textMuted} />
-        <Text style={{ fontSize: 13, fontWeight: '700', color: colors.textSecondary, marginLeft: 8 }}>
+        <Text
+          style={{ fontSize: 13, fontWeight: '700', color: colors.textSecondary, marginLeft: 8 }}
+        >
           Status:
         </Text>
         <TouchableOpacity
@@ -496,17 +614,57 @@ export const InventoryManagementView: React.FC = () => {
           style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginLeft: 'auto' }}
         >
           <Text style={{ fontSize: 13, fontWeight: '700', color: colors.textPrimary }}>
-            {statusFilter === 'all' ? 'All Status' : statusFilter === 'fresh' ? 'Fresh' : statusFilter === 'expiring_soon' ? 'Expiring Soon' : 'Expired'}
+            {statusFilter === 'all'
+              ? 'All Status'
+              : statusFilter === 'fresh'
+                ? 'Fresh'
+                : statusFilter === 'expiring_soon'
+                  ? 'Expiring Soon'
+                  : 'Expired'}
           </Text>
-          <Icon name={statusDropdownOpen ? 'chevron-up' : 'chevron-down'} size={14} color={colors.textMuted} />
+          <Icon
+            name={statusDropdownOpen ? 'chevron-up' : 'chevron-down'}
+            size={14}
+            color={colors.textMuted}
+          />
         </TouchableOpacity>
       </View>
       {statusDropdownOpen && (
-        <View style={[styles.dropdownMenu, { backgroundColor: colors.bgSurface, borderColor: colors.borderLight, borderRadius: radii.md, marginBottom: 10 }, shadows.medium]}>
+        <View
+          style={[
+            styles.dropdownMenu,
+            {
+              backgroundColor: colors.bgSurface,
+              borderColor: colors.borderLight,
+              borderRadius: radii.md,
+              marginBottom: 10,
+            },
+            shadows.medium,
+          ]}
+        >
           {(['all', 'fresh', 'expiring_soon', 'expired'] as const).map((f) => (
-            <TouchableOpacity key={f} onPress={() => { setStatusFilter(f); setStatusDropdownOpen(false); }} style={{ padding: 10, borderBottomWidth: 1, borderBottomColor: colors.borderLight }}>
-              <Text style={{ fontSize: 13, color: colors.textPrimary, fontWeight: statusFilter === f ? '800' : '400' }}>
-                {f === 'all' ? 'All Status' : f === 'fresh' ? 'Fresh' : f === 'expiring_soon' ? 'Expiring Soon' : 'Expired'}
+            <TouchableOpacity
+              key={f}
+              onPress={() => {
+                setStatusFilter(f);
+                setStatusDropdownOpen(false);
+              }}
+              style={{ padding: 10, borderBottomWidth: 1, borderBottomColor: colors.borderLight }}
+            >
+              <Text
+                style={{
+                  fontSize: 13,
+                  color: colors.textPrimary,
+                  fontWeight: statusFilter === f ? '800' : '400',
+                }}
+              >
+                {f === 'all'
+                  ? 'All Status'
+                  : f === 'fresh'
+                    ? 'Fresh'
+                    : f === 'expiring_soon'
+                      ? 'Expiring Soon'
+                      : 'Expired'}
               </Text>
             </TouchableOpacity>
           ))}
@@ -549,9 +707,7 @@ export const InventoryManagementView: React.FC = () => {
         onChange={setCategoryFilter}
         counts={categoryCounts}
         totalCount={
-          filter === 'all'
-            ? items.length
-            : Object.values(categoryCounts).reduce((a, b) => a + b, 0)
+          filter === 'all' ? items.length : Object.values(categoryCounts).reduce((a, b) => a + b, 0)
         }
       />
 
@@ -575,26 +731,27 @@ export const InventoryManagementView: React.FC = () => {
                 <View style={styles.itemCardHeader}>
                   <View style={{ flex: 1 }}>
                     <Text style={[styles.itemName, { color: colors.textPrimary }]}>
-                      {item.name?.replace(/Sachet \d+:\s*/gi, '').replace(/Sachet \d+\s*:?\s*/gi, '')}
+                      {item.name
+                        ?.replace(/Sachet \d+:\s*/gi, '')
+                        .replace(/Sachet \d+\s*:?\s*/gi, '')}
                     </Text>
                     <View style={{ flexDirection: 'row', gap: 6, marginTop: 4 }}>
-                      <Badge
-                        label={CATEGORY_LABELS[item.section]}
-                        variant="neutral"
-                        size="sm"
-                      />
+                      <Badge label={CATEGORY_LABELS[item.section]} variant="neutral" size="sm" />
                       <Badge
                         label={getShelfLifeLabel(shelfStatus)}
                         variant={getShelfLifeBadgeVariant(shelfStatus)}
                         size="sm"
                       />
                       {out && <Badge label="OUT OF STOCK" variant="danger" size="sm" />}
-                      {low && !out && (
-                        <Badge label="LOW STOCK" variant="warning" size="sm" />
-                      )}
+                      {low && !out && <Badge label="LOW STOCK" variant="warning" size="sm" />}
                     </View>
                   </View>
-                  <Text style={[styles.itemStock, { color: out ? colors.danger : low ? '#D97706' : colors.primary }]}>
+                  <Text
+                    style={[
+                      styles.itemStock,
+                      { color: out ? colors.danger : low ? '#D97706' : colors.primary },
+                    ]}
+                  >
                     {item.currentStock} {item.unit}
                   </Text>
                 </View>
@@ -603,7 +760,9 @@ export const InventoryManagementView: React.FC = () => {
                 <View style={styles.itemCardBody}>
                   <View style={styles.itemInfoRow}>
                     <View style={styles.itemInfoItem}>
-                      <Text style={[styles.infoLabel, { color: colors.textMuted }]}>Shelf Life</Text>
+                      <Text style={[styles.infoLabel, { color: colors.textMuted }]}>
+                        Shelf Life
+                      </Text>
                       <Text style={[styles.infoVal, { color: colors.textPrimary }]}>
                         {item.shelfLifeDays} days
                       </Text>
@@ -623,17 +782,17 @@ export const InventoryManagementView: React.FC = () => {
                   </View>
                   {item.storageCondition && (
                     <Text style={[styles.itemMeta, { color: colors.textSecondary }]}>
-                      📦 {item.storageCondition}
+                      Storage: {item.storageCondition}
                     </Text>
                   )}
                   {item.supplier && (
                     <Text style={[styles.itemMeta, { color: colors.textSecondary }]}>
-                      🏭 {item.supplier}
+                      Supplier: {item.supplier}
                     </Text>
                   )}
                   {item.notes && (
                     <Text style={[styles.itemMeta, { color: colors.textMuted }]}>
-                      📝 {item.notes}
+                      Notes: {item.notes}
                     </Text>
                   )}
                 </View>
@@ -652,7 +811,9 @@ export const InventoryManagementView: React.FC = () => {
                     onPress={() => openEditModal(item)}
                   >
                     <Icon name="create" size={14} color={colors.textSecondary} />
-                    <Text style={[styles.actionBtnText, { color: colors.textSecondary }]}>Edit</Text>
+                    <Text style={[styles.actionBtnText, { color: colors.textSecondary }]}>
+                      Edit
+                    </Text>
                   </TouchableOpacity>
                   <TouchableOpacity
                     style={[styles.actionBtn, { backgroundColor: '#FEE2E2' }]}
@@ -681,14 +842,23 @@ export const InventoryManagementView: React.FC = () => {
 
             <Text style={[styles.inputLabel, { color: colors.textPrimary }]}>Item Name *</Text>
             <TextInput
-              style={[styles.modalInput, { backgroundColor: colors.bgSubtle, borderColor: colors.border, borderRadius: radii.md }]}
+              style={[
+                styles.modalInput,
+                {
+                  backgroundColor: colors.bgSubtle,
+                  borderColor: colors.border,
+                  borderRadius: radii.md,
+                },
+              ]}
               value={newItem.name}
               onChangeText={(t) => setNewItem({ ...newItem, name: t })}
               placeholder="e.g. Chicken Breast"
               placeholderTextColor={colors.textMuted}
             />
 
-            <Text style={[styles.inputLabel, { color: colors.textPrimary, marginTop: 10 }]}>Category *</Text>
+            <Text style={[styles.inputLabel, { color: colors.textPrimary, marginTop: 10 }]}>
+              Category *
+            </Text>
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 4 }}>
               {(Object.keys(CATEGORY_LABELS) as InventorySection[]).map((cat) => (
                 <TouchableOpacity
@@ -702,7 +872,13 @@ export const InventoryManagementView: React.FC = () => {
                     },
                   ]}
                 >
-                  <Text style={{ color: newItem.section === cat ? '#fff' : colors.textPrimary, fontWeight: '700', fontSize: 11 }}>
+                  <Text
+                    style={{
+                      color: newItem.section === cat ? '#fff' : colors.textPrimary,
+                      fontWeight: '700',
+                      fontSize: 11,
+                    }}
+                  >
                     {CATEGORY_LABELS[cat]}
                   </Text>
                 </TouchableOpacity>
@@ -711,18 +887,36 @@ export const InventoryManagementView: React.FC = () => {
 
             <View style={styles.row2}>
               <View style={{ flex: 1 }}>
-                <Text style={[styles.inputLabel, { color: colors.textPrimary, marginTop: 10 }]}>Current Stock *</Text>
+                <Text style={[styles.inputLabel, { color: colors.textPrimary, marginTop: 10 }]}>
+                  Current Stock *
+                </Text>
                 <TextInput
-                  style={[styles.modalInput, { backgroundColor: colors.bgSubtle, borderColor: colors.border, borderRadius: radii.md }]}
+                  style={[
+                    styles.modalInput,
+                    {
+                      backgroundColor: colors.bgSubtle,
+                      borderColor: colors.border,
+                      borderRadius: radii.md,
+                    },
+                  ]}
                   value={String(newItem.currentStock)}
                   onChangeText={(t) => setNewItem({ ...newItem, currentStock: parseInt(t) || 0 })}
                   keyboardType="numeric"
                 />
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={[styles.inputLabel, { color: colors.textPrimary, marginTop: 10 }]}>Unit</Text>
+                <Text style={[styles.inputLabel, { color: colors.textPrimary, marginTop: 10 }]}>
+                  Unit
+                </Text>
                 <TextInput
-                  style={[styles.modalInput, { backgroundColor: colors.bgSubtle, borderColor: colors.border, borderRadius: radii.md }]}
+                  style={[
+                    styles.modalInput,
+                    {
+                      backgroundColor: colors.bgSubtle,
+                      borderColor: colors.border,
+                      borderRadius: radii.md,
+                    },
+                  ]}
                   value={newItem.unit}
                   onChangeText={(t) => setNewItem({ ...newItem, unit: t })}
                 />
@@ -731,18 +925,36 @@ export const InventoryManagementView: React.FC = () => {
 
             <View style={styles.row2}>
               <View style={{ flex: 1 }}>
-                <Text style={[styles.inputLabel, { color: colors.textPrimary, marginTop: 10 }]}>Shelf Life (days) *</Text>
+                <Text style={[styles.inputLabel, { color: colors.textPrimary, marginTop: 10 }]}>
+                  Shelf Life (days) *
+                </Text>
                 <TextInput
-                  style={[styles.modalInput, { backgroundColor: colors.bgSubtle, borderColor: colors.border, borderRadius: radii.md }]}
+                  style={[
+                    styles.modalInput,
+                    {
+                      backgroundColor: colors.bgSubtle,
+                      borderColor: colors.border,
+                      borderRadius: radii.md,
+                    },
+                  ]}
                   value={String(newItem.shelfLifeDays)}
                   onChangeText={(t) => setNewItem({ ...newItem, shelfLifeDays: parseInt(t) || 30 })}
                   keyboardType="numeric"
                 />
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={[styles.inputLabel, { color: colors.textPrimary, marginTop: 10 }]}>Low Threshold</Text>
+                <Text style={[styles.inputLabel, { color: colors.textPrimary, marginTop: 10 }]}>
+                  Low Threshold
+                </Text>
                 <TextInput
-                  style={[styles.modalInput, { backgroundColor: colors.bgSubtle, borderColor: colors.border, borderRadius: radii.md }]}
+                  style={[
+                    styles.modalInput,
+                    {
+                      backgroundColor: colors.bgSubtle,
+                      borderColor: colors.border,
+                      borderRadius: radii.md,
+                    },
+                  ]}
                   value={String(newItem.thresholdLow)}
                   onChangeText={(t) => setNewItem({ ...newItem, thresholdLow: parseInt(t) || 5 })}
                   keyboardType="numeric"
@@ -750,24 +962,47 @@ export const InventoryManagementView: React.FC = () => {
               </View>
             </View>
 
-            <Text style={[styles.inputLabel, { color: colors.textPrimary, marginTop: 10 }]}>Storage Condition</Text>
+            <Text style={[styles.inputLabel, { color: colors.textPrimary, marginTop: 10 }]}>
+              Storage Condition
+            </Text>
             <TextInput
-              style={[styles.modalInput, { backgroundColor: colors.bgSubtle, borderColor: colors.border, borderRadius: radii.md }]}
+              style={[
+                styles.modalInput,
+                {
+                  backgroundColor: colors.bgSubtle,
+                  borderColor: colors.border,
+                  borderRadius: radii.md,
+                },
+              ]}
               value={newItem.storageCondition}
               onChangeText={(t) => setNewItem({ ...newItem, storageCondition: t })}
               placeholder="e.g. Refrigerated at 2-5°C"
             />
 
-            <Text style={[styles.inputLabel, { color: colors.textPrimary, marginTop: 10 }]}>Supplier</Text>
+            <Text style={[styles.inputLabel, { color: colors.textPrimary, marginTop: 10 }]}>
+              Supplier
+            </Text>
             <TextInput
-              style={[styles.modalInput, { backgroundColor: colors.bgSubtle, borderColor: colors.border, borderRadius: radii.md }]}
+              style={[
+                styles.modalInput,
+                {
+                  backgroundColor: colors.bgSubtle,
+                  borderColor: colors.border,
+                  borderRadius: radii.md,
+                },
+              ]}
               value={newItem.supplier}
               onChangeText={(t) => setNewItem({ ...newItem, supplier: t })}
               placeholder="e.g. FreshPoultry Co."
             />
 
             <View style={{ flexDirection: 'row', marginTop: 16, gap: 10 }}>
-              <Button title="Cancel" variant="secondary" style={{ flex: 1 }} onPress={() => setAddModalVisible(false)} />
+              <Button
+                title="Cancel"
+                variant="secondary"
+                style={{ flex: 1 }}
+                onPress={() => setAddModalVisible(false)}
+              />
               <Button title="Add Item" style={{ flex: 1 }} onPress={handleAddItem} />
             </View>
           </View>
@@ -782,42 +1017,102 @@ export const InventoryManagementView: React.FC = () => {
 
             {editingItem && (
               <>
-                <Text style={[styles.inputLabel, { color: colors.textPrimary, marginTop: 10 }]}>Name</Text>
+                <Text style={[styles.inputLabel, { color: colors.textPrimary, marginTop: 10 }]}>
+                  Name
+                </Text>
                 <TextInput
-                  style={[styles.modalInput, { backgroundColor: colors.bgSubtle, borderColor: colors.border, borderRadius: radii.md }]}
+                  style={[
+                    styles.modalInput,
+                    {
+                      backgroundColor: colors.bgSubtle,
+                      borderColor: colors.border,
+                      borderRadius: radii.md,
+                    },
+                  ]}
                   value={editingItem.name}
                   onChangeText={(t) => setEditingItem({ ...editingItem, name: t })}
                 />
-                <Text style={[styles.inputLabel, { color: colors.textPrimary, marginTop: 10 }]}>Current Stock</Text>
+                <Text style={[styles.inputLabel, { color: colors.textPrimary, marginTop: 10 }]}>
+                  Current Stock
+                </Text>
                 <TextInput
-                  style={[styles.modalInput, { backgroundColor: colors.bgSubtle, borderColor: colors.border, borderRadius: radii.md }]}
+                  style={[
+                    styles.modalInput,
+                    {
+                      backgroundColor: colors.bgSubtle,
+                      borderColor: colors.border,
+                      borderRadius: radii.md,
+                    },
+                  ]}
                   value={String(editingItem.currentStock)}
-                  onChangeText={(t) => setEditingItem({ ...editingItem, currentStock: parseInt(t) || 0 })}
+                  onChangeText={(t) =>
+                    setEditingItem({ ...editingItem, currentStock: parseInt(t) || 0 })
+                  }
                   keyboardType="numeric"
                 />
-                <Text style={[styles.inputLabel, { color: colors.textPrimary, marginTop: 10 }]}>Shelf Life (days)</Text>
+                <Text style={[styles.inputLabel, { color: colors.textPrimary, marginTop: 10 }]}>
+                  Shelf Life (days)
+                </Text>
                 <TextInput
-                  style={[styles.modalInput, { backgroundColor: colors.bgSubtle, borderColor: colors.border, borderRadius: radii.md }]}
+                  style={[
+                    styles.modalInput,
+                    {
+                      backgroundColor: colors.bgSubtle,
+                      borderColor: colors.border,
+                      borderRadius: radii.md,
+                    },
+                  ]}
                   value={String(editingItem.shelfLifeDays)}
-                  onChangeText={(t) => setEditingItem({ ...editingItem, shelfLifeDays: parseInt(t) || 30 })}
+                  onChangeText={(t) =>
+                    setEditingItem({ ...editingItem, shelfLifeDays: parseInt(t) || 30 })
+                  }
                   keyboardType="numeric"
                 />
-                <Text style={[styles.inputLabel, { color: colors.textPrimary, marginTop: 10 }]}>Low Threshold</Text>
+                <Text style={[styles.inputLabel, { color: colors.textPrimary, marginTop: 10 }]}>
+                  Low Threshold
+                </Text>
                 <TextInput
-                  style={[styles.modalInput, { backgroundColor: colors.bgSubtle, borderColor: colors.border, borderRadius: radii.md }]}
+                  style={[
+                    styles.modalInput,
+                    {
+                      backgroundColor: colors.bgSubtle,
+                      borderColor: colors.border,
+                      borderRadius: radii.md,
+                    },
+                  ]}
                   value={String(editingItem.thresholdLow)}
-                  onChangeText={(t) => setEditingItem({ ...editingItem, thresholdLow: parseInt(t) || 5 })}
+                  onChangeText={(t) =>
+                    setEditingItem({ ...editingItem, thresholdLow: parseInt(t) || 5 })
+                  }
                   keyboardType="numeric"
                 />
-                <Text style={[styles.inputLabel, { color: colors.textPrimary, marginTop: 10 }]}>Storage Condition</Text>
+                <Text style={[styles.inputLabel, { color: colors.textPrimary, marginTop: 10 }]}>
+                  Storage Condition
+                </Text>
                 <TextInput
-                  style={[styles.modalInput, { backgroundColor: colors.bgSubtle, borderColor: colors.border, borderRadius: radii.md }]}
+                  style={[
+                    styles.modalInput,
+                    {
+                      backgroundColor: colors.bgSubtle,
+                      borderColor: colors.border,
+                      borderRadius: radii.md,
+                    },
+                  ]}
                   value={editingItem.storageCondition}
                   onChangeText={(t) => setEditingItem({ ...editingItem, storageCondition: t })}
                 />
-                <Text style={[styles.inputLabel, { color: colors.textPrimary, marginTop: 10 }]}>Notes</Text>
+                <Text style={[styles.inputLabel, { color: colors.textPrimary, marginTop: 10 }]}>
+                  Notes
+                </Text>
                 <TextInput
-                  style={[styles.modalInput, { backgroundColor: colors.bgSubtle, borderColor: colors.border, borderRadius: radii.md }]}
+                  style={[
+                    styles.modalInput,
+                    {
+                      backgroundColor: colors.bgSubtle,
+                      borderColor: colors.border,
+                      borderRadius: radii.md,
+                    },
+                  ]}
                   value={editingItem.notes}
                   onChangeText={(t) => setEditingItem({ ...editingItem, notes: t })}
                   multiline
@@ -826,7 +1121,15 @@ export const InventoryManagementView: React.FC = () => {
             )}
 
             <View style={{ flexDirection: 'row', marginTop: 16, gap: 10 }}>
-              <Button title="Cancel" variant="secondary" style={{ flex: 1 }} onPress={() => { setEditModalVisible(false); setEditingItem(null); }} />
+              <Button
+                title="Cancel"
+                variant="secondary"
+                style={{ flex: 1 }}
+                onPress={() => {
+                  setEditModalVisible(false);
+                  setEditingItem(null);
+                }}
+              />
               <Button title="Save" style={{ flex: 1 }} onPress={handleUpdateItem} />
             </View>
           </View>
@@ -844,25 +1147,51 @@ export const InventoryManagementView: React.FC = () => {
               Current: {restockingItem?.currentStock} {restockingItem?.unit}
             </Text>
 
-            <Text style={[styles.inputLabel, { color: colors.textPrimary, marginTop: 10 }]}>Quantity to Add *</Text>
+            <Text style={[styles.inputLabel, { color: colors.textPrimary, marginTop: 10 }]}>
+              Quantity to Add *
+            </Text>
             <TextInput
-              style={[styles.modalInput, { backgroundColor: colors.bgSubtle, borderColor: colors.border, borderRadius: radii.md }]}
+              style={[
+                styles.modalInput,
+                {
+                  backgroundColor: colors.bgSubtle,
+                  borderColor: colors.border,
+                  borderRadius: radii.md,
+                },
+              ]}
               value={restockQty}
               onChangeText={setRestockQty}
               keyboardType="numeric"
               placeholder="e.g. 50"
             />
 
-            <Text style={[styles.inputLabel, { color: colors.textPrimary, marginTop: 10 }]}>Batch Note (optional)</Text>
+            <Text style={[styles.inputLabel, { color: colors.textPrimary, marginTop: 10 }]}>
+              Batch Note (optional)
+            </Text>
             <TextInput
-              style={[styles.modalInput, { backgroundColor: colors.bgSubtle, borderColor: colors.border, borderRadius: radii.md }]}
+              style={[
+                styles.modalInput,
+                {
+                  backgroundColor: colors.bgSubtle,
+                  borderColor: colors.border,
+                  borderRadius: radii.md,
+                },
+              ]}
               value={restockNote}
               onChangeText={setRestockNote}
               placeholder="e.g. New shipment from supplier"
             />
 
             <View style={{ flexDirection: 'row', marginTop: 16, gap: 10 }}>
-              <Button title="Cancel" variant="secondary" style={{ flex: 1 }} onPress={() => { setRestockModalVisible(false); setRestockingItem(null); }} />
+              <Button
+                title="Cancel"
+                variant="secondary"
+                style={{ flex: 1 }}
+                onPress={() => {
+                  setRestockModalVisible(false);
+                  setRestockingItem(null);
+                }}
+              />
               <Button title="Confirm Restock" style={{ flex: 1 }} onPress={handleRestock} />
             </View>
           </View>
@@ -878,7 +1207,15 @@ export const InventoryManagementView: React.FC = () => {
               Are you sure you want to remove "{deletingItem?.name}" from inventory?
             </Text>
             <View style={{ flexDirection: 'row', marginTop: 16, gap: 10 }}>
-              <Button title="Cancel" variant="secondary" style={{ flex: 1 }} onPress={() => { setDeleteModalVisible(false); setDeletingItem(null); }} />
+              <Button
+                title="Cancel"
+                variant="secondary"
+                style={{ flex: 1 }}
+                onPress={() => {
+                  setDeleteModalVisible(false);
+                  setDeletingItem(null);
+                }}
+              />
               <Button title="Delete" variant="danger" style={{ flex: 1 }} onPress={handleDelete} />
             </View>
           </View>

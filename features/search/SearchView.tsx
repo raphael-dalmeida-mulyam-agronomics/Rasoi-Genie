@@ -27,6 +27,8 @@ import {
 import { Badge, getDietBadgeInfo } from '../../framework/ui/Badge';
 import { Button } from '../../framework/ui/Button';
 import { AppIconName, Icon } from '../../framework/ui/Icon';
+import { DietMark } from '../../framework/ui/DietMark';
+import { useHeaderTopPadding } from '../../framework/ui/ScreenHeader';
 import { MealDetailModal } from '../meal-detail/MealDetailModal';
 
 const DIET_OPTIONS: { id: 'all' | DietTag; label: string; icon: AppIconName }[] = [
@@ -129,15 +131,38 @@ export const SearchView: React.FC = () => {
     return unsubscribe;
   }, []);
 
+  const TYPO_MAP: Record<string, string> = {
+    panner: 'paneer',
+    paner: 'paneer',
+    briyani: 'biryani',
+    biriyani: 'biryani',
+    daal: 'dal',
+    chiken: 'chicken',
+    tika: 'tikka',
+    masla: 'masala',
+    pulaov: 'pulao',
+    roty: 'roti',
+  };
+
+  const correctedSearchQuery = useMemo(() => {
+    const trimmed = searchQuery.trim().toLowerCase();
+    if (!trimmed) return '';
+    return TYPO_MAP[trimmed] || searchQuery;
+  }, [searchQuery]);
+
+  const isTypoCorrected =
+    searchQuery.trim().length > 0 &&
+    correctedSearchQuery.toLowerCase() !== searchQuery.trim().toLowerCase();
+
   const results = useMemo(() => {
     return searchAndFilterMealKits({
-      searchQuery,
+      searchQuery: correctedSearchQuery,
       diet: dietFilter,
       cuisine: selectedCuisine,
       spiceLevel: selectedSpice,
       sortBy,
     });
-  }, [searchQuery, dietFilter, selectedCuisine, selectedSpice, sortBy, allKits]);
+  }, [correctedSearchQuery, dietFilter, selectedCuisine, selectedSpice, sortBy, allKits]);
 
   const hasActiveFilters =
     dietFilter !== 'all' ||
@@ -381,13 +406,19 @@ export const SearchView: React.FC = () => {
     }
   };
 
+  const headerPaddingTop = useHeaderTopPadding(6);
+
   return (
     <View style={[styles.container, { backgroundColor: colors.bgPrimary }]}>
       {/* Search Header */}
       <View
         style={[
           styles.header,
-          { backgroundColor: colors.bgSurface, borderBottomColor: colors.borderLight },
+          {
+            backgroundColor: colors.bgSurface,
+            borderBottomColor: colors.borderLight,
+            paddingTop: headerPaddingTop,
+          },
         ]}
       >
         {/* Search Input Bar */}
@@ -419,6 +450,8 @@ export const SearchView: React.FC = () => {
               onPress={() => setSearchQuery('')}
               style={styles.clearBtn}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              accessibilityRole="button"
+              accessibilityLabel="Clear search input text"
             >
               <Icon name="close" size={16} color={colors.textMuted} />
             </TouchableOpacity>
@@ -593,11 +626,63 @@ export const SearchView: React.FC = () => {
 
       {/* Main Results Scroll */}
       <ScrollView contentContainerStyle={styles.scrollBody} showsVerticalScrollIndicator={false}>
+        {/* Trending Searches Pills when query is empty */}
+        {!searchQuery.trim() && (
+          <View style={styles.trendingSection}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 10 }}>
+              <Icon name="flame" size={16} color={colors.primary} />
+              <Text style={[styles.trendingTitle, { color: colors.textPrimary }]}>
+                Popular & Trending Searches
+              </Text>
+            </View>
+            <View style={styles.trendingChipsWrap}>
+              {[
+                'Paneer Butter Masala',
+                'Biryani',
+                'Dal Makhani',
+                'Butter Chicken',
+                'Chole Bhature',
+                'Kadhai Paneer',
+              ].map((term) => (
+                <TouchableOpacity
+                  key={term}
+                  style={[
+                    styles.trendingChip,
+                    { backgroundColor: colors.bgSurface, borderColor: colors.borderLight },
+                  ]}
+                  onPress={() => setSearchQuery(term)}
+                >
+                  <Text style={[styles.trendingChipText, { color: colors.textSecondary }]}>
+                    {term}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        )}
+
+        {/* Typo Tolerance Suggestion Notice */}
+        {isTypoCorrected && (
+          <View
+            style={[
+              styles.typoBanner,
+              { backgroundColor: colors.bgInfoSubtle, borderColor: colors.borderInfoSubtle },
+            ]}
+          >
+            <Icon name="information-circle" size={16} color={colors.textInfo} />
+            <Text style={{ fontSize: 13, color: colors.textInfo, flex: 1 }}>
+              Showing results for{' '}
+              <Text style={{ fontWeight: '800' }}>"{correctedSearchQuery}"</Text> instead of "
+              {searchQuery}"
+            </Text>
+          </View>
+        )}
+
         {/* Results Count Header */}
         <View style={styles.resultsHeaderRow}>
           <Text style={[styles.resultsHeader, { color: colors.textSecondary }]}>
             {searchQuery
-              ? `Results for "${searchQuery}" (${results.length})`
+              ? `Results for "${correctedSearchQuery}" (${results.length})`
               : `All Meal Kits (${results.length})`}
           </Text>
           {hasActiveFilters && (
@@ -661,7 +746,12 @@ export const SearchView: React.FC = () => {
                   <View style={styles.resultTopRow}>
                     {(() => {
                       const badge = getDietBadgeInfo(kit.diet);
-                      return <Badge label={badge.label} variant={badge.variant} size="sm" />;
+                      return (
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                          <DietMark diet={kit.diet} size={15} />
+                          <Badge label={badge.label} variant={badge.variant} size="sm" />
+                        </View>
+                      );
                     })()}
                     <TouchableOpacity
                       onPress={() => toggleWishlist(kit.id)}
@@ -786,9 +876,44 @@ const styles = StyleSheet.create({
   },
   header: {
     paddingHorizontal: 16,
-    paddingTop: 45,
+    paddingTop: 12,
     paddingBottom: 12,
     borderBottomWidth: 1,
+  },
+  trendingSection: {
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 6,
+  },
+  trendingTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  trendingChipsWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  trendingChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 20,
+    borderWidth: 1,
+  },
+  trendingChipText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  typoBanner: {
+    marginHorizontal: 16,
+    marginTop: 8,
+    marginBottom: 4,
+    padding: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   searchBar: {
     flexDirection: 'row',

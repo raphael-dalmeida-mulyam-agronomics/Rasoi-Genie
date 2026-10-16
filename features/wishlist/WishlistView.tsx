@@ -1,5 +1,5 @@
-﻿import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, Alert } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity } from 'react-native';
 import { router } from 'expo-router';
 import { useWishlist } from '../../framework/context/WishlistContext';
 import { useCart } from '../../framework/context/CartContext';
@@ -8,12 +8,15 @@ import { getMealKits, MealKit } from '../../framework/services/mealKitsService';
 import { Badge, getDietBadgeInfo } from '../../framework/ui/Badge';
 import { Button } from '../../framework/ui/Button';
 import { Icon } from '../../framework/ui/Icon';
+import { EmptyState } from '../../framework/ui/EmptyState';
+import { useToast } from '../../framework/ui/Toast';
 import { MealDetailModal } from '../meal-detail/MealDetailModal';
 
 export const WishlistView: React.FC = () => {
-  const { wishlistIds, removeFromWishlist } = useWishlist();
-  const { addItem } = useCart();
+  const { wishlistIds, removeFromWishlist, addToWishlist } = useWishlist();
+  const { addItem, removeItem } = useCart();
   const { colors, radii, shadows } = useTheme();
+  const { showToast } = useToast();
 
   const [selectedKit, setSelectedKit] = useState<MealKit | null>(null);
   const [detailModalVisible, setDetailModalVisible] = useState(false);
@@ -24,22 +27,30 @@ export const WishlistView: React.FC = () => {
   const handleMoveToCart = (kit: MealKit) => {
     addItem(kit, 1);
     removeFromWishlist(kit.id);
-    Alert.alert('Moved to Basket', `${kit.name} was moved to your cart.`);
+    showToast({
+      message: `${kit.name} moved to basket!`,
+      type: 'success',
+      actionLabel: 'Undo',
+      onAction: () => {
+        removeItem(kit.id);
+        addToWishlist(kit.id);
+      },
+      secondaryActionLabel: 'View Basket',
+      onSecondaryAction: () => {
+        router.push('/(tabs)/cart' as any);
+      },
+    });
   };
 
   if (savedKits.length === 0) {
     return (
-      <View style={styles.emptyContainer}>
-        <Text style={[styles.emptyTitle, { color: colors.textPrimary }]}>
-          Your Wishlist is Empty
-        </Text>
-        <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>
-          Tap the heart on any meal kit to save it here for upcoming dinners!
-        </Text>
-        <Button
-          title="Browse Indian Meal Kits"
-          style={{ marginTop: 16 }}
-          onPress={() => router.push('/' as any)}
+      <View style={[styles.emptyContainer, { backgroundColor: colors.bgPrimary }]}>
+        <EmptyState
+          icon="heart-outline"
+          title="Your Wishlist is Empty"
+          description="Save delicious regional meal kits to plan your home-cooked dinners for the week."
+          actionTitle="Browse Meal Kits"
+          onAction={() => router.push('/' as any)}
         />
       </View>
     );

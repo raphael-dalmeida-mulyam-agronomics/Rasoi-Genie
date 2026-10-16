@@ -438,12 +438,12 @@ export const DependentProfileSheet: React.FC<DependentProfileSheetProps> = ({
                       <View style={styles.tagPillRow}>
                         <View style={[styles.miniPill, { backgroundColor: colors.bgSubtle }]}>
                           <Text style={[styles.miniPillText, { color: colors.textSecondary }]}>
-                            🌶️ {kit.spiceLevel || 'Mild'}
+                            {kit.spiceLevel || 'Mild'}
                           </Text>
                         </View>
                         <View style={[styles.miniPill, { backgroundColor: colors.bgSubtle }]}>
                           <Text style={[styles.miniPillText, { color: colors.textSecondary }]}>
-                            👥 {kit.servings || 2} Servings
+                            {kit.servings || 2} Servings
                           </Text>
                         </View>
                       </View>

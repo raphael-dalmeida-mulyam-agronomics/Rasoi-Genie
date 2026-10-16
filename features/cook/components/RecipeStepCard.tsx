@@ -27,9 +27,10 @@ export const RecipeStepCard: React.FC<RecipeStepCardProps> = ({
   const { colors, radii, shadows, isDark } = useTheme();
 
   const isLargeText = textSize === 'large';
-  const titleFontSize = isLargeText ? 26 : 19;
-  const instructionFontSize = isLargeText ? 20 : 15;
-  const instructionLineHeight = isLargeText ? 28 : 22;
+  const isCounterText = textSize === 'counter';
+  const titleFontSize = isCounterText ? 32 : isLargeText ? 26 : 19;
+  const instructionFontSize = isCounterText ? 24 : isLargeText ? 20 : 15;
+  const instructionLineHeight = isCounterText ? 34 : isLargeText ? 28 : 22;
 
   const photoUri = step.imageUrl || fallbackHeroImage;
 
