@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import {
   AUTH_STORAGE_KEY,
   getStoredUser,
@@ -21,6 +21,7 @@ import {
   isSuperAdminEmail,
 } from '../services/adminRbacService';
 import { RegionHub } from '../services/mealKitsService';
+import { clearDependentSession } from '../services/familyAuthBridge';
 
 interface AuthContextType {
   user: UserProfile | null;
@@ -117,71 +118,83 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [user?.email, user?.role]);
 
-  // Synchronize chef status for active session (both on mount and on realtime updates)
-  // Runs whenever uid/email changes (i.e. login/logout), NOT on role change —
-  // including role in deps causes a circular loop where the effect never heals itself.
+  const [isChef, setIsChef] = useState<boolean>(() => user?.role === 'chef');
+
+  const syncChefStatus = useCallback(async () => {
+    if (!user) {
+      setIsChef(false);
+      return;
+    }
+    try {
+      const { fetchChefProfile } = await import('../services/adminRbacService');
+      const chefProfile = await fetchChefProfile(user.uid, user.email);
+      const active = Boolean(chefProfile);
+      setIsChef(active);
+
+      if (active && user.role !== 'chef' && user.role !== 'admin') {
+        const updated = { ...user, role: 'chef' as const };
+        setUser(updated);
+        saveStoredUser(updated);
+      } else if (!active && user.role === 'chef') {
+        const updated = { ...user, role: 'customer' as const };
+        setUser(updated);
+        saveStoredUser(updated);
+      }
+    } catch (err) {
+      console.warn('[AuthContext] syncChefStatus error:', err);
+    }
+  }, [user?.uid, user?.email, user?.role]);
+
+  const syncChefStatusRef = useRef(syncChefStatus);
+  syncChefStatusRef.current = syncChefStatus;
+
+  // Synchronize chef status on mount and poll as fallback
   useEffect(() => {
-    let isMounted = true;
-    if (!user || user.role === 'admin') return;
+    if (!user) return;
 
-    const syncChefStatus = () => {
-      import('../services/adminRbacService').then(({ fetchChefProfile }) => {
-        fetchChefProfile(user.uid, user.email).then((chefProfile) => {
-          if (!isMounted) return;
-          if (chefProfile && user.role !== 'chef') {
-            const updated = { ...user, role: 'chef' as const };
-            setUser(updated);
-            saveStoredUser(updated);
-          } else if (!chefProfile && user.role === 'chef') {
-            const updated = { ...user, role: 'customer' as const };
-            setUser(updated);
-            saveStoredUser(updated);
-          }
-        });
-      });
-    };
-
-    // Run immediately on mount
     syncChefStatus();
-
-    // Also poll every 8s while the app is open — catches cases where the
-    // realtime listener doesn't fire (e.g. grant from a different device,
-    // or Supabase realtime not connected).
-    const interval = setInterval(syncChefStatus, 8000);
+    const interval = setInterval(() => {
+      syncChefStatusRef.current();
+    }, 15000);
 
     return () => {
-      isMounted = false;
       clearInterval(interval);
     };
   }, [user?.uid, user?.email]);
 
-  // Realtime listener for promotion/revocation while user is in active session
+  // Realtime listeners for promotion/revocation on chef_profiles and user_profiles
   useEffect(() => {
-    let isMounted = true;
-    let unsubscribe: (() => void) | undefined;
+    let unsubscribeChef: (() => void) | undefined;
+    let unsubscribeUser: (() => void) | undefined;
 
-    import('../services/supabaseUserService').then(({ subscribeToUserProfilesRealtime }) => {
-      unsubscribe = subscribeToUserProfilesRealtime(async () => {
-        if (!isMounted || !user || user.role === 'admin') return;
-        const { fetchChefProfile } = await import('../services/adminRbacService');
-        const chefProfile = await fetchChefProfile(user.uid, user.email);
-        if (chefProfile && user.role !== 'chef') {
-          const updated = { ...user, role: 'chef' as const };
-          setUser(updated);
-          saveStoredUser(updated);
-        } else if (!chefProfile && user.role === 'chef') {
-          const updated = { ...user, role: 'customer' as const };
-          setUser(updated);
-          saveStoredUser(updated);
-        }
+    import('../services/adminRbacService').then(({ subscribeToChefProfilesRealtime }) => {
+      unsubscribeChef = subscribeToChefProfilesRealtime(() => {
+        syncChefStatusRef.current();
       });
     });
 
-    return () => {
-      isMounted = false;
-      if (unsubscribe) unsubscribe();
+    import('../services/supabaseUserService').then(({ subscribeToUserProfilesRealtime }) => {
+      unsubscribeUser = subscribeToUserProfilesRealtime(() => {
+        syncChefStatusRef.current();
+      });
+    });
+
+    const handleCustomEvent = () => {
+      syncChefStatusRef.current();
     };
-  }, [user?.uid, user?.email, user?.role]);
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener('chef_role_changed', handleCustomEvent);
+    }
+
+    return () => {
+      if (unsubscribeChef) unsubscribeChef();
+      if (unsubscribeUser) unsubscribeUser();
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('chef_role_changed', handleCustomEvent);
+      }
+    };
+  }, []);
 
   // Restore persisted session on native app startup / mount
   useEffect(() => {
@@ -204,12 +217,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     });
 
-    // When the admin tab writes the chef store to localStorage (same origin),
-    // the user's tab receives a 'storage' event — use it to immediately refresh.
     const handleStorageEvent = (e: StorageEvent) => {
       if (!isMounted) return;
-      if (e.key === '@rasoi_chef_profiles_v1' || e.key === '@rasoi_auth_user') {
-        // Re-read stored user; getStoredUser already checks chefStore
+      if (
+        e.key === '@rasoi_chef_profiles_v1' ||
+        e.key === '@rasoi_auth_user' ||
+        e.key === '@rasoi_chef_sync_trigger'
+      ) {
+        syncChefStatus();
         getStoredUser().then((stored) => {
           if (isMounted && stored) {
             setUser(stored);
@@ -228,12 +243,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         window.removeEventListener('storage', handleStorageEvent);
       }
     };
-  }, []);
+  }, [syncChefStatus]);
 
   const isAdmin = !!(user && user.role === 'admin' && user.email && validateAdminEmail(user.email));
   const isSuperAdmin = isAdmin && isSuperAdminEmail(user?.email);
   const isRegionalAdmin = isAdmin && !isSuperAdmin;
-  const isChef = !!(user && user.role === 'chef');
 
   const refreshAdminPermissions = async () => {
     if (user?.email) {
@@ -363,6 +377,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const logout = async () => {
     setLoading(true);
     try {
+      await clearDependentSession();
       await logoutUser();
       setUser(null);
       setVerificationId(null);

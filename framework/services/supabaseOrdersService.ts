@@ -709,6 +709,9 @@ export async function fetchAllOrdersFromSupabase(): Promise<Order[]> {
     }
 
     if (ordersData.length === 0) {
+      if (localCombined.length > 0) {
+        return localCombined.map(applyApproval);
+      }
       // Database is online and explicitly empty (all orders deleted)
       localOrdersMemory.length = 0;
       await savePersistedOrders([]);

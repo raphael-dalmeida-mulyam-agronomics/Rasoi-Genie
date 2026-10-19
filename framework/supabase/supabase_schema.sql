@@ -397,7 +397,28 @@ CREATE POLICY "chef_submissions readable" ON public.chef_submissions FOR SELECT 
 DROP POLICY IF EXISTS "chef_submissions writable" ON public.chef_submissions;
 CREATE POLICY "chef_submissions writable" ON public.chef_submissions FOR ALL USING (true) WITH CHECK (true);
 
--- 11. REALTIME REPLICATION
+-- 11. CASCADE USER DELETION TRIGGER
+CREATE OR REPLACE FUNCTION public.cascade_user_deletion()
+RETURNS TRIGGER AS $$
+BEGIN
+  DELETE FROM public.chef_profiles
+  WHERE uid = OLD.uid
+     OR (OLD.email IS NOT NULL AND lower(email) = lower(OLD.email));
+
+  DELETE FROM public.chef_submissions
+  WHERE chef_id = OLD.uid;
+
+  RETURN OLD;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+DROP TRIGGER IF EXISTS trg_cascade_user_deletion ON public.user_profiles;
+CREATE TRIGGER trg_cascade_user_deletion
+  AFTER DELETE ON public.user_profiles
+  FOR EACH ROW
+  EXECUTE FUNCTION public.cascade_user_deletion();
+
+-- 12. REALTIME REPLICATION
 ALTER PUBLICATION supabase_realtime ADD TABLE public.orders;
 ALTER PUBLICATION supabase_realtime ADD TABLE public.admin_notifications;
 ALTER PUBLICATION supabase_realtime ADD TABLE public.user_profiles;

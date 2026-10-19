@@ -483,6 +483,9 @@ export function subscribeToFirebaseAuthChanges(
 export async function logoutUser(): Promise<void> {
   try {
     await clearStoredUser();
+    if (typeof window !== 'undefined' && window.localStorage) {
+      window.localStorage.removeItem('@rasoi_dependent_session_v1');
+    }
     await signOut(auth);
   } catch {
     // Silent catch for local session clear

@@ -120,6 +120,7 @@ import {
 import { RealtimeConnectionStatus } from '../../framework/services/realtimeService';
 import {
   ManagedUser,
+  deleteManagedUser,
   fetchLiveManagedUsers,
   getManagedUsers,
   subscribeToManagedUsers,
@@ -4126,12 +4127,47 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
                           title={u.role === 'admin' ? 'Revoke Admin' : 'Grant Admin'}
                           variant="outline"
                           size="sm"
+                          style={{ marginRight: 8 }}
                           onPress={() => {
                             toggleUserAdminRole(u.id);
                             reloadLiveUsers();
                           }}
                         />
                       )}
+
+                    <Button
+                      title="Delete User"
+                      variant="outline"
+                      size="sm"
+                      style={{ borderColor: '#EF4444' }}
+                      textStyle={{ color: '#EF4444' }}
+                      onPress={() => {
+                        Alert.alert(
+                          'Delete Customer Account?',
+                          `Are you sure you want to permanently delete "${u.name}" (${u.id})?\n\nIf this user is an approved chef, their chef status and studio access will also be automatically removed.`,
+                          [
+                            { text: 'Cancel', style: 'cancel' },
+                            {
+                              text: 'Delete',
+                              style: 'destructive',
+                              onPress: async () => {
+                                const res = await deleteManagedUser(u.id);
+                                if (res.success) {
+                                  showInAppAlert(
+                                    'User Deleted',
+                                    `"${u.name}" has been permanently removed${u.role === 'chef' ? ' and removed from approved chefs' : ''}.`,
+                                  );
+                                  reloadLiveUsers();
+                                  reloadChefData();
+                                } else {
+                                  showInAppAlert('Error', res.error || 'Could not delete user.');
+                                }
+                              },
+                            },
+                          ],
+                        );
+                      }}
+                    />
                   </View>
                 </View>
               ));

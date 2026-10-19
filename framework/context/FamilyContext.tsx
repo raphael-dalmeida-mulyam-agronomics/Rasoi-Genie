@@ -53,7 +53,11 @@ import {
   MemberSubtotalBreakdown,
   subscribeToFamilyCartRealtime,
 } from '../services/familyCartService';
-import { getDependentSession, DependentSession } from '../services/familyAuthBridge';
+import {
+  getDependentSession,
+  clearDependentSession,
+  DependentSession,
+} from '../services/familyAuthBridge';
 
 export interface FamilyContextValue {
   family: Family | null;
@@ -134,6 +138,7 @@ export interface FamilyContextValue {
   ) => Promise<{ success: boolean; error?: string }>;
   removeFamilyMember: (targetUserId: string) => Promise<{ success: boolean; error?: string }>;
   leaveCurrentFamily: () => Promise<{ success: boolean; error?: string }>;
+  resetDependentSession: () => Promise<void>;
   transferFamilyOwnership: (
     newOwnerUserId: string,
   ) => Promise<{ success: boolean; error?: string }>;
@@ -222,7 +227,6 @@ export const FamilyProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     getDependentSession().then((dep) => {
       if (dep) {
         setDependentSession(dep);
-        setActiveCartType('family'); // Dependents are locked to family cart
       }
     });
   }, []);
@@ -236,13 +240,17 @@ export const FamilyProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       currentDep = await getDependentSession();
       if (currentDep) {
         setDependentSession(currentDep);
-        setActiveCartType('family');
       }
     }
 
     const currentUserId = user?.uid || currentDep?.uid || null;
 
     if (!currentUserId) {
+      if (currentDep) {
+        await clearDependentSession();
+        setDependentSession(null);
+        setActiveCartType('personal');
+      }
       setFamily(null);
       setMembers([]);
       setInvites([]);
@@ -258,6 +266,11 @@ export const FamilyProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       if (fam && !isMockEnabled() && !isValidUUID(fam.id)) {
         // Stale mock family detected while live Supabase mode is active.
         // Clear local state so the user can create a real family on Supabase.
+        if (currentDep) {
+          await clearDependentSession();
+          setDependentSession(null);
+          setActiveCartType('personal');
+        }
         setFamily(null);
         setMembers([]);
         setInvites([]);
@@ -266,7 +279,6 @@ export const FamilyProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         setCartState(buildCartState([]));
         return;
       }
-      setFamily(fam);
 
       if (fam) {
         const [memList, cartList, invList, hold, linkList] = await Promise.all([
@@ -276,12 +288,37 @@ export const FamilyProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           fetchFamilyCheckoutHold(fam.id),
           fetchFamilyJoinLinks(fam.id),
         ]);
+
+        // If dependent session exists, verify that the dependent actually belongs to this family!
+        if (currentDep) {
+          const isStillMember = memList.some((m) => m.user_id === currentDep?.uid);
+          if (!isStillMember) {
+            console.warn(
+              '[FamilyContext] Dependent session not found in family members, clearing stale session',
+            );
+            await clearDependentSession();
+            setDependentSession(null);
+            setActiveCartType('personal');
+          } else {
+            setActiveCartType('family');
+          }
+        }
+
+        setFamily(fam);
         setMembers(memList);
         setInvites(invList);
         setLinks(linkList || []);
         setActiveHold(hold);
         setCartState(buildCartState(cartList));
       } else {
+        // No family exists for this user / dependent!
+        if (currentDep) {
+          console.warn('[FamilyContext] Stale dependent session with no active family, clearing');
+          await clearDependentSession();
+          setDependentSession(null);
+          setActiveCartType('personal');
+        }
+        setFamily(null);
         setMembers([]);
         setInvites([]);
         setLinks([]);
@@ -358,14 +395,17 @@ export const FamilyProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     return members.find((m) => m.user_id === effectiveUserId) || null;
   }, [members, effectiveUserId]);
 
-  const role: FamilyRole | null = currentMember?.role || (dependentSession ? 'dependent' : null);
-  const dependentType: DependentType | null =
-    currentMember?.dependent_type || dependentSession?.dependentType || null;
+  const role: FamilyRole | null = family
+    ? currentMember?.role || (dependentSession ? 'dependent' : null)
+    : null;
+  const dependentType: DependentType | null = family
+    ? currentMember?.dependent_type || dependentSession?.dependentType || null
+    : null;
 
   const isOwner = role === 'owner';
   const isCoOwner = role === 'co_owner';
   const isAdultMember = role === 'member';
-  const isDependent = role === 'dependent';
+  const isDependent = !!family && role === 'dependent';
   const isChild = isDependent && dependentType === 'child';
   const isSenior = isDependent && dependentType === 'senior';
 
@@ -507,31 +547,43 @@ export const FamilyProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     return res;
   };
 
+  const resetDependentSession = async () => {
+    await clearDependentSession();
+    setDependentSession(null);
+    setActiveCartType('personal');
+    await refreshFamily();
+  };
+
   const leaveCurrentFamily = async () => {
-    if (!family || !effectiveUserId) return { success: false, error: 'Family not found' };
-    const res = await leaveFamily(family.id, effectiveUserId);
-    if (res.success) {
-      setFamily(null);
-      setMembers([]);
-      setInvites([]);
-      setLinks([]);
+    if (!family || !effectiveUserId) {
+      await clearDependentSession();
+      setDependentSession(null);
       setActiveCartType('personal');
-      await refreshFamily();
+      return { success: true };
     }
+    const res = await leaveFamily(family.id, effectiveUserId);
+    await clearDependentSession();
+    setDependentSession(null);
+    setFamily(null);
+    setMembers([]);
+    setInvites([]);
+    setLinks([]);
+    setActiveCartType('personal');
+    await refreshFamily();
     return res;
   };
 
   const deleteFamily = async () => {
     if (!family || !effectiveUserId) return { success: false, error: 'Family not found' };
     const res = await deleteFamilyService(family.id, effectiveUserId);
-    if (res.success) {
-      setFamily(null);
-      setMembers([]);
-      setInvites([]);
-      setLinks([]);
-      setActiveCartType('personal');
-      await refreshFamily();
-    }
+    await clearDependentSession();
+    setDependentSession(null);
+    setFamily(null);
+    setMembers([]);
+    setInvites([]);
+    setLinks([]);
+    setActiveCartType('personal');
+    await refreshFamily();
     return res;
   };
 
@@ -837,6 +889,7 @@ export const FamilyProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     promoteOrDemoteCoOwner,
     removeFamilyMember,
     leaveCurrentFamily,
+    resetDependentSession,
     transferFamilyOwnership,
     addFamilyItem,
     editFamilyItem,

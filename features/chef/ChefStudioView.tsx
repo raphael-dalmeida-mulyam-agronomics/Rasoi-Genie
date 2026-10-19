@@ -9,12 +9,7 @@
  */
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import {
-  View,
-  StyleSheet,
-  ScrollView,
-  Alert,
-} from 'react-native';
+import { View, StyleSheet, ScrollView, Alert } from 'react-native';
 import { useTheme } from '../../framework/theme/ThemeContext';
 import { useAuth } from '../../framework/context/AuthContext';
 import {
@@ -25,12 +20,14 @@ import {
   updateChefSubmission,
   deleteChefSubmission,
 } from '../../framework/services/chefMealKitsService';
-import {
-  ChefProfile,
-  fetchAllChefProfiles,
-} from '../../framework/services/adminRbacService';
+import { ChefProfile, fetchAllChefProfiles } from '../../framework/services/adminRbacService';
 
-import { ChefRecipeFormState, ChefStudioStage, StructuredIngredient, StructuredStep } from './types';
+import {
+  ChefRecipeFormState,
+  ChefStudioStage,
+  StructuredIngredient,
+  StructuredStep,
+} from './types';
 import { useChefDraft } from './useChefDraft';
 import { ChefStudioHeader } from './components/ChefStudioHeader';
 import { StepNavigation } from './components/StepNavigation';
@@ -101,14 +98,8 @@ export function ChefStudioView() {
   const chefDisplayName = activeChefProfile?.displayName || user?.displayName || 'Chef';
 
   // Draft auto-saving hook
-  const {
-    saveStatus,
-    lastSavedTime,
-    loadDraft,
-    saveDraftNow,
-    scheduleDraftSave,
-    clearDraft,
-  } = useChefDraft(chefId);
+  const { saveStatus, lastSavedTime, loadDraft, saveDraftNow, scheduleDraftSave, clearDraft } =
+    useChefDraft(chefId);
 
   // Load approved chefs & active chef UID
   useEffect(() => {
@@ -118,21 +109,22 @@ export function ChefStudioView() {
         const chefs = await fetchAllChefProfiles();
         if (mounted && chefs.length > 0) {
           setApprovedChefs(chefs);
-          if (!activeChefUid) {
+          setActiveChefUid((prev) => {
+            if (prev) return prev;
             const currentIsChef = chefs.find((c) => c.uid === user?.uid);
-            setActiveChefUid(currentIsChef ? currentIsChef.uid : chefs[0]!.uid);
-          }
+            return currentIsChef ? currentIsChef.uid : chefs[0]!.uid;
+          });
         } else if (mounted && user?.uid) {
-          setActiveChefUid(user.uid);
+          setActiveChefUid((prev) => prev || user.uid);
         }
       } catch {
-        if (mounted && user?.uid) setActiveChefUid(user.uid);
+        if (mounted && user?.uid) setActiveChefUid((prev) => prev || user.uid);
       }
     })();
     return () => {
       mounted = false;
     };
-  }, [user?.uid, activeChefUid]);
+  }, [user?.uid]);
 
   // Load submissions
   const loadSubmissions = useCallback(async () => {
@@ -189,23 +181,13 @@ export function ChefStudioView() {
       return form.name.trim().length > 0 && form.description.trim().length > 0;
     }
     if (currentStage === 'ingredients') {
-      return (
-        form.ingredients.length > 0 &&
-        form.ingredients.some((i) => i.name.trim().length > 0)
-      );
+      return form.ingredients.length > 0 && form.ingredients.some((i) => i.name.trim().length > 0);
     }
     if (currentStage === 'steps') {
-      return (
-        form.steps.length > 0 &&
-        form.steps.some((s) => s.instruction.trim().length > 0)
-      );
+      return form.steps.length > 0 && form.steps.some((s) => s.instruction.trim().length > 0);
     }
     if (currentStage === 'review') {
-      return (
-        completedStages.details &&
-        completedStages.ingredients &&
-        completedStages.steps
-      );
+      return completedStages.details && completedStages.ingredients && completedStages.steps;
     }
     return true;
   }, [currentStage, form, completedStages]);
@@ -235,26 +217,22 @@ export function ChefStudioView() {
     setCurrentStage('details');
 
     // Map existing recipe record into structured form state
-    const mappedIngredients: StructuredIngredient[] = (recipe.ingredients || []).map(
-      (ing, idx) => {
-        const qtyStr = ing.quantity || '100 g';
-        const match = qtyStr.match(/^([\d.]+)\s*([a-zA-Z]+)?$/);
-        const amount = match ? parseFloat(match[1] || '100') || 100 : 100;
-        const unit = (match && match[2] ? match[2] : 'g') as any;
-        return {
-          id: `ing-${idx}-${Date.now()}`,
-          ingredientId: (ing as any).ingredientId,
-          name: ing.name,
-          amount,
-          unit: ['g', 'kg', 'ml', 'L', 'piece', 'packet', 'sachet', 'bunch', 'clove'].includes(
-            unit,
-          )
-            ? unit
-            : 'g',
-          quantityStr: qtyStr,
-        };
-      },
-    );
+    const mappedIngredients: StructuredIngredient[] = (recipe.ingredients || []).map((ing, idx) => {
+      const qtyStr = ing.quantity || '100 g';
+      const match = qtyStr.match(/^([\d.]+)\s*([a-zA-Z]+)?$/);
+      const amount = match ? parseFloat(match[1] || '100') || 100 : 100;
+      const unit = (match && match[2] ? match[2] : 'g') as any;
+      return {
+        id: `ing-${idx}-${Date.now()}`,
+        ingredientId: (ing as any).ingredientId,
+        name: ing.name,
+        amount,
+        unit: ['g', 'kg', 'ml', 'L', 'piece', 'packet', 'sachet', 'bunch', 'clove'].includes(unit)
+          ? unit
+          : 'g',
+        quantityStr: qtyStr,
+      };
+    });
 
     const mappedSteps: StructuredStep[] = (recipe.recipeSteps || []).map((st, idx) => ({
       id: `step-${idx}-${Date.now()}`,
@@ -278,7 +256,8 @@ export function ChefStudioView() {
       cookTimeMinutes: recipe.cookTimeMinutes || 30,
       dietaryTags: recipe.dietaryTags || ['veg'],
       allergens: recipe.allergens || [],
-      ingredients: mappedIngredients.length > 0 ? mappedIngredients : DEFAULT_FORM_STATE.ingredients,
+      ingredients:
+        mappedIngredients.length > 0 ? mappedIngredients : DEFAULT_FORM_STATE.ingredients,
       steps: mappedSteps.length > 0 ? mappedSteps : DEFAULT_FORM_STATE.steps,
     });
 
@@ -436,9 +415,7 @@ export function ChefStudioView() {
           contentContainerStyle={styles.builderContent}
           showsVerticalScrollIndicator={false}
         >
-          {currentStage === 'details' && (
-            <Step1Details form={form} onChange={handleFormChange} />
-          )}
+          {currentStage === 'details' && <Step1Details form={form} onChange={handleFormChange} />}
 
           {currentStage === 'ingredients' && (
             <Step2Ingredients

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useTheme } from '../../framework/theme/ThemeContext';
+import { AppIconName, Icon } from '../../framework/ui/Icon';
 import { INGREDIENT_CATEGORIES, IngredientCategoryId } from './ingredientCategories';
 
 export type CategoryFilter = 'all' | IngredientCategoryId;
@@ -10,15 +11,18 @@ export const CategoryDropdown: React.FC<{
   onChange: (v: CategoryFilter) => void;
   counts: Record<string, number>;
   totalCount: number;
-}> = ({ value, onChange, counts, totalCount }) => {
+  onOpenBulkRestock?: (category: CategoryFilter) => void;
+}> = ({ value, onChange, counts, totalCount, onOpenBulkRestock }) => {
   const { colors, radii, shadows } = useTheme();
   const [open, setOpen] = useState(false);
 
   const options: { id: CategoryFilter; label: string; count: number }[] = [
     { id: 'all', label: 'All Categories', count: totalCount },
-    ...INGREDIENT_CATEGORIES
-      .filter((c) => (counts[c.id] || 0) > 0)
-      .map((c) => ({ id: c.id as CategoryFilter, label: c.label, count: counts[c.id] || 0 })),
+    ...INGREDIENT_CATEGORIES.filter((c) => (counts[c.id] || 0) > 0).map((c) => ({
+      id: c.id as CategoryFilter,
+      label: c.label,
+      count: counts[c.id] || 0,
+    })),
   ];
 
   const current = options.find((o) => o.id === value) ?? options[0]!;
@@ -27,38 +31,66 @@ export const CategoryDropdown: React.FC<{
     <View style={[styles.wrapper, { zIndex: open ? 5000 : 1 }]}>
       <Text style={[styles.label, { color: colors.textMuted }]}>Category</Text>
 
-      <TouchableOpacity
-        activeOpacity={0.8}
-        onPress={() => setOpen((v) => !v)}
-        style={[
-          styles.trigger,
-          {
-            borderColor: open || value !== 'all' ? colors.primary : colors.borderLight,
-            backgroundColor: colors.bgSurface,
-            borderRadius: radii.lg,
-          },
-        ]}
-      >
-        <Text
-          numberOfLines={1}
+      <View style={styles.controlsRow}>
+        <TouchableOpacity
+          activeOpacity={0.8}
+          onPress={() => setOpen((v) => !v)}
           style={[
-            styles.triggerText,
-            { color: value !== 'all' ? colors.primary : colors.textPrimary },
+            styles.trigger,
+            {
+              borderColor: open || value !== 'all' ? colors.primary : colors.borderLight,
+              backgroundColor: colors.bgSurface,
+              borderRadius: radii.lg,
+            },
           ]}
         >
-          {current.label}
-        </Text>
-        <View
-          style={[
-            styles.countBadge,
-            { backgroundColor: value !== 'all' ? colors.primaryLight : colors.bgSubtle },
-          ]}
-        >
-          <Text style={[styles.countText, { color: value !== 'all' ? colors.primary : colors.textMuted }]}>
-            {current.count}
+          <Text
+            numberOfLines={1}
+            style={[
+              styles.triggerText,
+              { color: value !== 'all' ? colors.primary : colors.textPrimary },
+            ]}
+          >
+            {current.label}
           </Text>
-        </View>
-      </TouchableOpacity>
+          <View
+            style={[
+              styles.countBadge,
+              { backgroundColor: value !== 'all' ? colors.primaryLight : colors.bgSubtle },
+            ]}
+          >
+            <Text
+              style={[
+                styles.countText,
+                { color: value !== 'all' ? colors.primary : colors.textMuted },
+              ]}
+            >
+              {current.count}
+            </Text>
+          </View>
+          <Icon name={open ? 'chevron-up' : 'chevron-down'} size={14} color={colors.textMuted} />
+        </TouchableOpacity>
+
+        {onOpenBulkRestock && (
+          <TouchableOpacity
+            activeOpacity={0.8}
+            onPress={() => onOpenBulkRestock(value)}
+            style={[
+              styles.restockBtn,
+              {
+                backgroundColor: colors.primaryLight,
+                borderColor: colors.primary,
+                borderRadius: radii.lg,
+              },
+            ]}
+          >
+            <Icon name="refresh" size={14} color={colors.primary} />
+            <Text style={[styles.restockBtnText, { color: colors.primary }]}>
+              Restock {value === 'all' ? 'Items' : current.label}
+            </Text>
+          </TouchableOpacity>
+        )}
+      </View>
 
       {open && (
         <View
@@ -113,6 +145,28 @@ export const CategoryDropdown: React.FC<{
                 </TouchableOpacity>
               );
             })}
+
+            {onOpenBulkRestock && (
+              <TouchableOpacity
+                style={[
+                  styles.menuActionItem,
+                  {
+                    backgroundColor: colors.primaryLight,
+                    borderTopWidth: 1,
+                    borderTopColor: colors.borderLight,
+                  },
+                ]}
+                onPress={() => {
+                  setOpen(false);
+                  onOpenBulkRestock(value);
+                }}
+              >
+                <Icon name="refresh" size={14} color={colors.primary} />
+                <Text style={[styles.menuActionText, { color: colors.primary }]}>
+                  Select & Restock {current.label}...
+                </Text>
+              </TouchableOpacity>
+            )}
           </ScrollView>
         </View>
       )}
@@ -124,7 +178,7 @@ const styles = StyleSheet.create({
   wrapper: {
     position: 'relative',
     marginBottom: 12,
-    maxWidth: 320,
+    width: '100%',
   },
   label: {
     fontSize: 11,
@@ -133,10 +187,18 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
     marginBottom: 4,
   },
-  trigger: {
+  controlsRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    height: 48,
+    gap: 8,
+    flexWrap: 'wrap',
+  },
+  trigger: {
+    flex: 1,
+    minWidth: 160,
+    flexDirection: 'row',
+    alignItems: 'center',
+    height: 44,
     paddingHorizontal: 14,
     borderWidth: 1.5,
     gap: 8,
@@ -157,12 +219,25 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
   },
+  restockBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    height: 44,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    gap: 6,
+  },
+  restockBtnText: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
   menu: {
     position: 'absolute',
     top: '100%',
     left: 0,
     right: 0,
-    marginTop: 2,
+    maxWidth: 380,
+    marginTop: 4,
     borderWidth: 1,
     maxHeight: 280,
     overflow: 'hidden',
@@ -190,6 +265,17 @@ const styles = StyleSheet.create({
   },
   menuCountText: {
     fontSize: 12,
+    fontWeight: '700',
+  },
+  menuActionItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+  },
+  menuActionText: {
+    fontSize: 13,
     fontWeight: '700',
   },
 });

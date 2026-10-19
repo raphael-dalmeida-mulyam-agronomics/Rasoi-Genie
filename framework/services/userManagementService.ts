@@ -3,6 +3,7 @@ import {
   fetchAllUserProfilesFromSupabase,
   subscribeToUserProfilesRealtime,
   emitUserProfileUpdated,
+  deleteUserProfileFromSupabase,
 } from './supabaseUserService';
 import { subscribeToWalletsRealtime, getAllLocalWalletsMap } from './walletService';
 
@@ -53,9 +54,7 @@ export function getManagedUsers(): ManagedUser[] {
 }
 
 export function updateUserWalletBalance(userId: string, newBalance: number): void {
-  usersStore = usersStore.map((u) =>
-    u.id === userId ? { ...u, walletBalance: newBalance } : u,
-  );
+  usersStore = usersStore.map((u) => (u.id === userId ? { ...u, walletBalance: newBalance } : u));
   emitUserProfileUpdated();
 }
 
@@ -119,10 +118,12 @@ export async function fetchLiveManagedUsers(): Promise<ManagedUser[]> {
 
     // Fetch approved chef profiles to assign live chef roles
     let chefUidSet = new Set<string>();
+    let chefEmailSet = new Set<string>();
     try {
       const { fetchAllChefProfiles } = await import('./adminRbacService');
       const chefProfiles = await fetchAllChefProfiles();
       chefUidSet = new Set(chefProfiles.map((c) => c.uid));
+      chefEmailSet = new Set(chefProfiles.map((c) => (c.email || '').toLowerCase()));
     } catch {}
 
     // 4. Map profiles into ManagedUser records
@@ -159,14 +160,17 @@ export async function fetchLiveManagedUsers(): Promise<ManagedUser[]> {
         (p.uid.toLowerCase().startsWith('admin_') ||
           (existing?.role === 'admin' && p.uid.toLowerCase().startsWith('admin_')));
 
-      const isChef = chefUidSet.has(p.uid) || existing?.role === 'chef';
+      const isChef =
+        chefUidSet.has(p.uid) ||
+        (emailLower ? chefEmailSet.has(emailLower) : false) ||
+        p.role === 'chef';
 
       const determinedRole: 'admin' | 'customer' | 'chef' =
         isStaffAdmin || (existing?.role === 'admin' && isMulyamEmail)
           ? 'admin'
           : isChef
-          ? 'chef'
-          : 'customer';
+            ? 'chef'
+            : 'customer';
 
       liveUsers.push({
         id: p.uid, // Customer ID
@@ -281,3 +285,35 @@ export function setUserChefRole(userId: string, isChef: boolean): void {
   emitUserProfileUpdated();
 }
 
+/**
+ * Permanently removes a customer user account from the system.
+ * If the user is an approved chef, their chef status is automatically revoked
+ * and they are removed from Approved Chefs both on the frontend and backend.
+ */
+export async function deleteManagedUser(
+  userId: string,
+): Promise<{ success: boolean; error?: string }> {
+  const user = usersStore.find((u) => u.id === userId);
+  const userEmail = user?.email && user.email !== 'N/A' ? user.email : undefined;
+
+  // 1. Remove from local users store immediately
+  usersStore = usersStore.filter((u) => u.id !== userId);
+
+  // 2. Revoke and delete chef profile if they were a chef
+  try {
+    const { revokeChefRole } = require('./adminRbacService');
+    await revokeChefRole(userId, userEmail || '');
+  } catch (err) {
+    console.warn('[UserManagement] Error revoking chef role during user deletion:', err);
+  }
+
+  // 3. Delete user profile from Supabase & device storage
+  try {
+    await deleteUserProfileFromSupabase(userId, userEmail);
+  } catch (err) {
+    console.warn('[UserManagement] Error deleting user profile from Supabase:', err);
+  }
+
+  emitUserProfileUpdated();
+  return { success: true };
+}

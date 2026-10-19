@@ -40,15 +40,12 @@ export const LocationOnboardingView: React.FC<LocationOnboardingViewProps> = ({
   const { colors, radii, shadows } = useTheme();
   const { updatePreferences } = usePreferences();
 
-  const [step, setStep] = useState<'prompt' | 'detecting' | 'unserviceable' | 'picker'>('prompt');
+  const [step, setStep] = useState<'prompt' | 'detecting' | 'unserviceable' | 'picker'>(
+    isModal ? 'picker' : 'prompt',
+  );
   const [unserviceableCity, setUnserviceableCity] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [errorText, setErrorText] = useState('');
-
-  // Auto-trigger detection on mount if not in modal
-  useEffect(() => {
-    handleDetect();
-  }, []);
 
   const handleDetect = async () => {
     setStep('detecting');
@@ -116,6 +113,46 @@ export const LocationOnboardingView: React.FC<LocationOnboardingViewProps> = ({
         },
       ]}
     >
+      {/* Initial Permission & Location Selection Prompt */}
+      {step === 'prompt' && (
+        <View style={styles.centerBox}>
+          <View
+            style={[
+              styles.iconCircle,
+              { backgroundColor: colors.primaryLight, borderColor: colors.primary },
+            ]}
+          >
+            <Icon name="location" size={44} color={colors.primary} />
+          </View>
+          <Text style={[styles.heading, { color: colors.textPrimary }]}>
+            Where should we deliver?
+          </Text>
+          <Text style={[styles.subheading, { color: colors.textSecondary }]}>
+            Allow location access to find your nearest kitchen hub and explore fresh meal kits
+            prepared for your city in 20 minutes.
+          </Text>
+
+          <Button
+            testID="enable-location-btn"
+            title="Use Current Location (GPS)"
+            variant="primary"
+            size="lg"
+            onPress={handleDetect}
+            style={{ marginTop: 24, width: '100%' }}
+          />
+
+          <TouchableOpacity
+            testID="manual-city-picker-btn"
+            style={styles.switchLink}
+            onPress={() => setStep('picker')}
+          >
+            <Text style={[styles.linkText, { color: colors.primary }]}>
+              Choose City or Pincode Manually
+            </Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
       {/* Detecting Animation State */}
       {step === 'detecting' && (
         <View style={styles.centerBox}>

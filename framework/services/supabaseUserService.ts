@@ -4,6 +4,7 @@ import { PaymentMethod } from '../context/CartContext';
 import { AddressItem, UserDietaryPreferences } from '../context/PreferencesContext';
 import { db } from '../firebase/config';
 import { getSupabaseClient } from '../supabase/client';
+import { revokeChefRole } from './adminRbacService';
 import { isMissingSchemaError } from './supabaseUtils';
 
 export interface UserProfileData {
@@ -11,6 +12,7 @@ export interface UserProfileData {
   email?: string;
   displayName?: string;
   phoneNumber?: string;
+  role?: string;
   preferences: UserDietaryPreferences;
   addresses: AddressItem[];
   preferredPaymentMethod: PaymentMethod;
@@ -370,6 +372,7 @@ export async function fetchAllUserProfilesFromSupabase(): Promise<UserProfileDat
           email: row.email || undefined,
           displayName: row.display_name || undefined,
           phoneNumber: row.phone_number || undefined,
+          role: row.role || undefined,
           preferences: row.preferences || {},
           addresses: row.addresses || [],
           preferredPaymentMethod: row.preferred_payment_method || 'UPI',
@@ -471,4 +474,51 @@ export function subscribeToUserProfilesRealtime(callback: () => void): () => voi
       }
     }
   };
+}
+
+/**
+ * Permanently removes a user profile from Supabase and local storage.
+ * If this user was an approved chef, automatically deletes their chef_profiles record
+ * and removes them from the chef store across frontend and backend.
+ */
+export async function deleteUserProfileFromSupabase(
+  uid: string,
+  email?: string,
+): Promise<{ success: boolean; error?: string }> {
+  if (!uid) {
+    return { success: false, error: 'User ID is required to delete profile.' };
+  }
+
+  // 1. If user was an approved chef, automatically revoke and purge chef profile
+  try {
+    await revokeChefRole(uid, email || '');
+  } catch (chefErr) {
+    console.warn('[UserService] Error removing chef profile for deleted user:', chefErr);
+  }
+
+  // 2. Remove from local storage
+  const storageKey = `${USER_PROFILE_STORAGE_PREFIX}${uid}`;
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      window.localStorage.removeItem(storageKey);
+    }
+    await AsyncStorage.removeItem(storageKey);
+  } catch (localErr) {
+    console.warn('[UserService] Error removing profile from local storage:', localErr);
+  }
+
+  // 3. Delete from Supabase `user_profiles` table
+  try {
+    const supabase = getSupabaseClient();
+    const { error } = await supabase.from('user_profiles').delete().eq('uid', uid);
+    if (error && !isMissingSchemaError(error)) {
+      console.warn('[UserService] Error deleting user profile from Supabase:', error.message);
+      return { success: false, error: error.message };
+    }
+  } catch (err: any) {
+    console.warn('[UserService] Exception deleting user profile from Supabase:', err);
+  }
+
+  emitUserProfileUpdated();
+  return { success: true };
 }

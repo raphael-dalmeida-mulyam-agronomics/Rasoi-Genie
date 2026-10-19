@@ -65,6 +65,7 @@ function loadStore(): void {
             }
             return item;
           });
+          deduplicateAndCleanInventoryStore();
           return;
         }
       }
@@ -74,6 +75,7 @@ function loadStore(): void {
   }
   // Fallback to seed data if nothing persisted
   seedInventory();
+  deduplicateAndCleanInventoryStore();
 }
 
 function seedInventory(): void {
@@ -112,7 +114,7 @@ function seedInventory(): void {
     },
     {
       id: 'inv-003',
-      name: 'Paper Cups (8oz)',
+      name: 'Paper Cups',
       section: 'packaging',
       currentStock: 2000,
       unit: 'units',
@@ -240,7 +242,7 @@ function seedInventory(): void {
     },
     {
       id: 'inv-004',
-      name: 'Garam Masala Blend',
+      name: 'Garam Masala',
       section: 'seasonings',
       currentStock: 8,
       unit: 'kg',
@@ -256,7 +258,7 @@ function seedInventory(): void {
     },
     {
       id: 'inv-005',
-      name: 'Tomato Puree (1L)',
+      name: 'Tomato Puree',
       section: 'raw_ingredients',
       currentStock: 30,
       unit: 'liters',
@@ -272,19 +274,19 @@ function seedInventory(): void {
     },
     {
       id: 'inv-006',
-      name: 'Desi Ghee (5L)',
+      name: 'Desi Ghee',
       section: 'raw_ingredients',
-      currentStock: 0,
+      currentStock: 50,
       unit: 'liters',
       shelfLifeDays: 180,
       thresholdLow: 2,
       region: 'West',
       lastRestocked: new Date().toISOString(),
-      expiryDate: new Date().toISOString(),
+      expiryDate: addDays(new Date(), 180).toISOString(),
       storageCondition: 'Room temperature, sealed',
       supplier: 'Amul Dairy',
       costPerUnit: 3200,
-      notes: 'OUT OF STOCK - reorder needed',
+      notes: 'Pure cow ghee',
     },
     {
       id: 'inv-007',
@@ -304,7 +306,7 @@ function seedInventory(): void {
     },
     {
       id: 'inv-008',
-      name: 'Almond Slivered',
+      name: 'Slivered Almonds',
       section: 'raw_ingredients',
       currentStock: 3,
       unit: 'kg',
@@ -320,7 +322,7 @@ function seedInventory(): void {
     },
     {
       id: 'inv-009',
-      name: 'Sesame Oil (1L)',
+      name: 'Sesame Oil',
       section: 'raw_ingredients',
       currentStock: 15,
       unit: 'liters',
@@ -354,10 +356,16 @@ function seedInventory(): void {
   persistStore();
 }
 
-function addDays(date: Date, days: number): Date {
+export function addDays(date: Date, days: number): Date {
   const d = new Date(date);
   d.setDate(d.getDate() + days);
   return d;
+}
+
+export function setInventoryStore(items: InventoryItem[]): void {
+  inventoryStore = [...items];
+  persistStore();
+  notifyListeners();
 }
 
 // Initialize on module load
@@ -438,6 +446,107 @@ export function deleteInventoryItem(id: string): boolean {
   persistStore();
   notifyListeners();
   return true;
+}
+
+/**
+ * Deduplicates and cleans inventory items in the store.
+ * - Applies cleanFn to normalize names and remove adjectives.
+ * - Merges duplicate items with identical or similar names:
+ *   harmonizes units (e.g. g vs liters), combines currentStock,
+ *   takes highest thresholdLow, keeps freshest expiryDate, and keeps primary ID.
+ */
+export function deduplicateAndCleanInventoryStore(cleanFn?: (name: string) => string): {
+  cleaned: number;
+  merged: number;
+} {
+  let cleaned = 0;
+  let merged = 0;
+
+  // 1. Clean names
+  for (const item of inventoryStore) {
+    let newName = item.name;
+    if (cleanFn) {
+      newName = cleanFn(item.name);
+    } else {
+      // Basic fallback cleaning if no function passed
+      newName = item.name.replace(/\s+/g, ' ').trim();
+    }
+    if (newName && newName !== item.name) {
+      item.name = newName;
+      cleaned++;
+    }
+  }
+
+  // 2. Find and merge duplicates by canonical name & region
+  const grouped = new Map<string, InventoryItem[]>();
+  for (const item of inventoryStore) {
+    // Key by lower-cased name so all items sharing the same name merge
+    const key = (item.name || '').trim().toLowerCase();
+    const list = grouped.get(key) || [];
+    list.push(item);
+    grouped.set(key, list);
+  }
+
+  const newStore: InventoryItem[] = [];
+  for (const [, items] of grouped) {
+    if (items.length === 1) {
+      newStore.push(items[0]!);
+    } else {
+      // Pick the primary item (prefer one with non-expired date or larger shelf life)
+      const sorted = [...items].sort((a, b) => {
+        const timeA = new Date(a.expiryDate).getTime() || 0;
+        const timeB = new Date(b.expiryDate).getTime() || 0;
+        return timeB - timeA;
+      });
+
+      const primary = { ...sorted[0]! };
+
+      for (let i = 1; i < sorted.length; i++) {
+        const dup = sorted[i]!;
+
+        // Harmonize units if different
+        let addStock = dup.currentStock;
+        const u1 = (primary.unit || '').toLowerCase();
+        const u2 = (dup.unit || '').toLowerCase();
+
+        if ((u1 === 'liters' || u1 === 'l') && (u2 === 'g' || u2 === 'ml')) {
+          addStock = dup.currentStock / 1000;
+        } else if ((u1 === 'g' || u1 === 'ml') && (u2 === 'liters' || u2 === 'l')) {
+          addStock = dup.currentStock * 1000;
+        } else if (u1 === 'kg' && u2 === 'g') {
+          addStock = dup.currentStock / 1000;
+        } else if (u1 === 'g' && u2 === 'kg') {
+          addStock = dup.currentStock * 1000;
+        }
+
+        primary.currentStock += addStock;
+        primary.thresholdLow = Math.max(primary.thresholdLow, dup.thresholdLow);
+        primary.shelfLifeDays = Math.max(primary.shelfLifeDays, dup.shelfLifeDays);
+
+        // Keep freshest expiry date
+        if (new Date(dup.expiryDate).getTime() > new Date(primary.expiryDate).getTime()) {
+          primary.expiryDate = dup.expiryDate;
+        }
+
+        // Keep richer metadata
+        if (!primary.supplier && dup.supplier) primary.supplier = dup.supplier;
+        if (!primary.storageCondition && dup.storageCondition)
+          primary.storageCondition = dup.storageCondition;
+        if (!primary.notes && dup.notes) primary.notes = dup.notes;
+
+        merged++;
+      }
+      newStore.push(primary);
+    }
+  }
+
+  if (merged > 0 || cleaned > 0) {
+    inventoryStore = newStore;
+    persistStore();
+    notifyListeners();
+  }
+
+  return { cleaned, merged };
 }
 
 export function subscribeToInventory(listener: () => void): () => void {

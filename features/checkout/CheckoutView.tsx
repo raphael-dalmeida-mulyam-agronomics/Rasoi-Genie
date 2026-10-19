@@ -88,8 +88,10 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({ onBack, onOrderPlace
   } = useFamily();
 
   // Prefill Contact & Address Details
-  const initialCity = canonicalCityName(preferences.city || preferences.currentCity || 'Bengaluru');
   const initialAddress = defaultAddress || addresses[0];
+  const initialCity = canonicalCityName(
+    preferences.city || preferences.currentCity || initialAddress?.city || '',
+  );
 
   const initialUserPhone = user?.phoneNumber
     ? user.phoneNumber.replace(/\D/g, '').slice(-10)

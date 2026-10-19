@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Tabs, usePathname, useRouter } from 'expo-router';
-import { View, Text, ActivityIndicator } from 'react-native';
+import { View, Text, ActivityIndicator, TouchableOpacity, Alert } from 'react-native';
 import { Icon } from '../../framework/ui/Icon';
 import { RoleBadge } from '../../framework/ui/RoleBadge';
 import { useAuth } from '../../framework/context/AuthContext';
@@ -28,6 +28,7 @@ export default function TabLayout() {
     dependentType,
     canApproveItems,
     cartState: familyCartState,
+    leaveCurrentFamily,
   } = useFamily();
   const [pendingApprovalCount, setPendingApprovalCount] = useState<number>(0);
 
@@ -36,7 +37,7 @@ export default function TabLayout() {
 
   // Route guard: Dependent accounts cannot access search, login/account, admin, or chef
   useEffect(() => {
-    if (isDependent && pathname) {
+    if (isDependent && family && pathname) {
       if (
         pathname.includes('/search') ||
         pathname.includes('/login') ||
@@ -48,7 +49,7 @@ export default function TabLayout() {
         router.replace('/');
       }
     }
-  }, [isDependent, pathname, router]);
+  }, [isDependent, family, pathname, router]);
 
   // First launch welcome & location onboarding state
   const [isInitializing, setIsInitializing] = useState(true);
@@ -110,8 +111,14 @@ export default function TabLayout() {
     );
   }
 
-  // 2. Location is the only onboarding step: require location before entering main app (skipped for dependents)
-  if (!isDependent && !userLocation && !preferences.city && !preferences.currentCity) {
+  // 2. Location is required when user signs in for the first time or guest has no location
+  const needsLocationOnboarding =
+    !isDependent &&
+    (user
+      ? !preferences.isOnboarded || !preferences.city
+      : !userLocation && !preferences.city && !preferences.currentCity);
+
+  if (needsLocationOnboarding) {
     return (
       <View style={{ flex: 1, backgroundColor: colors.bgPrimary }}>
         <LocationOnboardingView
@@ -149,7 +156,27 @@ export default function TabLayout() {
               {family.name}
             </Text>
           </View>
-          <RoleBadge role="dependent" dependentType={dependentType} size="sm" />
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+            <RoleBadge role="dependent" dependentType={dependentType} size="sm" />
+            <TouchableOpacity
+              onPress={() => {
+                Alert.alert('Leave Family', 'Are you sure you want to exit family mode?', [
+                  { text: 'Cancel', style: 'cancel' },
+                  { text: 'Exit', style: 'destructive', onPress: () => leaveCurrentFamily() },
+                ]);
+              }}
+              style={{
+                paddingHorizontal: 10,
+                paddingVertical: 5,
+                borderRadius: 6,
+                backgroundColor: colors.borderLight,
+              }}
+            >
+              <Text style={{ fontSize: 12, fontWeight: '600', color: colors.textSecondary }}>
+                Exit
+              </Text>
+            </TouchableOpacity>
+          </View>
         </View>
       )}
 
@@ -176,7 +203,7 @@ export default function TabLayout() {
           name="search"
           options={{
             title: 'Search',
-            href: isDependent ? null : undefined,
+            href: isDependent && family ? null : undefined,
             tabBarIcon: ({ color }) => <Icon name="search" size={22} color={color as string} />,
           }}
         />
@@ -213,7 +240,7 @@ export default function TabLayout() {
         <Tabs.Screen
           name="orders"
           options={{
-            title: isDependent ? 'Family Orders' : 'My Orders',
+            title: isDependent && family ? 'Family Orders' : 'My Orders',
             tabBarIcon: ({ color }) => <Icon name="time" size={22} color={color as string} />,
           }}
         />
@@ -222,7 +249,7 @@ export default function TabLayout() {
           name="login"
           options={{
             title: user ? 'Account' : 'Sign In',
-            href: isDependent ? null : undefined,
+            href: isDependent && family ? null : undefined,
             tabBarIcon: ({ color }) => <Icon name="people" size={22} color={color as string} />,
           }}
         />
@@ -231,7 +258,7 @@ export default function TabLayout() {
           name="admin"
           options={{
             title: 'Admin Dash',
-            href: isAdmin ? '/admin' : null,
+            href: isAdmin ? undefined : null,
             tabBarBadge: pendingApprovalCount > 0 ? pendingApprovalCount : undefined,
             tabBarBadgeStyle: {
               backgroundColor: '#DC2626',
@@ -247,7 +274,7 @@ export default function TabLayout() {
           name="chef"
           options={{
             title: 'Chef Studio',
-            href: isChef && !isAdmin ? '/chef' : null,
+            href: isChef || isAdmin ? undefined : null,
             tabBarIcon: ({ color }) => <Icon name="chef" size={22} color={color as string} />,
           }}
         />

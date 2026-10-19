@@ -39,7 +39,7 @@ export interface MealDetailModalProps {
   onOpenReviewsModal?: (kit: MealKit) => void;
 }
 
-type TabType = 'overview' | 'recipe' | 'ingredients' | 'nutrition' | 'reviews';
+type TabType = 'overview' | 'nutrition' | 'ingredients' | 'recipe' | 'reviews';
 
 export const MealDetailModal: React.FC<MealDetailModalProps> = ({
   kit,
@@ -628,9 +628,9 @@ export const MealDetailModal: React.FC<MealDetailModalProps> = ({
               >
                 {[
                   { value: 'overview' as const, label: 'Overview', icon: 'restaurant' as const },
-                  { value: 'recipe' as const, label: 'Recipe Guide', icon: 'time' as const },
-                  { value: 'ingredients' as const, label: 'Masala Box', icon: 'flame' as const },
                   { value: 'nutrition' as const, label: 'Nutrition', icon: 'nutrition' as const },
+                  { value: 'ingredients' as const, label: 'Masala Box', icon: 'flame' as const },
+                  { value: 'recipe' as const, label: 'Recipe Guide', icon: 'time' as const },
                   {
                     value: 'reviews' as const,
                     label: `Reviews (${reviews.length})`,
@@ -728,7 +728,170 @@ export const MealDetailModal: React.FC<MealDetailModalProps> = ({
               </View>
             )}
 
-            {/* TAB 2: STEP-BY-STEP RECIPE GUIDE */}
+            {/* TAB 2: NUTRITION */}
+            {activeTab === 'nutrition' && (
+              <View
+                style={[
+                  styles.cardBlock,
+                  { backgroundColor: colors.bgSurface, borderRadius: radii.xl },
+                ]}
+              >
+                <Text style={[styles.blockHeading, { color: colors.textPrimary }]}>
+                  Nutrition Facts (Per Serving)
+                </Text>
+
+                <View style={styles.macroGrid}>
+                  <View
+                    style={[
+                      styles.macroCard,
+                      { backgroundColor: colors.bgSubtle, borderRadius: radii.lg },
+                    ]}
+                  >
+                    <Text style={[styles.macroVal, { color: colors.primary }]}>
+                      {kit.nutrition.calories}
+                    </Text>
+                    <Text style={[styles.macroUnit, { color: colors.textMuted }]}>kcal</Text>
+                    <Text style={[styles.macroLabel, { color: colors.textSecondary }]}>
+                      Calories
+                    </Text>
+                  </View>
+
+                  <View
+                    style={[
+                      styles.macroCard,
+                      { backgroundColor: colors.bgSubtle, borderRadius: radii.lg },
+                    ]}
+                  >
+                    <Text style={[styles.macroVal, { color: colors.textPrimary }]}>
+                      {kit.nutrition.protein}g
+                    </Text>
+                    <Text style={[styles.macroUnit, { color: colors.textMuted }]}>grams</Text>
+                    <Text style={[styles.macroLabel, { color: colors.textSecondary }]}>
+                      Protein
+                    </Text>
+                  </View>
+
+                  <View
+                    style={[
+                      styles.macroCard,
+                      { backgroundColor: colors.bgSubtle, borderRadius: radii.lg },
+                    ]}
+                  >
+                    <Text style={[styles.macroVal, { color: colors.textPrimary }]}>
+                      {kit.nutrition.carbs}g
+                    </Text>
+                    <Text style={[styles.macroUnit, { color: colors.textMuted }]}>grams</Text>
+                    <Text style={[styles.macroLabel, { color: colors.textSecondary }]}>
+                      Carbohydrates
+                    </Text>
+                  </View>
+
+                  <View
+                    style={[
+                      styles.macroCard,
+                      { backgroundColor: colors.bgSubtle, borderRadius: radii.lg },
+                    ]}
+                  >
+                    <Text style={[styles.macroVal, { color: colors.textPrimary }]}>
+                      {kit.nutrition.fat}g
+                    </Text>
+                    <Text style={[styles.macroUnit, { color: colors.textMuted }]}>grams</Text>
+                    <Text style={[styles.macroLabel, { color: colors.textSecondary }]}>Fats</Text>
+                  </View>
+
+                  <View
+                    style={[
+                      styles.macroCard,
+                      { backgroundColor: colors.bgSubtle, borderRadius: radii.lg },
+                    ]}
+                  >
+                    <Text style={[styles.macroVal, { color: colors.textPrimary }]}>
+                      {kit.nutrition.fiber || 0}g
+                    </Text>
+                    <Text style={[styles.macroUnit, { color: colors.textMuted }]}>grams</Text>
+                    <Text style={[styles.macroLabel, { color: colors.textSecondary }]}>Fiber</Text>
+                  </View>
+                </View>
+
+                <Text
+                  style={{
+                    fontSize: 11,
+                    color: colors.textMuted,
+                    marginTop: 10,
+                    textAlign: 'center',
+                    fontStyle: 'italic',
+                  }}
+                >
+                  * Values are calculated estimates based on standardized culinary yields.
+                </Text>
+
+                <View style={[styles.dietTagsRow, { marginTop: 14 }]}>
+                  <Text style={[styles.specLabel, { color: colors.textMuted, marginBottom: 8 }]}>
+                    DIETARY TAGS:
+                  </Text>
+                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+                    {kit.dietaryTags.map((tag) => (
+                      <Badge key={tag} label={tag.toUpperCase()} variant="accent" />
+                    ))}
+                  </View>
+                </View>
+              </View>
+            )}
+
+            {/* TAB 3: INGREDIENTS */}
+            {activeTab === 'ingredients' && (
+              <View
+                style={[
+                  styles.cardBlock,
+                  { backgroundColor: colors.bgSurface, borderRadius: radii.xl },
+                ]}
+              >
+                <Text style={[styles.blockHeading, { color: colors.textPrimary }]}>
+                  Pre-Portioned Ingredients Checklist
+                </Text>
+                <Text style={[styles.subHeading, { color: colors.textSecondary }]}>
+                  Everything comes pre-cleaned and weighed to exact proportions for {kit.servings}{' '}
+                  people.
+                </Text>
+
+                {kit.ingredients.map((ing, idx) => (
+                  <View
+                    key={idx}
+                    style={[
+                      styles.ingredientRow,
+                      {
+                        borderBottomColor: colors.borderLight,
+                        backgroundColor: ing.isMasalaSachet
+                          ? colors.primaryLight + '50'
+                          : 'transparent',
+                        padding: 10,
+                        borderRadius: radii.sm,
+                      },
+                    ]}
+                  >
+                    <View style={{ flex: 1 }}>
+                      <Text
+                        style={[
+                          styles.ingredientName,
+                          {
+                            color: ing.isMasalaSachet ? colors.primary : colors.textPrimary,
+                            fontWeight: ing.isMasalaSachet ? '800' : '600',
+                          },
+                        ]}
+                      >
+                        {ing.name}
+                      </Text>
+                    </View>
+                    <Badge
+                      label={scaleQuantity(ing.quantity, servingRatio)}
+                      variant={ing.isMasalaSachet ? 'primary' : 'neutral'}
+                    />
+                  </View>
+                ))}
+              </View>
+            )}
+
+            {/* TAB 4: STEP-BY-STEP RECIPE GUIDE */}
             {activeTab === 'recipe' && (
               <View
                 style={[
@@ -840,169 +1003,6 @@ export const MealDetailModal: React.FC<MealDetailModalProps> = ({
                     </View>
                   );
                 })}
-              </View>
-            )}
-
-            {/* TAB 3: INGREDIENTS */}
-            {activeTab === 'ingredients' && (
-              <View
-                style={[
-                  styles.cardBlock,
-                  { backgroundColor: colors.bgSurface, borderRadius: radii.xl },
-                ]}
-              >
-                <Text style={[styles.blockHeading, { color: colors.textPrimary }]}>
-                  Pre-Portioned Ingredients Checklist
-                </Text>
-                <Text style={[styles.subHeading, { color: colors.textSecondary }]}>
-                  Everything comes pre-cleaned and weighed to exact proportions for {kit.servings}{' '}
-                  people.
-                </Text>
-
-                {kit.ingredients.map((ing, idx) => (
-                  <View
-                    key={idx}
-                    style={[
-                      styles.ingredientRow,
-                      {
-                        borderBottomColor: colors.borderLight,
-                        backgroundColor: ing.isMasalaSachet
-                          ? colors.primaryLight + '50'
-                          : 'transparent',
-                        padding: 10,
-                        borderRadius: radii.sm,
-                      },
-                    ]}
-                  >
-                    <View style={{ flex: 1 }}>
-                      <Text
-                        style={[
-                          styles.ingredientName,
-                          {
-                            color: ing.isMasalaSachet ? colors.primary : colors.textPrimary,
-                            fontWeight: ing.isMasalaSachet ? '800' : '600',
-                          },
-                        ]}
-                      >
-                        {ing.name}
-                      </Text>
-                    </View>
-                    <Badge
-                      label={scaleQuantity(ing.quantity, servingRatio)}
-                      variant={ing.isMasalaSachet ? 'primary' : 'neutral'}
-                    />
-                  </View>
-                ))}
-              </View>
-            )}
-
-            {/* TAB 4: NUTRITION */}
-            {activeTab === 'nutrition' && (
-              <View
-                style={[
-                  styles.cardBlock,
-                  { backgroundColor: colors.bgSurface, borderRadius: radii.xl },
-                ]}
-              >
-                <Text style={[styles.blockHeading, { color: colors.textPrimary }]}>
-                  Nutrition Facts (Per Serving)
-                </Text>
-
-                <View style={styles.macroGrid}>
-                  <View
-                    style={[
-                      styles.macroCard,
-                      { backgroundColor: colors.bgSubtle, borderRadius: radii.lg },
-                    ]}
-                  >
-                    <Text style={[styles.macroVal, { color: colors.primary }]}>
-                      {kit.nutrition.calories}
-                    </Text>
-                    <Text style={[styles.macroUnit, { color: colors.textMuted }]}>kcal</Text>
-                    <Text style={[styles.macroLabel, { color: colors.textSecondary }]}>
-                      Calories
-                    </Text>
-                  </View>
-
-                  <View
-                    style={[
-                      styles.macroCard,
-                      { backgroundColor: colors.bgSubtle, borderRadius: radii.lg },
-                    ]}
-                  >
-                    <Text style={[styles.macroVal, { color: colors.textPrimary }]}>
-                      {kit.nutrition.protein}g
-                    </Text>
-                    <Text style={[styles.macroUnit, { color: colors.textMuted }]}>grams</Text>
-                    <Text style={[styles.macroLabel, { color: colors.textSecondary }]}>
-                      Protein
-                    </Text>
-                  </View>
-
-                  <View
-                    style={[
-                      styles.macroCard,
-                      { backgroundColor: colors.bgSubtle, borderRadius: radii.lg },
-                    ]}
-                  >
-                    <Text style={[styles.macroVal, { color: colors.textPrimary }]}>
-                      {kit.nutrition.carbs}g
-                    </Text>
-                    <Text style={[styles.macroUnit, { color: colors.textMuted }]}>grams</Text>
-                    <Text style={[styles.macroLabel, { color: colors.textSecondary }]}>
-                      Carbohydrates
-                    </Text>
-                  </View>
-
-                  <View
-                    style={[
-                      styles.macroCard,
-                      { backgroundColor: colors.bgSubtle, borderRadius: radii.lg },
-                    ]}
-                  >
-                    <Text style={[styles.macroVal, { color: colors.textPrimary }]}>
-                      {kit.nutrition.fat}g
-                    </Text>
-                    <Text style={[styles.macroUnit, { color: colors.textMuted }]}>grams</Text>
-                    <Text style={[styles.macroLabel, { color: colors.textSecondary }]}>Fats</Text>
-                  </View>
-
-                  <View
-                    style={[
-                      styles.macroCard,
-                      { backgroundColor: colors.bgSubtle, borderRadius: radii.lg },
-                    ]}
-                  >
-                    <Text style={[styles.macroVal, { color: colors.textPrimary }]}>
-                      {kit.nutrition.fiber || 0}g
-                    </Text>
-                    <Text style={[styles.macroUnit, { color: colors.textMuted }]}>grams</Text>
-                    <Text style={[styles.macroLabel, { color: colors.textSecondary }]}>Fiber</Text>
-                  </View>
-                </View>
-
-                <Text
-                  style={{
-                    fontSize: 11,
-                    color: colors.textMuted,
-                    marginTop: 10,
-                    textAlign: 'center',
-                    fontStyle: 'italic',
-                  }}
-                >
-                  * Values are calculated estimates based on standardized culinary yields.
-                </Text>
-
-                <View style={[styles.dietTagsRow, { marginTop: 14 }]}>
-                  <Text style={[styles.specLabel, { color: colors.textMuted, marginBottom: 8 }]}>
-                    DIETARY TAGS:
-                  </Text>
-                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
-                    {kit.dietaryTags.map((tag) => (
-                      <Badge key={tag} label={tag.toUpperCase()} variant="accent" />
-                    ))}
-                  </View>
-                </View>
               </View>
             )}
 

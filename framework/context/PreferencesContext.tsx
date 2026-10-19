@@ -90,11 +90,11 @@ export const DEFAULT_PREFERENCES: UserDietaryPreferences = {
   allergies: [],
   spiceTolerance: 'Medium',
   preferredCuisines: ['North Indian', 'South Indian', 'Punjabi'],
-  state: 'Karnataka',
-  city: 'Bengaluru',
+  state: '',
+  city: '',
   subRegion: '',
-  regionHub: 'South', // derived: legacyHubForCity('Bengaluru')
-  currentCity: 'Bengaluru',
+  regionHub: 'West',
+  currentCity: '',
   isOnboarded: false,
 };
 
@@ -181,10 +181,10 @@ export const PreferencesProvider: React.FC<{ children: React.ReactNode }> = ({ c
       try {
         const profile = await getUserProfileFromSupabase(authUser.uid);
         if (isMounted) {
-          if (profile && profile.isOnboarded) {
-            const raw = profile.preferences || DEFAULT_PREFERENCES;
-            // Migrate old profiles that only have regionHub/currentCity
-            const city = raw.city || (raw as any).currentCity || '';
+          const raw = profile?.preferences || DEFAULT_PREFERENCES;
+          const city =
+            profile?.preferences?.city || (profile?.preferences as any)?.currentCity || '';
+          if (profile && profile.isOnboarded && city) {
             const migratedPrefs: UserDietaryPreferences = {
               ...DEFAULT_PREFERENCES,
               ...raw,
@@ -193,14 +193,18 @@ export const PreferencesProvider: React.FC<{ children: React.ReactNode }> = ({ c
               state: raw.state || '',
               subRegion: raw.subRegion || '',
               regionHub: raw.regionHub ?? legacyHubForCity(city),
+              isOnboarded: true,
             };
             setPreferences(migratedPrefs);
             setAddresses(profile.addresses || []);
             setPreferredPaymentMethodState(profile.preferredPaymentMethod || 'UPI');
           } else {
-            // New user without completed onboarding
+            // New user without completed onboarding / location
             setPreferences({
               ...DEFAULT_PREFERENCES,
+              city: '',
+              currentCity: '',
+              state: '',
               isOnboarded: false,
             });
             setAddresses([]);

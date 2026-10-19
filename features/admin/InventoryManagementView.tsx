@@ -24,13 +24,24 @@ import {
   subscribeToInventory,
   updateInventoryItem,
 } from '../../framework/services/inventoryService';
-import { notifyRegionalAdminsOutOfStock } from '../../framework/services/notificationService';
-import { seedInventoryFromMealKits } from '../../framework/services/seedInventoryFromMealKits';
+import {
+  guessSection,
+  seedInventoryFromMealKits,
+} from '../../framework/services/seedInventoryFromMealKits';
+import {
+  addInventoryItemToSupabase,
+  deleteInventoryItemFromSupabase,
+  fetchInventoryFromSupabase,
+  restockInventoryItemInSupabase,
+  subscribeToRealtimeInventory,
+  updateInventoryItemInSupabase,
+} from '../../framework/services/supabaseInventoryService';
 import { useTheme } from '../../framework/theme/ThemeContext';
 import { Badge, BadgeVariant } from '../../framework/ui/Badge';
 import { Button } from '../../framework/ui/Button';
 import { AppIconName, Icon } from '../../framework/ui/Icon';
 import { CategoryDropdown, CategoryFilter } from './CategoryDropdown';
+import { BulkRestockModal } from './BulkRestockModal';
 import { getIngredientCategory } from './ingredientCategories';
 
 const CATEGORY_LABELS: Record<InventorySection, string> = {
@@ -77,6 +88,8 @@ export const InventoryManagementView: React.FC = () => {
   const [statusDropdownOpen, setStatusDropdownOpen] = useState(false);
   const [restockModalVisible, setRestockModalVisible] = useState(false);
   const [deleteModalVisible, setDeleteModalVisible] = useState(false);
+  const [bulkModalVisible, setBulkModalVisible] = useState(false);
+  const [bulkModalCategory, setBulkModalCategory] = useState<CategoryFilter>('all');
 
   // Form states
   const [editingItem, setEditingItem] = useState<InventoryItem | null>(null);
@@ -102,23 +115,38 @@ export const InventoryManagementView: React.FC = () => {
   const [restockQty, setRestockQty] = useState('');
   const [restockNote, setRestockNote] = useState('');
 
-  // Seed meal-kit ingredients into inventory on load
+  // Seed meal-kit ingredients into inventory on load & synchronize with Supabase database
   useEffect(() => {
     try {
-      const added = seedInventoryFromMealKits();
-      console.log('[Inventory] Seeded meal-kit ingredients:', added);
-      // Refresh items after seed writes to store
+      seedInventoryFromMealKits();
       setItems(getInventoryItems());
+      // Fetch from Supabase database (and seed table if empty)
+      fetchInventoryFromSupabase()
+        .then((dbItems) => {
+          if (dbItems && dbItems.length > 0) {
+            setItems(dbItems);
+          }
+        })
+        .catch((e) => {
+          console.warn('[Inventory] Supabase sync error:', e);
+        });
     } catch (e) {
       console.error('[Inventory] Seed error:', e);
     }
-    const unsub = subscribeToInventory(() => {
+
+    const unsubLocal = subscribeToInventory(() => {
       setItems(getInventoryItems());
     });
+
+    const unsubRealtime = subscribeToRealtimeInventory(() => {
+      setItems(getInventoryItems());
+    });
+
     return () => {
-      unsub();
+      unsubLocal();
+      unsubRealtime();
     };
-  }, [getInventoryItems]);
+  }, []);
 
   const filteredItems = useMemo(() => {
     const q = (searchQuery || '').trim().toLowerCase();
@@ -133,65 +161,7 @@ export const InventoryManagementView: React.FC = () => {
         if (!regionMatch) return false;
       }
       if (filter !== 'all') {
-        const inferSection = (name: string): string => {
-          const n = name.toLowerCase();
-          if (
-            n.includes('sachet') ||
-            n.includes('masala') ||
-            n.includes('spice') ||
-            n.includes('powder') ||
-            n.includes('blend') ||
-            n.includes('dust') ||
-            n.includes('tadka') ||
-            n.includes('seasoning') ||
-            n.includes('tempering') ||
-            n.includes('premix') ||
-            n.includes('turmeric') ||
-            n.includes('cumin') ||
-            n.includes('saffron') ||
-            n.includes('cardamom') ||
-            n.includes('clove') ||
-            n.includes('nutmeg') ||
-            n.includes('cinnamon') ||
-            n.includes('bayleaf') ||
-            n.includes('bay leaf') ||
-            n.includes('curry leaves') ||
-            n.includes('curry leaf') ||
-            n.includes('fresh coriander') ||
-            n.includes('fresh cilantro') ||
-            n.includes('fresh mint') ||
-            n.includes('fresh basil') ||
-            n.includes('fresh thyme') ||
-            n.includes('fresh oregano') ||
-            n.includes('fresh chilli') ||
-            n.includes('fresh chili') ||
-            n.includes('green chilli') ||
-            n.includes('green chili') ||
-            n.includes('kasuri methi') ||
-            n.includes('methi')
-          )
-            return 'seasonings';
-          if (
-            n.includes('paper cup') ||
-            n.includes('foil tray') ||
-            n.includes('foil container') ||
-            n.includes('cling wrap') ||
-            n.includes('cling film') ||
-            n.includes('parchment') ||
-            n.includes('meal kit box') ||
-            n.includes('insulated box') ||
-            n.includes('delivery box') ||
-            n.includes('zip-lock') ||
-            n.includes('ziplock') ||
-            n.includes('heat-seal') ||
-            n.includes('tamper seal') ||
-            n.includes('sticker label') ||
-            n.includes('food tray')
-          )
-            return 'packaging';
-          return 'raw_ingredients';
-        };
-        const s = item.section || inferSection(item.name);
+        const s = item.section || guessSection(item.name);
         if (s !== filter) return false;
       }
       // Status filter
@@ -374,7 +344,7 @@ export const InventoryManagementView: React.FC = () => {
     return counts;
   }, [items, filter]);
 
-  const handleAddItem = () => {
+  const handleAddItem = async () => {
     if (!newItem.name.trim()) {
       Alert.alert('Validation', 'Item name is required.');
       return;
@@ -384,21 +354,10 @@ export const InventoryManagementView: React.FC = () => {
       return;
     }
 
-    const item = addInventoryItem({
+    const item = await addInventoryItemToSupabase({
       ...newItem,
       storageCondition: newItem.storageCondition || 'Room temperature',
     });
-
-    // Check if low stock alert needed
-    if (item.currentStock <= item.thresholdLow) {
-      notifyRegionalAdminsOutOfStock({
-        kitId: item.id,
-        kitName: item.name,
-        region: 'Regional',
-        remainingStock: item.currentStock,
-        reason: 'Low inventory',
-      } as any);
-    }
 
     setNewItem({
       name: '',
@@ -417,22 +376,22 @@ export const InventoryManagementView: React.FC = () => {
     Alert.alert('Success', `"${item.name}" added to inventory.`);
   };
 
-  const handleUpdateItem = () => {
+  const handleUpdateItem = async () => {
     if (!editingItem) return;
-    updateInventoryItem(editingItem.id, editingItem);
+    await updateInventoryItemInSupabase(editingItem.id, editingItem);
     setEditModalVisible(false);
     setEditingItem(null);
     Alert.alert('Success', 'Inventory item updated.');
   };
 
-  const handleRestock = () => {
+  const handleRestock = async () => {
     if (!restockingItem || !restockQty) return;
     const qty = parseFloat(restockQty);
     if (isNaN(qty) || qty <= 0) {
       Alert.alert('Validation', 'Enter a valid quantity.');
       return;
     }
-    restockInventoryItem(restockingItem.id, qty, restockNote);
+    await restockInventoryItemInSupabase(restockingItem.id, qty, restockNote);
     setRestockModalVisible(false);
     setRestockingItem(null);
     setRestockQty('');
@@ -440,9 +399,9 @@ export const InventoryManagementView: React.FC = () => {
     Alert.alert('Success', `Restocked ${qty} ${restockingItem.unit} of "${restockingItem.name}".`);
   };
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (!deletingItem) return;
-    deleteInventoryItem(deletingItem.id);
+    await deleteInventoryItemFromSupabase(deletingItem.id);
     setDeleteModalVisible(false);
     setDeletingItem(null);
     Alert.alert('Deleted', `"${deletingItem.name}" removed from inventory.`);
@@ -489,7 +448,7 @@ export const InventoryManagementView: React.FC = () => {
     <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
       {/* Header */}
       <View style={styles.headerRow}>
-        <View>
+        <View style={styles.headerTextCol}>
           <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>
             Inventory & Shelf Life
           </Text>
@@ -497,7 +456,18 @@ export const InventoryManagementView: React.FC = () => {
             Track raw materials, ingredients, packaging & spices
           </Text>
         </View>
-        <Button title="+ Add Item" size="sm" onPress={() => setAddModalVisible(true)} />
+        <View style={styles.headerActions}>
+          <Button
+            title="Bulk Restock"
+            variant="secondary"
+            size="sm"
+            onPress={() => {
+              setBulkModalCategory('all');
+              setBulkModalVisible(true);
+            }}
+          />
+          <Button title="+ Add Item" size="sm" onPress={() => setAddModalVisible(true)} />
+        </View>
       </View>
 
       {/* Stats Grid */}
@@ -709,6 +679,10 @@ export const InventoryManagementView: React.FC = () => {
         totalCount={
           filter === 'all' ? items.length : Object.values(categoryCounts).reduce((a, b) => a + b, 0)
         }
+        onOpenBulkRestock={(cat) => {
+          setBulkModalCategory(cat);
+          setBulkModalVisible(true);
+        }}
       />
 
       <View style={{ gap: 12, paddingBottom: 20 }}>
@@ -1216,11 +1190,21 @@ export const InventoryManagementView: React.FC = () => {
                   setDeletingItem(null);
                 }}
               />
-              <Button title="Delete" variant="danger" style={{ flex: 1 }} onPress={handleDelete} />
             </View>
           </View>
         </View>
       </Modal>
+
+      {/* ── BULK RESTOCK MODAL ── */}
+      <BulkRestockModal
+        visible={bulkModalVisible}
+        onClose={() => setBulkModalVisible(false)}
+        items={items}
+        initialCategory={bulkModalCategory}
+        onRestockComplete={() => {
+          setItems(getInventoryItems());
+        }}
+      />
     </ScrollView>
   );
 };
@@ -1265,7 +1249,19 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 12,
     marginBottom: 14,
+  },
+  headerTextCol: {
+    flex: 1,
+    minWidth: 200,
+  },
+  headerActions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    alignItems: 'center',
   },
   headerTitle: {
     fontSize: 18,

@@ -1,4 +1,4 @@
-﻿import AsyncStorage from '@react-native-async-storage/async-storage';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../supabase/client';
 import { RegionHub } from './mealKitsService';
 
@@ -585,7 +585,11 @@ export function isSuperAdminEmail(email?: string | null): boolean {
  */
 export async function fetchAdminProfile(email: string): Promise<AdminProfile | null> {
   const cleanEmail = (email || '').trim().toLowerCase();
-  if (!cleanEmail || cleanEmail === 'raphdesantos@gmail.com' || !cleanEmail.endsWith('@mulyam.in')) {
+  if (
+    !cleanEmail ||
+    cleanEmail === 'raphdesantos@gmail.com' ||
+    !cleanEmail.endsWith('@mulyam.in')
+  ) {
     return null;
   }
 
@@ -665,8 +669,22 @@ export async function fetchAllAdminProfiles(): Promise<AdminProfile[]> {
   try {
     // Purge raphdesantos@gmail.com from Supabase if present
     try {
-      supabase.from('admin_users').delete().ilike('email', 'raphdesantos@gmail.com').then(() => {}, () => {});
-      supabase.from('admin_regions').delete().ilike('admin_email', 'raphdesantos@gmail.com').then(() => {}, () => {});
+      supabase
+        .from('admin_users')
+        .delete()
+        .ilike('email', 'raphdesantos@gmail.com')
+        .then(
+          () => {},
+          () => {},
+        );
+      supabase
+        .from('admin_regions')
+        .delete()
+        .ilike('admin_email', 'raphdesantos@gmail.com')
+        .then(
+          () => {},
+          () => {},
+        );
     } catch {}
 
     const { data: users, error: usersErr } = await supabase
@@ -909,31 +927,78 @@ function mapChefRow(r: any): ChefProfile {
 }
 
 /**
- * Fetches all approved chef profiles, merging Supabase with the local persistent store.
+ * Fetches all approved chef profiles, synchronizing Supabase with the local persistent store
+ * and automatically pruning any orphan chef records whose associated user profiles have been deleted.
  */
 export async function fetchAllChefProfiles(): Promise<ChefProfile[]> {
   await ensureChefStoreLoaded();
-  const result: ChefProfile[] = [...chefStore];
+
   try {
+    // 1. Fetch active users from Supabase to verify which users currently exist
+    const { data: activeUsers, error: usersError } = await supabase
+      .from('user_profiles')
+      .select('uid, email');
+
+    const activeUidSet = new Set<string>();
+    const activeEmailSet = new Set<string>();
+
+    if (!usersError && Array.isArray(activeUsers)) {
+      for (const u of activeUsers) {
+        if (u.uid) activeUidSet.add(u.uid);
+        if (u.email) activeEmailSet.add(u.email.trim().toLowerCase());
+      }
+    }
+
+    // 2. Fetch live chef profiles from Supabase
     const { data, error } = await supabase
       .from('chef_profiles')
       .select('uid, email, display_name, approved_at, approved_by, bio, speciality')
       .order('approved_at', { ascending: true });
 
     if (!error && Array.isArray(data)) {
+      const validChefs: ChefProfile[] = [];
+      const orphanUidsToDelete: string[] = [];
+
       for (const row of data) {
         const c = mapChefRow(row);
-        if (!result.some((r) => r.uid === c.uid)) result.push(c);
+        const emailLower = (c.email || '').toLowerCase();
+        // If active users were loaded, verify the chef belongs to an active user profile
+        const userExists =
+          activeUidSet.size === 0 ||
+          activeUidSet.has(c.uid) ||
+          (emailLower && activeEmailSet.has(emailLower));
+
+        if (userExists) {
+          validChefs.push(c);
+        } else {
+          orphanUidsToDelete.push(c.uid);
+        }
       }
+
+      // Automatically purge orphan chef records from Supabase backend
+      if (orphanUidsToDelete.length > 0) {
+        try {
+          await supabase.from('chef_profiles').delete().in('uid', orphanUidsToDelete);
+        } catch (delErr) {
+          console.warn('[ChefRBAC] Failed deleting orphan chefs from Supabase:', delErr);
+        }
+      }
+
+      // Update local chefStore to match valid active chefs exactly
+      chefStore = validChefs;
+      await persistChefStore();
+      return validChefs;
     }
   } catch (err) {
     console.warn('[ChefRBAC] Supabase fetchAllChefProfiles error:', err);
   }
-  return result;
+
+  return [...chefStore];
 }
 
 /**
  * Fetches a single chef profile by UID or email.
+ * Queries Supabase as the authoritative source and synchronizes the local cache.
  */
 export async function fetchChefProfile(
   identifier: string,
@@ -947,15 +1012,13 @@ export async function fetchChefProfile(
 
   // 1. Check local persistent store first
   const foundLocal = chefStore.find(
-    (c) =>
-      (cleanId && c.uid === cleanId) ||
-      (cleanEmail && c.email?.toLowerCase() === cleanEmail),
+    (c) => (cleanId && c.uid === cleanId) || (cleanEmail && c.email?.toLowerCase() === cleanEmail),
   );
   if (foundLocal) {
     return foundLocal;
   }
 
-  // 2. Query Supabase chef_profiles (by uid, then by email)
+  // 2. Query Supabase chef_profiles (authoritative source if not cached locally)
   try {
     const select = 'uid, email, display_name, approved_at, approved_by, bio, speciality';
     let row: any = null;
@@ -978,16 +1041,43 @@ export async function fetchChefProfile(
 
     if (row) {
       const chefRecord = mapChefRow(row);
-      if (!chefStore.some((c) => c.uid === chefRecord.uid)) {
+      const idx = chefStore.findIndex(
+        (c) => c.uid === chefRecord.uid || (cleanEmail && c.email?.toLowerCase() === cleanEmail),
+      );
+      if (idx >= 0) {
+        chefStore[idx] = chefRecord;
+      } else {
         chefStore.push(chefRecord);
-        await persistChefStore();
       }
+      await persistChefStore();
       return chefRecord;
     }
   } catch (err) {
-    console.warn('[ChefRBAC] Supabase fetchChefProfile error:', err);
+    console.warn('[ChefRBAC] Supabase fetchChefProfile error (using local cache):', err);
   }
+
   return null;
+}
+
+/**
+ * Subscribes to realtime changes on the chef_profiles table in Supabase.
+ */
+export function subscribeToChefProfilesRealtime(onChange: () => void): () => void {
+  try {
+    const channel = supabase
+      .channel('chef-profiles-changes-' + Date.now())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'chef_profiles' }, () => {
+        onChange();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  } catch (err) {
+    console.warn('[ChefRBAC] Error subscribing to chef_profiles realtime:', err);
+    return () => {};
+  }
 }
 
 /**
@@ -1039,9 +1129,9 @@ export async function grantChefRole(
     }
   } catch {}
 
-  // 3. Update managed user store and emit notification
+  // 3. Update managed user store
   try {
-    const { setUserChefRole } = await import('./userManagementService');
+    const { setUserChefRole } = require('./userManagementService');
     setUserChefRole(uid, true);
   } catch {}
 
@@ -1063,21 +1153,40 @@ export async function grantChefRole(
       console.warn('[ChefRBAC] chef_profiles upsert error:', chefError.message);
     }
 
-    // Touch user_profiles so AuthContext's realtime listener fires on the user's device.
-    // This is what actually wakes up the user's session without requiring a re-login.
+    // 5. Update user_profiles in Supabase to role = 'chef'
     try {
-      await supabase
-        .from('user_profiles')
-        .update({ updated_at: new Date().toISOString() })
-        .eq('uid', uid);
-    } catch {
-      // Non-critical — the 8s polling in AuthContext will catch it anyway
+      if (uid) {
+        await supabase
+          .from('user_profiles')
+          .update({ role: 'chef', updated_at: new Date().toISOString() })
+          .eq('uid', uid);
+      }
+      if (cleanEmail && cleanEmail !== 'n/a') {
+        await supabase
+          .from('user_profiles')
+          .update({ role: 'chef', updated_at: new Date().toISOString() })
+          .ilike('email', cleanEmail);
+      }
+    } catch (uErr) {
+      console.warn('[ChefRBAC] Error updating user_profiles role to chef:', uErr);
+    }
+
+    // 6. Broadcast across tabs and windows
+    if (typeof window !== 'undefined') {
+      try {
+        window.dispatchEvent(
+          new CustomEvent('chef_role_changed', {
+            detail: { uid, email: cleanEmail, isChef: true },
+          }),
+        );
+        window.localStorage.setItem('@rasoi_chef_sync_trigger', Date.now().toString());
+      } catch {}
     }
 
     return { success: true };
   } catch (err: any) {
     console.warn('[ChefRBAC] grantChefRole exception:', err?.message || err);
-    return { success: true }; // Local store already updated
+    return { success: true };
   }
 }
 
@@ -1087,9 +1196,9 @@ export async function grantChefRole(
  */
 export async function revokeChefRole(
   uid: string,
-  email: string,
+  email?: string,
 ): Promise<{ success: boolean; error?: string }> {
-  const cleanEmail = email.trim().toLowerCase();
+  const cleanEmail = (email || '').trim().toLowerCase();
   await ensureChefStoreLoaded();
   chefStore = chefStore.filter(
     (c) => c.uid !== uid && (!cleanEmail || c.email.toLowerCase() !== cleanEmail),
@@ -1102,7 +1211,8 @@ export async function revokeChefRole(
     const stored = await getStoredUser();
     if (
       stored &&
-      (stored.uid === uid || (stored.email && stored.email.toLowerCase() === cleanEmail))
+      (stored.uid === uid ||
+        (cleanEmail && stored.email && stored.email.toLowerCase() === cleanEmail))
     ) {
       await saveStoredUser({ ...stored, role: 'customer' });
     }
@@ -1110,24 +1220,46 @@ export async function revokeChefRole(
 
   // Update managed user store
   try {
-    const { setUserChefRole } = await import('./userManagementService');
+    const { setUserChefRole } = require('./userManagementService');
     setUserChefRole(uid, false);
   } catch {}
 
   try {
     await supabase.from('chef_profiles').delete().eq('uid', uid);
-    if (cleanEmail) {
+    if (cleanEmail && cleanEmail !== 'n/a') {
       await supabase.from('chef_profiles').delete().ilike('email', cleanEmail);
     }
-    // Touch user_profiles to wake up AuthContext's realtime listener
+
+    // Reset role in user_profiles to 'customer'
     try {
-      await supabase
-        .from('user_profiles')
-        .update({ updated_at: new Date().toISOString() })
-        .eq('uid', uid);
-    } catch {
-      // Non-critical
+      if (uid) {
+        await supabase
+          .from('user_profiles')
+          .update({ role: 'customer', updated_at: new Date().toISOString() })
+          .eq('uid', uid);
+      }
+      if (cleanEmail && cleanEmail !== 'n/a') {
+        await supabase
+          .from('user_profiles')
+          .update({ role: 'customer', updated_at: new Date().toISOString() })
+          .ilike('email', cleanEmail);
+      }
+    } catch (uErr) {
+      console.warn('[ChefRBAC] Error resetting user_profiles role to customer:', uErr);
     }
+
+    // Broadcast across tabs and windows
+    if (typeof window !== 'undefined') {
+      try {
+        window.dispatchEvent(
+          new CustomEvent('chef_role_changed', {
+            detail: { uid, email: cleanEmail, isChef: false },
+          }),
+        );
+        window.localStorage.setItem('@rasoi_chef_sync_trigger', Date.now().toString());
+      } catch {}
+    }
+
     return { success: true };
   } catch (err: any) {
     console.warn('[ChefRBAC] revokeChefRole exception:', err?.message || err);

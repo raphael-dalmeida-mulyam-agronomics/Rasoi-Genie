@@ -268,6 +268,7 @@ function createMockFamilyContext(
     promoteOrDemoteCoOwner: jest.fn().mockResolvedValue({ success: true }),
     removeFamilyMember: jest.fn().mockResolvedValue({ success: true }),
     leaveCurrentFamily: jest.fn().mockResolvedValue({ success: true }),
+    resetDependentSession: jest.fn().mockResolvedValue(undefined),
     transferFamilyOwnership: jest.fn().mockResolvedValue({ success: true }),
     addFamilyItem: jest.fn().mockResolvedValue({ success: true }),
     editFamilyItem: jest.fn().mockResolvedValue({ success: true }),

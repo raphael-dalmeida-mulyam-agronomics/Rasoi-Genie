@@ -1,76 +1,44 @@
-# Daily Work Status Report — October 14, 2026
+# Daily Work Status Report — October 19, 2026
 
 **Project:** RasoiGenie  
-**Branch:** `feature/gourmet-cook-mode-ui-polish` (Merged to `main`)  
-**Status:** Completed, Exported to Web Build & Pushed to Remote `origin/main`  
-**Quality Gates:** 34/34 test suites passed (267/267 tests), TypeScript typecheck clean (0 errors)
+**Branch:** `feature/inventory-mgmt-chef-cascade-and-meal-detail-polish` (Merged to `main`)  
+**Status:** Completed, Verified with Automated Test Suites & Merged to `main`  
+**Quality Gates:** 37/37 test suites passed (297/297 tests passed), TypeScript clean (0 errors)
 
 ---
 
-### Design System & Warm Gourmet Theme Tokens
+### Meal Detail Modal Tab Prioritization & Nutrition Visibility
 
-- Upgraded global color palette to warm gourmet tones (`bgPrimary: '#FCFAF6'`, `bgSubtle: '#F6F2EB'`, amber accents `#D97706`, and terracotta primary `#E05A47`).
-- Added organic depth shadows (`soft`, `card`, `floating`, `glow`) and expanded border radius scale (`radii.xl: 22`, `radii.pill: 9999`).
-- Standardized `Button` and `SegmentedControl` components with pill geometry, smooth press feedback, and warm border styling.
-- Propagated warm gourmet theme tokens across `MealDetailModal`, `OrderHistoryView`, `ReferralView`, `ReviewModal`, and `WalletView`.
+- **Nutrition Re-positioning**: Repositioned the **Nutrition** tab as the second tab immediately after **Overview**, fulfilling customer demand for immediate visibility into macronutrients (calories, protein, carbohydrates, fats, dietary fiber) and dietary badges prior to evaluating contents or instructions.
+- **Order of Importance Hierarchy**: Reordered both the tab navigation strip and the underlying scrollable card blocks in `MealDetailModal.tsx` in strictly descending order of purchase and culinary importance:
+  1. `overview` (Overview): High-level description, pre-portioned masala sachets included, allergen alerts.
+  2. `nutrition` (Nutrition): Per-serving nutritional facts (kcal, protein, carbs, fats, fiber) and dietary tags (Vegetarian, Vegan, Gluten-Free, High-Protein).
+  3. `ingredients` (Masala Box): Pre-portioned ingredients checklist with real-time serving size scaling.
+  4. `recipe` (Recipe Guide): Interactive step-by-step cooking guide with built-in stovetop timers and culinary tips.
+  5. `reviews` (Reviews): Verified buyer reviews, rating breakdowns, and submission trigger.
+- **Type Safety**: Synchronized `TabType` union definition (`'overview' | 'nutrition' | 'ingredients' | 'recipe' | 'reviews'`) ensuring type safety across component states.
 
-### Cook Mode Culinary Experience & Deep Linking
+### Inventory Management Hub & Supabase Realtime Service
 
-- Fixed direct URL order routing for `/cook/[orderId]` with automatic demo order fallback for direct desktop and mobile inspection.
-- Wrapped desktop/web viewports in a centered responsive container (`maxWidth: 760`) with dark glass background framing.
-- Built elevated floating header pill displaying meal kit thumbnail, live cooking badge, step counter, and close button.
-- Implemented kitchen-friendly text size scaler (`Aa / A+`) toggling between standard and high-legibility font sizes for busy hands.
-- Implemented segmented visual step progress bar with tap-to-open step overview jump modal.
-- Redesigned step recipe cards with elevated shadows, time estimation pills, 240px rounded food photography, and warm amber chef tip callouts.
-- Upgraded digital step timers with pulse animation rings, tabular-numeric countdown displays, and one-tap reset/pause controls.
-- Redesigned celebratory "Enjoy Your Meal" screen with completion confetti, recipe star ratings, and clear navigation CTAs.
-- Added persistent bottom dock with rounded pill action buttons for seamless step navigation.
+- **Supabase Database Migration**: Created `framework/supabase/migrations/20261019_inventory_items.sql` with full replica identity, automated timestamps, RLS policies, and added `inventory_items` to the `supabase_realtime` publication.
+- **Supabase Inventory Service**: Built `framework/services/supabaseInventoryService.ts` providing CRUD operations, real-time table sync, low-stock alert calculation, and local cache fallbacks.
+- **Bulk Restock Modal**: Implemented `features/admin/BulkRestockModal.tsx` allowing multi-item restocking with custom restock amounts, supplier tracking, unit cost calculations, and updated expiry calculations.
+- **Category & Stock Filtering**: Created `features/admin/CategoryDropdown.tsx` enabling category filtering across raw ingredients, packaging, seasonings, and stock thresholds.
+- **Inventory Seeding Automation**: Developed `framework/services/seedInventoryFromMealKits.ts` extracting ingredients from all 28 meal kits and populating the warehouse inventory database.
 
-### Cart & Post-Checkout Integration
+### Chef Auto-Removal Cascade on User Account Deletion
 
-- Added "Recent Placed Order • Ready to Cook!" card to `CartView` allowing instant jump into guided cooking for active meal kits.
-- Updated `OrderConfirmationView` with direct "Start cooking guide" action button immediately upon successful checkout.
-- Enforced safe optional chaining on active orders in `CartView` to eliminate TypeScript undefined index warnings.
+- **SQL Cascade Trigger**: Implemented `framework/supabase/migrations/20261019_cascade_chef_on_user_delete.sql` creating a `SECURITY DEFINER` trigger function (`cascade_user_deletion`) on `user_profiles` that automatically purges corresponding records from `chef_profiles` and `chef_submissions` when a user account is deleted.
+- **Service Layer Sync**: Updated `userManagementService.ts`, `supabaseUserService.ts`, and `adminRbacService.ts` to coordinate dual-layer user deletion and cache clearing.
+- **Automated Test Coverage**: Created `framework/__tests__/chefAutoRemovalOnUserDeletion.test.ts` verifying that deleting a user account immediately revokes chef privileges and purges submission records.
 
-### Family Basket & Service Layer Hardening
+### Location Onboarding & Geographic Detection Fallback
 
-- Implemented `fetchFamilyById` query helper in `familyService.ts` for direct single-family lookups.
-- Wired typesafe `onResync` handler in `subscribeToFamilyRealtime` for reliable Supabase Realtime reconnection and state synchronization.
-- Resolved type definitions and strict null-check requirements across family context reducers and order interfaces.
+- **Initial Mode Selection**: Updated `features/onboarding/LocationOnboardingView.tsx` with a dual-option screen allowing users to choose between GPS auto-detection and manual city selection.
+- **Distance-Based Hub Resolution**: Enhanced `framework/services/locationService.ts` with coordinate-based distance calculation across major Indian hub coordinates (`bengaluru`, `mumbai`, `delhi`, `pune`, `hyderabad`, `chennai`, etc.) to provide reliable hub resolution on web browsers where native geocoding is restricted.
 
-### Quality Assurance, Build & Deployment
+### Quality Assurance & Automated Testing
 
-- Added unit and integration test coverage for Cook Mode navigation, timer controls, text scaling, and fallback handling (`cookMode.test.ts`).
-- Verified entire test suite with 34/34 passing test suites (267/267 unit and integration tests passing cleanly).
-- Validated zero TypeScript compilation errors with strict typecheck (`tsc --noEmit`).
-- Bundled and exported 25 static web routes and assets into the production `dist/` directory via `npx expo export -p web`.
-- Created and pushed feature branch `feature/gourmet-cook-mode-ui-polish` to GitHub remote (`origin`).
-- Merged feature branch into `main` and pushed updated `main` to `origin/main` (`823aada`).
-
-### Family Dependent Profiles & Personalized Home Recommendations
-
-- **Direct Profile Addition**: Enabled family owners to directly add Child (ages 4-15) and Senior Citizen (ages 60-120) profiles with strict validation and no invitation links required.
-- **Unified Card Grid Styling**: Transformed Regional Cuisine and Food Allergy selectors into rich 2-column card grids matching Dietary Preferences with dynamic highlight borders and descriptive subtitles.
-- **Home Screen Recommendations for Children & Seniors**: Added dynamic `"Recommended for {name}"` sections below `"Recommended for You"` on the owner's home feed. When multiple children or senior citizens exist in the family, an individualized recommendation section is shown for each dependent based on their dietary preferences, allergen exclusions, and spice tolerance.
-- **Unified Setup & Edit Preferences Experience**: Swapped out the old generic modal in `DependentProfileSheet` for the exact same `AddDependentSheet` used during profile creation (supporting prefilled values in edit mode, identical 2-column card grid styling, age bounds, allergen exclusions, and immediate reactivity).
-- **Simultaneous Sheet Dismissal**: Saving edited taste preferences now automatically slides down both the preferences editing menu and the underlying taste profile sheet back to the family hub.
-- **Strict Cuisine Matching**: Enforced strict cuisine filtering for dependent recommendations in both `DependentProfileSheet` and `HomeScreenView`. Dishes from unselected cuisines (such as European Ratatouille when a senior citizen selects Indian cuisines) are strictly excluded.
-- **Test Coverage**: Added 56 unit and UI tests verifying role access controls, strict age validation, identical edit preferences menu, sheet dismissal flow, strict cuisine filtering, and home screen recommendation sections with 100% pass rate.
-
-### Explicit Basket Destination & Cross-Basket Item Moving
-
-- **Explicit Destination Prompt on Quick-Add**: When family members add a meal kit from the home screen, an explicit bottom sheet ([CartDestinationModal](file:///c:/Users/raphd/OneDrive/Desktop/RasoiGenie/features/cart/CartDestinationModal.tsx)) prompts them to choose between their **Personal Basket** (individual checkout, private) and the **Family Basket** (pooled order, shared delivery).
-- **Cart Lock Awareness**: If the Family Cart has been locked by the family owner, the Family Basket option in the prompt and in cross-basket actions is disabled with clear warning badges for non-owner members.
-- **Meal Detail Cart Destination Toggle**: In [MealDetailModal](file:///c:/Users/raphd/OneDrive/Desktop/RasoiGenie/features/meal-detail/MealDetailModal.tsx), users in a family have an explicit destination toggle that defaults to the currently active cart tab while allowing instant switching before adding to cart.
-- **Move to Family Basket (from Personal Cart)**: In [CartView](file:///c:/Users/raphd/OneDrive/Desktop/RasoiGenie/features/cart/CartView.tsx), each personal item card includes a "Move to Family Basket" pill button. Clicking it atomically adds the dish to the family cart and removes it from the personal cart (with locked state prevention).
-- **Move to Personal Basket (from Family Cart)**: In [FamilyCartView](file:///c:/Users/raphd/OneDrive/Desktop/RasoiGenie/features/family/FamilyCartView.tsx) and [FamilyCartItemRow](file:///c:/Users/raphd/OneDrive/Desktop/RasoiGenie/features/family/FamilyCartItemRow.tsx), members can move their dishes to their personal cart using "Move to Personal Basket", keeping personal orders distinct while releasing items from the family pool.
-- **Automated UI Test Coverage**: Suite of tests in [familyUI.test.tsx](file:///c:/Users/raphd/OneDrive/Desktop/RasoiGenie/framework/__tests__/familyUI.test.tsx) verifying modal destination callbacks, locked state handling, and bidirectional cross-basket move action triggers.
-
-### Family Basket Item Deletion & Bounce-Back Fix
-
-- **Root Cause of the "Bounce Back"**: When an item was deleted, the local state removed it immediately, but because Supabase's direct table delete returned without error even when RLS blocked it (0 rows affected), the item was never deleted from PostgreSQL. A second later, the background fetch (`fetchFamilyCartItems`) or a Realtime reconnect resync fetched the still-existing row from Supabase and restored it into the UI.
-- **SECURITY DEFINER RPC Priority**: Updated [familyService.ts](file:///c:/Users/raphd/OneDrive/Desktop/RasoiGenie/framework/services/familyService.ts) `ownerRemoveItem` to prioritize the `SECURITY DEFINER` RPC `owner_remove_item`. This executes with elevated database privileges, bypassing RLS blocks. Direct deletes are verified with `.select('id')` to ensure a row was truly deleted.
-- **Tombstone Protection in State**: In [FamilyContext.tsx](file:///c:/Users/raphd/OneDrive/Desktop/RasoiGenie/framework/context/FamilyContext.tsx), added a `recentlyRemovedCartItemIdsRef` tombstone set with a 15-second TTL. Both background re-fetches and Realtime resync events strictly filter out any recently removed IDs, preventing any race condition, replication latency, or socket reconnect from resurrecting deleted items.
-- **SQL Migration**: Created [20261015_fix_family_cart_remove_item.sql](file:///c:/Users/raphd/OneDrive/Desktop/RasoiGenie/framework/supabase/migrations/20261015_fix_family_cart_remove_item.sql) to remove restrictive DELETE RLS policies, remove delete-blocking triggers, and install the streamlined `owner_remove_item` and `clear_family_cart` RPCs.
-- **Family Basket Auto-Clearing After Order Placement**: Added `clearFamilyCart` across [familyService.ts](file:///c:/Users/raphd/OneDrive/Desktop/RasoiGenie/framework/services/familyService.ts), [FamilyContext.tsx](file:///c:/Users/raphd/OneDrive/Desktop/RasoiGenie/framework/context/FamilyContext.tsx), and [CheckoutView.tsx](file:///c:/Users/raphd/OneDrive/Desktop/RasoiGenie/features/checkout/CheckoutView.tsx). Once an order is completed, the family basket items and checkout holds are completely cleared from PostgreSQL, local storage, and React state, ensuring the family basket is fresh and empty after checkout.
-- **Test Coverage**: All 35 tests in [familyUI.test.tsx](file:///c:/Users/raphd/OneDrive/Desktop/RasoiGenie/framework/__tests__/familyUI.test.tsx) and 8 tests in [familyDependentsRecommendations.test.ts](file:///c:/Users/raphd/OneDrive/Desktop/RasoiGenie/framework/__tests__/familyDependentsRecommendations.test.ts) pass cleanly.
+- Verified TypeScript codebase integrity with 0 errors via `npx tsc --noEmit`.
+- Ran complete Jest test suite with all 37 test suites and 297 tests passing (`37 passed, 297 passed`).
+- Created feature branch `feature/inventory-mgmt-chef-cascade-and-meal-detail-polish`, pushed to GitHub remote, merged into `main`, and pushed updated `main` to `origin/main`.
