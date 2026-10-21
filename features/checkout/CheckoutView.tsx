@@ -1262,7 +1262,10 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({ onBack, onOrderPlace
 
           <View style={styles.slotsGrid}>
             {DELIVERY_SLOTS.map((slot) => {
-              const isSelected = selectedSlot === slot.title;
+              const isSelected =
+                selectedSlot === slot.title ||
+                (selectedSlot && slot.title.includes(selectedSlot)) ||
+                (selectedSlot && selectedSlot.includes(slot.title));
               return (
                 <TouchableOpacity
                   key={slot.id}
@@ -1278,16 +1281,26 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({ onBack, onOrderPlace
                     },
                   ]}
                   onPress={() => setSelectedSlot(slot.title)}
+                  activeOpacity={0.8}
                 >
-                  <View style={styles.slotHeader}>
-                    <Badge label={slot.tag} variant={isSelected ? 'accent' : 'outline'} />
-                    {isSelected && (
-                      <Icon name="checkmark-circle" size={16} color={colors.primary} />
-                    )}
+                  <View style={styles.slotLeft}>
+                    <View style={styles.slotRadioCircle}>
+                      {isSelected ? (
+                        <Icon name="checkmark-circle" size={18} color={colors.primary} />
+                      ) : (
+                        <View
+                          style={[styles.slotUnselectedCircle, { borderColor: colors.borderLight }]}
+                        />
+                      )}
+                    </View>
+                    <Text
+                      style={[styles.slotTitle, { color: colors.textPrimary }]}
+                      numberOfLines={2}
+                    >
+                      {slot.title}
+                    </Text>
                   </View>
-                  <Text style={[styles.slotTitle, { color: colors.textPrimary }]}>
-                    {slot.title}
-                  </Text>
+                  <Badge label={slot.tag} variant={isSelected ? 'accent' : 'outline'} size="sm" />
                 </TouchableOpacity>
               );
             })}
@@ -1888,21 +1901,46 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   slotCard: {
-    padding: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
     borderRadius: 10,
     borderWidth: 1.5,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    gap: 10,
+  },
+  slotLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    flex: 1,
+    minWidth: 0,
+  },
+  slotRadioCircle: {
+    width: 20,
+    height: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  slotUnselectedCircle: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    borderWidth: 1.5,
+  },
+  slotTitle: {
+    fontSize: 13,
+    fontWeight: '600',
+    flex: 1,
+    flexShrink: 1,
   },
   slotHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-  },
-  slotTitle: {
-    fontSize: 14,
-    fontWeight: '600',
+    flexShrink: 0,
   },
   walletCard: {
     padding: 14,

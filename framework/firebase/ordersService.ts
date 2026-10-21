@@ -514,6 +514,10 @@ export function subscribeToOrders(callback: (orders: Order[]) => void): () => vo
           }
         },
         (error) => {
+          if ((error as any)?.code === 'permission-denied') {
+            // Firestore rules reject unauthenticated reads; Supabase is the primary database
+            return;
+          }
           console.warn('[ordersService] Firestore onSnapshot fallback:', error);
         },
       );

@@ -13,7 +13,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../framework/theme/ThemeContext';
 import { Icon } from '../../framework/ui/Icon';
 import { Button } from '../../framework/ui/Button';
-import { Badge } from '../../framework/ui/Badge';
 import {
   detectCurrentLocation,
   saveStoredUserLocation,
@@ -128,8 +127,7 @@ export const LocationOnboardingView: React.FC<LocationOnboardingViewProps> = ({
             Where should we deliver?
           </Text>
           <Text style={[styles.subheading, { color: colors.textSecondary }]}>
-            Allow location access to find your nearest kitchen hub and explore fresh meal kits
-            prepared for your city in 20 minutes.
+            Allow location access to explore fresh meal kits prepared for your city in 20 minutes.
           </Text>
 
           <Button
@@ -165,7 +163,7 @@ export const LocationOnboardingView: React.FC<LocationOnboardingViewProps> = ({
             <Icon name="location" size={40} color={colors.primary} />
           </View>
           <Text style={[styles.heading, { color: colors.textPrimary }]}>
-            Finding your nearest kitchen hub...
+            Finding your location...
           </Text>
           <Text style={[styles.subheading, { color: colors.textSecondary }]}>
             We use your location to deliver fresh ingredients with cold-chain packaging in 20
@@ -195,7 +193,7 @@ export const LocationOnboardingView: React.FC<LocationOnboardingViewProps> = ({
           </Text>
           <Text style={[styles.subheading, { color: colors.textSecondary }]}>
             RasoiGenie currently delivers fresh meal kits in 26 major cities across India. We're
-            expanding fast! Meanwhile, explore what our chefs are cooking in other hubs.
+            expanding fast! Meanwhile, explore what our chefs are cooking in other cities.
           </Text>
           <Button
             testID="unserviceable-select-manually-btn"
@@ -216,7 +214,7 @@ export const LocationOnboardingView: React.FC<LocationOnboardingViewProps> = ({
               Select Delivery City
             </Text>
             <Text style={[styles.pickerSub, { color: colors.textSecondary }]}>
-              Showing serviceable cities across North, South, West & East Hubs
+              Showing serviceable cities across India
             </Text>
           </View>
 
@@ -314,19 +312,6 @@ export const LocationOnboardingView: React.FC<LocationOnboardingViewProps> = ({
                     </Text>
                   </View>
                 </View>
-                <Badge
-                  label={`${item.hub} Hub`}
-                  variant={
-                    item.hub === 'South'
-                      ? 'success'
-                      : item.hub === 'West'
-                        ? 'warning'
-                        : item.hub === 'North'
-                          ? 'primary'
-                          : 'accent'
-                  }
-                  size="sm"
-                />
               </TouchableOpacity>
             )}
             ListEmptyComponent={

@@ -1,5 +1,14 @@
-﻿import { initializeApp, getApps, getApp, FirebaseApp } from 'firebase/app';
-import { getAuth, Auth, GoogleAuthProvider } from 'firebase/auth';
+import { initializeApp, getApps, getApp, FirebaseApp } from 'firebase/app';
+import {
+  getAuth,
+  initializeAuth,
+  // @ts-ignore - getReactNativePersistence is exported by @firebase/auth in React Native
+  getReactNativePersistence,
+  Auth,
+  GoogleAuthProvider,
+} from 'firebase/auth';
+import { Platform } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getFirestore, Firestore } from 'firebase/firestore';
 
 const firebaseConfig = {
@@ -23,7 +32,24 @@ if (!getApps().length) {
   app = getApp();
 }
 
-export const auth: Auth = getAuth(app);
+let authInstance: Auth;
+if (Platform.OS === 'web') {
+  authInstance = getAuth(app);
+} else {
+  try {
+    const persistence =
+      typeof getReactNativePersistence === 'function'
+        ? getReactNativePersistence(AsyncStorage)
+        : undefined;
+
+    authInstance = persistence ? initializeAuth(app, { persistence }) : getAuth(app);
+  } catch {
+    // Graceful fallback if already initialized (e.g. during Fast Refresh / HMR)
+    authInstance = getAuth(app);
+  }
+}
+
+export const auth: Auth = authInstance;
 export const db: Firestore = getFirestore(app);
 export const googleProvider = new GoogleAuthProvider();
 

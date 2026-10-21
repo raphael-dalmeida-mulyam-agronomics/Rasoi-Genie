@@ -444,11 +444,11 @@ const CatalogSections = React.memo(function CatalogSections({
   onDecrement?: (kit: MealKit) => void;
 }) {
   const { colors, radii } = useTheme();
-  const [visibleCount, setVisibleCount] = useState(32);
+  const [visibleCount, setVisibleCount] = useState(12);
 
   // Reset visible count when filters change
   useEffect(() => {
-    setVisibleCount(32);
+    setVisibleCount(12);
   }, [dietFilterTags, selectedCuisine, selectedDishCategory]);
 
   const displayedKits = useMemo(() => {
@@ -517,7 +517,7 @@ const CatalogSections = React.memo(function CatalogSections({
                     styles.showMoreBtn,
                     { borderColor: colors.primary, backgroundColor: colors.primary + '12' },
                   ]}
-                  onPress={() => setVisibleCount((prev) => prev + 32)}
+                  onPress={() => setVisibleCount((prev) => prev + 12)}
                   activeOpacity={0.8}
                 >
                   <Text style={[styles.showMoreBtnText, { color: colors.primary }]}>
@@ -569,7 +569,7 @@ const CatalogSections = React.memo(function CatalogSections({
           >
             {trendingKits
               .filter((k): k is MealKit => Boolean(k && k.id))
-              .slice(0, 10)
+              .slice(0, 6)
               .map((kit) => (
                 <MealKitHorizontalCard
                   key={kit.id}
@@ -607,7 +607,7 @@ const CatalogSections = React.memo(function CatalogSections({
           >
             {foreignKits
               .filter((k): k is MealKit => Boolean(k && k.id))
-              .slice(0, 10)
+              .slice(0, 6)
               .map((kit) => (
                 <MealKitHorizontalCard
                   key={kit.id}
@@ -694,7 +694,7 @@ const CatalogSections = React.memo(function CatalogSections({
             >
               {recommendedKits
                 .filter((k): k is MealKit => Boolean(k && k.id))
-                .slice(0, 10)
+                .slice(0, 6)
                 .map((kit) => (
                   <MealKitHorizontalCard
                     key={kit.id}
@@ -820,7 +820,7 @@ const CatalogSections = React.memo(function CatalogSections({
                 >
                   {kits
                     .filter((k): k is MealKit => Boolean(k && k.id))
-                    .slice(0, 10)
+                    .slice(0, 6)
                     .map((kit) => (
                       <MealKitHorizontalCard
                         key={kit.id}
@@ -903,7 +903,7 @@ const CatalogSections = React.memo(function CatalogSections({
                     styles.showMoreBtn,
                     { borderColor: colors.primary, backgroundColor: colors.primary + '12' },
                   ]}
-                  onPress={() => setVisibleCount((prev) => prev + 32)}
+                  onPress={() => setVisibleCount((prev) => prev + 12)}
                   activeOpacity={0.8}
                 >
                   <Text style={[styles.showMoreBtnText, { color: colors.primary }]}>
@@ -1482,7 +1482,6 @@ export const HomeScreenView: React.FC = () => {
                 {preferences.city ||
                   preferences.currentCity ||
                   (isDependent ? 'Managed by Owner' : 'Choose City')}
-                {preferences.regionHub ? ` (${preferences.regionHub} Hub)` : ''}
               </Text>
             </View>
           </TouchableOpacity>

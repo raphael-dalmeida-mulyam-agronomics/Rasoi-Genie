@@ -1,4 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { Platform } from 'react-native';
 import {
   CreditLot,
   debitWallet,
@@ -194,14 +195,23 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   // Cross-tab localStorage listener — picks up wallet updates written by the
   // admin in another browser tab (e.g. when issuing credits from the admin panel).
   useEffect(() => {
-    if (typeof window === 'undefined') return;
+    if (
+      Platform.OS !== 'web' ||
+      typeof window === 'undefined' ||
+      typeof window.addEventListener !== 'function'
+    )
+      return;
     const handleStorage = (e: StorageEvent) => {
       if (e.key === '@rasoi_local_wallets' || e.key === '@rasoi_local_wallet_txs') {
         refreshAll();
       }
     };
     window.addEventListener('storage', handleStorage);
-    return () => window.removeEventListener('storage', handleStorage);
+    return () => {
+      if (typeof window !== 'undefined' && typeof window.removeEventListener === 'function') {
+        window.removeEventListener('storage', handleStorage);
+      }
+    };
   }, [refreshAll]);
 
   // ─── Helper: Calculate applicable credits for checkout ─────────────────────

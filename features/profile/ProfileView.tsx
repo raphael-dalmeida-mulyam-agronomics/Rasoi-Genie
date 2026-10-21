@@ -201,7 +201,7 @@ export const ProfileView: React.FC = () => {
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 }}>
                 <Icon name="location" size={13} color={colors.textMuted} />
                 <Text style={[styles.userRegion, { color: colors.textMuted, marginTop: 0 }]}>
-                  {preferences.currentCity} ({preferences.regionHub} Region)
+                  {preferences.currentCity || 'India'}
                 </Text>
               </View>
             </View>

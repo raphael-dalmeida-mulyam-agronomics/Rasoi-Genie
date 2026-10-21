@@ -464,4 +464,87 @@ describe('Cook Mode & Kitchen Companion Suite', () => {
       expect(showEnjoyMealScreen).toBe(false); // recipe view is active again!
     });
   });
+
+  describe('10. Delivery & Review Lifecycle: Instructions Only Disappear After Delivery AND Review', () => {
+    interface TestOrder {
+      id: string;
+      status: Order['status'];
+      items: { kitId: string; name: string }[];
+    }
+
+    const reviewedKitKeys = new Set<string>();
+
+    const isKitReviewed = (orderId: string, kitId: string) => {
+      return reviewedKitKeys.has(`${orderId}:${kitId}`) || reviewedKitKeys.has(kitId);
+    };
+
+    const isOrderReadyToDisappear = (order: TestOrder) => {
+      if (order.status === 'Cancelled' || order.status === 'Refunded') {
+        return true;
+      }
+      // ONLY disappear if Delivered AND reviewed
+      if (order.status !== 'Delivered') {
+        return false;
+      }
+      return order.items.every((it) => isKitReviewed(order.id, it.kitId));
+    };
+
+    beforeEach(() => {
+      reviewedKitKeys.clear();
+    });
+
+    it('keeps instructions active when order is preparing and unreviewed', () => {
+      const order: TestOrder = {
+        id: 'ORD-100',
+        status: 'Preparing',
+        items: [{ kitId: 'paneer-butter-masala', name: 'Paneer Butter Masala' }],
+      };
+
+      expect(isOrderReadyToDisappear(order)).toBe(false);
+    });
+
+    it('keeps instructions active when user rates meal kit but order is not yet delivered', () => {
+      const order: TestOrder = {
+        id: 'ORD-101',
+        status: 'Out for Delivery',
+        items: [{ kitId: 'paneer-butter-masala', name: 'Paneer Butter Masala' }],
+      };
+
+      // User reviews the meal kit
+      reviewedKitKeys.add('ORD-101:paneer-butter-masala');
+
+      expect(isKitReviewed('ORD-101', 'paneer-butter-masala')).toBe(true);
+      // Order is not delivered yet: instructions MUST NOT disappear!
+      expect(isOrderReadyToDisappear(order)).toBe(false);
+    });
+
+    it('keeps instructions active when admin marks order Delivered but user has not reviewed yet', () => {
+      const order: TestOrder = {
+        id: 'ORD-102',
+        status: 'Delivered', // Admin marked as delivered
+        items: [{ kitId: 'dal-makhani', name: 'Dal Makhani' }],
+      };
+
+      // Meal kit NOT reviewed yet: instructions MUST NOT disappear!
+      expect(isKitReviewed('ORD-102', 'dal-makhani')).toBe(false);
+      expect(isOrderReadyToDisappear(order)).toBe(false);
+    });
+
+    it('finally allows instructions to disappear only after order is Delivered AND meal kit is reviewed', () => {
+      const order: TestOrder = {
+        id: 'ORD-103',
+        status: 'Delivered', // Admin marked as delivered
+        items: [{ kitId: 'biryani-kit', name: 'Dum Biryani' }],
+      };
+
+      // Before review
+      expect(isOrderReadyToDisappear(order)).toBe(false);
+
+      // User submits review
+      reviewedKitKeys.add('ORD-103:biryani-kit');
+
+      // Now both Delivered AND reviewed: instructions finally disappear!
+      expect(isOrderReadyToDisappear(order)).toBe(true);
+    });
+  });
 });

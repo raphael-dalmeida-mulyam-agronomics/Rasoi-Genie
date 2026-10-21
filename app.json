@@ -6,6 +6,7 @@
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "rasoigenie",
+    "primaryColor": "#E6F4FE",
     "userInterfaceStyle": "automatic",
     "ios": {
       "supportsTablet": true

@@ -1,44 +1,93 @@
-# Daily Work Status Report — October 19, 2026
+# Daily Work Status Report — October 21, 2026
 
 **Project:** RasoiGenie  
-**Branch:** `feature/inventory-mgmt-chef-cascade-and-meal-detail-polish` (Merged to `main`)  
+**Branch:** `feature/cook-mode-review-requirement-and-delivery-status` (Merged to `main`)  
 **Status:** Completed, Verified with Automated Test Suites & Merged to `main`  
-**Quality Gates:** 37/37 test suites passed (297/297 tests passed), TypeScript clean (0 errors)
+**Quality Gates:** 37/37 test suites passed (301/301 tests passed), TypeScript clean (0 errors)
 
 ---
 
-### Meal Detail Modal Tab Prioritization & Nutrition Visibility
+### 1. Warning Removals & Platform Modernization
 
-- **Nutrition Re-positioning**: Repositioned the **Nutrition** tab as the second tab immediately after **Overview**, fulfilling customer demand for immediate visibility into macronutrients (calories, protein, carbohydrates, fats, dietary fiber) and dietary badges prior to evaluating contents or instructions.
-- **Order of Importance Hierarchy**: Reordered both the tab navigation strip and the underlying scrollable card blocks in `MealDetailModal.tsx` in strictly descending order of purchase and culinary importance:
-  1. `overview` (Overview): High-level description, pre-portioned masala sachets included, allergen alerts.
-  2. `nutrition` (Nutrition): Per-serving nutritional facts (kcal, protein, carbs, fats, fiber) and dietary tags (Vegetarian, Vegan, Gluten-Free, High-Protein).
-  3. `ingredients` (Masala Box): Pre-portioned ingredients checklist with real-time serving size scaling.
-  4. `recipe` (Recipe Guide): Interactive step-by-step cooking guide with built-in stovetop timers and culinary tips.
-  5. `reviews` (Reviews): Verified buyer reviews, rating breakdowns, and submission trigger.
-- **Type Safety**: Synchronized `TabType` union definition (`'overview' | 'nutrition' | 'ingredients' | 'recipe' | 'reviews'`) ensuring type safety across component states.
+- **Deprecated `SafeAreaView` Modernization**:
+  - Replaced the deprecated `SafeAreaView` from `'react-native'` with standard `SafeAreaView` from `'react-native-safe-area-context'` across the application (`CookModeView.tsx`, `CartView.tsx`, `CheckoutView.tsx`, `HomeScreenView.tsx`, `ProfileView.tsx`, `SearchView.tsx`, `LocationOnboardingView.tsx`, etc.).
+  - Eliminated runtime deprecation warnings (`WARN SafeAreaView has been deprecated and will be removed in a future release`) across iOS, Android, and Web viewports.
+- **Graceful Firebase Firestore Fallback**:
+  - Handled `permission-denied` / `Missing or insufficient permissions` gracefully in `framework/firebase/ordersService.ts` when querying Firestore on client devices without admin auth.
+  - Ensured seamless Supabase-first operations without noisy console error traces.
 
-### Inventory Management Hub & Supabase Realtime Service
+---
 
-- **Supabase Database Migration**: Created `framework/supabase/migrations/20261019_inventory_items.sql` with full replica identity, automated timestamps, RLS policies, and added `inventory_items` to the `supabase_realtime` publication.
-- **Supabase Inventory Service**: Built `framework/services/supabaseInventoryService.ts` providing CRUD operations, real-time table sync, low-stock alert calculation, and local cache fallbacks.
-- **Bulk Restock Modal**: Implemented `features/admin/BulkRestockModal.tsx` allowing multi-item restocking with custom restock amounts, supplier tracking, unit cost calculations, and updated expiry calculations.
-- **Category & Stock Filtering**: Created `features/admin/CategoryDropdown.tsx` enabling category filtering across raw ingredients, packaging, seasonings, and stock thresholds.
-- **Inventory Seeding Automation**: Developed `framework/services/seedInventoryFromMealKits.ts` extracting ingredients from all 28 meal kits and populating the warehouse inventory database.
+### 2. Meal Kit Review-Gated Instructions Lifecycle
 
-### Chef Auto-Removal Cascade on User Account Deletion
+- **Review Gating Architecture**:
+  - Designed and implemented a mandatory review gate before cooking instructions can disappear: cooking instructions and active cook mode remain accessible to the user until both criteria are met:
+    1. The order has been marked as **Delivered** by kitchen operations.
+    2. The customer has submitted a **Meal Kit Review / Rating** for that kit.
+- **Cook Mode Review Prompts & Banners**:
+  - Added interactive review prompt banners (`"Rate this Meal Kit to complete cooking guide"`) directly within `CookModeView.tsx` with a primary `"Rate Kit"` action button.
+  - Linked to `ReviewModal` with pre-filled kit details, star ratings (1–5 stars), photo attachments, and chef compliments.
+  - Intercepted early exit (`handleExit`) in `CookModeView.tsx`: if the user attempts to exit unreviewed steps, an alert prompts: _"Please rate the meal kit to close instructions. Would you like to review now?"_ with a direct shortcut to the rating modal.
+  - Step card footnote added to `RecipeStepCard.tsx`: _"Please rate this meal kit after cooking to finish and close the guide."_
+- **Enjoy Your Meal Completion Screen**:
+  - Updated `EnjoyYourMealView.tsx`: removed auto-dismiss behavior upon reaching the final slide.
+  - Added a prominent review status card:
+    - If unreviewed: Displays a glowing amber badge with the message _"Please rate the meal kit to close instructions"_ and a large green _"Rate Meal Kit Now"_ button.
+    - If reviewed but not yet delivered: Informs customer _"Order delivery confirmation in progress — instructions will disappear once delivered."_
+    - If delivered AND reviewed: Activates the primary _"Finish & Close Guide"_ button.
+- **Persistence & Context Filtering**:
+  - Updated `CookModeContext.tsx` with persistent reviewed kit keys (`reviewedKitKeys`) saved to storage.
+  - Added `isKitReviewed(kitId, orderId)`, `markKitReviewed(kitId, orderId)`, and `isOrderReadyToDisappear(orderId)`.
+  - Excluded `'Delivered'` from terminal dismissal statuses unless the meal kit is also confirmed reviewed.
+  - Updated `ResumeCookingBanner.tsx` and `CookModeMiniBar.tsx` so active floating banners only dismiss once both delivery and review conditions are satisfied.
 
-- **SQL Cascade Trigger**: Implemented `framework/supabase/migrations/20261019_cascade_chef_on_user_delete.sql` creating a `SECURITY DEFINER` trigger function (`cascade_user_deletion`) on `user_profiles` that automatically purges corresponding records from `chef_profiles` and `chef_submissions` when a user account is deleted.
-- **Service Layer Sync**: Updated `userManagementService.ts`, `supabaseUserService.ts`, and `adminRbacService.ts` to coordinate dual-layer user deletion and cache clearing.
-- **Automated Test Coverage**: Created `framework/__tests__/chefAutoRemovalOnUserDeletion.test.ts` verifying that deleting a user account immediately revokes chef privileges and purges submission records.
+---
 
-### Location Onboarding & Geographic Detection Fallback
+### 3. Admin Dashboard: Mark as Delivered Action
 
-- **Initial Mode Selection**: Updated `features/onboarding/LocationOnboardingView.tsx` with a dual-option screen allowing users to choose between GPS auto-detection and manual city selection.
-- **Distance-Based Hub Resolution**: Enhanced `framework/services/locationService.ts` with coordinate-based distance calculation across major Indian hub coordinates (`bengaluru`, `mumbai`, `delhi`, `pune`, `hyderabad`, `chennai`, etc.) to provide reliable hub resolution on web browsers where native geocoding is restricted.
+- **Quick-Action Order Lifecycle Button**:
+  - Added a dedicated, prominent emerald green **"Mark as Delivered"** button (`testID="mark-delivered-btn-${order.id}"`) to each active order card in `AdminDashboardView.tsx` under the Orders tab.
+  - Configured status checks: the button displays whenever an order is in `'Confirmed'`, `'Preparing'`, or `'Out for Delivery'` status.
+- **Inspect Order Modal Integration**:
+  - Added a synchronized **"Mark as Delivered"** action in the Inspect Order modal footer (`testID="inspect-mark-delivered-btn-${inspectOrder.id}"`), enabling kitchen admins to update status either from the card list or full order drill-down.
+- **Dual Backend Synchronization**:
+  - Triggers synchronous updates across Supabase (`updateOrderStatusInSupabase(orderId, 'Delivered')`) and local/fallback storage (`updateOrderStatus(orderId, 'Delivered')`).
+  - Automatically notifies subscribers and dispatches delivery tracking events.
 
-### Quality Assurance & Automated Testing
+---
 
-- Verified TypeScript codebase integrity with 0 errors via `npx tsc --noEmit`.
-- Ran complete Jest test suite with all 37 test suites and 297 tests passing (`37 passed, 297 passed`).
-- Created feature branch `feature/inventory-mgmt-chef-cascade-and-meal-detail-polish`, pushed to GitHub remote, merged into `main`, and pushed updated `main` to `origin/main`.
+### 4. Supabase Backend Reliability & Conflict Resolution Fixes
+
+- **Collision-Proof Order IDs**:
+  - Updated `createOrderInSupabase` to use full 13-digit millisecond timestamps with 4-digit random entropy (`ORD-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}}`), completely eliminating key collisions on rapid test or checkout operations.
+- **Double Inventory Revert Prevention**:
+  - Resolved duplicate stock restoration bug where `updateOrderStatus` and `updateOrderStatusInSupabase` each independently reverted inventory on cancelled orders. Added safety check on `allCurrent.find(...)` to ensure cancellation inventory revert occurs exactly once.
+- **Status Hierarchy Priority in Fallback Merges**:
+  - Enhanced `fetchAllOrdersFromSupabase` merge logic with order lifecycle status ranking:
+    `Placed (1) < Confirmed (2) < Preparing (3) < Out for Delivery (4) < Delivered (5) < Cancelled (6)`
+  - When merging persisted local orders with remote Supabase rows or in-memory caches, more advanced statuses are preserved and never overwritten by older `Placed` or `Confirmed` entries.
+- **Asynchronous Race Condition Resolution**:
+  - Awaited reactive approval counter calculations (`await refreshPendingApprovalCount()`) during order approval and status progression, preventing concurrent read/write race conditions against local order memory.
+
+---
+
+### 5. Automated Testing & Verification
+
+- **Cook Mode & Review Gating Test Suite (`framework/__tests__/cookMode.test.ts`)**:
+  - Section 10 tests written and passing (21/21 tests in suite):
+    - Instructions remain active when order is Out for Delivery.
+    - Instructions stay visible when order is Delivered if kit has NOT been reviewed.
+    - Instructions stay visible if kit is reviewed but order is NOT yet Delivered.
+    - Instructions disappear only when order is Delivered AND kit is reviewed.
+    - Reviewing marks kit as reviewed and persists state across app restarts.
+- **Supabase Service & Order Flow Suite (`framework/__tests__/supabaseService.test.ts`)**:
+  - All 8 comprehensive end-to-end tests passing:
+    - Pending approval subscriber notifications and sound chime triggers.
+    - Order creation with `Placed` state.
+    - Admin approval transitioning `Placed` to `Confirmed`.
+    - Lifecycle stage updates: `Preparing` -> `Out for Delivery` -> `Delivered`.
+    - Supabase meal kit publishing and deletion.
+    - Database seeder integrity.
+    - Persistent one-time approval validation across reloads.
+- **TypeScript Integrity**:
+  - Verified with `npx tsc --noEmit` with 0 compiler errors.

@@ -164,6 +164,18 @@ export const SearchView: React.FC = () => {
     });
   }, [correctedSearchQuery, dietFilter, selectedCuisine, selectedSpice, sortBy, allKits]);
 
+  const [visibleCount, setVisibleCount] = useState(15);
+
+  useEffect(() => {
+    setVisibleCount(15);
+  }, [correctedSearchQuery, dietFilter, selectedCuisine, selectedSpice, sortBy]);
+
+  const displayedResults = useMemo(() => {
+    return results.slice(0, visibleCount);
+  }, [results, visibleCount]);
+
+  const hasMoreResults = results.length > visibleCount;
+
   const hasActiveFilters =
     dietFilter !== 'all' ||
     selectedCuisine !== 'All' ||
@@ -718,92 +730,114 @@ export const SearchView: React.FC = () => {
               />
             </View>
           ) : (
-            results.map((kit) => (
-              <TouchableOpacity
-                key={kit.id}
-                testID={`search-result-card-${kit.id}`}
-                style={[
-                  styles.resultCard,
-                  {
-                    backgroundColor: colors.bgSurface,
-                    borderRadius: radii.xl,
-                    borderColor: colors.borderLight,
-                    ...shadows.card,
-                  },
-                ]}
-                onPress={() => {
-                  setSelectedKit(kit);
-                  setDetailModalVisible(true);
-                }}
-                activeOpacity={0.88}
-              >
-                <Image
-                  source={{ uri: kit.heroImage }}
-                  style={styles.resultImg}
-                  resizeMode="cover"
-                />
-                <View style={styles.resultDetails}>
-                  <View style={styles.resultTopRow}>
-                    {(() => {
-                      const badge = getDietBadgeInfo(kit.diet);
-                      return (
-                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                          <DietMark diet={kit.diet} size={15} />
-                          <Badge label={badge.label} variant={badge.variant} size="sm" />
-                        </View>
-                      );
-                    })()}
-                    <TouchableOpacity
-                      onPress={() => toggleWishlist(kit.id)}
-                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            <>
+              {displayedResults.map((kit) => (
+                <TouchableOpacity
+                  key={kit.id}
+                  testID={`search-result-card-${kit.id}`}
+                  style={[
+                    styles.resultCard,
+                    {
+                      backgroundColor: colors.bgSurface,
+                      borderRadius: radii.xl,
+                      borderColor: colors.borderLight,
+                      ...shadows.card,
+                    },
+                  ]}
+                  onPress={() => {
+                    setSelectedKit(kit);
+                    setDetailModalVisible(true);
+                  }}
+                  activeOpacity={0.88}
+                >
+                  <Image
+                    source={{ uri: kit.heroImage }}
+                    style={styles.resultImg}
+                    resizeMode="cover"
+                  />
+                  <View style={styles.resultDetails}>
+                    <View style={styles.resultTopRow}>
+                      {(() => {
+                        const badge = getDietBadgeInfo(kit.diet);
+                        return (
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                            <DietMark diet={kit.diet} size={15} />
+                            <Badge label={badge.label} variant={badge.variant} size="sm" />
+                          </View>
+                        );
+                      })()}
+                      <TouchableOpacity
+                        onPress={() => toggleWishlist(kit.id)}
+                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                      >
+                        <Icon
+                          name={isInWishlist && isInWishlist(kit.id) ? 'heart' : 'heart-outline'}
+                          size={18}
+                          color={
+                            isInWishlist && isInWishlist(kit.id) ? colors.primary : colors.textMuted
+                          }
+                        />
+                      </TouchableOpacity>
+                    </View>
+
+                    <Text
+                      style={[styles.resultName, { color: colors.textPrimary }]}
+                      numberOfLines={1}
                     >
-                      <Icon
-                        name={isInWishlist && isInWishlist(kit.id) ? 'heart' : 'heart-outline'}
-                        size={18}
-                        color={
-                          isInWishlist && isInWishlist(kit.id) ? colors.primary : colors.textMuted
-                        }
-                      />
-                    </TouchableOpacity>
-                  </View>
+                      {kit.name}
+                    </Text>
+                    <Text
+                      style={[styles.resultTagline, { color: colors.textSecondary }]}
+                      numberOfLines={1}
+                    >
+                      {kit.tagline}
+                    </Text>
 
-                  <Text
-                    style={[styles.resultName, { color: colors.textPrimary }]}
-                    numberOfLines={1}
-                  >
-                    {kit.name}
-                  </Text>
-                  <Text
-                    style={[styles.resultTagline, { color: colors.textSecondary }]}
-                    numberOfLines={1}
-                  >
-                    {kit.tagline}
-                  </Text>
+                    <View style={styles.resultMetaRow}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                        <Icon name="time" size={13} color={colors.textMuted} />
+                        <Text style={[styles.resultMeta, { color: colors.textMuted }]}>
+                          {(kit.prepTimeMinutes || 0) + (kit.cookTimeMinutes || 0)}m •{' '}
+                          {kit.servings || 2} Servings
+                        </Text>
+                      </View>
+                    </View>
 
-                  <View style={styles.resultMetaRow}>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                      <Icon name="time" size={13} color={colors.textMuted} />
-                      <Text style={[styles.resultMeta, { color: colors.textMuted }]}>
-                        {(kit.prepTimeMinutes || 0) + (kit.cookTimeMinutes || 0)}m •{' '}
-                        {kit.servings || 2} Servings
+                    <View style={styles.resultFooter}>
+                      <Text style={[styles.resultPrice, { color: colors.primary }]}>
+                        ₹{kit.price}
                       </Text>
+                      <Button
+                        title="+ Add"
+                        size="sm"
+                        onPress={() => handleQuickAdd(kit)}
+                        style={{ paddingHorizontal: 14 }}
+                      />
                     </View>
                   </View>
-
-                  <View style={styles.resultFooter}>
-                    <Text style={[styles.resultPrice, { color: colors.primary }]}>
-                      ₹{kit.price}
-                    </Text>
-                    <Button
-                      title="+ Add"
-                      size="sm"
-                      onPress={() => handleQuickAdd(kit)}
-                      style={{ paddingHorizontal: 14 }}
-                    />
-                  </View>
-                </View>
-              </TouchableOpacity>
-            ))
+                </TouchableOpacity>
+              ))}
+              {hasMoreResults && (
+                <TouchableOpacity
+                  style={{
+                    borderColor: colors.primary,
+                    backgroundColor: colors.primary + '12',
+                    borderWidth: 1,
+                    borderRadius: radii.lg,
+                    paddingVertical: 12,
+                    alignItems: 'center',
+                    marginTop: 8,
+                    marginBottom: 24,
+                  }}
+                  onPress={() => setVisibleCount((prev) => prev + 15)}
+                  activeOpacity={0.8}
+                >
+                  <Text style={{ color: colors.primary, fontWeight: '600', fontSize: 14 }}>
+                    Show More ({results.length - visibleCount} more dishes)
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </>
           )}
         </View>
       </ScrollView>

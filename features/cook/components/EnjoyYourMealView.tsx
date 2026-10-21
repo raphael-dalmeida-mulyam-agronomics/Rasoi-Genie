@@ -27,14 +27,16 @@ export const EnjoyYourMealView: React.FC<EnjoyYourMealViewProps> = ({
 }) => {
   const { colors, radii, shadows, isDark } = useTheme();
   const { reorderItems } = useCart();
-  const { markKitCompleted, dismissCookMode } = useCookMode();
+  const { markKitCompleted, dismissCookMode, isKitReviewed, markKitReviewed } = useCookMode();
   const [reviewModalVisible, setReviewModalVisible] = useState(false);
 
-  // Auto-mark completed and dismiss prompt as soon as user reaches celebration view
+  const isDelivered = order.status === 'Delivered';
+  const isReviewed = isKitReviewed(order.id, kit.id);
+
+  // Mark cooking steps completed in progress state (do NOT auto-dismiss until delivered + reviewed)
   React.useEffect(() => {
     markKitCompleted(order.id, kit.id);
-    dismissCookMode(order.id);
-  }, [order.id, kit.id, markKitCompleted, dismissCookMode]);
+  }, [order.id, kit.id, markKitCompleted]);
 
   const handleReorder = () => {
     reorderItems(order.items);
@@ -48,12 +50,48 @@ export const EnjoyYourMealView: React.FC<EnjoyYourMealViewProps> = ({
   };
 
   const handleFinish = async () => {
+    if (!isReviewed) {
+      Alert.alert(
+        'Please Rate the Meal Kit',
+        'You have to review the meal kit to close the instructions. Would you like to rate it now?',
+        [
+          {
+            text: 'Rate Meal Kit',
+            onPress: () => setReviewModalVisible(true),
+          },
+          {
+            text: 'Exit for Now',
+            style: 'cancel',
+            onPress: () => onDone(),
+          },
+        ],
+      );
+      return;
+    }
+
+    if (!isDelivered) {
+      Alert.alert(
+        'Awaiting Delivery',
+        'Thank you for rating! Cooking instructions will remain available until your order is marked as delivered.',
+        [
+          {
+            text: 'OK',
+            onPress: () => onDone(),
+          },
+        ],
+      );
+      return;
+    }
+
+    // Both delivered AND reviewed: instructions finally disappear!
     await markKitCompleted(order.id, kit.id);
     await dismissCookMode(order.id);
-    onDone();
+    Alert.alert(
+      'Cooking Guide Complete',
+      'Your order has been delivered and reviewed. Instructions are now closed. Bon Appétit!',
+      [{ text: 'Close', onPress: () => onDone() }],
+    );
   };
-
-  const isDelivered = order.status === 'Delivered';
 
   return (
     <>
@@ -92,6 +130,49 @@ export const EnjoyYourMealView: React.FC<EnjoyYourMealViewProps> = ({
           </View>
         ) : null}
 
+        {/* Review Required Notice Card */}
+        <View
+          testID="meal-kit-review-notice"
+          style={[
+            styles.reviewRequiredCard,
+            {
+              backgroundColor: isReviewed
+                ? isDark
+                  ? '#064E3B'
+                  : '#ECFDF5'
+                : isDark
+                  ? '#451A03'
+                  : '#FFFBEB',
+              borderColor: isReviewed ? '#10B981' : '#F59E0B',
+              borderRadius: radii.xl,
+              ...shadows.card,
+            },
+          ]}
+        >
+          <View style={styles.reviewCardTopRow}>
+            <View
+              style={[
+                styles.reviewIconCircle,
+                { backgroundColor: isReviewed ? '#10B981' : '#F59E0B' },
+              ]}
+            >
+              <Icon name={isReviewed ? 'checkmark' : 'star'} size={20} color="#FFFFFF" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.reviewCardTitle, { color: colors.textPrimary }]}>
+                {isReviewed ? 'Meal Kit Reviewed' : 'Please Rate The Meal Kit'}
+              </Text>
+              <Text style={[styles.reviewCardSubtitle, { color: colors.textSecondary }]}>
+                {!isReviewed
+                  ? 'Please review the meal kit to close the instructions. Instructions will finally disappear once your order has been delivered and reviewed.'
+                  : !isDelivered
+                    ? 'Review submitted! Cooking instructions will remain available until your order is marked as delivered by the admin.'
+                    : 'Order delivered and meal kit reviewed! Instructions can now be closed.'}
+              </Text>
+            </View>
+          </View>
+        </View>
+
         {/* Live Delivery Note if not yet delivered */}
         {!isDelivered && (
           <View
@@ -107,21 +188,43 @@ export const EnjoyYourMealView: React.FC<EnjoyYourMealViewProps> = ({
           >
             <Icon name="delivery" size={16} color={colors.primary} />
             <Text style={[styles.statusNoticeText, { color: colors.textPrimary }]}>
-              Order is currently {order.status}. You can track delivery status in the Orders tab.
+              Order status is currently {order.status}. Instructions will only finally disappear
+              after the order has been delivered and the meal kit has been reviewed.
             </Text>
           </View>
         )}
 
         {/* Action Buttons */}
         <View style={styles.actions}>
-          <Button
-            testID="rate-dish-btn"
-            title="Rate This Recipe"
-            icon={<Icon name="star" size={16} color="#FFFFFF" />}
-            variant="primary"
-            size="lg"
-            onPress={() => setReviewModalVisible(true)}
-          />
+          {!isReviewed ? (
+            <Button
+              testID="rate-dish-btn"
+              title="Please Rate the Meal Kit to Close"
+              icon={<Icon name="star" size={16} color="#FFFFFF" />}
+              variant="primary"
+              size="lg"
+              onPress={() => setReviewModalVisible(true)}
+            />
+          ) : isDelivered ? (
+            <Button
+              testID="finish-and-close-btn"
+              title="Finish & Close Instructions"
+              icon={<Icon name="checkmark-circle" size={16} color="#FFFFFF" />}
+              variant="primary"
+              size="lg"
+              style={{ backgroundColor: '#10B981' }}
+              onPress={handleFinish}
+            />
+          ) : (
+            <Button
+              testID="rate-dish-btn"
+              title="Edit Meal Kit Review"
+              icon={<Icon name="star" size={16} color="#FFFFFF" />}
+              variant="secondary"
+              size="md"
+              onPress={() => setReviewModalVisible(true)}
+            />
+          )}
 
           {(onBackToRecipe || onPrevStep) && (
             <Button
@@ -148,7 +251,7 @@ export const EnjoyYourMealView: React.FC<EnjoyYourMealViewProps> = ({
 
           <Button
             testID="done-cooking-btn"
-            title="Done / Back"
+            title={isDelivered && isReviewed ? 'Done / Close' : 'Done / Back to Home'}
             variant="secondary"
             size="md"
             onPress={handleFinish}
@@ -163,9 +266,21 @@ export const EnjoyYourMealView: React.FC<EnjoyYourMealViewProps> = ({
         onClose={() => setReviewModalVisible(false)}
         onReviewSubmitted={async () => {
           setReviewModalVisible(false);
+          await markKitReviewed(order.id, kit.id);
           await markKitCompleted(order.id, kit.id);
-          await dismissCookMode(order.id);
-          onDone();
+          if (order.status === 'Delivered') {
+            await dismissCookMode(order.id);
+            Alert.alert(
+              'Cooking Guide Completed',
+              'Thank you for reviewing! Your order has been delivered and reviewed. Instructions are now closed.',
+              [{ text: 'Close', onPress: () => onDone() }],
+            );
+          } else {
+            Alert.alert(
+              'Review Submitted!',
+              'Thank you for rating! Cooking instructions will remain available until your order is marked as delivered.',
+            );
+          }
         }}
       />
     </>
@@ -236,5 +351,32 @@ const styles = StyleSheet.create({
   actions: {
     width: '100%',
     gap: 4,
+  },
+  reviewRequiredCard: {
+    width: '100%',
+    padding: 16,
+    borderWidth: 1.5,
+    marginBottom: 16,
+  },
+  reviewCardTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  reviewIconCircle: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  reviewCardTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    marginBottom: 2,
+  },
+  reviewCardSubtitle: {
+    fontSize: 13,
+    lineHeight: 18,
   },
 });

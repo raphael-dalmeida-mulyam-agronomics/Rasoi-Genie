@@ -1,4 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
+import { Platform } from 'react-native';
 import {
   AUTH_STORAGE_KEY,
   getStoredUser,
@@ -183,14 +184,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       syncChefStatusRef.current();
     };
 
-    if (typeof window !== 'undefined') {
+    if (
+      Platform.OS === 'web' &&
+      typeof window !== 'undefined' &&
+      typeof window.addEventListener === 'function'
+    ) {
       window.addEventListener('chef_role_changed', handleCustomEvent);
     }
 
     return () => {
       if (unsubscribeChef) unsubscribeChef();
       if (unsubscribeUser) unsubscribeUser();
-      if (typeof window !== 'undefined') {
+      if (
+        Platform.OS === 'web' &&
+        typeof window !== 'undefined' &&
+        typeof window.removeEventListener === 'function'
+      ) {
         window.removeEventListener('chef_role_changed', handleCustomEvent);
       }
     };
@@ -232,14 +241,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         });
       }
     };
-    if (typeof window !== 'undefined') {
+    if (
+      Platform.OS === 'web' &&
+      typeof window !== 'undefined' &&
+      typeof window.addEventListener === 'function'
+    ) {
       window.addEventListener('storage', handleStorageEvent);
     }
 
     return () => {
       isMounted = false;
       unsubscribeFirebase();
-      if (typeof window !== 'undefined') {
+      if (
+        Platform.OS === 'web' &&
+        typeof window !== 'undefined' &&
+        typeof window.removeEventListener === 'function'
+      ) {
         window.removeEventListener('storage', handleStorageEvent);
       }
     };

@@ -22,6 +22,8 @@ import {
   notifyTimerFinishedInForeground,
 } from '../services/cookingNotificationService';
 
+import { hasUserReviewedRecently } from '../services/reviewsService';
+
 export type CookTextSize = 'standard' | 'large' | 'counter';
 
 export interface CookingTimerState {
@@ -72,6 +74,9 @@ interface CookModeContextType {
   registerNewActiveOrder: (order: Order) => void;
   activeOrderWithTimer: { order: Order; kitId: string; timer: CookingTimerState } | null;
   refreshOrders: () => Promise<void>;
+  isKitReviewed: (orderId: string, kitId: string) => boolean;
+  markKitReviewed: (orderId: string, kitId: string) => Promise<void>;
+  isOrderReadyToDisappear: (orderId: string) => boolean;
 }
 
 const CookModeContext = createContext<CookModeContextType | null>(null);
@@ -80,9 +85,10 @@ const STORAGE_KEYS = {
   DISMISSED_ORDERS: '@rasoi_cook_dismissed_orders_v1',
   PROGRESS: '@rasoi_cook_progress_v1',
   TEXT_SIZE: '@rasoi_cook_text_size_v1',
+  REVIEWED_KITS: '@rasoi_cook_reviewed_kits_v1',
 };
 
-const TERMINAL_STATUSES: Set<OrderStatus> = new Set(['Delivered', 'Cancelled', 'Refunded']);
+const TERMINAL_STATUSES: Set<OrderStatus> = new Set(['Cancelled', 'Refunded']);
 
 export const CookModeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user } = useAuth();
@@ -95,20 +101,22 @@ export const CookModeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const [dismissedOrderIds, setDismissedOrderIds] = useState<Set<string>>(new Set());
   const [progressMap, setProgressMap] = useState<Record<string, OrderProgressRecord>>({});
   const [textSize, setTextSize] = useState<CookTextSize>('standard');
+  const [reviewedKitKeys, setReviewedKitKeys] = useState<Set<string>>(new Set());
 
   const progressRef = useRef(progressMap);
   progressRef.current = progressMap;
 
-  // 1. Rehydrate settings, dismissed IDs, and progress from AsyncStorage
+  // 1. Rehydrate settings, dismissed IDs, progress, and reviewed kits from AsyncStorage
   useEffect(() => {
     let isMounted = true;
 
     async function rehydrate() {
       try {
-        const [savedDismissed, savedProgress, savedTextSize] = await Promise.all([
+        const [savedDismissed, savedProgress, savedTextSize, savedReviewed] = await Promise.all([
           AsyncStorage.getItem(STORAGE_KEYS.DISMISSED_ORDERS),
           AsyncStorage.getItem(STORAGE_KEYS.PROGRESS),
           AsyncStorage.getItem(STORAGE_KEYS.TEXT_SIZE),
+          AsyncStorage.getItem(STORAGE_KEYS.REVIEWED_KITS),
         ]);
 
         if (!isMounted) return;
@@ -118,6 +126,15 @@ export const CookModeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             const parsed = JSON.parse(savedDismissed);
             if (Array.isArray(parsed)) {
               setDismissedOrderIds(new Set(parsed));
+            }
+          } catch {}
+        }
+
+        if (savedReviewed) {
+          try {
+            const parsed = JSON.parse(savedReviewed);
+            if (Array.isArray(parsed)) {
+              setReviewedKitKeys(new Set(parsed));
             }
           } catch {}
         }
@@ -193,17 +210,75 @@ export const CookModeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     };
   }, [loadOrders]);
 
+  // Review & Disappear Helpers
+  const markKitReviewed = useCallback(async (orderId: string, kitId: string) => {
+    const compoundKey = `${orderId}:${kitId}`;
+    setReviewedKitKeys((prev) => {
+      const next = new Set(prev).add(compoundKey).add(kitId);
+      AsyncStorage.setItem(STORAGE_KEYS.REVIEWED_KITS, JSON.stringify(Array.from(next))).catch(
+        () => {},
+      );
+      return next;
+    });
+  }, []);
+
+  const isKitReviewed = useCallback(
+    (orderId: string, kitId: string): boolean => {
+      const compoundKey = `${orderId}:${kitId}`;
+      if (reviewedKitKeys.has(compoundKey) || reviewedKitKeys.has(kitId)) {
+        return true;
+      }
+      if (hasUserReviewedRecently(kitId, user?.uid || 'guest-user', 1440)) {
+        return true;
+      }
+      return false;
+    },
+    [reviewedKitKeys, user?.uid],
+  );
+
+  const isOrderReadyToDisappear = useCallback(
+    (orderId: string): boolean => {
+      const order =
+        allOrders.find((o) => o.id === orderId) || guestLocalOrders.find((o) => o.id === orderId);
+      if (!order) return true;
+      if (order.status === 'Cancelled' || order.status === 'Refunded') {
+        return true;
+      }
+      // ONLY disappear after order is Delivered AND meal kit has been reviewed
+      if (order.status !== 'Delivered') {
+        return false;
+      }
+      const items = order.items || [];
+      if (items.length === 0) return true;
+      const allKitsReviewed = items.every((it) => {
+        const kId = it.kitId || it.id || 'kit-1';
+        return isKitReviewed(order.id, kId);
+      });
+      return allKitsReviewed;
+    },
+    [allOrders, guestLocalOrders, isKitReviewed],
+  );
+
   // 3. Compute active orders for current user (or guest)
   const activeOrders = useMemo(() => {
-    const cleanOrders = allOrders.filter(
-      (o) => !TERMINAL_STATUSES.has(o.status) && o.id && o.id.startsWith('ORD-'),
-    );
+    const cleanOrders = allOrders.filter((o) => {
+      if (!o.id || !o.id.startsWith('ORD-')) return false;
+      if (TERMINAL_STATUSES.has(o.status)) return false;
+      // If delivered, instructions only disappear if kit has also been reviewed
+      if (o.status === 'Delivered' && isOrderReadyToDisappear(o.id)) {
+        return false;
+      }
+      return true;
+    });
 
     if (!user) {
       // Guest: merge local orders with remote updates
       const guestMap = new Map<string, Order>();
       for (const g of guestLocalOrders) {
-        if (!TERMINAL_STATUSES.has(g.status)) {
+        if (
+          !TERMINAL_STATUSES.has(g.status) &&
+          !(g.status === 'Delivered' && isOrderReadyToDisappear(g.id))
+        ) {
           guestMap.set(g.id, g);
         }
       }
@@ -239,7 +314,7 @@ export const CookModeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     return filtered.sort(
       (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
     );
-  }, [allOrders, guestLocalOrders, user, family]);
+  }, [allOrders, guestLocalOrders, user, family, isOrderReadyToDisappear]);
 
   // 4. Timer interval tick for active running timers
   useEffect(() => {
@@ -323,15 +398,13 @@ export const CookModeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const isOrderDismissed = useCallback(
     (orderId: string) => {
-      if (dismissedOrderIds.has(orderId)) return true;
-      const orderRec = progressMap[orderId];
-      if (orderRec?.kits && Object.keys(orderRec.kits).length > 0) {
-        const allCompleted = Object.values(orderRec.kits).every((k) => k.isCompleted);
-        if (allCompleted) return true;
+      // Instructions should only finally disappear after order is Delivered AND meal kit is reviewed
+      if (isOrderReadyToDisappear(orderId)) {
+        return true;
       }
       return false;
     },
-    [dismissedOrderIds, progressMap],
+    [isOrderReadyToDisappear],
   );
 
   // Text size toggle across 3 states: standard -> large -> counter distance
@@ -595,6 +668,9 @@ export const CookModeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         registerNewActiveOrder,
         activeOrderWithTimer,
         refreshOrders: loadOrders,
+        isKitReviewed,
+        markKitReviewed,
+        isOrderReadyToDisappear,
       }}
     >
       {children}

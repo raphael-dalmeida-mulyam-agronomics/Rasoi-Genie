@@ -8,9 +8,10 @@ import {
   Image,
   BackHandler,
   Modal,
-  SafeAreaView,
   Platform,
+  Alert,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { useKeepAwake } from 'expo-keep-awake';
 import { Order } from '../../framework/firebase/ordersService';
@@ -32,6 +33,7 @@ import { WhatsInYourBoxView } from './components/WhatsInYourBoxView';
 import { RecipeStepCard } from './components/RecipeStepCard';
 import { MultiKitPickerView } from './components/MultiKitPickerView';
 import { EnjoyYourMealView } from './components/EnjoyYourMealView';
+import { ReviewModal } from '../reviews/ReviewModal';
 
 interface CookModeViewProps {
   orderId: string;
@@ -52,7 +54,12 @@ export const CookModeView: React.FC<CookModeViewProps> = ({ orderId, initialKitI
     toggleTextSize,
     getProgressForOrderKit,
     setKitStep,
+    isKitReviewed,
+    markKitReviewed,
+    isOrderReadyToDisappear,
   } = useCookMode();
+
+  const [reviewModalVisible, setReviewModalVisible] = useState(false);
 
   const { user } = useAuth();
   const { family, role } = useFamily();
@@ -147,6 +154,57 @@ export const CookModeView: React.FC<CookModeViewProps> = ({ orderId, initialKitI
 
   // Exit / skip handler
   const handleExit = useCallback(async () => {
+    const kitItem =
+      visibleKits.find((it) => (it.kitId || it.id) === selectedKitId) || visibleKits[0];
+    const kitId = kitItem?.kitId || kitItem?.id || 'kit-1';
+    const isReviewed = orderId ? isKitReviewed(orderId, kitId) : false;
+    const isDelivered = order?.status === 'Delivered';
+
+    if (!isReviewed) {
+      Alert.alert(
+        'Please Rate the Meal Kit',
+        'You have to review the meal kit to close the instructions. Would you like to rate it now?',
+        [
+          {
+            text: 'Rate Now',
+            onPress: () => setReviewModalVisible(true),
+          },
+          {
+            text: 'Exit (Keep Guide Active)',
+            style: 'cancel',
+            onPress: () => {
+              if (router.canGoBack()) {
+                router.back();
+              } else {
+                router.replace('/(tabs)' as any);
+              }
+            },
+          },
+        ],
+      );
+      return;
+    }
+
+    if (!isDelivered) {
+      Alert.alert(
+        'Awaiting Delivery',
+        'Thank you for rating! Cooking instructions will remain available until your order is marked as delivered.',
+        [
+          {
+            text: 'OK',
+            onPress: () => {
+              if (router.canGoBack()) {
+                router.back();
+              } else {
+                router.replace('/(tabs)' as any);
+              }
+            },
+          },
+        ],
+      );
+      return;
+    }
+
     if (orderId) {
       await dismissCookMode(orderId);
     }
@@ -155,7 +213,7 @@ export const CookModeView: React.FC<CookModeViewProps> = ({ orderId, initialKitI
     } else {
       router.replace('/(tabs)' as any);
     }
-  }, [orderId, dismissCookMode]);
+  }, [orderId, visibleKits, selectedKitId, isKitReviewed, order?.status, dismissCookMode]);
 
   // Handle hardware Android back button
   useEffect(() => {
@@ -287,10 +345,9 @@ export const CookModeView: React.FC<CookModeViewProps> = ({ orderId, initialKitI
     if (currentStepIndex + 1 < totalSteps) {
       await setKitStep(order.id, currentKitInfo.kitId, currentStepIndex + 1);
     } else {
-      // Reached the end!
+      // Reached the end! Advance to celebration and review screen
       await setKitStep(order.id, currentKitInfo.kitId, totalSteps);
       await markKitCompleted(order.id, currentKitInfo.kitId);
-      await dismissCookMode(order.id);
     }
   };
 
@@ -472,6 +529,8 @@ export const CookModeView: React.FC<CookModeViewProps> = ({ orderId, initialKitI
     );
   }
 
+  const isReviewed =
+    currentKitInfo?.kitId && order ? isKitReviewed(order.id, currentKitInfo.kitId) : false;
   const progressFraction = (currentStepIndex + 1) / totalSteps;
 
   return (
@@ -691,6 +750,62 @@ export const CookModeView: React.FC<CookModeViewProps> = ({ orderId, initialKitI
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.scrollContent}
         >
+          {/* Meal Prep Review Requirement Notice */}
+          <View
+            testID="cook-mode-review-banner"
+            style={[
+              styles.reviewBanner,
+              {
+                backgroundColor: isReviewed
+                  ? isDark
+                    ? '#064E3B'
+                    : '#ECFDF5'
+                  : isDark
+                    ? '#292524'
+                    : '#FFFBEB',
+                borderColor: isReviewed ? '#10B981' : '#F59E0B',
+                borderRadius: radii.xl,
+                ...shadows.card,
+              },
+            ]}
+          >
+            <View style={styles.reviewBannerTopRow}>
+              <View
+                style={[
+                  styles.reviewBannerIconCircle,
+                  { backgroundColor: isReviewed ? '#10B981' : '#F59E0B' },
+                ]}
+              >
+                <Icon name={isReviewed ? 'checkmark' : 'star'} size={16} color="#FFFFFF" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.reviewBannerTitle, { color: colors.textPrimary }]}>
+                  {isReviewed ? 'Meal Kit Reviewed' : 'Please Rate The Meal Kit'}
+                </Text>
+                <Text style={[styles.reviewBannerSub, { color: colors.textSecondary }]}>
+                  {isReviewed
+                    ? 'Review recorded! Instructions will stay available until your order is delivered.'
+                    : 'Please rate the meal kit to close the instructions. Instructions will only finally disappear after delivery and review.'}
+                </Text>
+              </View>
+              <TouchableOpacity
+                testID="cook-mode-rate-kit-btn"
+                style={[
+                  styles.reviewBannerBtn,
+                  {
+                    backgroundColor: isReviewed ? '#10B981' : colors.primary,
+                    borderRadius: radii.pill,
+                  },
+                ]}
+                onPress={() => setReviewModalVisible(true)}
+              >
+                <Text style={styles.reviewBannerBtnText}>
+                  {isReviewed ? 'Reviewed' : 'Rate Kit'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
           {/* 1. Live Delivery Strip (if not delivered) */}
           <CookingDeliveryStrip order={order} />
 
@@ -866,12 +981,90 @@ export const CookModeView: React.FC<CookModeViewProps> = ({ orderId, initialKitI
             </View>
           </View>
         </Modal>
+
+        {/* Review Modal directly accessible from Cook Mode */}
+        {currentKitInfo?.kit && (
+          <ReviewModal
+            kit={currentKitInfo.kit}
+            visible={reviewModalVisible}
+            onClose={() => setReviewModalVisible(false)}
+            onReviewSubmitted={async () => {
+              setReviewModalVisible(false);
+              if (currentKitInfo?.kitId && order) {
+                await markKitReviewed(order.id, currentKitInfo.kitId);
+              }
+              if (order?.status === 'Delivered') {
+                if (orderId) {
+                  await dismissCookMode(orderId);
+                }
+                Alert.alert(
+                  'Cooking Guide Complete',
+                  'Your order has been delivered and reviewed. Instructions are now closed. Bon Appétit!',
+                  [
+                    {
+                      text: 'Close',
+                      onPress: () => {
+                        if (router.canGoBack()) {
+                          router.back();
+                        } else {
+                          router.replace('/(tabs)' as any);
+                        }
+                      },
+                    },
+                  ],
+                );
+              } else {
+                Alert.alert(
+                  'Review Submitted!',
+                  'Thank you for rating! Cooking instructions will remain available until your order is marked as delivered by the admin.',
+                );
+              }
+            }}
+          />
+        )}
       </View>
     </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
+  reviewBanner: {
+    marginHorizontal: 16,
+    marginBottom: 14,
+    padding: 14,
+    borderWidth: 1.5,
+  },
+  reviewBannerTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  reviewBannerIconCircle: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  reviewBannerTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    marginBottom: 2,
+  },
+  reviewBannerSub: {
+    fontSize: 12,
+    lineHeight: 16,
+  },
+  reviewBannerBtn: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    alignSelf: 'center',
+  },
+  reviewBannerBtnText: {
+    color: '#FFFFFF',
+    fontWeight: '800',
+    fontSize: 12,
+  },
   safeArea: {
     flex: 1,
   },

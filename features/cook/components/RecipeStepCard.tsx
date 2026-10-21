@@ -162,6 +162,14 @@ export const RecipeStepCard: React.FC<RecipeStepCardProps> = ({
           </View>
         </View>
       ) : null}
+
+      {/* Review reminder footnote */}
+      <View style={styles.reviewFootnote}>
+        <Icon name="star" size={13} color={colors.primary} />
+        <Text style={[styles.reviewFootnoteText, { color: colors.textSecondary }]}>
+          Please rate this meal kit after cooking to close your prep instructions.
+        </Text>
+      </View>
     </View>
   );
 };
@@ -259,6 +267,19 @@ const styles = StyleSheet.create({
   tipContent: {
     fontSize: 13,
     lineHeight: 18,
+    fontStyle: 'italic',
+  },
+  reviewFootnote: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 14,
+    paddingTop: 10,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: '#E5E7EB40',
+  },
+  reviewFootnoteText: {
+    fontSize: 12,
     fontStyle: 'italic',
   },
 });

@@ -19,13 +19,9 @@ export const CookModeMiniBar: React.FC = () => {
     return null;
   }
 
-  // Filter for active orders that are NOT dismissed and whose recipe is NOT completed
+  // Filter for active orders that are NOT dismissed (instructions only disappear when delivered + reviewed)
   const pendingOrders = (activeOrders || []).filter((order) => {
-    if (isOrderDismissed(order.id)) return false;
-    const firstKit = order.items?.[0];
-    const kitId = firstKit?.kitId || firstKit?.id || 'kit-1';
-    const progress = getProgressForOrderKit(order.id, kitId);
-    return !progress.isCompleted;
+    return !isOrderDismissed(order.id);
   });
 
   // Hide if there are no active cooking orders pending
@@ -48,7 +44,12 @@ export const CookModeMiniBar: React.FC = () => {
   const kitName = firstKit?.name || 'Meal Kit Recipe';
 
   const progress = getProgressForOrderKit(primaryOrder.id, kitId);
-  const currentStepDisplay = `Step ${(progress.currentStepIndex || 0) + 1}`;
+  const currentStepDisplay =
+    primaryOrder.status === 'Delivered'
+      ? 'Delivered • Please Rate'
+      : progress.isCompleted
+        ? 'Cooked • Awaiting Delivery'
+        : `Step ${(progress.currentStepIndex || 0) + 1}`;
 
   // Running timer format mm:ss
   const runningTimer = activeOrderWithTimer?.timer?.isRunning

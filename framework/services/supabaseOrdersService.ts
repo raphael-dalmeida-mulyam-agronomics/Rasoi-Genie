@@ -108,7 +108,8 @@ function calculateRequiredIngredientQuantity(
 export async function createOrderInSupabase(
   params: CreateOrderParams,
 ): Promise<{ success: boolean; orderId: string; error?: string }> {
-  const orderId = params.orderId || params.id || `ORD-${Date.now().toString().slice(-6)}`;
+  const orderId =
+    params.orderId || params.id || `ORD-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`;
   const now = new Date().toISOString();
 
   const storageCentre = resolveStorageCentre(params.deliveryAddress || '');
@@ -405,7 +406,7 @@ export async function approveOrderInSupabase(
     console.warn('[Supabase Orders] Exception in approveOrderInSupabase:', err?.message || err);
   }
 
-  refreshPendingApprovalCount();
+  await refreshPendingApprovalCount();
   notifyRealtimeOrderListeners();
   return { success: true };
 }
@@ -437,7 +438,7 @@ export async function updateOrderStatusInSupabase(
 
   // Revert inventory if order is being cancelled and inventory was deducted and not yet reverted
   if (newStatus === 'Cancelled') {
-    const targetOrder = existingMem || allCurrent.find((o) => o.id === orderId);
+    const targetOrder = allCurrent.find((o) => o.id === orderId) || existingMem;
     if (
       targetOrder &&
       !targetOrder.inventoryReverted &&
@@ -564,7 +565,7 @@ export async function updateOrderStatusInSupabase(
     console.warn('[Supabase Orders] Error updating status:', err?.message);
   }
 
-  refreshPendingApprovalCount();
+  await refreshPendingApprovalCount();
   notifyRealtimeOrderListeners();
   return { success: true };
 }
@@ -675,15 +676,39 @@ export function mapSupabaseRowToOrder(row: any, existingOrder?: Order): Order {
 export async function fetchAllOrdersFromSupabase(): Promise<Order[]> {
   const localPersisted = await loadPersistedOrders();
   const localCombined = [...localOrdersMemory];
+
+  const statusRank: Record<string, number> = {
+    Placed: 1,
+    Pending: 1,
+    Confirmed: 2,
+    Preparing: 3,
+    'Out for Delivery': 4,
+    Delivered: 5,
+    Cancelled: 6,
+    Refunded: 6,
+  };
+
   for (const p of localPersisted) {
-    if (
-      !localCombined.some((o) => o.id === p.id) &&
-      !MOCK_ORDER_IDS.has(p.id) &&
-      p.id.startsWith('ORD-')
-    ) {
+    if (MOCK_ORDER_IDS.has(p.id) || !p.id.startsWith('ORD-')) continue;
+    const existingIdx = localCombined.findIndex((o) => o.id === p.id);
+    if (existingIdx === -1) {
       localCombined.push(p);
+    } else {
+      const existingItem = localCombined[existingIdx];
+      const pRank = statusRank[p.status] || 0;
+      const memRank = existingItem ? statusRank[existingItem.status] || 0 : 0;
+      if (existingItem && pRank > memRank) {
+        localCombined[existingIdx] = {
+          ...existingItem,
+          ...p,
+          status: p.status,
+        };
+      }
     }
   }
+
+  localOrdersMemory.length = 0;
+  localOrdersMemory.push(...localCombined);
 
   const applyApproval = (o: Order): Order => {
     if (o.status === 'Cancelled' || o.status === 'Refunded') {
@@ -750,20 +775,34 @@ export async function fetchAllOrdersFromSupabase(): Promise<Order[]> {
                 ? loc.trackingEvents
                 : remote.trackingEvents,
           });
-        } else if (loc.status !== 'Placed' && remote.status === 'Placed') {
-          // If local has progressed beyond Placed (e.g. Confirmed, Preparing, Out for Delivery, Delivered)
-          combinedMap.set(loc.id, {
-            ...remote,
-            status: loc.status,
-            cancellationReason: loc.cancellationReason || remote.cancellationReason,
-            adminNotes: loc.adminNotes || remote.adminNotes,
-            isApproved: loc.isApproved || remote.isApproved,
-            updatedAt: loc.updatedAt || remote.updatedAt,
-            trackingEvents:
-              loc.trackingEvents && loc.trackingEvents.length > 0
-                ? loc.trackingEvents
-                : remote.trackingEvents,
-          });
+        } else if (loc.status !== remote.status) {
+          // If local has progressed beyond remote status (e.g. Confirmed -> Preparing -> Out for Delivery -> Delivered)
+          const statusRank: Record<string, number> = {
+            Placed: 1,
+            Pending: 1,
+            Confirmed: 2,
+            Preparing: 3,
+            'Out for Delivery': 4,
+            Delivered: 5,
+            Cancelled: 6,
+            Refunded: 6,
+          };
+          const locRank = statusRank[loc.status] || 0;
+          const remoteRank = statusRank[remote.status] || 0;
+          if (locRank >= remoteRank) {
+            combinedMap.set(loc.id, {
+              ...remote,
+              status: loc.status,
+              cancellationReason: loc.cancellationReason || remote.cancellationReason,
+              adminNotes: loc.adminNotes || remote.adminNotes,
+              isApproved: loc.isApproved || remote.isApproved,
+              updatedAt: loc.updatedAt || remote.updatedAt,
+              trackingEvents:
+                loc.trackingEvents && loc.trackingEvents.length > 0
+                  ? loc.trackingEvents
+                  : remote.trackingEvents,
+            });
+          }
         }
       }
     });

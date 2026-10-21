@@ -398,10 +398,19 @@ export const CartView: React.FC = () => {
                   flexDirection: 'row',
                   alignItems: 'center',
                   justifyContent: 'space-between',
+                  gap: 10,
                   marginBottom: 8,
                 }}
               >
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 }}>
+                <View
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 8,
+                    flex: 1,
+                    minWidth: 0,
+                  }}
+                >
                   <View
                     style={{
                       width: 28,
@@ -411,6 +420,7 @@ export const CartView: React.FC = () => {
                         subtotal >= 499 ? colors.bgSuccessSubtle : colors.primaryLight,
                       alignItems: 'center',
                       justifyContent: 'center',
+                      flexShrink: 0,
                     }}
                   >
                     <Icon
@@ -419,21 +429,39 @@ export const CartView: React.FC = () => {
                       color={subtotal >= 499 ? colors.textSuccess : colors.primary}
                     />
                   </View>
-                  <Text style={{ fontSize: 13, fontWeight: '700', color: colors.textPrimary }}>
+                  <Text
+                    style={{
+                      fontSize: 13,
+                      fontWeight: '700',
+                      color: colors.textPrimary,
+                      flex: 1,
+                    }}
+                    numberOfLines={2}
+                  >
                     {subtotal >= 499
-                      ? 'Free Cold-Chain Delivery Unlocked!'
+                      ? 'Free Delivery Unlocked!'
                       : `Add ₹${499 - subtotal} more for FREE delivery`}
                   </Text>
                 </View>
-                <Text
+                <View
                   style={{
-                    fontSize: 12,
-                    fontWeight: '700',
-                    color: subtotal >= 499 ? colors.textSuccess : colors.textSecondary,
+                    backgroundColor: subtotal >= 499 ? colors.bgSuccessSubtle : colors.bgSubtle,
+                    paddingHorizontal: 8,
+                    paddingVertical: 4,
+                    borderRadius: radii.sm,
+                    flexShrink: 0,
                   }}
                 >
-                  {subtotal >= 499 ? 'FREE' : '₹49 fee'}
-                </Text>
+                  <Text
+                    style={{
+                      fontSize: 12,
+                      fontWeight: '700',
+                      color: subtotal >= 499 ? colors.textSuccess : colors.textSecondary,
+                    }}
+                  >
+                    {subtotal >= 499 ? 'FREE' : '₹49 fee'}
+                  </Text>
+                </View>
               </View>
               {/* Progress Track */}
               <View
@@ -866,12 +894,13 @@ export const CartView: React.FC = () => {
                     accessibilityRole="button"
                     accessibilityLabel={`Select delivery slot ${slot.title}`}
                   >
-                    <View style={{ flex: 1 }}>
+                    <View style={{ flex: 1, minWidth: 0, marginRight: 8 }}>
                       <Text
                         style={[
                           styles.slotTitle,
                           { color: isSelected ? colors.primary : colors.textPrimary },
                         ]}
+                        numberOfLines={2}
                       >
                         {slot.title}
                       </Text>

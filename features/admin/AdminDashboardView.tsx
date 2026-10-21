@@ -2278,6 +2278,25 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
                     )}
 
                   <View style={styles.orderBottomBar}>
+                    {order.status !== 'Cancelled' &&
+                      order.status !== 'Delivered' &&
+                      order.status !== 'Refunded' && (
+                        <Button
+                          testID={`mark-delivered-btn-${order.id}`}
+                          title={updatingOrderId === order.id ? 'Marking...' : 'Mark as Delivered'}
+                          variant="primary"
+                          size="sm"
+                          style={{
+                            backgroundColor: '#10B981',
+                            borderColor: '#10B981',
+                            marginRight: 8,
+                          }}
+                          textStyle={{ color: '#FFFFFF', fontWeight: '800', fontSize: 11 }}
+                          disabled={updatingOrderId === order.id}
+                          onPress={() => handleStatusChange(order.id, 'Delivered')}
+                        />
+                      )}
+
                     <Button
                       title={`Inspect Items (${order.items?.length || 0})`}
                       variant="outline"
@@ -5966,6 +5985,27 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
                       style={{ flex: 1 }}
                       onPress={() => Alert.alert('Invoice', generateInvoiceText(inspectOrder))}
                     />
+                    {inspectOrder.status !== 'Cancelled' &&
+                      inspectOrder.status !== 'Delivered' &&
+                      inspectOrder.status !== 'Refunded' && (
+                        <Button
+                          testID={`inspect-mark-delivered-btn-${inspectOrder.id}`}
+                          title={
+                            updatingOrderId === inspectOrder.id ? 'Marking...' : 'Mark as Delivered'
+                          }
+                          variant="primary"
+                          size="sm"
+                          style={{ backgroundColor: '#10B981', borderColor: '#10B981', flex: 1 }}
+                          textStyle={{ color: '#FFFFFF', fontWeight: '800' }}
+                          disabled={updatingOrderId === inspectOrder.id}
+                          onPress={async () => {
+                            await handleStatusChange(inspectOrder.id, 'Delivered');
+                            setInspectOrder((prev) =>
+                              prev ? { ...prev, status: 'Delivered' } : null,
+                            );
+                          }}
+                        />
+                      )}
                     {inspectOrder.status !== 'Cancelled' &&
                       inspectOrder.status !== 'Delivered' &&
                       inspectOrder.status !== 'Refunded' && (
