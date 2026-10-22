@@ -1,5 +1,6 @@
 {
   "hosting": {
+    "site": "rasoi-genie",
     "public": "dist",
     "ignore": ["firebase.json", "**/.*"],
     "rewrites": [
