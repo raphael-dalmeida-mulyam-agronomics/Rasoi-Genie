@@ -16,7 +16,7 @@ export class CartPage {
   }
 
   async goto() {
-    await this.page.goto('/cart');
+    await this.page.goto('/cart', { waitUntil: 'domcontentloaded' });
     await this.page.waitForLoadState('domcontentloaded');
   }
 

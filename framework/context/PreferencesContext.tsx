@@ -199,15 +199,80 @@ export const PreferencesProvider: React.FC<{ children: React.ReactNode }> = ({ c
             setAddresses(profile.addresses || []);
             setPreferredPaymentMethodState(profile.preferredPaymentMethod || 'UPI');
           } else {
-            // New user without completed onboarding / location
-            setPreferences({
-              ...DEFAULT_PREFERENCES,
-              city: '',
-              currentCity: '',
-              state: '',
-              isOnboarded: false,
-            });
-            setAddresses([]);
+            // New user or user signing up: check if location was already selected during onboarding/guest session
+            const storedLoc = await getStoredUserLocation();
+            const storedGuestRaw = await AsyncStorage.getItem(GUEST_PREFS_KEY);
+            let guestPrefs: Partial<UserDietaryPreferences> = {};
+            if (storedGuestRaw) {
+              try {
+                guestPrefs = JSON.parse(storedGuestRaw);
+              } catch {}
+            }
+
+            const existingCity =
+              city ||
+              preferences.city ||
+              preferences.currentCity ||
+              storedLoc?.city ||
+              guestPrefs.city ||
+              guestPrefs.currentCity ||
+              '';
+
+            if (existingCity) {
+              const canonical = canonicalCityName(existingCity);
+              const hub =
+                storedLoc?.hub || raw.regionHub || guestPrefs.regionHub || hubForCity(canonical);
+              const state =
+                storedLoc?.state || raw.state || guestPrefs.state || preferences.state || '';
+              const subRegion =
+                raw.subRegion || guestPrefs.subRegion || preferences.subRegion || '';
+
+              const initializedPrefs: UserDietaryPreferences = {
+                ...DEFAULT_PREFERENCES,
+                ...guestPrefs,
+                ...preferences,
+                ...raw,
+                city: canonical,
+                currentCity: canonical,
+                state,
+                subRegion,
+                regionHub: hub,
+                isOnboarded: true,
+              };
+
+              setPreferences(initializedPrefs);
+              setAddresses(profile?.addresses || []);
+              setPreferredPaymentMethodState(profile?.preferredPaymentMethod || 'UPI');
+
+              // Persist initialized profile with onboarding completed to Supabase immediately
+              const initialPayload: UserProfileData = {
+                uid: authUser.uid,
+                email: authUser.email,
+                displayName: authUser.displayName,
+                phoneNumber: authUser.phoneNumber,
+                preferences: initializedPrefs,
+                addresses: profile?.addresses || [],
+                preferredPaymentMethod: profile?.preferredPaymentMethod || 'UPI',
+                isOnboarded: true,
+                updatedAt: new Date().toISOString(),
+              };
+              saveUserProfileToSupabase(initialPayload).catch((err) => {
+                console.warn(
+                  '[PreferencesContext] Error linking onboarding location to newly signed-in user:',
+                  err,
+                );
+              });
+            } else {
+              // Genuinely new user with no stored location anywhere
+              setPreferences({
+                ...DEFAULT_PREFERENCES,
+                city: '',
+                currentCity: '',
+                state: '',
+                isOnboarded: false,
+              });
+              setAddresses([]);
+            }
           }
         }
       } catch (err) {

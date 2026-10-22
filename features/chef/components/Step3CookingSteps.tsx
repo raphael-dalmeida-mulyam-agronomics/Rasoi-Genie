@@ -1,17 +1,11 @@
-import React, { useRef } from 'react';
-import {
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  Image,
-  StyleSheet,
-  Platform,
-} from 'react-native';
+import React, { useState, useRef } from 'react';
+import { View, Text, TextInput, TouchableOpacity, Image, StyleSheet, Platform } from 'react-native';
 import { useTheme } from '../../../framework/theme/ThemeContext';
 import { Icon } from '../../../framework/ui/Icon';
 import { StructuredStep } from '../types';
 import { SAMPLE_STEP_IMAGES } from '../sampleImages';
+import * as ImagePicker from 'expo-image-picker';
+import { ImageEditorModal } from '../../../framework/ui/ImageEditorModal';
 
 interface Step3CookingStepsProps {
   steps: StructuredStep[];
@@ -23,6 +17,32 @@ export function Step3CookingSteps({ steps, onChange }: Step3CookingStepsProps) {
 
   // Web file input refs indexed by step index
   const fileInputRefs = useRef<{ [key: number]: HTMLInputElement | null }>({});
+
+  const [editingStepIndex, setEditingStepIndex] = useState<number | null>(null);
+  const [editingImageUri, setEditingImageUri] = useState<string | null>(null);
+
+  const handlePickOrUpload = async (idx: number) => {
+    if (Platform.OS === 'web' && fileInputRefs.current[idx]) {
+      fileInputRefs.current[idx]?.click();
+      return;
+    }
+
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        quality: 0.9,
+      });
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        const uri = result.assets[0]?.uri;
+        if (uri) {
+          setEditingStepIndex(idx);
+          setEditingImageUri(uri);
+        }
+      }
+    } catch (err) {
+      console.warn('[Step3CookingSteps] Image pick error:', err);
+    }
+  };
 
   const handleAddStep = () => {
     const nextNumber = steps.length + 1;
@@ -36,19 +56,13 @@ export function Step3CookingSteps({ steps, onChange }: Step3CookingStepsProps) {
     onChange([...steps, newStep]);
   };
 
-  const handleUpdateStep = (
-    idx: number,
-    field: keyof StructuredStep,
-    value: any,
-  ) => {
+  const handleUpdateStep = (idx: number, field: keyof StructuredStep, value: any) => {
     const updated = steps.map((s, i) => (i === idx ? { ...s, [field]: value } : s));
     onChange(updated);
   };
 
   const handleRemoveStep = (idx: number) => {
-    const filtered = steps
-      .filter((_, i) => i !== idx)
-      .map((s, i) => ({ ...s, stepNumber: i + 1 }));
+    const filtered = steps.filter((_, i) => i !== idx).map((s, i) => ({ ...s, stepNumber: i + 1 }));
     onChange(filtered);
   };
 
@@ -79,10 +93,12 @@ export function Step3CookingSteps({ steps, onChange }: Step3CookingStepsProps) {
       reader.onload = (event) => {
         const result = event.target?.result as string;
         if (result) {
-          handleUpdateStep(idx, 'imageUrl', result);
+          setEditingStepIndex(idx);
+          setEditingImageUri(result);
         }
       };
       reader.readAsDataURL(file);
+      e.target.value = '';
     }
   };
 
@@ -92,10 +108,7 @@ export function Step3CookingSteps({ steps, onChange }: Step3CookingStepsProps) {
     <View style={styles.container}>
       {/* SECTION: Header info */}
       <View
-        style={[
-          styles.card,
-          { backgroundColor: colors.bgCard, borderColor: colors.borderLight },
-        ]}
+        style={[styles.card, { backgroundColor: colors.bgCard, borderColor: colors.borderLight }]}
       >
         <View style={styles.headerRow}>
           <View>
@@ -126,10 +139,7 @@ export function Step3CookingSteps({ steps, onChange }: Step3CookingStepsProps) {
       {steps.map((step, idx) => (
         <View
           key={step.id || idx}
-          style={[
-            styles.card,
-            { backgroundColor: colors.bgCard, borderColor: colors.borderLight },
-          ]}
+          style={[styles.card, { backgroundColor: colors.bgCard, borderColor: colors.borderLight }]}
         >
           {/* Step Card Header */}
           <View style={styles.stepCardHeader}>
@@ -148,10 +158,7 @@ export function Step3CookingSteps({ steps, onChange }: Step3CookingStepsProps) {
               <TouchableOpacity
                 onPress={() => handleMoveDown(idx)}
                 disabled={idx === steps.length - 1}
-                style={[
-                  styles.stepOrderBtn,
-                  { opacity: idx === steps.length - 1 ? 0.3 : 1 },
-                ]}
+                style={[styles.stepOrderBtn, { opacity: idx === steps.length - 1 ? 0.3 : 1 }]}
               >
                 <Icon name="arrow-down" size={14} color={colors.textSecondary} />
               </TouchableOpacity>
@@ -169,9 +176,7 @@ export function Step3CookingSteps({ steps, onChange }: Step3CookingStepsProps) {
           {/* Title & Instruction inputs */}
           <View style={styles.stepFormCol}>
             <View style={styles.fieldGroup}>
-              <Text style={[styles.fieldLabel, { color: colors.textPrimary }]}>
-                Step Title
-              </Text>
+              <Text style={[styles.fieldLabel, { color: colors.textPrimary }]}>Step Title</Text>
               <TextInput
                 value={step.title}
                 onChangeText={(text) => handleUpdateStep(idx, 'title', text)}
@@ -179,8 +184,8 @@ export function Step3CookingSteps({ steps, onChange }: Step3CookingStepsProps) {
                   idx === 0
                     ? 'Prep & Marinate Ingredients'
                     : idx === 1
-                    ? 'Sauté Whole Spices & Aromatics'
-                    : 'Simmer and Garnish'
+                      ? 'Sauté Whole Spices & Aromatics'
+                      : 'Simmer and Garnish'
                 }`}
                 placeholderTextColor={colors.textMuted}
                 style={[
@@ -223,9 +228,7 @@ export function Step3CookingSteps({ steps, onChange }: Step3CookingStepsProps) {
             {/* Step Image (REQUIRED on every step) */}
             <View style={styles.fieldGroup}>
               <View style={styles.labelWithRequired}>
-                <Text style={[styles.fieldLabel, { color: colors.textPrimary }]}>
-                  Step Image
-                </Text>
+                <Text style={[styles.fieldLabel, { color: colors.textPrimary }]}>Step Image</Text>
                 <View style={styles.requiredMiniBadge}>
                   <Text style={styles.requiredMiniText}>Required</Text>
                 </View>
@@ -239,17 +242,26 @@ export function Step3CookingSteps({ steps, onChange }: Step3CookingStepsProps) {
                   <Image source={{ uri: step.imageUrl }} style={styles.stepImagePreview} />
                   <View style={styles.imageOverlayRow}>
                     <TouchableOpacity
-                      style={[styles.overlayBtn, { backgroundColor: 'rgba(0,0,0,0.7)' }]}
+                      testID={`step-crop-adjust-btn-${idx}`}
+                      style={[styles.overlayBtn, { backgroundColor: colors.primary }]}
                       onPress={() => {
-                        if (Platform.OS === 'web' && fileInputRefs.current[idx]) {
-                          fileInputRefs.current[idx]?.click();
-                        }
+                        setEditingStepIndex(idx);
+                        setEditingImageUri(step.imageUrl);
                       }}
+                    >
+                      <Icon name="crop" size={13} color="#FFFFFF" />
+                      <Text style={styles.overlayBtnText}>Crop & Adjust</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      testID={`step-replace-photo-btn-${idx}`}
+                      style={[styles.overlayBtn, { backgroundColor: 'rgba(0,0,0,0.7)' }]}
+                      onPress={() => handlePickOrUpload(idx)}
                     >
                       <Icon name="create-outline" size={13} color="#FFFFFF" />
                       <Text style={styles.overlayBtnText}>Replace Photo</Text>
                     </TouchableOpacity>
                     <TouchableOpacity
+                      testID={`step-remove-photo-btn-${idx}`}
                       style={[styles.overlayBtn, { backgroundColor: 'rgba(239,68,68,0.85)' }]}
                       onPress={() => handleUpdateStep(idx, 'imageUrl', '')}
                     >
@@ -261,22 +273,19 @@ export function Step3CookingSteps({ steps, onChange }: Step3CookingStepsProps) {
               ) : (
                 <View style={styles.stepImageUploadArea}>
                   <TouchableOpacity
+                    testID={`step-upload-box-${idx}`}
                     style={[
                       styles.stepUploadBox,
                       { backgroundColor: colors.bgSubtle, borderColor: colors.border },
                     ]}
-                    onPress={() => {
-                      if (Platform.OS === 'web' && fileInputRefs.current[idx]) {
-                        fileInputRefs.current[idx]?.click();
-                      }
-                    }}
+                    onPress={() => handlePickOrUpload(idx)}
                   >
                     <Icon name="camera-outline" size={24} color={colors.primary} />
                     <Text style={[styles.stepUploadText, { color: colors.textPrimary }]}>
                       Upload Step {idx + 1} Photo
                     </Text>
                     <Text style={[styles.stepUploadHint, { color: colors.textMuted }]}>
-                      JPG or PNG
+                      JPG or PNG (Crop, rotate & enhance enabled)
                     </Text>
                   </TouchableOpacity>
 
@@ -299,7 +308,9 @@ export function Step3CookingSteps({ steps, onChange }: Step3CookingStepsProps) {
                           onPress={() => handleUpdateStep(idx, 'imageUrl', sample.url)}
                         >
                           <Image source={{ uri: sample.url }} style={styles.miniStepPresetImg} />
-                          <Text style={[styles.miniStepPresetText, { color: colors.textSecondary }]}>
+                          <Text
+                            style={[styles.miniStepPresetText, { color: colors.textSecondary }]}
+                          >
                             {sample.label}
                           </Text>
                         </TouchableOpacity>
@@ -339,6 +350,25 @@ export function Step3CookingSteps({ steps, onChange }: Step3CookingStepsProps) {
           Add Another Cooking Step
         </Text>
       </TouchableOpacity>
+
+      {/* Reusable Image Crop, Rotate & Adjust Modal */}
+      <ImageEditorModal
+        visible={editingStepIndex !== null && !!editingImageUri}
+        imageUri={editingImageUri}
+        title={`Crop, Rotate & Adjust Step ${editingStepIndex !== null ? editingStepIndex + 1 : ''} Photo`}
+        defaultAspectRatio="1:1"
+        onSave={(editedUri) => {
+          if (editingStepIndex !== null) {
+            handleUpdateStep(editingStepIndex, 'imageUrl', editedUri);
+          }
+          setEditingStepIndex(null);
+          setEditingImageUri(null);
+        }}
+        onCancel={() => {
+          setEditingStepIndex(null);
+          setEditingImageUri(null);
+        }}
+      />
     </View>
   );
 }

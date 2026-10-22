@@ -6,10 +6,12 @@ import {
   Dimensions,
   Image,
   Modal,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import { useAuth } from '../../framework/context/AuthContext';
@@ -58,7 +60,51 @@ export interface DependentRecommendationGroup {
   kits: MealKit[];
 }
 
-const { width } = Dimensions.get('window');
+const DEFAULT_FALLBACK_FOOD_IMG =
+  'https://images.unsplash.com/photo-1546549032-9571cd6b27df?auto=format&fit=crop&w=1000&q=80';
+
+const CATEGORY_SHORTCUTS: {
+  id: DishCategory;
+  label: string;
+  image: string;
+}[] = [
+  {
+    id: 'Biryani & Rice',
+    label: 'Biryani',
+    image:
+      'https://images.unsplash.com/photo-1563379091339-03b21ab4a4f8?auto=format&fit=crop&w=240&q=80',
+  },
+  {
+    id: 'Pizzas',
+    label: 'Pizza',
+    image:
+      'https://images.unsplash.com/photo-1513104890138-7c749659a591?auto=format&fit=crop&w=240&q=80',
+  },
+  {
+    id: 'Burgers & Sliders',
+    label: 'Burgers',
+    image:
+      'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=240&q=80',
+  },
+  {
+    id: 'Curries & Gravies',
+    label: 'Curries',
+    image:
+      'https://images.unsplash.com/photo-1585937421612-70a008356fbe?auto=format&fit=crop&w=240&q=80',
+  },
+  {
+    id: 'Pastas',
+    label: 'Pastas',
+    image:
+      'https://images.unsplash.com/photo-1551183053-bf91a1d81141?auto=format&fit=crop&w=240&q=80',
+  },
+  {
+    id: 'Street Food',
+    label: 'Street Food',
+    image:
+      'https://images.unsplash.com/photo-1601050690597-df0568f70950?auto=format&fit=crop&w=240&q=80',
+  },
+];
 
 const PROMO_BANNERS = [
   {
@@ -80,6 +126,16 @@ const PROMO_BANNERS = [
     gradientBg: '#0F766E',
     image:
       'https://images.unsplash.com/photo-1559847844-5315695dadae?auto=format&fit=crop&w=600&q=80',
+  },
+  {
+    id: 'promo-3',
+    title: 'Artisan Wood-Fired Feast',
+    subtitle: 'Flat 20% OFF on all gourmet pizzas & pastas',
+    tag: 'CHEF CURATED',
+    code: 'FEAST20',
+    gradientBg: '#854D0E',
+    image:
+      'https://images.unsplash.com/photo-1513104890138-7c749659a591?auto=format&fit=crop&w=600&q=80',
   },
 ];
 
@@ -146,6 +202,7 @@ const MealKitCard = React.memo(function MealKitCard({
   cartQuantity = 0,
   onIncrement,
   onDecrement,
+  cardBasis,
 }: {
   kit: MealKit;
   onPress: (kit: MealKit) => void;
@@ -155,43 +212,69 @@ const MealKitCard = React.memo(function MealKitCard({
   cartQuantity?: number;
   onIncrement?: (kit: MealKit) => void;
   onDecrement?: (kit: MealKit) => void;
+  cardBasis?: any;
 }) {
   const { colors, radii, shadows } = useTheme();
+  const [imgError, setImgError] = useState(false);
+  const [isHovered, setIsHovered] = useState(false);
 
   if (!kit || !kit.id) return null;
 
   const prepTime = (kit.prepTimeMinutes || 0) + (kit.cookTimeMinutes || 0);
   const servings = kit.servings || 2;
-  const dietBadge = getDietBadgeInfo(kit.diet);
+  const ratingText = kit.rating ? kit.rating.toFixed(1) : '4.8';
+  const imageUri = imgError || !kit.heroImage ? DEFAULT_FALLBACK_FOOD_IMG : kit.heroImage;
 
   return (
     <TouchableOpacity
       testID={`meal-kit-card-${kit.id}`}
       style={[
         styles.gridCard,
+        cardBasis ? { flexBasis: cardBasis, maxWidth: cardBasis } : null,
         {
           backgroundColor: colors.bgSurface,
           borderRadius: radii.xl,
-          borderColor: colors.borderLight,
+          borderColor: isHovered ? colors.primary : colors.borderLight,
           ...shadows.card,
         },
+        Platform.OS === 'web' && isHovered
+          ? {
+              // @ts-ignore
+              transform: [{ translateY: -3 }],
+              shadowOpacity: 0.16,
+              shadowRadius: 10,
+            }
+          : null,
       ]}
       onPress={() => onPress(kit)}
       activeOpacity={0.9}
+      // @ts-ignore
+      onMouseEnter={() => setIsHovered(true)}
+      // @ts-ignore
+      onMouseLeave={() => setIsHovered(false)}
     >
       <View style={styles.cardImageContainer}>
-        {kit.heroImage ? (
-          <Image source={{ uri: kit.heroImage }} style={styles.cardImg} resizeMode="cover" />
-        ) : (
-          <View style={[styles.cardImg, { backgroundColor: colors.bgSubtle }]} />
-        )}
+        <Image
+          source={{ uri: imageUri }}
+          style={styles.cardImg}
+          resizeMode="cover"
+          onError={() => setImgError(true)}
+        />
+
+        {/* Top Badges Row: Standard Veg/Non-veg Dot + Flame for Trending */}
         <View style={styles.cardBadgeRow}>
-          <View style={{ flexDirection: 'row', gap: 4, alignItems: 'center', flexWrap: 'wrap' }}>
-            <DietMark diet={kit.diet} size={15} />
-            <Badge label={dietBadge.label} variant={dietBadge.variant} size="sm" />
-            {kit.isTrending ? <Badge label="TRENDING" variant="warning" size="sm" /> : null}
+          <View style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+            <View style={styles.dietMarkWrapper}>
+              <DietMark diet={kit.diet} size={16} />
+            </View>
+            {kit.isTrending ? (
+              <View style={styles.trendingFlameBadge}>
+                <Icon name="flame" size={13} color="#EA580C" />
+              </View>
+            ) : null}
             {kit.isOutOfStock ? <Badge label="OUT OF STOCK" variant="danger" size="sm" /> : null}
           </View>
+
           <TouchableOpacity
             style={styles.cardFavBtn}
             onPress={() => onToggleFavorite(kit.id)}
@@ -210,40 +293,23 @@ const MealKitCard = React.memo(function MealKitCard({
             />
           </TouchableOpacity>
         </View>
-
-        <View style={styles.cardBottomOverlay}>
-          <Text style={styles.cardPrepTime}>
-            {prepTime} mins • {servings} Servings
-          </Text>
-        </View>
       </View>
 
       <View style={styles.cardDetails}>
+        {/* Title: 2 lines, no tagline */}
         <View style={styles.cardTitleRow}>
-          <Text style={[styles.cardTitle, { color: colors.textPrimary }]} numberOfLines={1}>
+          <Text style={[styles.cardTitle, { color: colors.textPrimary }]} numberOfLines={2}>
             {kit.name || 'Unnamed Kit'}
           </Text>
         </View>
 
-        <Text style={[styles.cardDescription, { color: colors.textSecondary }]} numberOfLines={2}>
-          {kit.description || kit.tagline || ''}
-        </Text>
-
-        {/* Clean Meta Line: Rating, Cook Time, Servings */}
-        <View style={styles.cardMetaRow}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-            <Icon name="star" size={13} color={colors.star} />
-            <Text style={[styles.cardMetaText, { color: colors.textSecondary }]}>
-              {kit.rating ? kit.rating.toFixed(1) : '4.8'}
-            </Text>
-          </View>
-          <Text style={[styles.cardMetaDot, { color: colors.textMuted }]}>•</Text>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-            <Icon name="time" size={13} color={colors.textMuted} />
-            <Text style={[styles.cardMetaText, { color: colors.textMuted }]}>{prepTime}m</Text>
-          </View>
-          <Text style={[styles.cardMetaDot, { color: colors.textMuted }]}>•</Text>
-          <Text style={[styles.cardMetaText, { color: colors.textMuted }]}>{servings} serv</Text>
+        {/* Clean Meta Line: ★ 4.8 · 25 min · Serves 2 */}
+        <View style={styles.cardMetaLine}>
+          <Text style={[styles.cardMetaText, { color: colors.textSecondary }]}>
+            <Text style={{ color: colors.star, fontWeight: '700' }}>★ {ratingText}</Text>
+            {' · '}
+            {prepTime} min · Serves {servings}
+          </Text>
         </View>
 
         <View style={styles.cardFooter}>
@@ -262,7 +328,7 @@ const MealKitCard = React.memo(function MealKitCard({
               size="sm"
               disabled
               variant="secondary"
-              style={{ paddingHorizontal: 12, opacity: 0.6 }}
+              style={{ minHeight: 44, paddingHorizontal: 12, opacity: 0.6 }}
             />
           ) : cartQuantity > 0 ? (
             <View
@@ -273,31 +339,34 @@ const MealKitCard = React.memo(function MealKitCard({
             >
               <TouchableOpacity
                 onPress={() => (onDecrement ? onDecrement(kit) : undefined)}
-                hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                 accessibilityRole="button"
                 accessibilityLabel={`Decrease ${kit.name} quantity`}
                 style={styles.cardStepperBtn}
               >
-                <Icon name="remove" size={13} color={colors.primary} />
+                <Icon name="remove" size={14} color={colors.primary} />
               </TouchableOpacity>
               <Text style={[styles.cardStepperQty, { color: colors.primary }]}>{cartQuantity}</Text>
               <TouchableOpacity
                 onPress={() => (onIncrement ? onIncrement(kit) : onQuickAdd(kit))}
-                hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                 accessibilityRole="button"
                 accessibilityLabel={`Increase ${kit.name} quantity`}
                 style={styles.cardStepperBtn}
               >
-                <Icon name="add" size={13} color={colors.primary} />
+                <Icon name="add" size={14} color={colors.primary} />
               </TouchableOpacity>
             </View>
           ) : (
-            <Button
-              title="+ Add"
-              size="sm"
+            <TouchableOpacity
               onPress={() => onQuickAdd(kit)}
-              style={{ paddingHorizontal: 16 }}
-            />
+              style={[styles.quickAddBtn, { backgroundColor: colors.primary }]}
+              activeOpacity={0.8}
+              accessibilityRole="button"
+              accessibilityLabel={`Add ${kit.name} to cart`}
+            >
+              <Text style={styles.quickAddBtnText}>+ Add</Text>
+            </TouchableOpacity>
           )}
         </View>
       </View>
@@ -313,6 +382,9 @@ const MealKitHorizontalCard = React.memo(function MealKitHorizontalCard({
   onQuickAdd,
   isFavorite,
   onToggleFavorite,
+  cartQuantity = 0,
+  onIncrement,
+  onDecrement,
 }: {
   kit: MealKit;
   currentCity?: string;
@@ -320,13 +392,21 @@ const MealKitHorizontalCard = React.memo(function MealKitHorizontalCard({
   onQuickAdd: (kit: MealKit) => void;
   isFavorite: boolean;
   onToggleFavorite: (id: string) => void;
+  cartQuantity?: number;
+  onIncrement?: (kit: MealKit) => void;
+  onDecrement?: (kit: MealKit) => void;
 }) {
   const { colors, radii, shadows } = useTheme();
+  const [imgError, setImgError] = useState(false);
+  const [isHovered, setIsHovered] = useState(false);
 
   if (!kit || !kit.id) return null;
 
   const isSpecialty = currentCity ? isRegionalSpecialtyOfCity(kit, currentCity) : false;
-  const dietBadge = getDietBadgeInfo(kit.diet);
+  const prepTime = (kit.prepTimeMinutes || 0) + (kit.cookTimeMinutes || 0);
+  const servings = kit.servings || 2;
+  const ratingText = kit.rating ? kit.rating.toFixed(1) : '4.8';
+  const imageUri = imgError || !kit.heroImage ? DEFAULT_FALLBACK_FOOD_IMG : kit.heroImage;
 
   return (
     <TouchableOpacity
@@ -335,46 +415,83 @@ const MealKitHorizontalCard = React.memo(function MealKitHorizontalCard({
         {
           backgroundColor: colors.bgSurface,
           borderRadius: radii.xl,
-          borderColor: isSpecialty ? colors.primary : colors.borderLight,
+          borderColor: isSpecialty
+            ? colors.primary
+            : isHovered
+              ? colors.primary
+              : colors.borderLight,
           borderWidth: isSpecialty ? 1.5 : 1,
           ...shadows.card,
         },
+        Platform.OS === 'web' && isHovered
+          ? {
+              // @ts-ignore
+              transform: [{ translateY: -3 }],
+              shadowOpacity: 0.16,
+              shadowRadius: 10,
+            }
+          : null,
       ]}
       onPress={() => onPress(kit)}
       activeOpacity={0.9}
+      // @ts-ignore
+      onMouseEnter={() => setIsHovered(true)}
+      // @ts-ignore
+      onMouseLeave={() => setIsHovered(false)}
     >
       <View style={styles.hCardImgContainer}>
-        {kit.heroImage ? (
-          <Image source={{ uri: kit.heroImage }} style={styles.hCardImg} />
-        ) : (
-          <View style={[styles.hCardImg, { backgroundColor: colors.bgSubtle }]} />
-        )}
-        <View style={styles.hCardBadge}>
-          <Badge label={dietBadge.label} variant={dietBadge.variant} size="sm" />
-          {kit.isTrending ? (
-            <Badge label="TRENDING" variant="warning" size="sm" style={{ marginTop: 2 }} />
-          ) : null}
-          {isSpecialty ? (
-            <Badge
-              label={`${kit.originCity || currentCity} Special`}
-              variant="accent"
-              size="sm"
-              style={{ marginTop: 2 }}
+        <Image
+          source={{ uri: imageUri }}
+          style={styles.hCardImg}
+          resizeMode="cover"
+          onError={() => setImgError(true)}
+        />
+        <View style={styles.cardBadgeRow}>
+          <View style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+            <View style={styles.dietMarkWrapper}>
+              <DietMark diet={kit.diet} size={15} />
+            </View>
+            {kit.isTrending ? (
+              <View style={styles.trendingFlameBadge}>
+                <Icon name="flame" size={12} color="#EA580C" />
+              </View>
+            ) : null}
+            {isSpecialty ? (
+              <Badge
+                label={`${kit.originCity || currentCity} Special`}
+                variant="accent"
+                size="sm"
+              />
+            ) : null}
+            {kit.isOutOfStock ? <Badge label="OUT OF STOCK" variant="danger" size="sm" /> : null}
+          </View>
+          <TouchableOpacity
+            style={styles.cardFavBtn}
+            onPress={() => onToggleFavorite(kit.id)}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            accessibilityRole="button"
+          >
+            <Icon
+              name={isFavorite ? 'heart' : 'heart-outline'}
+              size={16}
+              color={isFavorite ? '#EF4444' : '#64748B'}
             />
-          ) : null}
-          {kit.isOutOfStock ? (
-            <Badge label="OUT OF STOCK" variant="danger" size="sm" style={{ marginTop: 2 }} />
-          ) : null}
+          </TouchableOpacity>
         </View>
       </View>
 
       <View style={styles.hCardContent}>
-        <Text style={[styles.hCardTitle, { color: colors.textPrimary }]} numberOfLines={1}>
+        <Text style={[styles.hCardTitle, { color: colors.textPrimary }]} numberOfLines={2}>
           {kit.name || 'Unnamed Kit'}
         </Text>
-        <Text style={[styles.hCardSub, { color: colors.textSecondary }]} numberOfLines={1}>
-          {kit.tagline || ''}
-        </Text>
+
+        <View style={[styles.cardMetaLine, { marginTop: 4, marginBottom: 8 }]}>
+          <Text style={[styles.cardMetaText, { color: colors.textSecondary }]}>
+            <Text style={{ color: colors.star, fontWeight: '700' }}>★ {ratingText}</Text>
+            {' · '}
+            {prepTime} min · Serves {servings}
+          </Text>
+        </View>
 
         <View style={styles.hCardBottomRow}>
           <Text style={[styles.hCardPrice, { color: colors.primary }]}>₹{kit.price ?? 0}</Text>
@@ -384,10 +501,39 @@ const MealKitHorizontalCard = React.memo(function MealKitHorizontalCard({
               size="sm"
               disabled
               variant="secondary"
-              style={{ opacity: 0.6 }}
+              style={{ minHeight: 44, opacity: 0.6 }}
             />
+          ) : cartQuantity > 0 ? (
+            <View
+              style={[
+                styles.cardInlineStepper,
+                { backgroundColor: colors.primaryLight, borderColor: colors.primary + '40' },
+              ]}
+            >
+              <TouchableOpacity
+                onPress={() => (onDecrement ? onDecrement(kit) : undefined)}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                style={styles.cardStepperBtn}
+              >
+                <Icon name="remove" size={13} color={colors.primary} />
+              </TouchableOpacity>
+              <Text style={[styles.cardStepperQty, { color: colors.primary }]}>{cartQuantity}</Text>
+              <TouchableOpacity
+                onPress={() => (onIncrement ? onIncrement(kit) : onQuickAdd(kit))}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                style={styles.cardStepperBtn}
+              >
+                <Icon name="add" size={13} color={colors.primary} />
+              </TouchableOpacity>
+            </View>
           ) : (
-            <Button title="+ Add" size="sm" onPress={() => onQuickAdd(kit)} />
+            <TouchableOpacity
+              onPress={() => onQuickAdd(kit)}
+              style={[styles.quickAddBtn, { backgroundColor: colors.primary }]}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.quickAddBtnText}>+ Add</Text>
+            </TouchableOpacity>
           )}
         </View>
       </View>
@@ -419,6 +565,8 @@ const CatalogSections = React.memo(function CatalogSections({
   getCartQuantity,
   onIncrement,
   onDecrement,
+  cardBasis,
+  onSeeAllSection,
 }: {
   filteredKits: MealKit[];
   trendingKits: MealKit[];
@@ -442,6 +590,8 @@ const CatalogSections = React.memo(function CatalogSections({
   getCartQuantity?: (kitId: string) => number;
   onIncrement?: (kit: MealKit) => void;
   onDecrement?: (kit: MealKit) => void;
+  cardBasis?: any;
+  onSeeAllSection?: (section: 'trending' | 'foreign') => void;
 }) {
   const { colors, radii } = useTheme();
   const [visibleCount, setVisibleCount] = useState(12);
@@ -456,6 +606,50 @@ const CatalogSections = React.memo(function CatalogSections({
   }, [filteredKits, visibleCount]);
 
   const hasMore = filteredKits.length > visibleCount;
+
+  // Deduplication: prevent dishes like Artisanal Sourdough, Smoky Chipotle,
+  // Texas Double Smash from appearing in multiple sections
+  const dedupedTrending = useMemo(() => {
+    const seen = new Set<string>();
+    const res: MealKit[] = [];
+    for (const kit of trendingKits) {
+      if (kit && kit.id && !seen.has(kit.id)) {
+        seen.add(kit.id);
+        res.push(kit);
+        if (res.length >= 6) break;
+      }
+    }
+    return res;
+  }, [trendingKits]);
+
+  const dedupedForeign = useMemo(() => {
+    const seen = new Set<string>(dedupedTrending.map((k) => k.id));
+    const res: MealKit[] = [];
+    for (const kit of foreignKits) {
+      if (kit && kit.id && !seen.has(kit.id)) {
+        seen.add(kit.id);
+        res.push(kit);
+        if (res.length >= 6) break;
+      }
+    }
+    return res;
+  }, [foreignKits, dedupedTrending]);
+
+  const dedupedRecommended = useMemo(() => {
+    const seen = new Set<string>([
+      ...dedupedTrending.map((k) => k.id),
+      ...dedupedForeign.map((k) => k.id),
+    ]);
+    const res: MealKit[] = [];
+    for (const kit of recommendedKits) {
+      if (kit && kit.id && !seen.has(kit.id)) {
+        seen.add(kit.id);
+        res.push(kit);
+        if (res.length >= 6) break;
+      }
+    }
+    return res;
+  }, [recommendedKits, dedupedTrending, dedupedForeign]);
 
   return (
     <>
@@ -508,6 +702,7 @@ const CatalogSections = React.memo(function CatalogSections({
                     cartQuantity={getCartQuantity ? getCartQuantity(kit.id) : 0}
                     onIncrement={onIncrement}
                     onDecrement={onDecrement}
+                    cardBasis={cardBasis}
                   />
                 ))}
               </View>
@@ -552,7 +747,7 @@ const CatalogSections = React.memo(function CatalogSections({
       {dietFilterTags.size === 0 && selectedCuisine === 'All' && (
         <View style={styles.catalogSection}>
           <View style={styles.sectionHeaderRow}>
-            <View>
+            <View style={{ flex: 1 }}>
               <Text style={[styles.sectionHeading, { color: colors.textPrimary }]}>
                 Trending in {currentCity}
               </Text>
@@ -560,36 +755,46 @@ const CatalogSections = React.memo(function CatalogSections({
                 {currentCity} regional specialties & popular kits in your area today
               </Text>
             </View>
+            <TouchableOpacity
+              onPress={() => onSeeAllSection?.('trending')}
+              style={styles.seeAllBtn}
+              accessibilityRole="button"
+              accessibilityLabel={`See all trending kits in ${currentCity}`}
+            >
+              <Text style={[styles.seeAllText, { color: colors.primary }]}>See all →</Text>
+            </TouchableOpacity>
           </View>
 
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.horizontalCardRow}
+            snapToInterval={232}
+            decelerationRate="fast"
           >
-            {trendingKits
-              .filter((k): k is MealKit => Boolean(k && k.id))
-              .slice(0, 6)
-              .map((kit) => (
-                <MealKitHorizontalCard
-                  key={kit.id}
-                  kit={kit}
-                  currentCity={currentCity}
-                  onPress={onOpenDetail}
-                  onQuickAdd={onQuickAdd}
-                  isFavorite={kit?.id ? (isInWishlist?.(kit.id) ?? false) : false}
-                  onToggleFavorite={onToggleFavorite}
-                />
-              ))}
+            {dedupedTrending.map((kit) => (
+              <MealKitHorizontalCard
+                key={kit.id}
+                kit={kit}
+                currentCity={currentCity}
+                onPress={onOpenDetail}
+                onQuickAdd={onQuickAdd}
+                isFavorite={kit?.id ? (isInWishlist?.(kit.id) ?? false) : false}
+                onToggleFavorite={onToggleFavorite}
+                cartQuantity={getCartQuantity ? getCartQuantity(kit.id) : 0}
+                onIncrement={onIncrement}
+                onDecrement={onDecrement}
+              />
+            ))}
           </ScrollView>
         </View>
       )}
 
       {/* SECTION 1.5: Global Favorites & Foreign Specials */}
-      {dietFilterTags.size === 0 && selectedCuisine === 'All' && foreignKits.length > 0 && (
+      {dietFilterTags.size === 0 && selectedCuisine === 'All' && dedupedForeign.length > 0 && (
         <View style={styles.catalogSection}>
           <View style={styles.sectionHeaderRow}>
-            <View>
+            <View style={{ flex: 1 }}>
               <Text style={[styles.sectionHeading, { color: colors.textPrimary }]}>
                 Global Street Eats & Foreign Specials
               </Text>
@@ -598,27 +803,37 @@ const CatalogSections = React.memo(function CatalogSections({
                 European & Mediterranean classics
               </Text>
             </View>
+            <TouchableOpacity
+              onPress={() => onSeeAllSection?.('foreign')}
+              style={styles.seeAllBtn}
+              accessibilityRole="button"
+              accessibilityLabel="See all global street eats"
+            >
+              <Text style={[styles.seeAllText, { color: colors.primary }]}>See all →</Text>
+            </TouchableOpacity>
           </View>
 
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.horizontalCardRow}
+            snapToInterval={232}
+            decelerationRate="fast"
           >
-            {foreignKits
-              .filter((k): k is MealKit => Boolean(k && k.id))
-              .slice(0, 6)
-              .map((kit) => (
-                <MealKitHorizontalCard
-                  key={kit.id}
-                  kit={kit}
-                  currentCity={currentCity}
-                  onPress={onOpenDetail}
-                  onQuickAdd={onQuickAdd}
-                  isFavorite={kit?.id ? (isInWishlist?.(kit.id) ?? false) : false}
-                  onToggleFavorite={onToggleFavorite}
-                />
-              ))}
+            {dedupedForeign.map((kit) => (
+              <MealKitHorizontalCard
+                key={kit.id}
+                kit={kit}
+                currentCity={currentCity}
+                onPress={onOpenDetail}
+                onQuickAdd={onQuickAdd}
+                isFavorite={kit?.id ? (isInWishlist?.(kit.id) ?? false) : false}
+                onToggleFavorite={onToggleFavorite}
+                cartQuantity={getCartQuantity ? getCartQuantity(kit.id) : 0}
+                onIncrement={onIncrement}
+                onDecrement={onDecrement}
+              />
+            ))}
           </ScrollView>
         </View>
       )}
@@ -637,12 +852,17 @@ const CatalogSections = React.memo(function CatalogSections({
                   : 'Curated for your profile'}
               </Text>
             </View>
-            <TouchableOpacity onPress={onOpenPreferencesModal}>
-              <Text style={[styles.editPrefLink, { color: colors.primary }]}>Edit Profile</Text>
+            <TouchableOpacity
+              onPress={onOpenPreferencesModal}
+              style={styles.seeAllBtn}
+              accessibilityRole="button"
+              accessibilityLabel="Edit taste and dietary profile"
+            >
+              <Text style={[styles.seeAllText, { color: colors.primary }]}>Edit Profile →</Text>
             </TouchableOpacity>
           </View>
 
-          {recommendedKits.length === 0 ? (
+          {dedupedRecommended.length === 0 ? (
             <View
               style={{
                 padding: 20,
@@ -691,21 +911,23 @@ const CatalogSections = React.memo(function CatalogSections({
               horizontal
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={styles.horizontalCardRow}
+              snapToInterval={232}
+              decelerationRate="fast"
             >
-              {recommendedKits
-                .filter((k): k is MealKit => Boolean(k && k.id))
-                .slice(0, 6)
-                .map((kit) => (
-                  <MealKitHorizontalCard
-                    key={kit.id}
-                    kit={kit}
-                    currentCity={currentCity}
-                    onPress={onOpenDetail}
-                    onQuickAdd={onQuickAdd}
-                    isFavorite={kit?.id ? (isInWishlist?.(kit.id) ?? false) : false}
-                    onToggleFavorite={onToggleFavorite}
-                  />
-                ))}
+              {dedupedRecommended.map((kit) => (
+                <MealKitHorizontalCard
+                  key={kit.id}
+                  kit={kit}
+                  currentCity={currentCity}
+                  onPress={onOpenDetail}
+                  onQuickAdd={onQuickAdd}
+                  isFavorite={kit?.id ? (isInWishlist?.(kit.id) ?? false) : false}
+                  onToggleFavorite={onToggleFavorite}
+                  cartQuantity={getCartQuantity ? getCartQuantity(kit.id) : 0}
+                  onIncrement={onIncrement}
+                  onDecrement={onDecrement}
+                />
+              ))}
             </ScrollView>
           )}
         </View>
@@ -771,7 +993,7 @@ const CatalogSections = React.memo(function CatalogSections({
                   style={{ alignSelf: 'flex-start', paddingTop: 2 }}
                 >
                   <Text style={[styles.editPrefLink, { color: colors.primary }]}>
-                    Family Profile
+                    Family Profile →
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -817,6 +1039,8 @@ const CatalogSections = React.memo(function CatalogSections({
                   horizontal
                   showsHorizontalScrollIndicator={false}
                   contentContainerStyle={styles.horizontalCardRow}
+                  snapToInterval={232}
+                  decelerationRate="fast"
                 >
                   {kits
                     .filter((k): k is MealKit => Boolean(k && k.id))
@@ -830,6 +1054,9 @@ const CatalogSections = React.memo(function CatalogSections({
                         onQuickAdd={onQuickAdd}
                         isFavorite={kit?.id ? (isInWishlist?.(kit.id) ?? false) : false}
                         onToggleFavorite={onToggleFavorite}
+                        cartQuantity={getCartQuantity ? getCartQuantity(kit.id) : 0}
+                        onIncrement={onIncrement}
+                        onDecrement={onDecrement}
                       />
                     ))}
                 </ScrollView>
@@ -894,6 +1121,7 @@ const CatalogSections = React.memo(function CatalogSections({
                     cartQuantity={getCartQuantity ? getCartQuantity(kit.id) : 0}
                     onIncrement={onIncrement}
                     onDecrement={onDecrement}
+                    cardBasis={cardBasis}
                   />
                 ))}
               </View>
@@ -927,6 +1155,23 @@ export const HomeScreenView: React.FC = () => {
   const { preferences } = usePreferences();
   const { family, role, members, isOwner, dependentType, addFamilyItem } = useFamily();
   const isDependent = role === 'dependent';
+
+  const { width: windowWidth } = useWindowDimensions();
+  const [activePromoIndex, setActivePromoIndex] = useState(0);
+
+  const cardBasis = useMemo(() => {
+    if (windowWidth >= 1024) return '23.5%';
+    if (windowWidth >= 640) return '31.5%';
+    return '48%';
+  }, [windowWidth]);
+
+  const handleSeeAllSection = useCallback((section: 'trending' | 'foreign') => {
+    if (section === 'trending') {
+      setSortBy('popularity');
+    } else if (section === 'foreign') {
+      setSelectedCuisine('Continental');
+    }
+  }, []);
 
   // Basket Destination Chooser Modal
   const [destinationModalVisible, setDestinationModalVisible] = useState(false);
@@ -967,7 +1212,6 @@ export const HomeScreenView: React.FC = () => {
   const [detailModalVisible, setDetailModalVisible] = useState(false);
   const [preferencesModalVisible, setPreferencesModalVisible] = useState(false);
   const [locationModalVisible, setLocationModalVisible] = useState(false);
-  const [isDietPromptDismissed, setIsDietPromptDismissed] = useState(false);
   const [reviewKit, setReviewKit] = useState<MealKit | null>(null);
   const [reviewModalVisible, setReviewModalVisible] = useState(false);
   const [allKits, setAllKits] = useState<MealKit[]>(() => getMealKits());
@@ -1485,9 +1729,6 @@ export const HomeScreenView: React.FC = () => {
               </Text>
             </View>
           </TouchableOpacity>
-
-          {/* Theme switcher with culinary color schemes & light/dark mode */}
-          <ThemeSwitcher variant="header" />
         </View>
 
         {/* Right header actions: Family button, Dietary badge, Wishlist, Cart */}
@@ -1518,13 +1759,27 @@ export const HomeScreenView: React.FC = () => {
           )}
 
           <TouchableOpacity
-            style={[styles.prefChip, { backgroundColor: colors.primaryLight }]}
+            testID="home-diet-header-chip"
+            style={[
+              styles.prefChip,
+              {
+                backgroundColor: colors.primaryLight,
+                borderColor: colors.primary + '35',
+                borderWidth: 1,
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: 5,
+              },
+            ]}
             onPress={() => setPreferencesModalVisible(true)}
+            accessibilityRole="button"
+            accessibilityLabel="Customize dietary preferences"
           >
+            <Icon name="leaf" size={13} color={colors.primary} />
             <Text style={[styles.prefChipText, { color: colors.primary }]}>
               {preferences.dietTypes && preferences.dietTypes.length > 0
-                ? preferences.dietTypes.join(', ').toUpperCase()
-                : 'ALL DIETS'}
+                ? `Diet: ${preferences.dietTypes.map((d) => d.charAt(0).toUpperCase() + d.slice(1)).join(', ')}`
+                : 'Diet: All'}
             </Text>
           </TouchableOpacity>
 
@@ -1580,520 +1835,512 @@ export const HomeScreenView: React.FC = () => {
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollBody}>
-        {/* SINGLE PRIORITY BANNER SLOT (Resume Cooking > Family Hub > Kitchen Preferences) */}
-        {pendingCookingOrders.length > 0 ? (
-          <ResumeCookingBanner />
-        ) : family ? (
-          <View style={styles.familyBannerWrapper}>
+        {/* RESPONSIVE WRAPPER (Constrains content on wide screens to 1200px and centers it) */}
+        <View style={styles.responsiveWrapper}>
+          {/* SINGLE PRIORITY BANNER SLOT (Resume Cooking > Family Hub > Slim Kitchen Preferences) */}
+          {pendingCookingOrders.length > 0 ? (
+            <ResumeCookingBanner />
+          ) : family ? (
+            <View style={styles.familyBannerWrapper}>
+              <TouchableOpacity
+                testID="home-family-top-tab"
+                style={[
+                  styles.familyTopTab,
+                  {
+                    backgroundColor: colors.bgSurface,
+                    borderColor: colors.borderLight,
+                    borderRadius: radii.xl,
+                    ...shadows.soft,
+                  },
+                ]}
+                onPress={() => router.push('/family' as any)}
+                activeOpacity={0.85}
+                accessibilityRole="button"
+                accessibilityLabel={`Open ${family.name || 'Family'} Hub`}
+              >
+                <View style={[styles.familyIconWrap, { backgroundColor: colors.primaryLight }]}>
+                  <Icon name="people" size={20} color={colors.primary} />
+                </View>
+
+                <View style={styles.familyTextWrap}>
+                  <View style={styles.familyTitleRow}>
+                    <Text
+                      style={[styles.familyTitleText, { color: colors.textPrimary }]}
+                      numberOfLines={1}
+                    >
+                      {family.name}
+                    </Text>
+                    {role && <RoleBadge role={role} dependentType={dependentType} size="sm" />}
+                  </View>
+                  <Text
+                    style={[styles.familySubtitleText, { color: colors.textSecondary }]}
+                    numberOfLines={1}
+                  >
+                    {members.length} {members.length === 1 ? 'member' : 'members'} • Shared Cart &
+                    Approvals
+                  </Text>
+                </View>
+
+                <View style={[styles.familyTabActionBtn, { backgroundColor: colors.primary }]}>
+                  <Text style={styles.familyTabActionText}>Open Family</Text>
+                  <Icon name="chevron-right" size={14} color="#FFFFFF" />
+                </View>
+              </TouchableOpacity>
+            </View>
+          ) : null}
+
+          {/* Search Bar Banner Link */}
+          <View style={styles.searchBarWrapper}>
             <TouchableOpacity
-              testID="home-family-top-tab"
               style={[
-                styles.familyTopTab,
+                styles.fakeSearchBar,
                 {
                   backgroundColor: colors.bgSurface,
-                  borderColor: colors.borderLight,
+                  borderColor: colors.border,
                   borderRadius: radii.xl,
                   ...shadows.soft,
                 },
               ]}
-              onPress={() => router.push('/family' as any)}
+              onPress={() => router.push('/(tabs)/search' as any)}
               activeOpacity={0.85}
-              accessibilityRole="button"
-              accessibilityLabel={`Open ${family.name || 'Family'} Hub`}
             >
-              <View style={[styles.familyIconWrap, { backgroundColor: colors.primaryLight }]}>
-                <Icon name="people" size={20} color={colors.primary} />
+              <View style={{ marginRight: 8 }}>
+                <Icon name="search" size={18} color={colors.textMuted} />
               </View>
-
-              <View style={styles.familyTextWrap}>
-                <View style={styles.familyTitleRow}>
-                  <Text
-                    style={[styles.familyTitleText, { color: colors.textPrimary }]}
-                    numberOfLines={1}
-                  >
-                    {family.name}
-                  </Text>
-                  {role && <RoleBadge role={role} dependentType={dependentType} size="sm" />}
-                </View>
-                <Text
-                  style={[styles.familySubtitleText, { color: colors.textSecondary }]}
-                  numberOfLines={1}
-                >
-                  {members.length} {members.length === 1 ? 'member' : 'members'} • Shared Cart &
-                  Approvals
-                </Text>
-              </View>
-
-              <View style={[styles.familyTabActionBtn, { backgroundColor: colors.primary }]}>
-                <Text style={styles.familyTabActionText}>Open Family</Text>
-                <Icon name="chevron-right" size={14} color="#FFFFFF" />
-              </View>
+              <Text style={[styles.searchPlaceholder, { color: colors.textMuted }]}>
+                Search by recipe or ingredient (e.g. Paneer, Biryani, Ghee)...
+              </Text>
             </TouchableOpacity>
           </View>
-        ) : !isDietPromptDismissed ? (
-          <View
-            testID="dietary-preferences-prompt"
-            style={[
-              styles.dietaryPromptCard,
-              {
-                backgroundColor: colors.bgSurface,
-                borderColor: colors.borderLight,
-                ...shadows.card,
-              },
-            ]}
-          >
-            <View style={styles.dietaryPromptLeft}>
-              <View
-                style={[styles.dietaryPromptIconWrap, { backgroundColor: colors.primaryLight }]}
-              >
-                <Icon name="leaf" size={20} color={colors.primary} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.dietaryPromptTitle, { color: colors.textPrimary }]}>
-                  Customize Your Kitchen Preferences
-                </Text>
-                <Text style={[styles.dietaryPromptSub, { color: colors.textSecondary }]}>
-                  Set veg, Jain, spice tolerance or allergy filters anytime.
-                </Text>
-              </View>
-            </View>
-            <View style={styles.dietaryPromptActions}>
-              <TouchableOpacity
-                testID="open-dietary-prefs-btn"
-                style={[styles.dietaryPromptBtn, { backgroundColor: colors.primaryLight }]}
-                onPress={() => setPreferencesModalVisible(true)}
-              >
-                <Text style={[styles.dietaryPromptBtnText, { color: colors.primary }]}>
-                  Personalize
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                testID="dismiss-dietary-prompt-btn"
-                style={styles.dietaryPromptDismissBtn}
-                onPress={() => setIsDietPromptDismissed(true)}
-                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-              >
-                <Icon name="close" size={18} color={colors.textMuted} />
-              </TouchableOpacity>
-            </View>
-          </View>
-        ) : null}
 
-        {/* Search Bar Banner Link */}
-        <View style={styles.searchBarWrapper}>
-          <TouchableOpacity
-            style={[
-              styles.fakeSearchBar,
-              {
-                backgroundColor: colors.bgSurface,
-                borderColor: colors.border,
-                borderRadius: radii.xl,
-                ...shadows.soft,
-              },
-            ]}
-            onPress={() => router.push('/(tabs)/search' as any)}
-            activeOpacity={0.85}
-          >
-            <View style={{ marginRight: 8 }}>
-              <Icon name="search" size={18} color={colors.textMuted} />
-            </View>
-            <Text style={[styles.searchPlaceholder, { color: colors.textMuted }]}>
-              Search by recipe or ingredient (e.g. Paneer, Biryani, Ghee)...
-            </Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Promotional Offers Carousel (Slim and Food-Forward) */}
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.promoCarousel}
-        >
-          {PROMO_BANNERS.map((promo) => (
-            <View
-              key={promo.id}
-              style={[
-                styles.promoCard,
-                { backgroundColor: promo.gradientBg, borderRadius: radii.xl, ...shadows.medium },
-              ]}
+          {/* Promotional Offers Carousel with Pagination Dots */}
+          <View style={styles.promoCarouselSection}>
+            <ScrollView
+              horizontal
+              pagingEnabled={Platform.OS !== 'web'}
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.promoCarousel}
+              snapToInterval={Math.min(windowWidth - 32, 540) + 12}
+              decelerationRate="fast"
+              onScroll={(e) => {
+                const cardW = Math.min(windowWidth - 32, 540) + 12;
+                const idx = Math.round(e.nativeEvent.contentOffset.x / cardW);
+                if (idx !== activePromoIndex && idx >= 0 && idx < PROMO_BANNERS.length) {
+                  setActivePromoIndex(idx);
+                }
+              }}
+              scrollEventThrottle={16}
             >
-              <View style={styles.promoContent}>
-                <View style={styles.promoTagBadge}>
-                  <Text style={styles.promoTagText}>{promo.tag}</Text>
-                </View>
-                <Text style={styles.promoTitle}>{promo.title}</Text>
-                <Text style={styles.promoSubtitle}>{promo.subtitle}</Text>
-                <TouchableOpacity
-                  style={styles.promoButton}
-                  onPress={() => router.push('/(tabs)/cart' as any)}
+              {PROMO_BANNERS.map((promo) => (
+                <View
+                  key={promo.id}
+                  style={[
+                    styles.promoCard,
+                    {
+                      backgroundColor: promo.gradientBg,
+                      borderRadius: radii.xl,
+                      ...shadows.medium,
+                      width: Math.min(windowWidth - 32, 540),
+                    },
+                  ]}
                 >
-                  <Text style={styles.promoButtonText}>Apply Code {promo.code}</Text>
-                </TouchableOpacity>
-              </View>
-              <Image source={{ uri: promo.image }} style={styles.promoImg} resizeMode="cover" />
-            </View>
-          ))}
-        </ScrollView>
-
-        {/* Minimalist 3-Filter Buttons Bar */}
-        <View style={styles.minimalistFilterBar}>
-          <TouchableOpacity
-            style={[
-              styles.minimalistFilterBtn,
-              {
-                backgroundColor: dietFilterTags.size > 0 ? colors.primary + '18' : colors.bgSurface,
-                borderColor: dietFilterTags.size > 0 ? colors.primary : colors.borderLight,
-              },
-            ]}
-            onPress={() => setActiveFilterModal((prev) => (prev === 'diet' ? null : 'diet'))}
-            activeOpacity={0.7}
-          >
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-              <Icon
-                name="restaurant"
-                size={14}
-                color={dietFilterTags.size > 0 ? colors.primary : colors.textSecondary}
-              />
-              <Text
-                style={[
-                  styles.minimalistFilterBtnText,
-                  {
-                    color: dietFilterTags.size > 0 ? colors.primary : colors.textPrimary,
-                  },
-                ]}
-                numberOfLines={1}
-              >
-                {dietFilterTags.size === 0
-                  ? 'Diets'
-                  : dietFilterTags.size === 1
-                    ? [...dietFilterTags][0]!.toUpperCase()
-                    : `${dietFilterTags.size} Diets`}
-              </Text>
-              <Icon name="chevron-down" size={12} color={colors.textMuted} />
-            </View>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[
-              styles.minimalistFilterBtn,
-              {
-                backgroundColor:
-                  selectedCuisine !== 'All' ? colors.primary + '18' : colors.bgSurface,
-                borderColor: selectedCuisine !== 'All' ? colors.primary : colors.borderLight,
-              },
-            ]}
-            onPress={() => setActiveFilterModal((prev) => (prev === 'cuisine' ? null : 'cuisine'))}
-            activeOpacity={0.7}
-          >
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-              <Icon
-                name="globe"
-                size={14}
-                color={selectedCuisine !== 'All' ? colors.primary : colors.textSecondary}
-              />
-              <Text
-                style={[
-                  styles.minimalistFilterBtnText,
-                  { color: selectedCuisine !== 'All' ? colors.primary : colors.textPrimary },
-                ]}
-                numberOfLines={1}
-              >
-                {selectedCuisine === 'All' ? 'Cuisines' : selectedCuisine}
-              </Text>
-              <Icon name="chevron-down" size={12} color={colors.textMuted} />
-            </View>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[
-              styles.minimalistFilterBtn,
-              {
-                backgroundColor:
-                  selectedDishCategory !== 'All' ? colors.primary + '18' : colors.bgSurface,
-                borderColor: selectedDishCategory !== 'All' ? colors.primary : colors.borderLight,
-              },
-            ]}
-            onPress={() => setActiveFilterModal((prev) => (prev === 'dish' ? null : 'dish'))}
-            activeOpacity={0.7}
-          >
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-              <Icon
-                name="fast-food"
-                size={14}
-                color={selectedDishCategory !== 'All' ? colors.primary : colors.textSecondary}
-              />
-              <Text
-                style={[
-                  styles.minimalistFilterBtnText,
-                  { color: selectedDishCategory !== 'All' ? colors.primary : colors.textPrimary },
-                ]}
-                numberOfLines={1}
-              >
-                {selectedDishCategory === 'All' ? 'Dishes' : selectedDishCategory}
-              </Text>
-              <Icon name="chevron-down" size={12} color={colors.textMuted} />
-            </View>
-          </TouchableOpacity>
-        </View>
-
-        {/* Active Filter Pills Bar (Removable chips with clear all) */}
-        {(dietFilterTags.size > 0 ||
-          selectedCuisine !== 'All' ||
-          selectedDishCategory !== 'All') && (
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.activeFiltersScroll}
-          >
-            <View style={styles.activeFilterCountBadge}>
-              <Text style={[styles.activeFilterCountText, { color: colors.primary }]}>
-                {dietFilterTags.size +
-                  (selectedCuisine !== 'All' ? 1 : 0) +
-                  (selectedDishCategory !== 'All' ? 1 : 0)}{' '}
-                Active
-              </Text>
-            </View>
-            {[...dietFilterTags].map((tag) => (
-              <TouchableOpacity
-                key={tag}
-                style={[
-                  styles.activeFilterPill,
-                  { backgroundColor: colors.primaryLight, borderColor: colors.primary + '35' },
-                ]}
-                onPress={() => {
-                  setDietFilterTags((prev) => {
-                    const next = new Set(prev);
-                    next.delete(tag);
-                    return next;
-                  });
-                }}
-              >
-                <Text style={[styles.activeFilterPillText, { color: colors.primary }]}>
-                  {tag.toUpperCase()}
-                </Text>
-                <Icon name="close" size={12} color={colors.primary} />
-              </TouchableOpacity>
-            ))}
-            {selectedCuisine !== 'All' && (
-              <TouchableOpacity
-                style={[
-                  styles.activeFilterPill,
-                  { backgroundColor: colors.primaryLight, borderColor: colors.primary + '35' },
-                ]}
-                onPress={() => setSelectedCuisine('All')}
-              >
-                <Text style={[styles.activeFilterPillText, { color: colors.primary }]}>
-                  {selectedCuisine}
-                </Text>
-                <Icon name="close" size={12} color={colors.primary} />
-              </TouchableOpacity>
-            )}
-            {selectedDishCategory !== 'All' && (
-              <TouchableOpacity
-                style={[
-                  styles.activeFilterPill,
-                  { backgroundColor: colors.primaryLight, borderColor: colors.primary + '35' },
-                ]}
-                onPress={() => setSelectedDishCategory('All')}
-              >
-                <Text style={[styles.activeFilterPillText, { color: colors.primary }]}>
-                  {selectedDishCategory}
-                </Text>
-                <Icon name="close" size={12} color={colors.primary} />
-              </TouchableOpacity>
-            )}
-            {quickIntent && (
-              <TouchableOpacity
-                style={[
-                  styles.activeFilterPill,
-                  { backgroundColor: colors.primaryLight, borderColor: colors.primary + '35' },
-                ]}
-                onPress={() => setQuickIntent(null)}
-              >
-                <Text style={[styles.activeFilterPillText, { color: colors.primary }]}>
-                  {quickIntent === 'under20'
-                    ? 'Under 20 min'
-                    : quickIntent === 'highProtein'
-                      ? 'High Protein'
-                      : quickIntent === 'kidFriendly'
-                        ? 'Kid-Friendly'
-                        : "Chef's Special"}
-                </Text>
-                <Icon name="close" size={12} color={colors.primary} />
-              </TouchableOpacity>
-            )}
-            <TouchableOpacity style={styles.clearAllFiltersBtn} onPress={handleResetFilters}>
-              <Text style={[styles.clearAllFiltersText, { color: colors.danger }]}>Clear all</Text>
-            </TouchableOpacity>
-          </ScrollView>
-        )}
-
-        {/* Quick-Intent Occasion Chips */}
-        <View style={{ marginHorizontal: 16, marginTop: 10, marginBottom: 4 }}>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={{ gap: 8, paddingVertical: 2 }}
-          >
-            {[
-              { id: 'under20', label: 'Under 20 min' },
-              { id: 'highProtein', label: 'High Protein' },
-              { id: 'kidFriendly', label: 'Kid-Friendly' },
-              { id: 'chefSpecial', label: "Chef's Special" },
-            ].map((intent) => {
-              const isSelected = quickIntent === intent.id;
-              return (
-                <TouchableOpacity
-                  key={intent.id}
-                  onPress={() =>
-                    setQuickIntent((prev) => (prev === intent.id ? null : (intent.id as any)))
-                  }
-                  style={{
-                    paddingHorizontal: 14,
-                    paddingVertical: 7,
-                    borderRadius: radii.pill,
-                    borderWidth: 1,
-                    backgroundColor: isSelected ? colors.primary : colors.bgSurface,
-                    borderColor: isSelected ? colors.primary : colors.borderLight,
-                    ...shadows.soft,
-                  }}
-                  activeOpacity={0.75}
-                >
-                  <Text
-                    style={{
-                      fontSize: 12,
-                      fontWeight: isSelected ? '700' : '600',
-                      color: isSelected ? '#FFFFFF' : colors.textPrimary,
-                    }}
-                  >
-                    {intent.label}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </ScrollView>
-        </View>
-
-        {/* Sort Bar with Dropdown List */}
-        <View style={styles.sortRow}>
-          <Text style={[styles.resultCount, { color: colors.textMuted }]}>
-            Showing {filteredKits.length} Chef Meal Kits
-          </Text>
-          <View style={{ position: 'relative', zIndex: 10 }}>
-            <TouchableOpacity
-              onPress={() => setIsSortDropdownOpen(!isSortDropdownOpen)}
-              style={[
-                styles.sortBtn,
-                {
-                  borderColor: isSortDropdownOpen ? colors.primary : colors.borderLight,
-                  backgroundColor: colors.bgSurface,
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  gap: 6,
-                },
-              ]}
-              activeOpacity={0.8}
-            >
-              <Icon
-                name={SORT_OPTIONS.find((s) => s.id === sortBy)?.icon || 'flame'}
-                size={14}
-                color={colors.primary}
-              />
-              <Text style={[styles.sortBtnText, { color: colors.textPrimary }]}>
-                Sort: {SORT_OPTIONS.find((s) => s.id === sortBy)?.label}
-              </Text>
-              <Icon
-                name={isSortDropdownOpen ? 'chevron-up' : 'chevron-down'}
-                size={12}
-                color={colors.textMuted}
-              />
-            </TouchableOpacity>
-
-            {/* Sort Dropdown List */}
-            {isSortDropdownOpen && (
-              <View
-                style={[
-                  styles.sortDropdownMenu,
-                  {
-                    backgroundColor: colors.bgSurface,
-                    borderColor: colors.borderLight,
-                    ...shadows.medium,
-                  },
-                ]}
-              >
-                {SORT_OPTIONS.map((opt) => {
-                  const isSelected = sortBy === opt.id;
-                  return (
+                  <View style={styles.promoContent}>
+                    <View style={styles.promoTagBadge}>
+                      <Text style={styles.promoTagText}>{promo.tag}</Text>
+                    </View>
+                    <Text style={styles.promoTitle}>{promo.title}</Text>
+                    <Text style={styles.promoSubtitle}>{promo.subtitle}</Text>
                     <TouchableOpacity
-                      key={opt.id}
+                      style={styles.promoButton}
+                      onPress={() => router.push('/(tabs)/cart' as any)}
+                    >
+                      <Text style={styles.promoButtonText}>Apply Code {promo.code}</Text>
+                    </TouchableOpacity>
+                  </View>
+                  <Image source={{ uri: promo.image }} style={styles.promoImg} resizeMode="cover" />
+                </View>
+              ))}
+            </ScrollView>
+            {/* Carousel Pagination Dots */}
+            <View style={styles.promoDotsContainer}>
+              {PROMO_BANNERS.map((_, idx) => (
+                <View
+                  key={idx}
+                  style={[
+                    styles.promoDot,
+                    {
+                      backgroundColor:
+                        activePromoIndex === idx ? colors.primary : colors.borderLight,
+                      width: activePromoIndex === idx ? 18 : 6,
+                    },
+                  ]}
+                />
+              ))}
+            </View>
+          </View>
+
+          {/* Category Shortcuts: Round Image Chips (Biryani, Pizza, Burgers, Curries, Street Food, Pastas) */}
+          <View style={styles.categoryShortcutsSection}>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.categoryShortcutsScroll}
+            >
+              {CATEGORY_SHORTCUTS.map((cat) => {
+                const isSelected = selectedDishCategory === cat.id;
+                return (
+                  <TouchableOpacity
+                    key={cat.id}
+                    onPress={() =>
+                      setSelectedDishCategory((prev) => (prev === cat.id ? 'All' : cat.id))
+                    }
+                    style={styles.categoryShortcutItem}
+                    activeOpacity={0.8}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Filter by ${cat.label}`}
+                  >
+                    <View
                       style={[
-                        styles.sortDropdownItem,
+                        styles.categoryShortcutImgWrap,
                         {
-                          backgroundColor: isSelected ? colors.primary + '18' : 'transparent',
+                          borderColor: isSelected ? colors.primary : colors.borderLight,
+                          borderWidth: isSelected ? 2.5 : 1,
+                          backgroundColor: colors.bgSurface,
+                          ...shadows.soft,
                         },
                       ]}
-                      onPress={() => {
-                        setSortBy(opt.id);
-                        setIsSortDropdownOpen(false);
-                      }}
-                      activeOpacity={0.7}
                     >
-                      <View style={{ marginRight: 8 }}>
-                        <Icon
-                          name={opt.icon}
-                          size={15}
-                          color={isSelected ? colors.primary : colors.textSecondary}
-                        />
-                      </View>
-                      <Text
+                      <Image source={{ uri: cat.image }} style={styles.categoryShortcutImg} />
+                    </View>
+                    <Text
+                      style={[
+                        styles.categoryShortcutLabel,
+                        {
+                          color: isSelected ? colors.primaryDark : colors.textPrimary,
+                          fontWeight: isSelected ? '800' : '600',
+                        },
+                      ]}
+                      numberOfLines={1}
+                    >
+                      {cat.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </View>
+
+          {/* Unified Compact Filter Bar (Diets, Cuisines, Dishes + Quick Filters in same scrolling row) */}
+          <View
+            style={[
+              styles.unifiedFilterRowWrap,
+              {
+                backgroundColor: colors.bgPrimary,
+              },
+            ]}
+          >
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.unifiedFilterRowScroll}
+            >
+              {/* 1. Diets Dropdown Chip */}
+              <TouchableOpacity
+                style={[
+                  styles.compactFilterChip,
+                  {
+                    backgroundColor:
+                      dietFilterTags.size > 0 ? colors.primaryLight : colors.bgSurface,
+                    borderColor: dietFilterTags.size > 0 ? colors.primary : colors.borderLight,
+                  },
+                ]}
+                onPress={() => setActiveFilterModal((prev) => (prev === 'diet' ? null : 'diet'))}
+                activeOpacity={0.7}
+              >
+                <Icon
+                  name="restaurant"
+                  size={14}
+                  color={dietFilterTags.size > 0 ? colors.primary : colors.textSecondary}
+                />
+                <Text
+                  style={[
+                    styles.compactFilterChipText,
+                    {
+                      color: dietFilterTags.size > 0 ? colors.primaryDark : colors.textPrimary,
+                    },
+                  ]}
+                  numberOfLines={1}
+                >
+                  {dietFilterTags.size === 0
+                    ? 'Diets'
+                    : dietFilterTags.size === 1
+                      ? [...dietFilterTags][0]!.toUpperCase()
+                      : `${dietFilterTags.size} Diets`}
+                </Text>
+                <Icon name="chevron-down" size={12} color={colors.textMuted} />
+              </TouchableOpacity>
+
+              {/* 2. Cuisines Dropdown Chip */}
+              <TouchableOpacity
+                style={[
+                  styles.compactFilterChip,
+                  {
+                    backgroundColor:
+                      selectedCuisine !== 'All' ? colors.primaryLight : colors.bgSurface,
+                    borderColor: selectedCuisine !== 'All' ? colors.primary : colors.borderLight,
+                  },
+                ]}
+                onPress={() =>
+                  setActiveFilterModal((prev) => (prev === 'cuisine' ? null : 'cuisine'))
+                }
+                activeOpacity={0.7}
+              >
+                <Icon
+                  name="globe"
+                  size={14}
+                  color={selectedCuisine !== 'All' ? colors.primary : colors.textSecondary}
+                />
+                <Text
+                  style={[
+                    styles.compactFilterChipText,
+                    {
+                      color: selectedCuisine !== 'All' ? colors.primaryDark : colors.textPrimary,
+                    },
+                  ]}
+                  numberOfLines={1}
+                >
+                  {selectedCuisine === 'All' ? 'Cuisines' : selectedCuisine}
+                </Text>
+                <Icon name="chevron-down" size={12} color={colors.textMuted} />
+              </TouchableOpacity>
+
+              {/* 3. Dishes Dropdown Chip */}
+              <TouchableOpacity
+                style={[
+                  styles.compactFilterChip,
+                  {
+                    backgroundColor:
+                      selectedDishCategory !== 'All' ? colors.primaryLight : colors.bgSurface,
+                    borderColor:
+                      selectedDishCategory !== 'All' ? colors.primary : colors.borderLight,
+                  },
+                ]}
+                onPress={() => setActiveFilterModal((prev) => (prev === 'dish' ? null : 'dish'))}
+                activeOpacity={0.7}
+              >
+                <Icon
+                  name="fast-food"
+                  size={14}
+                  color={selectedDishCategory !== 'All' ? colors.primary : colors.textSecondary}
+                />
+                <Text
+                  style={[
+                    styles.compactFilterChipText,
+                    {
+                      color:
+                        selectedDishCategory !== 'All' ? colors.primaryDark : colors.textPrimary,
+                    },
+                  ]}
+                  numberOfLines={1}
+                >
+                  {selectedDishCategory === 'All' ? 'Dishes' : selectedDishCategory}
+                </Text>
+                <Icon name="chevron-down" size={12} color={colors.textMuted} />
+              </TouchableOpacity>
+
+              <View style={[styles.filterChipDivider, { backgroundColor: colors.borderLight }]} />
+
+              {/* 4. Quick Filters: Under 20 min, High Protein, Kid-Friendly, Chef's Special */}
+              {[
+                { id: 'under20', label: 'Under 20 min' },
+                { id: 'highProtein', label: 'High Protein' },
+                { id: 'kidFriendly', label: 'Kid-Friendly' },
+                { id: 'chefSpecial', label: "Chef's Special" },
+              ].map((intent) => {
+                const isSelected = quickIntent === intent.id;
+                return (
+                  <TouchableOpacity
+                    key={intent.id}
+                    onPress={() =>
+                      setQuickIntent((prev) => (prev === intent.id ? null : (intent.id as any)))
+                    }
+                    style={[
+                      styles.compactFilterChip,
+                      {
+                        backgroundColor: isSelected ? colors.primary : colors.bgSurface,
+                        borderColor: isSelected ? colors.primary : colors.borderLight,
+                      },
+                    ]}
+                    activeOpacity={0.75}
+                  >
+                    <Text
+                      style={[
+                        styles.compactFilterChipText,
+                        {
+                          color: isSelected ? '#FFFFFF' : colors.textPrimary,
+                          fontWeight: isSelected ? '700' : '600',
+                        },
+                      ]}
+                    >
+                      {intent.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+
+              {/* Clear All Chip if filters are active */}
+              {(dietFilterTags.size > 0 ||
+                selectedCuisine !== 'All' ||
+                selectedDishCategory !== 'All' ||
+                quickIntent) && (
+                <TouchableOpacity
+                  style={[
+                    styles.compactFilterChip,
+                    {
+                      backgroundColor: colors.danger + '12',
+                      borderColor: colors.danger + '35',
+                    },
+                  ]}
+                  onPress={handleResetFilters}
+                  activeOpacity={0.7}
+                >
+                  <Icon name="close" size={12} color={colors.danger} />
+                  <Text
+                    style={[
+                      styles.compactFilterChipText,
+                      { color: colors.danger, fontWeight: '700' },
+                    ]}
+                  >
+                    Reset
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </ScrollView>
+          </View>
+
+          {/* Sort Bar with Dropdown List */}
+          <View style={styles.sortRow}>
+            <Text style={[styles.resultCount, { color: colors.textSecondary }]}>
+              Showing {filteredKits.length} Chef Meal Kits
+            </Text>
+            <View style={{ position: 'relative', zIndex: 10 }}>
+              <TouchableOpacity
+                onPress={() => setIsSortDropdownOpen(!isSortDropdownOpen)}
+                style={[
+                  styles.sortBtn,
+                  {
+                    borderColor: isSortDropdownOpen ? colors.primary : colors.borderLight,
+                    backgroundColor: colors.bgSurface,
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 6,
+                  },
+                ]}
+                activeOpacity={0.8}
+              >
+                <Icon
+                  name={SORT_OPTIONS.find((s) => s.id === sortBy)?.icon || 'flame'}
+                  size={14}
+                  color={colors.primary}
+                />
+                <Text style={[styles.sortBtnText, { color: colors.textPrimary }]}>
+                  Sort: {SORT_OPTIONS.find((s) => s.id === sortBy)?.label}
+                </Text>
+                <Icon
+                  name={isSortDropdownOpen ? 'chevron-up' : 'chevron-down'}
+                  size={12}
+                  color={colors.textMuted}
+                />
+              </TouchableOpacity>
+
+              {/* Sort Dropdown List */}
+              {isSortDropdownOpen && (
+                <View
+                  style={[
+                    styles.sortDropdownMenu,
+                    {
+                      backgroundColor: colors.bgSurface,
+                      borderColor: colors.borderLight,
+                      ...shadows.medium,
+                    },
+                  ]}
+                >
+                  {SORT_OPTIONS.map((opt) => {
+                    const isSelected = sortBy === opt.id;
+                    return (
+                      <TouchableOpacity
+                        key={opt.id}
                         style={[
-                          styles.sortDropdownItemText,
+                          styles.sortDropdownItem,
                           {
-                            color: isSelected ? colors.primary : colors.textPrimary,
-                            fontWeight: isSelected ? '700' : '500',
+                            backgroundColor: isSelected ? colors.primary + '18' : 'transparent',
                           },
                         ]}
+                        onPress={() => {
+                          setSortBy(opt.id);
+                          setIsSortDropdownOpen(false);
+                        }}
+                        activeOpacity={0.7}
                       >
-                        {opt.label}
-                      </Text>
-                      {isSelected && (
-                        <View style={{ marginLeft: 'auto' }}>
-                          <Icon name="check" size={14} color={colors.primary} />
+                        <View style={{ marginRight: 8 }}>
+                          <Icon
+                            name={opt.icon}
+                            size={15}
+                            color={isSelected ? colors.primary : colors.textSecondary}
+                          />
                         </View>
-                      )}
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-            )}
+                        <Text
+                          style={[
+                            styles.sortDropdownItemText,
+                            {
+                              color: isSelected ? colors.primary : colors.textPrimary,
+                              fontWeight: isSelected ? '700' : '500',
+                            },
+                          ]}
+                        >
+                          {opt.label}
+                        </Text>
+                        {isSelected && (
+                          <View style={{ marginLeft: 'auto' }}>
+                            <Icon name="check" size={14} color={colors.primary} />
+                          </View>
+                        )}
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              )}
+            </View>
           </View>
-        </View>
 
-        {/* Catalog Sections (Memoized to isolate catalog re-renders from filter menu states) */}
-        <CatalogSections
-          filteredKits={filteredKits}
-          trendingKits={trendingKits}
-          foreignKits={foreignKits}
-          recommendedKits={recommendedKits}
-          dependentRecommendations={dependentRecommendations}
-          dietFilterTags={dietFilterTags}
-          selectedCuisine={selectedCuisine}
-          selectedDishCategory={selectedDishCategory}
-          currentCity={preferences.currentCity}
-          isSeedingCity={isSeedingCity}
-          dietTypes={preferences.dietTypes}
-          preferredCuisines={preferences.preferredCuisines}
-          onOpenDetail={handleOpenDetail}
-          onQuickAdd={handleQuickAdd}
-          onToggleFavorite={handleToggleFavorite}
-          isInWishlist={isInWishlist}
-          onOpenPreferencesModal={handleOpenPreferencesModal}
-          onResetFilters={handleResetFilters}
-          onResetDishCategory={handleResetDishCategory}
-          getCartQuantity={getCartQuantity}
-          onIncrement={handleCardIncrement}
-          onDecrement={handleCardDecrement}
-        />
+          {/* Catalog Sections (Deduplicated, responsive grid, snap scrolling) */}
+          <CatalogSections
+            filteredKits={filteredKits}
+            trendingKits={trendingKits}
+            foreignKits={foreignKits}
+            recommendedKits={recommendedKits}
+            dependentRecommendations={dependentRecommendations}
+            dietFilterTags={dietFilterTags}
+            selectedCuisine={selectedCuisine}
+            selectedDishCategory={selectedDishCategory}
+            currentCity={preferences.currentCity}
+            isSeedingCity={isSeedingCity}
+            dietTypes={preferences.dietTypes}
+            preferredCuisines={preferences.preferredCuisines}
+            onOpenDetail={handleOpenDetail}
+            onQuickAdd={handleQuickAdd}
+            onToggleFavorite={handleToggleFavorite}
+            isInWishlist={isInWishlist}
+            onOpenPreferencesModal={handleOpenPreferencesModal}
+            onResetFilters={handleResetFilters}
+            onResetDishCategory={handleResetDishCategory}
+            getCartQuantity={getCartQuantity}
+            onIncrement={handleCardIncrement}
+            onDecrement={handleCardDecrement}
+            cardBasis={cardBasis}
+            onSeeAllSection={handleSeeAllSection}
+          />
+        </View>
       </ScrollView>
 
       {/* Meal Detail Modal */}
@@ -2461,8 +2708,11 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   prefChip: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
     borderRadius: 999,
   },
   prefChipText: {
@@ -2522,9 +2772,9 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   promoCard: {
-    width: width * 0.82,
-    maxWidth: 340,
-    height: 140,
+    width: 320,
+    maxWidth: 540,
+    minHeight: 140,
     flexDirection: 'row',
     overflow: 'hidden',
   },
@@ -2773,18 +3023,131 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     marginBottom: 12,
   },
-  sectionHeading: {
-    fontSize: 18,
+  responsiveWrapper: {
+    width: '100%',
+    maxWidth: 1200,
+    alignSelf: 'center',
+  },
+  promoCarouselSection: {
+    marginVertical: 6,
+  },
+  promoDotsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 8,
+  },
+  promoDot: {
+    height: 6,
+    borderRadius: 3,
+  },
+  categoryShortcutsSection: {
+    marginVertical: 10,
+  },
+  categoryShortcutsScroll: {
+    paddingHorizontal: 16,
+    gap: 14,
+    alignItems: 'center',
+  },
+  categoryShortcutItem: {
+    alignItems: 'center',
+    width: 70,
+  },
+  categoryShortcutImgWrap: {
+    width: 58,
+    height: 58,
+    borderRadius: 29,
+    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 6,
+  },
+  categoryShortcutImg: {
+    width: '100%',
+    height: '100%',
+  },
+  categoryShortcutLabel: {
+    fontSize: 12,
+    textAlign: 'center',
+  },
+  unifiedFilterRowWrap: {
+    paddingVertical: 6,
+    marginTop: 4,
+    marginBottom: 6,
+  },
+  unifiedFilterRowScroll: {
+    paddingHorizontal: 16,
+    gap: 8,
+    alignItems: 'center',
+  },
+  compactFilterChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+  compactFilterChipText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  filterChipDivider: {
+    width: 1,
+    height: 22,
+    marginHorizontal: 4,
+  },
+  dietMarkWrapper: {
+    backgroundColor: 'rgba(255,255,255,0.92)',
+    padding: 3,
+    borderRadius: 5,
+  },
+  trendingFlameBadge: {
+    backgroundColor: 'rgba(255,255,255,0.92)',
+    padding: 4,
+    borderRadius: 6,
+  },
+  cardMetaLine: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  quickAddBtn: {
+    minHeight: 44,
+    minWidth: 70,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  quickAddBtnText: {
+    color: '#FFFFFF',
+    fontSize: 13,
     fontWeight: '800',
-    letterSpacing: -0.3,
+  },
+  seeAllBtn: {
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+  },
+  seeAllText: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  sectionHeading: {
+    fontSize: 21,
+    fontWeight: '800',
+    letterSpacing: -0.4,
   },
   sectionSubtitle: {
-    fontSize: 12,
+    fontSize: 13,
     marginTop: 2,
     marginBottom: 12,
   },
   editPrefLink: {
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: '800',
   },
   horizontalCardRow: {
@@ -2891,8 +3254,9 @@ const styles = StyleSheet.create({
     marginBottom: 3,
   },
   cardTitle: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '800',
+    lineHeight: 18,
   },
   cardDescription: {
     fontSize: 12,
@@ -2922,7 +3286,8 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   cardStepperBtn: {
-    padding: 2,
+    minWidth: 32,
+    minHeight: 32,
     alignItems: 'center',
     justifyContent: 'center',
   },

@@ -8,7 +8,7 @@ export class HomePage {
   }
 
   async goto() {
-    await this.page.goto('/');
+    await this.page.goto('/', { waitUntil: 'domcontentloaded' });
     await this.page.waitForLoadState('domcontentloaded');
   }
 
@@ -48,11 +48,13 @@ export class HomePage {
   }
 
   async openBasket() {
-    await this.page.goto('/cart');
+    await this.page.goto('/cart', { waitUntil: 'domcontentloaded' });
     await this.page.waitForLoadState('domcontentloaded');
   }
 
   async isMealKitVisible(kitId: string): Promise<boolean> {
-    return await this.getMealKitCard(kitId).isVisible({ timeout: 5000 }).catch(() => false);
+    return await this.getMealKitCard(kitId)
+      .isVisible({ timeout: 5000 })
+      .catch(() => false);
   }
 }

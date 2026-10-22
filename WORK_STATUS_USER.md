@@ -1,93 +1,93 @@
-# Daily Work Status Report — October 21, 2026
+# Daily Work Status Report — October 22, 2026
 
 **Project:** RasoiGenie  
-**Branch:** `feature/cook-mode-review-requirement-and-delivery-status` (Merged to `main`)  
+**Branch:** `feature/home-ui-overhaul-and-chef-editor` (Merged to `main`)  
 **Status:** Completed, Verified with Automated Test Suites & Merged to `main`  
-**Quality Gates:** 37/37 test suites passed (301/301 tests passed), TypeScript clean (0 errors)
+**Quality Gates:** 42/42 test suites passed (327/327 tests passed), TypeScript clean (0 errors)
 
 ---
 
-### 1. Warning Removals & Platform Modernization
+### 1. Onboarding & Delivery Location Persistence Across OTP Sign-In
 
-- **Deprecated `SafeAreaView` Modernization**:
-  - Replaced the deprecated `SafeAreaView` from `'react-native'` with standard `SafeAreaView` from `'react-native-safe-area-context'` across the application (`CookModeView.tsx`, `CartView.tsx`, `CheckoutView.tsx`, `HomeScreenView.tsx`, `ProfileView.tsx`, `SearchView.tsx`, `LocationOnboardingView.tsx`, etc.).
-  - Eliminated runtime deprecation warnings (`WARN SafeAreaView has been deprecated and will be removed in a future release`) across iOS, Android, and Web viewports.
-- **Graceful Firebase Firestore Fallback**:
-  - Handled `permission-denied` / `Missing or insufficient permissions` gracefully in `framework/firebase/ordersService.ts` when querying Firestore on client devices without admin auth.
-  - Ensured seamless Supabase-first operations without noisy console error traces.
+- **Location Re-Prompt Elimination**:
+  - Resolved the issue where completing OTP verification during signup or checkout prompted for the delivery location again even though it was selected during initial onboarding.
+  - Synchronized guest onboarding location, profile coordinates, and Supabase preferences so saved location data seamlessly transfers to the authenticated user profile upon verification.
+  - Added automated test coverage in `framework/__tests__/onboardingPersistenceAfterOtp.test.ts`.
 
 ---
 
-### 2. Meal Kit Review-Gated Instructions Lifecycle
+### 2. Supabase Data API Access (Oct 30 Notice) Migration
 
-- **Review Gating Architecture**:
-  - Designed and implemented a mandatory review gate before cooking instructions can disappear: cooking instructions and active cook mode remain accessible to the user until both criteria are met:
-    1. The order has been marked as **Delivered** by kitchen operations.
-    2. The customer has submitted a **Meal Kit Review / Rating** for that kit.
-- **Cook Mode Review Prompts & Banners**:
-  - Added interactive review prompt banners (`"Rate this Meal Kit to complete cooking guide"`) directly within `CookModeView.tsx` with a primary `"Rate Kit"` action button.
-  - Linked to `ReviewModal` with pre-filled kit details, star ratings (1–5 stars), photo attachments, and chef compliments.
-  - Intercepted early exit (`handleExit`) in `CookModeView.tsx`: if the user attempts to exit unreviewed steps, an alert prompts: _"Please rate the meal kit to close instructions. Would you like to review now?"_ with a direct shortcut to the rating modal.
-  - Step card footnote added to `RecipeStepCard.tsx`: _"Please rate this meal kit after cooking to finish and close the guide."_
-- **Enjoy Your Meal Completion Screen**:
-  - Updated `EnjoyYourMealView.tsx`: removed auto-dismiss behavior upon reaching the final slide.
-  - Added a prominent review status card:
-    - If unreviewed: Displays a glowing amber badge with the message _"Please rate the meal kit to close instructions"_ and a large green _"Rate Meal Kit Now"_ button.
-    - If reviewed but not yet delivered: Informs customer _"Order delivery confirmation in progress — instructions will disappear once delivered."_
-    - If delivered AND reviewed: Activates the primary _"Finish & Close Guide"_ button.
-- **Persistence & Context Filtering**:
-  - Updated `CookModeContext.tsx` with persistent reviewed kit keys (`reviewedKitKeys`) saved to storage.
-  - Added `isKitReviewed(kitId, orderId)`, `markKitReviewed(kitId, orderId)`, and `isOrderReadyToDisappear(orderId)`.
-  - Excluded `'Delivered'` from terminal dismissal statuses unless the meal kit is also confirmed reviewed.
-  - Updated `ResumeCookingBanner.tsx` and `CookModeMiniBar.tsx` so active floating banners only dismiss once both delivery and review conditions are satisfied.
+- **Data API Schema Access Grants**:
+  - Addressed Supabase's policy change terminating automatic Data API access grants for new tables in the `public` schema.
+  - Created migration script `framework/supabase/migrations/20261022_supabase_data_api_grants.sql` and updated `framework/supabase/supabase_schema.sql`.
+  - Added explicit schema usage and table grants for `anon`, `authenticated`, and `service_role`, alongside `ALTER DEFAULT PRIVILEGES` ensuring all future tables automatically receive appropriate Data API access.
 
 ---
 
-### 3. Admin Dashboard: Mark as Delivered Action
+### 3. Chef Image Cropping, Rotation & Fine Adjustments
 
-- **Quick-Action Order Lifecycle Button**:
-  - Added a dedicated, prominent emerald green **"Mark as Delivered"** button (`testID="mark-delivered-btn-${order.id}"`) to each active order card in `AdminDashboardView.tsx` under the Orders tab.
-  - Configured status checks: the button displays whenever an order is in `'Confirmed'`, `'Preparing'`, or `'Out for Delivery'` status.
-- **Inspect Order Modal Integration**:
-  - Added a synchronized **"Mark as Delivered"** action in the Inspect Order modal footer (`testID="inspect-mark-delivered-btn-${inspectOrder.id}"`), enabling kitchen admins to update status either from the card list or full order drill-down.
-- **Dual Backend Synchronization**:
-  - Triggers synchronous updates across Supabase (`updateOrderStatusInSupabase(orderId, 'Delivered')`) and local/fallback storage (`updateOrderStatus(orderId, 'Delivered')`).
-  - Automatically notifies subscribers and dispatches delivery tracking events.
-
----
-
-### 4. Supabase Backend Reliability & Conflict Resolution Fixes
-
-- **Collision-Proof Order IDs**:
-  - Updated `createOrderInSupabase` to use full 13-digit millisecond timestamps with 4-digit random entropy (`ORD-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}}`), completely eliminating key collisions on rapid test or checkout operations.
-- **Double Inventory Revert Prevention**:
-  - Resolved duplicate stock restoration bug where `updateOrderStatus` and `updateOrderStatusInSupabase` each independently reverted inventory on cancelled orders. Added safety check on `allCurrent.find(...)` to ensure cancellation inventory revert occurs exactly once.
-- **Status Hierarchy Priority in Fallback Merges**:
-  - Enhanced `fetchAllOrdersFromSupabase` merge logic with order lifecycle status ranking:
-    `Placed (1) < Confirmed (2) < Preparing (3) < Out for Delivery (4) < Delivered (5) < Cancelled (6)`
-  - When merging persisted local orders with remote Supabase rows or in-memory caches, more advanced statuses are preserved and never overwritten by older `Placed` or `Confirmed` entries.
-- **Asynchronous Race Condition Resolution**:
-  - Awaited reactive approval counter calculations (`await refreshPendingApprovalCount()`) during order approval and status progression, preventing concurrent read/write race conditions against local order memory.
+- **In-App Image Editor Component**:
+  - Created `framework/ui/ImageEditorModal.tsx` providing client-side image adjustments before uploading:
+    - 90-degree clockwise and counter-clockwise rotation.
+    - Horizontal flipping.
+    - Aspect ratio cropping presets (1:1 square, 4:3 recipe card, 16:9 banner).
+    - Zoom magnification and pan/drag positioning.
+    - Fine-tuning sliders for brightness and contrast.
+- **Chef Studio Integration**:
+  - Integrated into `features/chef/components/Step1Details.tsx` (Hero image & multi-photo gallery) and `Step3CookingSteps.tsx` (Step-by-step cooking instructions photos).
+  - Added unit test suite in `framework/__tests__/imageEditorModal.test.tsx`.
 
 ---
 
-### 5. Automated Testing & Verification
+### 4. Chef Studio Navigation Role Gating
 
-- **Cook Mode & Review Gating Test Suite (`framework/__tests__/cookMode.test.ts`)**:
-  - Section 10 tests written and passing (21/21 tests in suite):
-    - Instructions remain active when order is Out for Delivery.
-    - Instructions stay visible when order is Delivered if kit has NOT been reviewed.
-    - Instructions stay visible if kit is reviewed but order is NOT yet Delivered.
-    - Instructions disappear only when order is Delivered AND kit is reviewed.
-    - Reviewing marks kit as reviewed and persists state across app restarts.
-- **Supabase Service & Order Flow Suite (`framework/__tests__/supabaseService.test.ts`)**:
-  - All 8 comprehensive end-to-end tests passing:
-    - Pending approval subscriber notifications and sound chime triggers.
-    - Order creation with `Placed` state.
-    - Admin approval transitioning `Placed` to `Confirmed`.
-    - Lifecycle stage updates: `Preparing` -> `Out for Delivery` -> `Delivered`.
-    - Supabase meal kit publishing and deletion.
-    - Database seeder integrity.
-    - Persistent one-time approval validation across reloads.
-- **TypeScript Integrity**:
-  - Verified with `npx tsc --noEmit` with 0 compiler errors.
+- **Role-Based Tab Visibility**:
+  - Restructured staff navigation: Chef Studio is strictly hidden from admins unless they also hold the `chef` role (`isChef` or `user.role === 'chef'`).
+  - Added quick portal links inside `ProfileView.tsx` and the desktop top navigation bar so standard customers see an uncluttered interface.
+  - Added test suite in `framework/__tests__/chefStudioNavigationRole.test.tsx`.
+
+---
+
+### 5. Home Page Responsive Overhaul & Visual Polish
+
+- **Constrained Layout & Responsive Grid**:
+  - Wrapped home content in a responsive container (`maxWidth: 1200`, `alignSelf: 'center'`).
+  - Implemented responsive column count (2 on mobile phones, 3 on tablets, 4 on desktop) with snap-scrolling retained on mobile horizontal carousels.
+- **Unified & Compact Filter Bar**:
+  - Converted stretched full-width pill inputs into compact chips sized to content.
+  - Unified Diets, Cuisines, Dishes, and Quick Filters into a single sticky, horizontally scrolling row.
+- **MealKit Card Redesign**:
+  - Added authentic Indian veg / non-veg square dot indicator (`DietMark`).
+  - Replaced text badges with a subtle flame icon badge (`🔥 Trending`).
+  - Added key decision metadata line: `★ 4.8 · 25 min · Serves 2`.
+  - Allowed 2 lines for kit titles and eliminated truncated taglines.
+  - Added `onError` fallback handling for missing/broken kit images (and fixed the broken Unsplash URL for _Sun-Dried Tomato & Basil Fettuccine_).
+  - Replaced "+ Add" button with an interactive inline `QuantityStepper` when items are in the cart.
+  - Configured 44px minimum tap targets and subtle web hover lift.
+- **Section Deduplication**:
+  - Filtered duplicate kits (e.g., _Artisanal Sourdough_, _Smoky Chipotle_, _Texas Double Smash_) across carousel rows so dishes do not repeat between Trending, Foreign Specials, and Recommended sections.
+- **Hierarchy & Aesthetic Enhancements**:
+  - Added circular category shortcuts row (_Biryani_, _Pizza_, _Burgers_, _Curries_, _Pastas_, _Street Food_).
+  - Converted static promo banners into a swipeable carousel with dot indicators.
+  - Replaced cryptic `"NONVEG, VEG"` header pill with a horizontally aligned `"Diet: Veg, Non-veg"` chip with the leaf icon placed next to the text.
+  - Removed duplicate "Customize Taste & Dietary Preferences" inline banner card.
+  - Added clean "See all →" links and relocated "Edit Profile →" to the Recommended section header.
+- **Desktop Top Navigation Bar**:
+  - On screens `>= 768px`, switches to a desktop top navigation bar with brand logo, nav links, live cart badge, and staff shortcuts, hiding the bottom tab bar.
+- **Navigation Bottom Bar Height Fix**:
+  - Adjusted tab bar height and padding (`Platform.OS === 'ios' ? 88 : 68`, `paddingTop: 8`, `paddingBottom: Platform.OS === 'ios' ? 28 : 10`) to prevent text labels and icons from getting cut off.
+- **Safe Area Inset Context**:
+  - Wrapped `RootLayoutNav` with `<SafeAreaProvider>` in `app/_layout.tsx` to ensure safe area context is available across all screens and modals.
+- **MealKit Details Icons**:
+  - Added visual icons for serving size (`people` icon) and spice level (`flame` icon) in both the specs overview bar and the interactive portion/taste customization section.
+
+---
+
+### Quality & Test Suite Metrics
+
+| Verification Gate        | Result                                              |
+| :----------------------- | :-------------------------------------------------- |
+| **TypeScript Typecheck** | `tsc --noEmit` passed with 0 errors                 |
+| **Jest Automated Tests** | **42/42 test suites passed** (327/327 tests passed) |
+| **Lint & Formatting**    | Verified and formatted                              |

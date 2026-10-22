@@ -28,6 +28,7 @@ import { MockPaymentGatewayModal } from './MockPaymentGatewayModal';
 import { qualifyReferralOrder } from '../../framework/services/referralService';
 import { getOrCreateGuestId, saveGuestOrder } from '../../framework/services/guestService';
 import { canonicalCityName } from '../admin/cityKitsSeederService';
+import { getStoredUserLocation } from '../../framework/services/locationService';
 import { getMealKitById, MealKit } from '../../framework/services/mealKitsService';
 import {
   getVerifiedContactInfo,
@@ -117,10 +118,26 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({ onBack, onOrderPlace
   const [email, setEmail] = useState(initialUserEmail);
   const [flatAndStreet, setFlatAndStreet] = useState(initialAddress?.flatAndStreet || '');
   const [areaAndLandmark, setAreaAndLandmark] = useState(initialAddress?.areaAndLandmark || '');
-  const [city] = useState(initialCity);
+  const [city, setCity] = useState(initialCity);
   const [pincode, setPincode] = useState(initialAddress?.pincode || '560001');
   const [deliveryInstructions, setDeliveryInstructions] = useState('');
   const [saveAddressForFuture, setSaveAddressForFuture] = useState(true);
+
+  // Synchronize city if initially blank
+  useEffect(() => {
+    if (!city) {
+      const resolved = preferences.city || preferences.currentCity || initialAddress?.city;
+      if (resolved) {
+        setCity(canonicalCityName(resolved));
+      } else {
+        getStoredUserLocation().then((loc) => {
+          if (loc?.city) {
+            setCity(canonicalCityName(loc.city));
+          }
+        });
+      }
+    }
+  }, [city, preferences.city, preferences.currentCity, initialAddress?.city]);
 
   // Address Saved States
   const initialHasSavedAddress = Boolean(
@@ -313,6 +330,7 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({ onBack, onOrderPlace
         setIsPhoneVerified(true);
         setShowOtpModal(false);
 
+        const authenticatedUser = res.user || user;
         const cleanPhone = phone.replace(/\D/g, '').trim();
         if (name.trim() && cleanPhone.length === 10) {
           const updatedRecord: VerifiedContactInfo = {
@@ -342,15 +360,15 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({ onBack, onOrderPlace
 
           // Persist verified contact and address to database so future orders don't ask again
           saveVerifiedContactInfo({
-            userId: user?.uid,
+            userId: authenticatedUser?.uid,
             name: name.trim(),
             phone: cleanPhone,
             email: email.trim() || undefined,
-            isGuest: !user,
+            isGuest: !authenticatedUser,
             address: savedAddr,
           }).catch(() => {});
 
-          if (user && updateUserContact) {
+          if (authenticatedUser && updateUserContact) {
             updateUserContact({
               displayName: name.trim(),
               phoneNumber: `+91${cleanPhone}`,

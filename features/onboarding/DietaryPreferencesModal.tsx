@@ -1,20 +1,7 @@
 import React, { useState } from 'react';
-import {
-  Modal,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { usePreferences, UserDietaryPreferences } from '../../framework/context/PreferencesContext';
 import { CuisineType, DietTag, SpiceLevel } from '../../framework/services/mealKitsService';
-import {
-  getCitiesForState,
-  getStates,
-  getSubRegionsForCity,
-} from '../../framework/services/regionService';
 import { useTheme } from '../../framework/theme/ThemeContext';
 import { Button } from '../../framework/ui/Button';
 import { Icon } from '../../framework/ui/Icon';
@@ -89,9 +76,6 @@ const CUISINES: { id: CuisineType; label: string; desc: string }[] = [
   { id: 'Mediterranean', label: 'Mediterranean', desc: 'Olive oil, roasted veggies & falafel' },
 ];
 
-// Region hierarchy
-const ALL_STATES = getStates();
-
 export const DietaryPreferencesModal: React.FC<DietaryPreferencesModalProps> = ({
   visible,
   onClose,
@@ -104,37 +88,6 @@ export const DietaryPreferencesModal: React.FC<DietaryPreferencesModalProps> = (
   const { preferences, updatePreferences } = usePreferences();
   const effectiveBasePrefs = initialPreferences || preferences;
   const { colors, radii, shadows } = useTheme();
-
-  // Region hierarchy state
-  const [selectedState, setSelectedState] = useState<string>(effectiveBasePrefs.state || '');
-  const [selectedCity, setSelectedCity] = useState<string>(effectiveBasePrefs.city || '');
-  const [selectedSubRegion, setSelectedSubRegion] = useState<string>(
-    effectiveBasePrefs.subRegion || '',
-  );
-
-  // Dropdown visibility state
-  const [showStateDropdown, setShowStateDropdown] = useState(false);
-  const [showCityDropdown, setShowCityDropdown] = useState(false);
-  const [showSubRegionDropdown, setShowSubRegionDropdown] = useState(false);
-
-  // Search text for filtering
-  const [stateSearchText, setStateSearchText] = useState('');
-  const [citySearchText, setCitySearchText] = useState('');
-
-  // Derived options for cities and sub-regions
-  const availableCities = selectedState ? getCitiesForState(selectedState) : [];
-  const availableSubRegions = selectedCity ? getSubRegionsForCity(selectedCity) : [];
-
-  // Filtered states/cities based on search
-  const filteredStates = stateSearchText
-    ? ALL_STATES.filter((s: string) => s.toLowerCase().includes(stateSearchText.toLowerCase()))
-    : ALL_STATES;
-  const filteredCities =
-    citySearchText && selectedState
-      ? availableCities.filter((c: string) =>
-          c.toLowerCase().includes(citySearchText.toLowerCase()),
-        )
-      : availableCities;
 
   const [selectedDiets, setSelectedDiets] = useState<DietTag[]>([]);
   const [allergies, setAllergies] = useState<string[]>(effectiveBasePrefs.allergies || []);
@@ -149,9 +102,6 @@ export const DietaryPreferencesModal: React.FC<DietaryPreferencesModalProps> = (
   React.useEffect(() => {
     if (visible) {
       const p = initialPreferences || preferences;
-      setSelectedState(p.state || '');
-      setSelectedCity(p.city || '');
-      setSelectedSubRegion(p.subRegion || '');
       setSelectedDiets(p.dietTypes || []);
       setAllergies(p.allergies || []);
       setSpiceTolerance(p.spiceTolerance || 'Medium');
@@ -172,20 +122,20 @@ export const DietaryPreferencesModal: React.FC<DietaryPreferencesModalProps> = (
   };
 
   const handleSave = async () => {
+    const base = initialPreferences ? (initialPreferences as UserDietaryPreferences) : preferences;
     const updated: UserDietaryPreferences = {
-      ...(initialPreferences ? (initialPreferences as UserDietaryPreferences) : preferences),
+      ...base,
       dietTypes: selectedDiets,
       allergies,
       spiceTolerance,
       preferredCuisines,
-      state: selectedState,
-      city: selectedCity,
-      subRegion: selectedSubRegion,
-      regionHub: preferences.regionHub,
-      currentCity: selectedCity || preferences.currentCity,
+      state: base.state || '',
+      city: base.city || '',
+      subRegion: base.subRegion || '',
+      regionHub: base.regionHub || preferences.regionHub,
+      currentCity: base.currentCity || base.city || preferences.currentCity,
       isOnboarded: true,
     };
-
     if (onSavePreferences) {
       await onSavePreferences(updated);
     } else {
@@ -407,283 +357,6 @@ export const DietaryPreferencesModal: React.FC<DietaryPreferencesModalProps> = (
               })}
             </View>
           </View>
-
-          {/* Section 5: Delivery Location */}
-          <View
-            style={[styles.section, { backgroundColor: colors.bgSurface, borderRadius: radii.xl }]}
-          >
-            <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
-              5. Delivery Location
-            </Text>
-            <Text style={[styles.sectionDesc, { color: colors.textSecondary }]}>
-              Set your state, city, and neighborhood for local meal kit availability.
-            </Text>
-
-            {/* State Input with Dropdown */}
-            <Text style={[styles.label, { color: colors.textSecondary }]}>State</Text>
-            <View
-              style={[
-                styles.picker,
-                {
-                  backgroundColor: colors.bgSubtle,
-                  borderColor: showStateDropdown ? colors.primary : colors.borderLight,
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  paddingRight: 8,
-                },
-              ]}
-            >
-              <TextInput
-                style={[
-                  styles.pickerText,
-                  {
-                    flex: 1,
-                    paddingVertical: 0,
-                    color: selectedState ? colors.textPrimary : colors.textMuted,
-                  },
-                ]}
-                placeholder="Select or type state"
-                placeholderTextColor={colors.textMuted}
-                value={selectedState || stateSearchText}
-                onChangeText={(text) => {
-                  setStateSearchText(text);
-                  setSelectedState('');
-                  if (text.length > 0) setShowStateDropdown(true);
-                }}
-                onFocus={() => setShowStateDropdown(true)}
-                onBlur={() => setTimeout(() => setShowStateDropdown(false), 200)}
-              />
-              <TouchableOpacity
-                onPress={() => setShowStateDropdown(!showStateDropdown)}
-                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-              >
-                <Icon
-                  name={showStateDropdown ? 'chevron-up' : 'chevron-down'}
-                  size={16}
-                  color={colors.textMuted}
-                />
-              </TouchableOpacity>
-            </View>
-            {showStateDropdown && filteredStates.length > 0 && (
-              <View
-                style={[
-                  styles.dropdownList,
-                  { backgroundColor: colors.bgSurface, borderColor: colors.borderLight },
-                ]}
-              >
-                <ScrollView style={styles.dropdownScroll} nestedScrollEnabled>
-                  {filteredStates.map((state) => (
-                    <TouchableOpacity
-                      key={state}
-                      style={[
-                        styles.dropdownItem,
-                        selectedState === state && { backgroundColor: colors.primaryLight },
-                      ]}
-                      onPress={() => {
-                        setSelectedState(state);
-                        setSelectedCity('');
-                        setSelectedSubRegion('');
-                        setShowStateDropdown(false);
-                        setStateSearchText('');
-                      }}
-                    >
-                      <Text
-                        style={[
-                          styles.dropdownItemText,
-                          { color: selectedState === state ? colors.primary : colors.textPrimary },
-                        ]}
-                      >
-                        {state}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </ScrollView>
-              </View>
-            )}
-
-            {/* City Input with Dropdown */}
-            {!!selectedState && (
-              <>
-                <Text style={[styles.label, { color: colors.textSecondary, marginTop: 12 }]}>
-                  City
-                </Text>
-                <View
-                  style={[
-                    styles.picker,
-                    {
-                      backgroundColor: colors.bgSubtle,
-                      borderColor: showCityDropdown ? colors.primary : colors.borderLight,
-                      flexDirection: 'row',
-                      alignItems: 'center',
-                      paddingRight: 8,
-                    },
-                  ]}
-                >
-                  <TextInput
-                    style={[
-                      styles.pickerText,
-                      {
-                        flex: 1,
-                        paddingVertical: 0,
-                        color: selectedCity ? colors.textPrimary : colors.textMuted,
-                      },
-                    ]}
-                    placeholder="Select or type city"
-                    placeholderTextColor={colors.textMuted}
-                    value={selectedCity || citySearchText}
-                    onChangeText={(text) => {
-                      setCitySearchText(text);
-                      setSelectedCity('');
-                      if (text.length > 0) setShowCityDropdown(true);
-                    }}
-                    onFocus={() => setShowCityDropdown(true)}
-                    onBlur={() => setTimeout(() => setShowCityDropdown(false), 200)}
-                  />
-                  <TouchableOpacity
-                    onPress={() => setShowCityDropdown(!showCityDropdown)}
-                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                  >
-                    <Icon
-                      name={showCityDropdown ? 'chevron-up' : 'chevron-down'}
-                      size={16}
-                      color={colors.textMuted}
-                    />
-                  </TouchableOpacity>
-                </View>
-                {showCityDropdown && filteredCities.length > 0 && (
-                  <View
-                    style={[
-                      styles.dropdownList,
-                      { backgroundColor: colors.bgSurface, borderColor: colors.borderLight },
-                    ]}
-                  >
-                    <ScrollView style={styles.dropdownScroll} nestedScrollEnabled>
-                      {filteredCities.map((city) => (
-                        <TouchableOpacity
-                          key={city}
-                          style={[
-                            styles.dropdownItem,
-                            selectedCity === city && { backgroundColor: colors.primaryLight },
-                          ]}
-                          onPress={() => {
-                            setSelectedCity(city);
-                            setSelectedSubRegion('');
-                            setShowCityDropdown(false);
-                            setCitySearchText('');
-                          }}
-                        >
-                          <Text
-                            style={[
-                              styles.dropdownItemText,
-                              {
-                                color: selectedCity === city ? colors.primary : colors.textPrimary,
-                              },
-                            ]}
-                          >
-                            {city}
-                          </Text>
-                        </TouchableOpacity>
-                      ))}
-                    </ScrollView>
-                  </View>
-                )}
-              </>
-            )}
-
-            {/* Sub-Region Picker */}
-            {!!selectedCity && availableSubRegions.length > 0 && (
-              <>
-                <Text style={[styles.label, { color: colors.textSecondary, marginTop: 12 }]}>
-                  Neighborhood / Zone (Optional)
-                </Text>
-                <TouchableOpacity
-                  style={[
-                    styles.picker,
-                    {
-                      backgroundColor: colors.bgSubtle,
-                      borderColor: colors.borderLight,
-                      flexDirection: 'row',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                    },
-                  ]}
-                  onPress={() => setShowSubRegionDropdown(!showSubRegionDropdown)}
-                >
-                  <Text
-                    style={[
-                      styles.pickerText,
-                      { color: selectedSubRegion ? colors.textPrimary : colors.textMuted },
-                    ]}
-                  >
-                    {selectedSubRegion
-                      ? availableSubRegions.find((sr) => sr.id === selectedSubRegion)?.name ||
-                        'Select zone'
-                      : 'All zones in ' + selectedCity}
-                  </Text>
-                  <Icon
-                    name={showSubRegionDropdown ? 'chevron-up' : 'chevron-down'}
-                    size={16}
-                    color={colors.textMuted}
-                  />
-                </TouchableOpacity>
-                {showSubRegionDropdown && (
-                  <View
-                    style={[
-                      styles.dropdownList,
-                      { backgroundColor: colors.bgSurface, borderColor: colors.borderLight },
-                    ]}
-                  >
-                    <ScrollView style={styles.dropdownScroll} nestedScrollEnabled>
-                      <TouchableOpacity
-                        style={[
-                          styles.dropdownItem,
-                          !selectedSubRegion && { backgroundColor: colors.primaryLight },
-                        ]}
-                        onPress={() => {
-                          setSelectedSubRegion('');
-                          setShowSubRegionDropdown(false);
-                        }}
-                      >
-                        <Text
-                          style={[
-                            styles.dropdownItemText,
-                            { color: !selectedSubRegion ? colors.primary : colors.textPrimary },
-                          ]}
-                        >
-                          All zones in {selectedCity}
-                        </Text>
-                      </TouchableOpacity>
-                      {availableSubRegions.map((sr) => (
-                        <TouchableOpacity
-                          key={sr.id}
-                          style={[
-                            styles.dropdownItem,
-                            selectedSubRegion === sr.id && { backgroundColor: colors.primaryLight },
-                          ]}
-                          onPress={() => {
-                            setSelectedSubRegion(sr.id);
-                            setShowSubRegionDropdown(false);
-                          }}
-                        >
-                          <Text
-                            style={[
-                              styles.dropdownItemText,
-                              {
-                                color:
-                                  selectedSubRegion === sr.id ? colors.primary : colors.textPrimary,
-                              },
-                            ]}
-                          >
-                            {sr.name}
-                          </Text>
-                        </TouchableOpacity>
-                      ))}
-                    </ScrollView>
-                  </View>
-                )}
-              </>
-            )}
-          </View>
         </ScrollView>
 
         {/* Bottom Save Bar */}
@@ -795,90 +468,6 @@ const styles = StyleSheet.create({
   pillsWrap: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-  },
-  hubCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 14,
-    borderWidth: 1.5,
-    marginBottom: 8,
-  },
-  hubName: {
-    fontSize: 14,
-    fontWeight: '800',
-  },
-  hubCity: {
-    fontSize: 12,
-    marginTop: 2,
-  },
-  radioCircle: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    borderWidth: 2,
-  },
-  // Picker styles for region hierarchy
-  label: {
-    fontSize: 13,
-    fontWeight: '600',
-    marginBottom: 6,
-    marginTop: 4,
-  },
-  pickerWrapper: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  picker: {
-    flex: 1,
-    height: 44,
-    borderRadius: 10,
-    borderWidth: 1,
-    justifyContent: 'center',
-    paddingHorizontal: 14,
-  },
-  pickerText: {
-    fontSize: 14,
-  },
-  pickerButtons: {
-    flexDirection: 'column',
-    gap: 4,
-  },
-  pickerBtn: {
-    width: 36,
-    height: 20,
-    borderRadius: 6,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  // Dropdown styles
-  dropdownList: {
-    maxHeight: 200,
-    borderRadius: 10,
-    borderWidth: 1,
-    marginBottom: 12,
-    overflow: 'hidden',
-  },
-  searchInput: {
-    height: 40,
-    borderRadius: 8,
-    borderWidth: 1,
-    paddingHorizontal: 12,
-    fontSize: 14,
-    margin: 8,
-  },
-  dropdownScroll: {
-    maxHeight: 150,
-  },
-  dropdownItem: {
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: 'rgba(0,0,0,0.1)',
-  },
-  dropdownItemText: {
-    fontSize: 14,
   },
   footerBar: {
     position: 'absolute',

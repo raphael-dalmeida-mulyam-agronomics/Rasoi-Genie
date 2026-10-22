@@ -10,7 +10,7 @@ export class SearchPage {
   }
 
   async goto() {
-    await this.page.goto('/search');
+    await this.page.goto('/search', { waitUntil: 'domcontentloaded' });
     await this.page.waitForLoadState('domcontentloaded');
   }
 
@@ -32,6 +32,8 @@ export class SearchPage {
   }
 
   async isSearchResultVisible(kitId: string): Promise<boolean> {
-    return await this.getSearchResultCard(kitId).isVisible({ timeout: 5000 }).catch(() => false);
+    return await this.getSearchResultCard(kitId)
+      .isVisible({ timeout: 5000 })
+      .catch(() => false);
   }
 }

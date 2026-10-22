@@ -10,6 +10,8 @@ import {
   SpiceLevel,
 } from '../../../framework/services/mealKitsService';
 import { SAMPLE_RECIPE_THUMBNAILS } from '../sampleImages';
+import * as ImagePicker from 'expo-image-picker';
+import { ImageEditorModal } from '../../../framework/ui/ImageEditorModal';
 
 const DIET_TYPES: Array<{ key: DietTag; label: string; icon: string; desc: string }> = [
   { key: 'veg', label: 'Vegetarian', icon: 'leaf-outline', desc: 'Plant-based with dairy' },
@@ -105,7 +107,33 @@ export function Step1Details({ form, onChange }: Step1DetailsProps) {
 
   const [allergenQuery, setAllergenQuery] = useState('');
 
+  const [editorVisible, setEditorVisible] = useState(false);
+  const [editingImageUri, setEditingImageUri] = useState<string | null>(null);
+
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const handlePickOrUpload = async () => {
+    if (Platform.OS === 'web' && fileInputRef.current) {
+      fileInputRef.current.click();
+      return;
+    }
+
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        quality: 0.9,
+      });
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        const uri = result.assets[0]?.uri;
+        if (uri) {
+          setEditingImageUri(uri);
+          setEditorVisible(true);
+        }
+      }
+    } catch (err) {
+      console.warn('[Step1Details] Image pick error:', err);
+    }
+  };
 
   const handleFileUpload = (e: any) => {
     const file = e.target?.files?.[0];
@@ -114,10 +142,12 @@ export function Step1Details({ form, onChange }: Step1DetailsProps) {
       reader.onload = (event) => {
         const result = event.target?.result as string;
         if (result) {
-          onChange({ thumbnailUrl: result });
+          setEditingImageUri(result);
+          setEditorVisible(true);
         }
       };
       reader.readAsDataURL(file);
+      e.target.value = '';
     }
   };
 
@@ -175,17 +205,26 @@ export function Step1Details({ form, onChange }: Step1DetailsProps) {
               />
               <View style={styles.imageOverlayActions}>
                 <TouchableOpacity
-                  style={[styles.overlayBtn, { backgroundColor: 'rgba(0,0,0,0.7)' }]}
+                  testID="step1-crop-adjust-btn"
+                  style={[styles.overlayBtn, { backgroundColor: colors.primary }]}
                   onPress={() => {
-                    if (Platform.OS === 'web' && fileInputRef.current) {
-                      fileInputRef.current.click();
-                    }
+                    setEditingImageUri(form.thumbnailUrl);
+                    setEditorVisible(true);
                   }}
+                >
+                  <Icon name="crop" size={14} color="#FFFFFF" />
+                  <Text style={styles.overlayBtnText}>Crop & Adjust</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  testID="step1-replace-photo-btn"
+                  style={[styles.overlayBtn, { backgroundColor: 'rgba(0,0,0,0.7)' }]}
+                  onPress={handlePickOrUpload}
                 >
                   <Icon name="create-outline" size={14} color="#FFFFFF" />
                   <Text style={styles.overlayBtnText}>Replace Photo</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
+                  testID="step1-remove-photo-btn"
                   style={[styles.overlayBtn, { backgroundColor: 'rgba(239,68,68,0.85)' }]}
                   onPress={() => onChange({ thumbnailUrl: '' })}
                 >
@@ -196,15 +235,12 @@ export function Step1Details({ form, onChange }: Step1DetailsProps) {
             </View>
           ) : (
             <TouchableOpacity
+              testID="step1-upload-dropzone"
               style={[
                 styles.uploadDropzone,
                 { backgroundColor: colors.bgSubtle, borderColor: colors.border },
               ]}
-              onPress={() => {
-                if (Platform.OS === 'web' && fileInputRef.current) {
-                  fileInputRef.current.click();
-                }
-              }}
+              onPress={handlePickOrUpload}
               activeOpacity={0.8}
             >
               <View style={[styles.uploadIconCircle, { backgroundColor: colors.primaryLight }]}>
@@ -214,7 +250,7 @@ export function Step1Details({ form, onChange }: Step1DetailsProps) {
                 Click to upload dish photo
               </Text>
               <Text style={[styles.uploadSpecs, { color: colors.textMuted }]}>
-                PNG, JPG or WEBP (Recommended 1200 x 900 px)
+                PNG, JPG or WEBP (Crop, rotate & enhance enabled)
               </Text>
             </TouchableOpacity>
           )}
@@ -229,6 +265,22 @@ export function Step1Details({ form, onChange }: Step1DetailsProps) {
               onChange={handleFileUpload}
             />
           )}
+
+          <ImageEditorModal
+            visible={editorVisible}
+            imageUri={editingImageUri}
+            title="Crop, Rotate & Adjust Recipe Cover"
+            defaultAspectRatio="4:3"
+            onSave={(editedUri) => {
+              onChange({ thumbnailUrl: editedUri });
+              setEditorVisible(false);
+              setEditingImageUri(null);
+            }}
+            onCancel={() => {
+              setEditorVisible(false);
+              setEditingImageUri(null);
+            }}
+          />
 
           {/* Quick preset selector */}
           <View style={styles.presetSection}>

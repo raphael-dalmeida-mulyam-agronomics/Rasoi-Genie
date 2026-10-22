@@ -207,7 +207,7 @@ export const ProfileView: React.FC = () => {
             </View>
           </View>
 
-          {isChef && !isAdmin && (
+          {isChef && (
             <Button
               title="Open Chef Studio — Create & Edit Meal Kits"
               icon={<Icon name="chef" size={16} color="#FFFFFF" />}
@@ -574,6 +574,45 @@ export const ProfileView: React.FC = () => {
             isLast
           />
         </View>
+
+        {/* GROUP 4: Staff & Chef Portals (Admin & Chef) */}
+        {(isAdmin || isChef) && (
+          <>
+            <Text style={[styles.groupSectionTitle, { color: colors.textMuted }]}>
+              STAFF & CHEF PORTALS
+            </Text>
+            <View
+              style={[
+                styles.menuList,
+                {
+                  backgroundColor: colors.bgSurface,
+                  borderRadius: radii.xl,
+                  borderColor: colors.borderLight,
+                  ...shadows.card,
+                },
+              ]}
+            >
+              {isAdmin && (
+                <MenuRow
+                  icon="stats"
+                  title="Admin Dashboard"
+                  subtitle="Manage inventory, orders & hub analytics"
+                  onPress={() => router.push('/(tabs)/admin' as any)}
+                  isLast={!isChef}
+                />
+              )}
+              {isChef && (
+                <MenuRow
+                  icon="chef"
+                  title="Chef Studio"
+                  subtitle="Create & curate meal kits, recipes & media"
+                  onPress={() => router.push('/(tabs)/chef' as any)}
+                  isLast
+                />
+              )}
+            </View>
+          </>
+        )}
 
         {/* Logout and Delete */}
         <View style={styles.authButtonsCol}>

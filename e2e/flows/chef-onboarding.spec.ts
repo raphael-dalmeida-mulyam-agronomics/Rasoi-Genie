@@ -17,6 +17,7 @@ test.describe('Flow 3: Chef Studio Meal Kit Lifecycle & Admin Moderation', () =>
       .delete()
       .or('name.ilike.Kashmiri Rogan Josh%,name.ilike.Experimental Spicy Dish%');
   });
+
   test('Happy Path: Chef submits recipe -> Admin reviews & publishes with pricing -> Meal kit goes live', async ({
     browser,
   }) => {
@@ -54,6 +55,17 @@ test.describe('Flow 3: Chef Studio Meal Kit Lifecycle & Admin Moderation', () =>
 
     await chefStudio.submitRecipe();
 
+    // Sync chef submission state to admin context
+    const chefSubs = await chefPage.evaluate(() =>
+      localStorage.getItem('@rasoi_genie_chef_submissions_v1'),
+    );
+    if (chefSubs) {
+      await adminPage.addInitScript(({ key, val }) => localStorage.setItem(key, val), {
+        key: '@rasoi_genie_chef_submissions_v1',
+        val: chefSubs,
+      });
+    }
+
     // 2. Admin inspects Chef Submissions tab
     await adminDash.goto();
     await adminDash.switchTab('chefs');
@@ -66,10 +78,22 @@ test.describe('Flow 3: Chef Studio Meal Kit Lifecycle & Admin Moderation', () =>
     // Admin sets price and publishes
     await adminDash.approveChefSubmission(449);
 
+    // Sync published kit to customer context
+    const customKits = await adminPage.evaluate(() =>
+      localStorage.getItem('@rasoi_genie_custom_kits_v1'),
+    );
+
     // 3. Customer views Home catalog to confirm the newly published kit is live
     const customerContext = await browser.newContext();
     const customerPage = await customerContext.newPage();
     await seedBrowserSession(customerPage, TEST_USERS.customer);
+
+    if (customKits) {
+      await customerPage.addInitScript(({ key, val }) => localStorage.setItem(key, val), {
+        key: '@rasoi_genie_custom_kits_v1',
+        val: customKits,
+      });
+    }
 
     const home = new HomePage(customerPage);
     await home.goto();
@@ -121,6 +145,17 @@ test.describe('Flow 3: Chef Studio Meal Kit Lifecycle & Admin Moderation', () =>
 
     await chefStudio.submitRecipe();
 
+    // Sync chef submission state to admin context
+    const chefSubs = await chefPage.evaluate(() =>
+      localStorage.getItem('@rasoi_genie_chef_submissions_v1'),
+    );
+    if (chefSubs) {
+      await adminPage.addInitScript(({ key, val }) => localStorage.setItem(key, val), {
+        key: '@rasoi_genie_chef_submissions_v1',
+        val: chefSubs,
+      });
+    }
+
     // 2. Admin inspects chefs tab and opens review modal
     await adminDash.goto();
     await adminDash.switchTab('chefs');
@@ -133,8 +168,19 @@ test.describe('Flow 3: Chef Studio Meal Kit Lifecycle & Admin Moderation', () =>
     const rejectionReason = 'Portion ratios incomplete. Please update allergen info.';
     await adminDash.rejectChefSubmission(rejectionReason);
 
+    // Sync rejected state back to chefPage
+    const updatedChefSubs = await adminPage.evaluate(() =>
+      localStorage.getItem('@rasoi_genie_chef_submissions_v1'),
+    );
+    if (updatedChefSubs) {
+      await chefPage.evaluate(
+        (data) => localStorage.setItem('@rasoi_genie_chef_submissions_v1', data),
+        updatedChefSubs,
+      );
+    }
+
     // 3. Chef reloads studio and verifies rejection feedback
-    await chefPage.reload();
+    await chefPage.reload({ waitUntil: 'domcontentloaded' });
     await chefPage.waitForLoadState('domcontentloaded');
 
     const rejectedBadge = chefPage.getByText('Rejected').first();

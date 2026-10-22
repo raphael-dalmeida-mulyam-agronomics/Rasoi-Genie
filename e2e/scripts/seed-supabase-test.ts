@@ -1,10 +1,10 @@
 /**
  * Seed script for Supabase test database.
  * Seeds:
- * 1. Seeded user rows in user_profiles / users (with isOnboarded = true)
+ * 1. Seeded user profiles in user_profiles
  * 2. Chef profile in chef_profiles for chef test user
- * 3. Seeded meal kits in meal_kits table
- * 4. Referral settings & referral code for referrer in referral_codes
+ * 3. Seeded meal kits in meal_kits table with is_published: true
+ * 4. Wallets for referrer & referee in wallets table
  * 5. Pending chef submission in chef_submissions
  */
 
@@ -17,17 +17,43 @@ export async function seedSupabaseTest() {
   try {
     // 1. Seed user profiles
     for (const user of Object.values(TEST_USERS)) {
-      const { error: userErr } = await supabase.from('users').upsert(
+      const { error: userErr } = await supabase.from('user_profiles').upsert(
         {
-          id: user.uid,
+          uid: user.uid,
           email: user.email,
           display_name: user.displayName,
-          phone: user.phoneNumber,
+          phone_number: user.phoneNumber,
           role: user.role,
           is_onboarded: true,
+          preferences: {
+            dietTypes: ['veg'],
+            allergies: [],
+            spiceTolerance: 'Medium',
+            preferredCuisines: ['North Indian', 'South Indian'],
+            state: 'Maharashtra',
+            city: 'Pune',
+            subRegion: 'pune-koregaon-park',
+            regionHub: 'West',
+            currentCity: 'Pune',
+            isOnboarded: true,
+          },
+          addresses: [
+            {
+              id: 'addr-e2e-1',
+              name: user.displayName,
+              phone: user.phoneNumber || '+919876543210',
+              flatAndStreet: 'Flat 402, Sunshine Heights',
+              areaAndLandmark: 'Koregaon Park',
+              city: 'Pune',
+              pincode: '411001',
+              tag: 'Home',
+              isDefault: true,
+            },
+          ],
+          preferred_payment_method: 'UPI',
           updated_at: new Date().toISOString(),
         },
-        { onConflict: 'id' },
+        { onConflict: 'uid' },
       );
       if (userErr) {
         console.warn(`[Seed Supabase] Warning upserting user ${user.email}:`, userErr.message);
@@ -41,9 +67,7 @@ export async function seedSupabaseTest() {
         email: TEST_USERS.chef.email,
         display_name: TEST_USERS.chef.displayName,
         speciality: 'North Indian & Mughlai Delicacies',
-        is_active: true,
         approved_at: new Date().toISOString(),
-        created_at: new Date().toISOString(),
       },
       { onConflict: 'uid' },
     );
@@ -51,7 +75,7 @@ export async function seedSupabaseTest() {
       console.warn('[Seed Supabase] Warning upserting chef profile:', chefErr.message);
     }
 
-    // 3. Seed meal kits in meal_kits table
+    // 3. Seed meal kits in meal_kits table with is_published: true
     for (const kit of TEST_MEAL_KITS) {
       const { error: kitErr } = await supabase.from('meal_kits').upsert(
         {
@@ -59,19 +83,34 @@ export async function seedSupabaseTest() {
           name: kit.name,
           tagline: kit.tagline,
           description: kit.description,
-          cuisine: kit.cuisine,
-          diet: kit.diet,
-          dish_category: kit.dishCategory,
           price: kit.price,
-          servings: kit.servings,
-          prep_time_minutes: kit.prepTimeMinutes,
-          cook_time_minutes: kit.cookTimeMinutes,
+          original_price: kit.price,
+          cuisine: kit.cuisine,
+          region: kit.availableRegions?.[0] || 'North',
+          category: kit.dishCategory,
+          diet_type: kit.diet,
           spice_level: kit.spiceLevel,
-          hero_image: kit.heroImage,
-          tags: kit.tags,
-          is_trending: kit.isTrending,
-          is_out_of_stock: kit.isOutOfStock,
-          available_regions: kit.availableRegions,
+          prep_time_minutes: (kit.prepTimeMinutes || 10) + (kit.cookTimeMinutes || 20),
+          servings: kit.servings,
+          image_url: kit.heroImage,
+          is_published: true,
+          stock_status: kit.isOutOfStock ? 'out_of_stock' : 'in_stock',
+          ingredients: [
+            { name: 'Fresh Ingredients', quantity: '1 pack' },
+            { name: 'Signature Spices', quantity: '2 sachets' },
+          ],
+          instructions: [
+            { step: 1, title: 'Prep', instruction: 'Prep ingredients according to package' },
+            { step: 2, title: 'Cook', instruction: 'Simmer and enjoy fresh' },
+          ],
+          nutrition: {
+            calories: 450,
+            tags: kit.tags,
+            is_trending: kit.isTrending,
+            available_regions: kit.availableRegions,
+          },
+          masala_sachets: ['Aroma Sachet', 'Base Gravy Premix'],
+          created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         },
         { onConflict: 'id' },
@@ -81,78 +120,45 @@ export async function seedSupabaseTest() {
       }
     }
 
-    // 4. Seed referral code & settings
-    const { error: refSettingsErr } = await supabase.from('referral_settings').upsert(
-      {
-        id: 1,
-        referrer_reward: TEST_REFERRAL.referrerReward,
-        referred_reward: TEST_REFERRAL.referredReward,
-        referral_credit_expiry_days: 60,
-        min_qualifying_order_amount: 0,
-        programme_enabled: true,
-        qualification_event: TEST_REFERRAL.qualificationEvent,
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: 'id' },
-    );
-    if (refSettingsErr) {
-      console.warn('[Seed Supabase] Warning upserting referral settings:', refSettingsErr.message);
-    }
-
-    const { error: codeErr } = await supabase.from('referral_codes').upsert(
+    // 4. Seed referrer wallet balance
+    const { error: walletErr } = await supabase.from('wallets').upsert(
       {
         user_id: TEST_USERS.referrer.uid,
-        code: TEST_REFERRAL.code,
-        is_active: true,
-        total_uses: 0,
+        available_balance: 500,
+        currency: 'INR',
         updated_at: new Date().toISOString(),
       },
-      { onConflict: 'code' },
+      { onConflict: 'user_id' },
     );
-    if (codeErr) {
-      console.warn('[Seed Supabase] Warning upserting referral code:', codeErr.message);
+    if (walletErr) {
+      console.warn('[Seed Supabase] Warning upserting wallet:', walletErr.message);
     }
 
     // 5. Seed a pending chef submission for admin review
     const { error: subErr } = await supabase.from('chef_submissions').upsert(
       {
         id: 'e2e-submission-shahi-paneer',
-        chef_id: TEST_USERS.chef.uid,
-        chef_name: TEST_USERS.chef.displayName,
-        chef_email: TEST_USERS.chef.email,
+        slug: 'royal-shahi-paneer-special',
         name: 'Royal Shahi Paneer Special',
         tagline: 'Creamy cashew and saffron royal curry',
         description:
           'Tender cottage cheese cooked in a rich, sweet and savory gravy of cashews, almonds and aromatic spices.',
-        cuisine: 'North Indian',
         diet: 'veg',
+        cuisine: 'North Indian',
         dish_category: 'Curries & Gravies',
+        spice_level: 'Mild',
         servings: 2,
         prep_time_minutes: 15,
         cook_time_minutes: 20,
-        spice_level: 'Mild',
         ingredients: [
           { name: 'Paneer Cubes', quantity: '250g' },
           { name: 'Cashew Saffron Paste', quantity: '100g' },
-          { name: 'Whole Shahi Spices', quantity: '1 sachet' },
         ],
         recipe_steps: [
-          {
-            step_number: 1,
-            title: 'Saute spices',
-            instruction: 'Heat ghee in a pan and lightly saute whole spices.',
-          },
-          {
-            step_number: 2,
-            title: 'Simmer gravy',
-            instruction: 'Add cashew paste and simmer on low flame for 8 minutes.',
-          },
-          {
-            step_number: 3,
-            title: 'Add paneer',
-            instruction: 'Gently add paneer cubes and garnish with crushed kasuri methi.',
-          },
+          { step_number: 1, title: 'Saute', instruction: 'Heat ghee and saute whole spices' },
         ],
+        chef_id: TEST_USERS.chef.uid,
+        chef_name: TEST_USERS.chef.displayName,
         submission_status: 'pending_review',
         submitted_at: new Date().toISOString(),
       },
@@ -172,26 +178,24 @@ export async function cleanupSupabaseTest() {
   console.log('[Cleanup Supabase] Cleaning up test records...');
   try {
     // Delete test orders created during tests
-    await supabase.from('orders').delete().ilike('id', 'ORD-E2E%');
+    await supabase.from('orders').delete().ilike('id', 'ORD%');
     // Delete test meal kits created during tests
     await supabase
       .from('meal_kits')
       .delete()
-      .or(
-        'id.ilike.e2e-%,name.ilike.Kashmiri Rogan Josh%,name.ilike.Experimental Spicy Dish%,id.ilike.city-%,id.ilike.kit-test-%',
-      );
+      .or('name.ilike.Kashmiri Rogan Josh%,name.ilike.Experimental Spicy Dish%');
     // Delete test chef submissions created during tests
     await supabase
       .from('chef_submissions')
       .delete()
-      .or('id.ilike.e2e-%,name.ilike.Kashmiri Rogan Josh%,name.ilike.Experimental Spicy Dish%');
+      .or('name.ilike.Kashmiri Rogan Josh%,name.ilike.Experimental Spicy Dish%');
     console.log('[Cleanup Supabase] Done cleanup.');
   } catch (err: any) {
     console.warn('[Cleanup Supabase] Error during cleanup:', err?.message || err);
   }
 }
 
-if (require.main === module) {
+if (typeof require !== 'undefined' && require.main === module) {
   seedSupabaseTest()
     .then(() => process.exit(0))
     .catch((err) => {

@@ -1,6 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { Tabs, usePathname, useRouter } from 'expo-router';
-import { View, Text, ActivityIndicator, TouchableOpacity, Alert } from 'react-native';
+import {
+  View,
+  Text,
+  ActivityIndicator,
+  TouchableOpacity,
+  Alert,
+  useWindowDimensions,
+  Platform,
+} from 'react-native';
 import { Icon } from '../../framework/ui/Icon';
 import { RoleBadge } from '../../framework/ui/RoleBadge';
 import { useAuth } from '../../framework/context/AuthContext';
@@ -34,6 +42,8 @@ export default function TabLayout() {
 
   const pathname = usePathname();
   const router = useRouter();
+  const { width } = useWindowDimensions();
+  const isWide = width >= 768;
 
   // Route guard: Dependent accounts cannot access search, login/account, admin, or chef
   useEffect(() => {
@@ -111,12 +121,11 @@ export default function TabLayout() {
     );
   }
 
-  // 2. Location is required when user signs in for the first time or guest has no location
-  const needsLocationOnboarding =
-    !isDependent &&
-    (user
-      ? !preferences.isOnboarded || !preferences.city
-      : !userLocation && !preferences.city && !preferences.currentCity);
+  // 2. Location is required only if no location has been selected yet (guest or authenticated user)
+  const hasValidLocation = Boolean(
+    preferences.city || preferences.currentCity || userLocation?.city,
+  );
+  const needsLocationOnboarding = !isDependent && !hasValidLocation;
 
   if (needsLocationOnboarding) {
     return (
@@ -136,6 +145,209 @@ export default function TabLayout() {
 
   return (
     <View style={{ flex: 1 }}>
+      {/* Responsive Desktop Top Navigation Bar (shown on screens >= 768px) */}
+      {isWide && (
+        <View
+          style={{
+            backgroundColor: colors.bgSurface,
+            borderBottomWidth: 1,
+            borderBottomColor: colors.borderLight,
+            paddingVertical: 12,
+            paddingHorizontal: 24,
+            zIndex: 100,
+          }}
+        >
+          <View
+            style={{
+              maxWidth: 1200,
+              width: '100%',
+              alignSelf: 'center',
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+            }}
+          >
+            {/* Brand Logo & Title */}
+            <TouchableOpacity
+              onPress={() => router.push('/')}
+              style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}
+              activeOpacity={0.8}
+            >
+              <View
+                style={{
+                  width: 34,
+                  height: 34,
+                  borderRadius: 10,
+                  backgroundColor: colors.primary,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <Icon name="restaurant" size={20} color="#FFFFFF" />
+              </View>
+              <View>
+                <Text
+                  style={{
+                    fontSize: 18,
+                    fontWeight: '900',
+                    color: colors.primary,
+                    letterSpacing: -0.5,
+                  }}
+                >
+                  Rasoi<Text style={{ color: colors.textPrimary }}>Genie</Text>
+                </Text>
+              </View>
+            </TouchableOpacity>
+
+            {/* Desktop Navigation Links */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              {[
+                { label: 'Explore', path: '/', icon: 'restaurant' as const },
+                {
+                  label: 'Search',
+                  path: '/(tabs)/search',
+                  icon: 'search' as const,
+                  hidden: Boolean(isDependent && family),
+                },
+                {
+                  label: isDependent ? 'Family Basket' : 'Basket',
+                  path: '/(tabs)/cart',
+                  icon: 'cart' as const,
+                  badge: isDependent
+                    ? familyCartState.approvedCount > 0
+                      ? familyCartState.approvedCount
+                      : undefined
+                    : totalCount > 0
+                      ? totalCount
+                      : undefined,
+                },
+                {
+                  label: isDependent && family ? 'Family Orders' : 'My Orders',
+                  path: '/(tabs)/orders',
+                  icon: 'time' as const,
+                },
+                {
+                  label: user ? 'Account' : 'Sign In',
+                  path: '/(tabs)/login',
+                  icon: 'people' as const,
+                  hidden: Boolean(isDependent && family),
+                },
+              ]
+                .filter((nav) => !nav.hidden)
+                .map((nav) => {
+                  const isActive =
+                    nav.path === '/'
+                      ? pathname === '/' || pathname === '/(tabs)' || pathname === ''
+                      : pathname.startsWith(nav.path);
+                  return (
+                    <TouchableOpacity
+                      key={nav.path}
+                      onPress={() => router.push(nav.path as any)}
+                      style={{
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        gap: 6,
+                        paddingHorizontal: 14,
+                        paddingVertical: 8,
+                        borderRadius: 20,
+                        backgroundColor: isActive ? colors.primaryLight : 'transparent',
+                      }}
+                      activeOpacity={0.7}
+                    >
+                      <Icon
+                        name={nav.icon}
+                        size={17}
+                        color={isActive ? colors.primary : colors.textSecondary}
+                      />
+                      <Text
+                        style={{
+                          fontSize: 13,
+                          fontWeight: isActive ? '700' : '500',
+                          color: isActive ? colors.primary : colors.textPrimary,
+                        }}
+                      >
+                        {nav.label}
+                      </Text>
+                      {typeof nav.badge === 'number' && nav.badge > 0 && (
+                        <View
+                          style={{
+                            backgroundColor: colors.primary,
+                            borderRadius: 10,
+                            paddingHorizontal: 6,
+                            paddingVertical: 2,
+                            marginLeft: 2,
+                          }}
+                        >
+                          <Text style={{ color: '#FFFFFF', fontSize: 10, fontWeight: '800' }}>
+                            {nav.badge}
+                          </Text>
+                        </View>
+                      )}
+                    </TouchableOpacity>
+                  );
+                })}
+
+              {/* Staff quick shortcuts on desktop if admin/chef */}
+              {isAdmin && (
+                <TouchableOpacity
+                  onPress={() => router.push('/(tabs)/admin' as any)}
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 6,
+                    paddingHorizontal: 12,
+                    paddingVertical: 7,
+                    borderRadius: 20,
+                    backgroundColor: colors.bgSubtle,
+                    marginLeft: 6,
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <Icon name="stats" size={15} color={colors.textSecondary} />
+                  <Text style={{ fontSize: 12, fontWeight: '600', color: colors.textSecondary }}>
+                    Admin
+                  </Text>
+                  {pendingApprovalCount > 0 && (
+                    <View
+                      style={{
+                        backgroundColor: '#DC2626',
+                        borderRadius: 10,
+                        paddingHorizontal: 5,
+                        paddingVertical: 1,
+                      }}
+                    >
+                      <Text style={{ color: '#FFFFFF', fontSize: 9, fontWeight: '800' }}>
+                        {pendingApprovalCount}
+                      </Text>
+                    </View>
+                  )}
+                </TouchableOpacity>
+              )}
+              {isChef && (
+                <TouchableOpacity
+                  onPress={() => router.push('/(tabs)/chef' as any)}
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 6,
+                    paddingHorizontal: 12,
+                    paddingVertical: 7,
+                    borderRadius: 20,
+                    backgroundColor: colors.bgSubtle,
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <Icon name="chef" size={15} color={colors.textSecondary} />
+                  <Text style={{ fontSize: 12, fontWeight: '600', color: colors.textSecondary }}>
+                    Chef Studio
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
+        </View>
+      )}
+
       {isDependent && family && (
         <View
           testID="dependent-shell-header"
@@ -184,9 +396,23 @@ export default function TabLayout() {
         screenOptions={{
           tabBarActiveTintColor: colors.primary,
           tabBarInactiveTintColor: colors.textMuted,
-          tabBarStyle: {
-            backgroundColor: colors.bgSurface,
-            borderTopColor: colors.borderLight,
+          tabBarStyle: isWide
+            ? { display: 'none' }
+            : {
+                backgroundColor: colors.bgSurface,
+                borderTopColor: colors.borderLight,
+                height: Platform.OS === 'ios' ? 88 : 68,
+                paddingTop: 8,
+                paddingBottom: Platform.OS === 'ios' ? 28 : 10,
+              },
+          tabBarLabelStyle: {
+            fontSize: 11,
+            fontWeight: '600',
+            marginTop: 1,
+          },
+          tabBarItemStyle: {
+            justifyContent: 'center',
+            alignItems: 'center',
           },
           headerShown: false,
         }}
@@ -254,28 +480,18 @@ export default function TabLayout() {
           }}
         />
 
+        {/* Admin and Chef are reached from the Profile screen and desktop top bar */}
         <Tabs.Screen
           name="admin"
           options={{
-            title: 'Admin Dash',
-            href: isAdmin ? undefined : null,
-            tabBarBadge: pendingApprovalCount > 0 ? pendingApprovalCount : undefined,
-            tabBarBadgeStyle: {
-              backgroundColor: '#DC2626',
-              color: '#FFFFFF',
-              fontSize: 10,
-              fontWeight: '800',
-            },
-            tabBarIcon: ({ color }) => <Icon name="stats" size={22} color={color as string} />,
+            href: null,
           }}
         />
 
         <Tabs.Screen
           name="chef"
           options={{
-            title: 'Chef Studio',
-            href: isChef || isAdmin ? undefined : null,
-            tabBarIcon: ({ color }) => <Icon name="chef" size={22} color={color as string} />,
+            href: null,
           }}
         />
 

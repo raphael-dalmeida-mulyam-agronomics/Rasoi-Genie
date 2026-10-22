@@ -50,7 +50,7 @@ test.describe('Flow 1: Browse and Order Meal Kit', () => {
     await checkoutPage.placeOrder();
 
     // 9. Verify order is recorded and visible in customer orders
-    await page.goto('/orders');
+    await page.goto('/orders', { waitUntil: 'domcontentloaded' });
     await page.waitForLoadState('domcontentloaded');
 
     // Look for placed order card

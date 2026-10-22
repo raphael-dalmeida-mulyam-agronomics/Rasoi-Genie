@@ -44,11 +44,16 @@ interface AuthContextType {
   requestEmailOTP: (
     email: string,
   ) => Promise<{ success: boolean; error?: string; otpHint?: string }>;
-  confirmEmailOTP: (email: string, code: string) => Promise<{ success: boolean; error?: string }>;
+  confirmEmailOTP: (
+    email: string,
+    code: string,
+  ) => Promise<{ success: boolean; error?: string; user?: UserProfile }>;
   requestPhoneOTP: (
     phone: string,
   ) => Promise<{ success: boolean; error?: string; otpHint?: string }>;
-  confirmPhoneOTP: (code: string) => Promise<{ success: boolean; error?: string }>;
+  confirmPhoneOTP: (
+    code: string,
+  ) => Promise<{ success: boolean; error?: string; user?: UserProfile }>;
   updateUserContact: (contact: {
     displayName?: string;
     phoneNumber?: string;
@@ -331,7 +336,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setUser(result.user);
         setVerificationId(null);
         setActiveOtpHint(null);
-        return { success: true };
+        return { success: true, user: result.user };
       }
       return { success: false, error: result.error || 'Invalid OTP code' };
     } finally {
@@ -366,7 +371,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setUser(result.user);
         setVerificationId(null);
         setActiveOtpHint(null);
-        return { success: true };
+        return { success: true, user: result.user };
       }
       return { success: false, error: result.error || 'Invalid Phone OTP' };
     } finally {

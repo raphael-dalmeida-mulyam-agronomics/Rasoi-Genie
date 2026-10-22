@@ -39,6 +39,16 @@ export const AppLoadingCoverScreen: React.FC<AppLoadingCoverScreenProps> = ({
   onDone,
   isAppReady = true,
 }) => {
+  if (
+    (typeof process !== 'undefined' &&
+      (process.env.EXPO_PUBLIC_ENV === 'test' || process.env.NODE_ENV === 'test')) ||
+    (typeof window !== 'undefined' &&
+      (Boolean((window as any).__E2E__) ||
+        window.localStorage?.getItem('@rasoi_e2e_mode') === 'true'))
+  ) {
+    return null;
+  }
+
   const [visible, setVisible] = useState(true);
 
   // Animation values

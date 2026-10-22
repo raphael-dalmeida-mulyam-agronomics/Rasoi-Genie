@@ -9,7 +9,7 @@ export class AdminDashboardPage {
   }
 
   async goto() {
-    await this.page.goto('/admin');
+    await this.page.goto('/admin', { waitUntil: 'domcontentloaded' });
     await this.page.waitForLoadState('domcontentloaded');
   }
 
@@ -43,6 +43,10 @@ export class AdminDashboardPage {
     const btn = this.page.getByTestId(`admin-reject-order-${orderId}`);
     await btn.waitFor({ state: 'visible', timeout: 5000 });
     await btn.click();
+    const confirmBtn = this.page.getByTestId('admin-confirm-cancel-order-btn');
+    if (await confirmBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
+      await confirmBtn.click();
+    }
     await this.page.waitForTimeout(1000);
   }
 

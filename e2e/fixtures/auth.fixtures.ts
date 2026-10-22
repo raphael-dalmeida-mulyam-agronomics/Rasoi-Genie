@@ -18,11 +18,90 @@ export async function seedBrowserSession(page: Page, user: TestUserAccount) {
     createdAt: new Date().toISOString(),
   };
 
-  await page.addInitScript(
-    ({ storageKey, userProfile }) => {
-      window.localStorage.setItem(storageKey, JSON.stringify(userProfile));
+  const userProfileData = {
+    uid: user.uid,
+    email: user.email,
+    displayName: user.displayName,
+    phoneNumber: user.phoneNumber || '+919876543210',
+    role: user.role,
+    preferences: {
+      dietTypes: ['veg'],
+      allergies: [],
+      spiceTolerance: 'Medium',
+      preferredCuisines: ['North Indian', 'South Indian', 'Punjabi'],
+      state: 'Maharashtra',
+      city: 'Pune',
+      subRegion: 'pune-koregaon-park',
+      regionHub: 'West',
+      currentCity: 'Pune',
+      isOnboarded: true,
     },
-    { storageKey: AUTH_STORAGE_KEY, userProfile: profile },
+    addresses: [
+      {
+        id: 'addr-e2e-1',
+        name: user.displayName,
+        phone: user.phoneNumber || '+919876543210',
+        flatAndStreet: 'Flat 402, Sunshine Heights',
+        areaAndLandmark: 'Koregaon Park',
+        city: 'Pune',
+        pincode: '411001',
+        tag: 'Home',
+        isDefault: true,
+      },
+    ],
+    preferredPaymentMethod: 'Cash on Delivery',
+    isOnboarded: true,
+    updatedAt: new Date().toISOString(),
+  };
+
+  const locationData = {
+    city: 'Pune',
+    pincode: '411001',
+    hub: 'West',
+  };
+
+  const guestPrefsData = {
+    city: 'Pune',
+    currentCity: 'Pune',
+    state: 'Maharashtra',
+    regionHub: 'West',
+    isOnboarded: true,
+  };
+
+  const verifiedContactData = {
+    name: user.displayName,
+    phone: (user.phoneNumber || '9999900003').replace(/\D/g, '').slice(-10),
+    email: user.email,
+    isVerified: true,
+    verifiedAt: new Date().toISOString(),
+    address: {
+      flatAndStreet: 'Flat 402, Sunshine Heights',
+      areaAndLandmark: 'Koregaon Park',
+      city: 'Pune',
+      pincode: '411001',
+      tag: 'Home',
+    },
+  };
+
+  await page.addInitScript(
+    ({ authKey, profileKey, authData, profileData, locData, guestData, contactData }) => {
+      (window as any).__E2E__ = true;
+      window.localStorage.setItem('@rasoi_e2e_mode', 'true');
+      window.localStorage.setItem(authKey, JSON.stringify(authData));
+      window.localStorage.setItem(profileKey, JSON.stringify(profileData));
+      window.localStorage.setItem('@rasoi_user_location', JSON.stringify(locData));
+      window.localStorage.setItem('@rasoi_guest_preferences_v1', JSON.stringify(guestData));
+      window.localStorage.setItem('@rasoi_verified_guest_contact_v1', JSON.stringify(contactData));
+    },
+    {
+      authKey: AUTH_STORAGE_KEY,
+      profileKey: `@rasoi_user_profile_${user.uid}`,
+      authData: profile,
+      profileData: userProfileData,
+      locData: locationData,
+      guestData: guestPrefsData,
+      contactData: verifiedContactData,
+    },
   );
 }
 

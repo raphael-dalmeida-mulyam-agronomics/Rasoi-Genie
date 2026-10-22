@@ -428,3 +428,16 @@ ALTER PUBLICATION supabase_realtime ADD TABLE public.admin_regions;
 ALTER PUBLICATION supabase_realtime ADD TABLE public.chef_profiles;
 ALTER PUBLICATION supabase_realtime ADD TABLE public.chef_submissions;
 
+-- 13. POSTGREST / SUPABASE DATA API PERMISSIONS
+-- Complies with Supabase October 30, 2026 update regarding Data API access for tables in public schema
+GRANT USAGE ON SCHEMA public TO anon, authenticated, service_role;
+GRANT ALL ON ALL TABLES IN SCHEMA public TO anon, authenticated, service_role;
+GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated, service_role;
+GRANT ALL ON ALL ROUTINES IN SCHEMA public TO anon, authenticated, service_role;
+
+-- Maintain automatic Data API access for newly created tables in the public schema
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO anon, authenticated, service_role;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO anon, authenticated, service_role;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON ROUTINES TO anon, authenticated, service_role;
+
+

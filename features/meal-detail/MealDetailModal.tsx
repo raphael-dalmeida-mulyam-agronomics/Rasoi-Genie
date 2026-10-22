@@ -374,9 +374,14 @@ export const MealDetailModal: React.FC<MealDetailModalProps> = ({
                 <View style={styles.specDivider} />
 
                 <View style={styles.specItem}>
-                  <Text style={[styles.specLabel, { color: colors.textMuted }]}>SPICE</Text>
+                  <View
+                    style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 2 }}
+                  >
+                    <Icon name="flame" size={12} color="#EA580C" />
+                    <Text style={[styles.specLabel, { color: colors.textMuted }]}>SPICE</Text>
+                  </View>
                   <Text style={[styles.specVal, { color: colors.textPrimary }]}>
-                    {kit.spiceLevel}
+                    {selectedSpiceLevel || kit.spiceLevel}
                   </Text>
                 </View>
 
@@ -392,7 +397,12 @@ export const MealDetailModal: React.FC<MealDetailModalProps> = ({
                 <View style={styles.specDivider} />
 
                 <View style={styles.specItem}>
-                  <Text style={[styles.specLabel, { color: colors.textMuted }]}>PORTION</Text>
+                  <View
+                    style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 2 }}
+                  >
+                    <Icon name="people" size={12} color={colors.primary} />
+                    <Text style={[styles.specLabel, { color: colors.textMuted }]}>PORTION</Text>
+                  </View>
                   <Text style={[styles.specVal, { color: colors.textPrimary }]}>
                     {selectedServings} Servings
                   </Text>
@@ -509,9 +519,31 @@ export const MealDetailModal: React.FC<MealDetailModalProps> = ({
                 </View>
 
                 {/* Serving Size Options */}
-                <Text style={[styles.customSectionLabel, { color: colors.textSecondary }]}>
-                  SERVING SIZE:
-                </Text>
+                <View
+                  style={{
+                    flexDirection: 'row',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    marginBottom: 8,
+                  }}
+                >
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    <Icon name="people" size={15} color={colors.primary} />
+                    <Text
+                      style={[
+                        styles.customSectionLabel,
+                        { color: colors.textSecondary, marginBottom: 0 },
+                      ]}
+                    >
+                      SERVING SIZE:
+                    </Text>
+                  </View>
+                  <Text style={{ fontSize: 11, fontWeight: '700', color: colors.primary }}>
+                    {selectedServings === 2 && '2 Servings (Couple)'}
+                    {selectedServings === 4 && '4 Servings (Family)'}
+                    {selectedServings === 6 && '6 Servings (Party)'}
+                  </Text>
+                </View>
                 <View style={styles.pillsRow}>
                   {[
                     { count: 2, label: '2 Servings', desc: 'Couple' },
@@ -534,14 +566,28 @@ export const MealDetailModal: React.FC<MealDetailModalProps> = ({
                           },
                         ]}
                       >
-                        <Text
-                          style={[
-                            styles.portionPillText,
-                            { color: isSelected ? '#FFFFFF' : colors.textPrimary },
-                          ]}
+                        <View
+                          style={{
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            gap: 5,
+                            marginBottom: 2,
+                          }}
                         >
-                          {s.label}
-                        </Text>
+                          <Icon
+                            name="people"
+                            size={14}
+                            color={isSelected ? '#FFFFFF' : colors.primary}
+                          />
+                          <Text
+                            style={[
+                              styles.portionPillText,
+                              { color: isSelected ? '#FFFFFF' : colors.textPrimary },
+                            ]}
+                          >
+                            {s.label}
+                          </Text>
+                        </View>
                         <Text
                           style={[
                             styles.portionPillDesc,
@@ -556,23 +602,26 @@ export const MealDetailModal: React.FC<MealDetailModalProps> = ({
                 </View>
 
                 {/* Spice Level Options */}
-                <View style={{ marginTop: 12 }}>
+                <View style={{ marginTop: 14 }}>
                   <View
                     style={{
                       flexDirection: 'row',
                       justifyContent: 'space-between',
                       alignItems: 'center',
-                      marginBottom: 6,
+                      marginBottom: 8,
                     }}
                   >
-                    <Text
-                      style={[
-                        styles.customSectionLabel,
-                        { color: colors.textSecondary, marginBottom: 0 },
-                      ]}
-                    >
-                      SPICE LEVEL:
-                    </Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                      <Icon name="flame" size={15} color="#EA580C" />
+                      <Text
+                        style={[
+                          styles.customSectionLabel,
+                          { color: colors.textSecondary, marginBottom: 0 },
+                        ]}
+                      >
+                        SPICE LEVEL:
+                      </Text>
+                    </View>
                     <Text style={{ fontSize: 11, fontWeight: '700', color: colors.primary }}>
                       {selectedSpiceLevel === 'Mild' && 'Mild (Kid-friendly)'}
                       {selectedSpiceLevel === 'Medium' && 'Medium (Classic Balance)'}
@@ -600,9 +649,26 @@ export const MealDetailModal: React.FC<MealDetailModalProps> = ({
                               backgroundColor: isSelected ? colors.primary : colors.bgSurface,
                               borderColor: isSelected ? colors.primary : colors.borderLight,
                               borderRadius: radii.pill,
+                              flexDirection: 'row',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              gap: 5,
                             },
                           ]}
                         >
+                          <Icon
+                            name={isSelected ? 'flame-filled' : 'flame'}
+                            size={13}
+                            color={
+                              isSelected
+                                ? '#FFFFFF'
+                                : sp.level === 'Mild'
+                                  ? '#10B981'
+                                  : sp.level === 'Medium'
+                                    ? '#F59E0B'
+                                    : '#EA580C'
+                            }
+                          />
                           <Text
                             style={[
                               styles.spicePillText,

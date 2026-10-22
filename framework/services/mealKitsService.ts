@@ -283,6 +283,131 @@ export function parseCategorizedTags(tags?: string[]): CategorizedTag[] {
 
 const BASE_INITIAL_MEAL_KITS: MealKit[] = [
   {
+    id: 'e2e-kit-butter-chicken',
+    name: 'Delhi Style Butter Chicken Kit',
+    hindiName: 'दिल्ली बटर चिकन',
+    slug: 'delhi-style-butter-chicken',
+    tagline: 'Rich tomato gravy with velvety spiced butter sauce',
+    description:
+      'Authentic Old Delhi style makhani gravy with marinated tender chicken and freshly ground garam masala sachets.',
+    heroImage:
+      'https://images.unsplash.com/photo-1603894584373-5ac82b2ae398?auto=format&fit=crop&w=600&q=80',
+    galleryImages: [
+      'https://images.unsplash.com/photo-1603894584373-5ac82b2ae398?auto=format&fit=crop&w=600&q=80',
+    ],
+    price: 349,
+    originalPrice: 399,
+    servings: 2,
+    prepTimeMinutes: 15,
+    cookTimeMinutes: 25,
+    diet: 'nonveg',
+    cuisine: 'North Indian',
+    dishCategory: 'Curries & Gravies',
+    spiceLevel: 'Medium',
+    difficulty: 'Easy',
+    dietaryTags: ['nonveg'],
+    isTrending: true,
+    availableRegions: ['North', 'South', 'West', 'East'],
+    cities: [],
+    stockByRegion: { North: 50, South: 50, West: 50, East: 50 },
+    salesByRegion: { North: 0, South: 0, West: 0, East: 0 },
+    rating: 4.9,
+    reviewCount: 120,
+    nutrition: {
+      calories: 520,
+      protein: 28,
+      carbs: 18,
+      fat: 32,
+      fiber: 3,
+    },
+    allergens: ['Dairy (Butter & Cream)', 'Tree Nuts (Cashew)'],
+    ingredients: [
+      { name: 'Marinated Tender Chicken', quantity: '350g' },
+      { name: 'Makhani Tomato Puree', quantity: '200g' },
+      { name: 'Cashew Butter Cream', quantity: '40g' },
+      { name: 'Kashmiri Mirch & Garam Masala', quantity: '10g', isMasalaSachet: true },
+      { name: 'Kasuri Methi Fragrance Pack', quantity: '5g', isMasalaSachet: true },
+    ],
+    masalaSachets: ['Old Delhi Makhani Spices', 'Kasuri Methi Aroma Finish'],
+    recipeSteps: [
+      {
+        stepNumber: 1,
+        title: 'Sear Chicken',
+        instruction: 'Sear pre-marinated chicken pieces in butter until golden.',
+        timerSeconds: 300,
+      },
+      {
+        stepNumber: 2,
+        title: 'Simmer Makhani Gravy',
+        instruction: 'Add tomato puree, cashew butter cream, and simmer with spice sachets.',
+        timerSeconds: 400,
+      },
+    ],
+    reviews: [],
+  },
+  {
+    id: 'e2e-kit-paneer-tikka',
+    name: 'Amritsari Paneer Tikka Kit',
+    hindiName: 'अमृतसरी पनीर टिक्का',
+    slug: 'amritsari-paneer-tikka',
+    tagline: 'Smoky grilled paneer cubes with mint chutney marinade',
+    description:
+      'Fresh malai paneer cubes marinated in hung curd, carom seeds, mustard oil and kasuri methi.',
+    heroImage:
+      'https://images.unsplash.com/photo-1567188040759-fb8a883dc6d8?auto=format&fit=crop&w=600&q=80',
+    galleryImages: [
+      'https://images.unsplash.com/photo-1567188040759-fb8a883dc6d8?auto=format&fit=crop&w=600&q=80',
+    ],
+    price: 299,
+    originalPrice: 349,
+    servings: 2,
+    prepTimeMinutes: 10,
+    cookTimeMinutes: 15,
+    diet: 'veg',
+    cuisine: 'Punjabi',
+    dishCategory: 'Street Food',
+    spiceLevel: 'Spicy',
+    difficulty: 'Easy',
+    dietaryTags: ['veg'],
+    isTrending: false,
+    availableRegions: ['North', 'South', 'West', 'East'],
+    cities: [],
+    stockByRegion: { North: 50, South: 50, West: 50, East: 50 },
+    salesByRegion: { North: 0, South: 0, West: 0, East: 0 },
+    rating: 4.8,
+    reviewCount: 88,
+    nutrition: {
+      calories: 380,
+      protein: 20,
+      carbs: 14,
+      fat: 26,
+      fiber: 4,
+    },
+    allergens: ['Dairy (Paneer)'],
+    ingredients: [
+      { name: 'Fresh Malai Paneer Cubes', quantity: '250g' },
+      { name: 'Tikka Marinade Hung Curd', quantity: '100g' },
+      { name: 'Amritsari Tikka Masala', quantity: '15g', isMasalaSachet: true },
+      { name: 'Mint Chutney Sachet', quantity: '40g', isMasalaSachet: true },
+    ],
+    masalaSachets: ['Amritsari Tikka Sachet', 'Chaat Finishing Dust'],
+    recipeSteps: [
+      {
+        stepNumber: 1,
+        title: 'Marinate & Skewer',
+        instruction: 'Toss paneer cubes in tikka marinade pouch and rest for 5 minutes.',
+        timerSeconds: 300,
+      },
+      {
+        stepNumber: 2,
+        title: 'Pan Roast or Grill',
+        instruction: 'Roast on high heat with a brush of butter until charred on edges.',
+        timerSeconds: 360,
+      },
+    ],
+    reviews: [],
+  },
+  {
     id: 'kit-101',
     name: 'Paneer Butter Masala Kit',
     hindiName: 'शाही पनीर मक्खन मसाला',
@@ -1488,10 +1613,10 @@ const BASE_INITIAL_MEAL_KITS: MealKit[] = [
     description:
       'Authentic Tuscan trattoria dinner in 12 minutes! Fresh artisan fettuccine pasta nests, sun-dried tomato and roasted garlic pesto pouch, aged Parmigiano Reggiano block for grating, and toasted Mediterranean pine nuts.',
     heroImage:
-      'https://images.unsplash.com/photo-1621996346565-e3d5d6281699?auto=format&fit=crop&w=1000&q=80',
-    galleryImages: [
-      'https://images.unsplash.com/photo-1621996346565-e3d5d6281699?auto=format&fit=crop&w=1000&q=80',
       'https://images.unsplash.com/photo-1551183053-bf91a1d81141?auto=format&fit=crop&w=1000&q=80',
+    galleryImages: [
+      'https://images.unsplash.com/photo-1551183053-bf91a1d81141?auto=format&fit=crop&w=1000&q=80',
+      'https://images.unsplash.com/photo-1608897013039-887f21d8c804?auto=format&fit=crop&w=1000&q=80',
       'https://images.unsplash.com/photo-1546549032-9571cd6b27df?auto=format&fit=crop&w=1000&q=80',
     ],
     price: 319,
@@ -4550,6 +4675,12 @@ export function updateMealKitShelfLife(
 
 export function toggleMealKitTrending(id: string, isTrending?: boolean): MealKit | undefined {
   let updatedKit: MealKit | undefined;
+  if (!catalogStore.some((kit) => kit.id === id)) {
+    const fallback = INITIAL_MEAL_KITS.find((k) => k.id === id);
+    if (fallback) {
+      catalogStore.push(fallback);
+    }
+  }
   catalogStore = catalogStore.map((kit) => {
     if (kit.id === id) {
       const nextTrending = typeof isTrending === 'boolean' ? isTrending : !kit.isTrending;

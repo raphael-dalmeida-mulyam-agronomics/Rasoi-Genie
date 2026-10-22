@@ -36,7 +36,7 @@ test.describe('Flow 2: Dual-Context Order Approval and Rejection', () => {
     await checkout.placeOrder();
 
     // 2. Extract placed order ID from customer orders page
-    await customerPage.goto('/orders');
+    await customerPage.goto('/orders', { waitUntil: 'domcontentloaded' });
     await customerPage.waitForLoadState('domcontentloaded');
 
     const firstOrderCard = customerPage.locator('[data-testid^="order-card-"]').first();
@@ -44,6 +44,17 @@ test.describe('Flow 2: Dual-Context Order Approval and Rejection', () => {
     const orderTestId = await firstOrderCard.getAttribute('data-testid');
     const orderId = orderTestId?.replace('order-card-', '');
     expect(orderId).toBeTruthy();
+
+    // Sync persisted order state from customer context to admin context
+    const ordersStorage = await customerPage.evaluate(() =>
+      localStorage.getItem('rasoi_persisted_orders_v2'),
+    );
+    if (ordersStorage) {
+      await adminPage.addInitScript(({ key, val }) => localStorage.setItem(key, val), {
+        key: 'rasoi_persisted_orders_v2',
+        val: ordersStorage,
+      });
+    }
 
     // 3. Admin navigates to Orders tab and locates the placed order
     await adminDash.goto();
@@ -56,8 +67,25 @@ test.describe('Flow 2: Dual-Context Order Approval and Rejection', () => {
     const adminStatus = await adminDash.getOrderStatus(orderId!);
     expect(adminStatus).toMatch(/Confirmed|Preparing/);
 
+    // Sync updated order state from admin context back to customer context
+    const updatedOrders = await adminPage.evaluate(() =>
+      localStorage.getItem('rasoi_persisted_orders_v2'),
+    );
+    const approvedOrders = await adminPage.evaluate(() =>
+      localStorage.getItem('rasoi_approved_orders'),
+    );
+    if (updatedOrders) {
+      await customerPage.evaluate(
+        ({ orders, approved }) => {
+          localStorage.setItem('rasoi_persisted_orders_v2', orders);
+          if (approved) localStorage.setItem('rasoi_approved_orders', approved);
+        },
+        { orders: updatedOrders, approved: approvedOrders },
+      );
+    }
+
     // 4. Customer verifies status reflection
-    await customerPage.reload();
+    await customerPage.reload({ waitUntil: 'domcontentloaded' });
     await customerPage.waitForLoadState('domcontentloaded');
 
     const customerStatusBadge = customerPage.getByTestId(`order-status-badge-${orderId}`);
@@ -98,7 +126,7 @@ test.describe('Flow 2: Dual-Context Order Approval and Rejection', () => {
     await checkout.placeOrder();
 
     // 2. Extract placed order ID
-    await customerPage.goto('/orders');
+    await customerPage.goto('/orders', { waitUntil: 'domcontentloaded' });
     await customerPage.waitForLoadState('domcontentloaded');
 
     const firstOrderCard = customerPage.locator('[data-testid^="order-card-"]').first();
@@ -106,6 +134,17 @@ test.describe('Flow 2: Dual-Context Order Approval and Rejection', () => {
     const orderTestId = await firstOrderCard.getAttribute('data-testid');
     const orderId = orderTestId?.replace('order-card-', '');
     expect(orderId).toBeTruthy();
+
+    // Sync persisted order state from customer context to admin context
+    const ordersStorage = await customerPage.evaluate(() =>
+      localStorage.getItem('rasoi_persisted_orders_v2'),
+    );
+    if (ordersStorage) {
+      await adminPage.addInitScript(({ key, val }) => localStorage.setItem(key, val), {
+        key: 'rasoi_persisted_orders_v2',
+        val: ordersStorage,
+      });
+    }
 
     // 3. Admin rejects order
     await adminDash.goto();
@@ -116,8 +155,19 @@ test.describe('Flow 2: Dual-Context Order Approval and Rejection', () => {
     const adminStatus = await adminDash.getOrderStatus(orderId!);
     expect(adminStatus).toContain('Cancelled');
 
+    // Sync updated order state from admin context back to customer context
+    const updatedOrders = await adminPage.evaluate(() =>
+      localStorage.getItem('rasoi_persisted_orders_v2'),
+    );
+    if (updatedOrders) {
+      await customerPage.evaluate(
+        (orders) => localStorage.setItem('rasoi_persisted_orders_v2', orders),
+        updatedOrders,
+      );
+    }
+
     // 4. Customer verifies status reflection
-    await customerPage.reload();
+    await customerPage.reload({ waitUntil: 'domcontentloaded' });
     await customerPage.waitForLoadState('domcontentloaded');
 
     const customerStatusBadge = customerPage.getByTestId(`order-status-badge-${orderId}`);

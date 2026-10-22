@@ -10,7 +10,7 @@ export class ChefStudioPage {
   }
 
   async goto() {
-    await this.page.goto('/chef');
+    await this.page.goto('/chef', { waitUntil: 'domcontentloaded' });
     await this.page.waitForLoadState('domcontentloaded');
   }
 

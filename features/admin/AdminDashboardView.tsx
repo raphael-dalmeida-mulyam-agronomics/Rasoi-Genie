@@ -5267,6 +5267,7 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
                 }}
               />
               <Button
+                testID="admin-confirm-cancel-order-btn"
                 title="Confirm Cancel"
                 variant="danger"
                 style={{ flex: 1 }}

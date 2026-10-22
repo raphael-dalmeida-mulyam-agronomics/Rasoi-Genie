@@ -9,9 +9,10 @@
  */
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { View, StyleSheet, ScrollView, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Alert } from 'react-native';
 import { useTheme } from '../../framework/theme/ThemeContext';
 import { useAuth } from '../../framework/context/AuthContext';
+import { Icon } from '../../framework/ui/Icon';
 import {
   ChefSubmissionRecord,
   ChefRecipeSubmission,
@@ -77,7 +78,7 @@ const DEFAULT_FORM_STATE: ChefRecipeFormState = {
 
 export function ChefStudioView() {
   const { colors } = useTheme();
-  const { user } = useAuth();
+  const { user, isChef, isAdmin } = useAuth();
 
   // Submissions list state
   const [submissions, setSubmissions] = useState<ChefSubmissionRecord[]>([]);
@@ -112,7 +113,7 @@ export function ChefStudioView() {
           setActiveChefUid((prev) => {
             if (prev) return prev;
             const currentIsChef = chefs.find((c) => c.uid === user?.uid);
-            return currentIsChef ? currentIsChef.uid : chefs[0]!.uid;
+            return currentIsChef ? currentIsChef.uid : user?.uid || '';
           });
         } else if (mounted && user?.uid) {
           setActiveChefUid((prev) => prev || user.uid);
@@ -385,6 +386,32 @@ export function ChefStudioView() {
     );
   };
 
+  // If user is not an approved chef, show access denied prompt
+  if (!isChef) {
+    return (
+      <View style={[styles.deniedRoot, { backgroundColor: colors.bgPrimary }]}>
+        <View
+          style={[
+            styles.deniedCard,
+            { backgroundColor: colors.bgCard, borderColor: colors.border },
+          ]}
+        >
+          <View style={[styles.deniedIconCircle, { backgroundColor: colors.bgSubtle }]}>
+            <Icon name="chef" size={40} color={colors.textMuted} />
+          </View>
+          <Text style={[styles.deniedTitle, { color: colors.textPrimary }]}>
+            Chef Studio Access Required
+          </Text>
+          <Text style={[styles.deniedSubtitle, { color: colors.textSecondary }]}>
+            {isAdmin
+              ? 'You are signed in as an administrator. To create and manage recipes in Chef Studio, assign the Chef role to your account in the Admin Panel.'
+              : 'You need an approved chef profile to access Chef Studio and create meal kit recipes.'}
+          </Text>
+        </View>
+      </View>
+    );
+  }
+
   // If in Builder Mode, render full-page multi-stage recipe builder
   if (isBuilderActive) {
     return (
@@ -485,5 +512,43 @@ const styles = StyleSheet.create({
     maxWidth: 960,
     width: '100%',
     alignSelf: 'center',
+  },
+  deniedRoot: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  deniedCard: {
+    maxWidth: 480,
+    width: '100%',
+    padding: 28,
+    borderRadius: 16,
+    borderWidth: 1,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 3,
+  },
+  deniedIconCircle: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  deniedTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  deniedSubtitle: {
+    fontSize: 14,
+    lineHeight: 20,
+    textAlign: 'center',
   },
 });
