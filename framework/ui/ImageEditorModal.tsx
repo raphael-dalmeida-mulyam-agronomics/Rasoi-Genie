@@ -596,7 +596,6 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
                         type="range"
                         id="image-editor-zoom-slider"
                         data-testid="image-editor-zoom-slider"
-                        {...({ testID: 'image-editor-zoom-slider' } as any)}
                         min="1.0"
                         max="3.0"
                         step="0.05"
