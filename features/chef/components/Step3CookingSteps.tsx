@@ -15,7 +15,11 @@ import { StructuredStep, InstructionType } from '../types';
 import { SAMPLE_STEP_IMAGES } from '../sampleImages';
 import * as ImagePicker from 'expo-image-picker';
 import { ImageEditorModal } from '../../../framework/ui/ImageEditorModal';
-import { YouTubeEmbed, extractYouTubeVideoId, isValidYouTubeUrl } from './YouTubeEmbed';
+import {
+  YouTubeEmbed,
+  extractYouTubeVideoId,
+  isValidYouTubeUrl,
+} from '../../../framework/ui/YouTubeEmbed';
 
 interface Step3CookingStepsProps {
   steps: StructuredStep[];

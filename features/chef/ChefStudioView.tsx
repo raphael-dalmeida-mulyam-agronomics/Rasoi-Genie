@@ -41,7 +41,7 @@ import { Step4Review } from './components/Step4Review';
 import { StickyBottomBar } from './components/StickyBottomBar';
 import { ChefSubmissionsList } from './ChefSubmissionsList';
 import { SAMPLE_RECIPE_THUMBNAILS, SAMPLE_STEP_IMAGES } from './sampleImages';
-import { extractYouTubeVideoId } from './components/YouTubeEmbed';
+import { extractYouTubeVideoId } from '../../framework/ui/YouTubeEmbed';
 
 const DEFAULT_FORM_STATE: ChefRecipeFormState = {
   name: '',

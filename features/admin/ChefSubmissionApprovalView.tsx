@@ -23,7 +23,7 @@ import {
   legacyHubForCity,
   SubRegion,
 } from '../../framework/services/regionService';
-import { YouTubeEmbed, extractYouTubeVideoId } from '../chef/components/YouTubeEmbed';
+import { YouTubeEmbed, extractYouTubeVideoId } from '../../framework/ui/YouTubeEmbed';
 
 interface ChefSubmissionApprovalViewProps {
   submission: ChefSubmissionRecord;

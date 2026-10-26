@@ -12,7 +12,7 @@ import {
 import { useTheme } from '../../../framework/theme/ThemeContext';
 import { Icon } from '../../../framework/ui/Icon';
 import { ChefRecipeFormState, ChefStudioStage, ReadinessCheckItem } from '../types';
-import { YouTubeEmbed, extractYouTubeVideoId } from './YouTubeEmbed';
+import { YouTubeEmbed, extractYouTubeVideoId } from '../../../framework/ui/YouTubeEmbed';
 
 interface Step4ReviewProps {
   form: ChefRecipeFormState;
