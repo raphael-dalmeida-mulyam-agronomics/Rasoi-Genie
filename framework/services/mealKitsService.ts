@@ -36,6 +36,7 @@ export interface RecipeStep {
   instruction: string;
   timerSeconds?: number;
   imageUrl?: string;
+  originalImageUrl?: string;
   tip?: string;
 }
 
@@ -122,6 +123,8 @@ export interface MealKit {
   masalaSachets: string[];
   sachets?: SachetItem[];
   recipeSteps: RecipeStep[];
+  instructionType?: 'steps' | 'video' | 'both';
+  videoUrl?: string;
   reviews: BuyerReview[];
   salesByRegion: Record<string, number>; // state -> units sold
   // Chef submission fields

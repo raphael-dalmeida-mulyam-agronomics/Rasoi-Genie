@@ -514,7 +514,7 @@ export const InventoryManagementView: React.FC = () => {
                   {
                     backgroundColor: isSelected ? colors.primary : colors.bgSurface,
                     borderColor: isSelected ? colors.primary : colors.borderLight,
-                    borderRadius: radii.pill,
+                    borderRadius: radii.md,
                   },
                   isSelected ? shadows.soft : null,
                 ]}
@@ -1439,7 +1439,7 @@ const styles = StyleSheet.create({
   catPill: {
     paddingHorizontal: 12,
     paddingVertical: 6,
-    borderRadius: 16,
+    borderRadius: 6,
     borderWidth: 1,
   },
 });

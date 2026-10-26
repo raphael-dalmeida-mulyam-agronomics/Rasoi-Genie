@@ -1,5 +1,14 @@
 import React from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ViewStyle } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  ViewStyle,
+  Modal,
+  Pressable,
+} from 'react-native';
 import { useTheme } from '../../framework/theme/ThemeContext';
 import { Icon, AppIconName } from '../../framework/ui/Icon';
 
@@ -28,6 +37,11 @@ export interface AdminNavTabItem {
   highlightAlert?: boolean;
 }
 
+export interface NavSection {
+  title: string;
+  tabs: AdminNavTabItem[];
+}
+
 export interface AdminNavigationMenuProps {
   activeTab: AdminTab;
   onTabChange: (tab: AdminTab) => void;
@@ -41,13 +55,23 @@ export interface AdminNavigationMenuProps {
   pendingChefSubmissions?: number;
   couponsCount?: number;
   reviewsCount?: number;
+  adminEmail?: string;
+  adminRoleLabel?: string;
+  isSuperAdmin?: boolean;
+  realtimeStatus?: 'live' | 'connecting' | 'reconnecting' | 'offline';
+  onLogout?: () => void;
+  onResync?: () => void;
+  isResyncing?: boolean;
+  isDesktop?: boolean;
+  mobileOpen?: boolean;
+  onCloseMobile?: () => void;
   style?: ViewStyle;
 }
 
 /**
- * Reusable Admin Navigation Menu Component
- * Provides a consistent, responsive, horizontally scrollable tab menu
- * across the RasoiGenie Admin Control Center.
+ * Modern Desktop-First Admin Sidebar Navigation Component
+ * Replaces old mobile horizontal pill tabs with a dedicated, professional ERP sidebar
+ * tailored for PC / desktop screens with grouped operations, live status, and responsive drawer support.
  */
 export const AdminNavigationMenu: React.FC<AdminNavigationMenuProps> = ({
   activeTab,
@@ -62,243 +86,583 @@ export const AdminNavigationMenu: React.FC<AdminNavigationMenuProps> = ({
   pendingChefSubmissions = 0,
   couponsCount = 0,
   reviewsCount = 0,
+  adminEmail = 'admin@mulyam.in',
+  adminRoleLabel,
+  isSuperAdmin = true,
+  realtimeStatus = 'live',
+  onLogout,
+  onResync,
+  isResyncing = false,
+  isDesktop = true,
+  mobileOpen = false,
+  onCloseMobile,
   style,
 }) => {
-  const { colors, radii, shadows } = useTheme();
+  const { colors, radii, shadows, isDark } = useTheme();
 
-  const tabs: AdminNavTabItem[] = [
+  const sections: NavSection[] = [
     {
-      id: 'overview',
-      label: 'Overview',
-      icon: 'home',
+      title: 'OPERATIONS',
+      tabs: [
+        {
+          id: 'overview',
+          label: 'Overview',
+          icon: 'home',
+        },
+        {
+          id: 'orders',
+          label: 'Orders & Kitchen',
+          icon: 'cube',
+          count: ordersCount,
+          alertBadge: pendingApprovalCount > 0 ? `${pendingApprovalCount} Awaiting` : undefined,
+          highlightAlert: pendingApprovalCount > 0,
+        },
+        {
+          id: 'kits',
+          label: 'Meal Kit Catalog',
+          icon: 'restaurant',
+          count: kitsCount,
+        },
+        {
+          id: 'inventory',
+          label: 'Inventory Hub',
+          icon: 'business',
+        },
+      ],
     },
     {
-      id: 'orders',
-      label: 'Orders',
-      icon: 'cube',
-      count: ordersCount,
-      alertBadge:
-        pendingApprovalCount > 0 ? `${pendingApprovalCount} Awaiting Approval` : undefined,
-      highlightAlert: pendingApprovalCount > 0,
+      title: 'LOGISTICS & GROWTH',
+      tabs: [
+        {
+          id: 'analytics',
+          label: 'Regional Analytics',
+          icon: 'bar-chart',
+        },
+        {
+          id: 'revenue',
+          label: 'Revenue & Finance',
+          icon: 'trending-up',
+        },
+        {
+          id: 'coupons',
+          label: 'Coupons & Promos',
+          icon: 'tag',
+          count: couponsCount,
+        },
+        {
+          id: 'referrals',
+          label: 'Referral Programme',
+          icon: 'gift',
+        },
+      ],
     },
     {
-      id: 'kits',
-      label: 'Meal Kits',
-      icon: 'restaurant',
-      count: kitsCount,
-    },
-    {
-      id: 'inventory',
-      label: 'Inventory Hub',
-      icon: 'business',
-    },
-    {
-      id: 'analytics',
-      label: 'Regional Analytics',
-      icon: 'bar-chart',
-    },
-    {
-      id: 'customers',
-      label: 'Customers',
-      icon: 'people',
-      count: customersCount ?? usersCount,
-    },
-    {
-      id: 'admins',
-      label: 'Staff Admins',
-      icon: 'lock',
-      count: adminsCount,
-    },
-    {
-      id: 'chefs',
-      label: 'Chef Submissions',
-      icon: 'chef',
-      count: chefsCount,
-      alertBadge: pendingChefSubmissions > 0 ? `${pendingChefSubmissions} Pending` : undefined,
-      highlightAlert: pendingChefSubmissions > 0,
-    },
-    {
-      id: 'coupons',
-      label: 'Coupons',
-      icon: 'tag',
-      count: couponsCount,
-    },
-    {
-      id: 'revenue',
-      label: 'Revenue Dash',
-      icon: 'trending-up',
-    },
-    {
-      id: 'reviews',
-      label: 'Reviews',
-      icon: 'star',
-      count: reviewsCount,
-    },
-    {
-      id: 'wallets',
-      label: 'Customer Wallets',
-      icon: 'wallet',
-    },
-    {
-      id: 'referrals',
-      label: 'Referral Programme',
-      icon: 'gift',
+      title: 'COMMUNITY & ACCESS',
+      tabs: [
+        {
+          id: 'customers',
+          label: 'Customers',
+          icon: 'people',
+          count: customersCount ?? usersCount,
+        },
+        {
+          id: 'admins',
+          label: 'Staff Admins (RBAC)',
+          icon: 'lock',
+          count: adminsCount,
+        },
+        {
+          id: 'chefs',
+          label: 'Chef Submissions',
+          icon: 'chef',
+          count: chefsCount,
+          alertBadge: pendingChefSubmissions > 0 ? `${pendingChefSubmissions} Pending` : undefined,
+          highlightAlert: pendingChefSubmissions > 0,
+        },
+        {
+          id: 'wallets',
+          label: 'Customer Wallets',
+          icon: 'wallet',
+        },
+        {
+          id: 'reviews',
+          label: 'Reviews Moderation',
+          icon: 'star',
+          count: reviewsCount,
+        },
+      ],
     },
   ];
 
-  return (
+  const renderSidebarContent = () => (
     <View
       style={[
-        styles.menuContainer,
+        styles.sidebarWrapper,
         {
           backgroundColor: colors.bgSurface,
-          borderBottomColor: colors.borderLight,
+          borderRightColor: colors.borderLight,
         },
-        style,
       ]}
     >
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        scrollEventThrottle={16}
-        contentContainerStyle={styles.tabsContent}
+      {/* Brand Header */}
+      <View
+        style={[
+          styles.brandHeader,
+          {
+            borderBottomColor: colors.borderLight,
+          },
+        ]}
       >
-        {tabs.map((tab) => {
-          const isSelected = activeTab === tab.id || (activeTab === 'users' && tab.id === 'customers');
-          const hasAlert = tab.highlightAlert && !isSelected;
-
-          return (
-            <TouchableOpacity
-              key={tab.id}
-              testID={`admin-tab-${tab.id}`}
-              accessibilityRole="tab"
-              accessibilityState={{ selected: isSelected }}
-              style={[
-                styles.tabPill,
-                {
-                  backgroundColor: isSelected
-                    ? colors.primary
-                    : hasAlert
-                      ? '#FEF2F2'
-                      : colors.bgSubtle,
-                  borderColor: isSelected
-                    ? colors.primary
-                    : hasAlert
-                      ? '#F87171'
-                      : colors.borderLight,
-                  borderRadius: radii.pill,
-                },
-                isSelected ? shadows.soft : null,
-              ]}
-              onPress={() => onTabChange(tab.id)}
-              activeOpacity={0.7}
-            >
-              {/* Icon & Label */}
-              <View style={{ marginRight: 6 }}>
-                <Icon
-                  name={tab.icon}
-                  size={14}
-                  color={isSelected ? '#FFFFFF' : hasAlert ? '#991B1B' : colors.textPrimary}
-                />
-              </View>
-              <Text
+        <View style={styles.brandLogoRow}>
+          <View style={[styles.brandIconBox, { backgroundColor: colors.primary }]}>
+            <Icon name="restaurant" size={20} color="#FFFFFF" />
+          </View>
+          <View style={styles.brandInfo}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <Text style={[styles.brandTitle, { color: colors.textPrimary }]}>RasoiGenie</Text>
+              <View
                 style={[
-                  styles.tabLabel,
+                  styles.adminTag,
                   {
-                    color: isSelected ? '#FFFFFF' : hasAlert ? '#991B1B' : colors.textPrimary,
-                    fontWeight: isSelected ? '800' : '600',
+                    backgroundColor: isDark ? 'rgba(234, 88, 12, 0.2)' : '#FFF7ED',
+                    borderColor: isDark ? colors.primary : '#FDBA74',
                   },
                 ]}
               >
-                {tab.label}
-              </Text>
+                <Text style={[styles.adminTagText, { color: colors.primary }]}>ADMIN</Text>
+              </View>
+            </View>
+            <Text style={[styles.brandSubtitle, { color: colors.textMuted }]}>
+              Operations Control Center
+            </Text>
+          </View>
+        </View>
 
-              {/* Alert or Count Badge */}
-              {tab.alertBadge ? (
-                <View
-                  testID={`admin-tab-${tab.id}-badge`}
-                  style={[
-                    styles.alertBadgeContainer,
-                    {
-                      backgroundColor: isSelected ? 'rgba(255, 255, 255, 0.25)' : '#DC2626',
-                    },
-                  ]}
-                >
-                  <Text style={[styles.alertBadgeText, { color: '#FFFFFF' }]}>
-                    {tab.alertBadge}
-                  </Text>
-                </View>
-              ) : tab.count !== undefined ? (
-                <View
-                  testID={`admin-tab-${tab.id}-badge`}
-                  style={[
-                    styles.countBadgeContainer,
-                    {
-                      backgroundColor: isSelected
-                        ? 'rgba(255, 255, 255, 0.22)'
-                        : colors.borderLight,
-                    },
-                  ]}
-                >
-                  <Text
+        {!isDesktop && onCloseMobile && (
+          <TouchableOpacity
+            onPress={onCloseMobile}
+            style={[styles.closeMobileBtn, { backgroundColor: colors.bgSubtle }]}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <Icon name="close" size={18} color={colors.textPrimary} />
+          </TouchableOpacity>
+        )}
+      </View>
+
+      {/* Navigation Links Scrollable List */}
+      <ScrollView
+        style={styles.navScrollView}
+        contentContainerStyle={styles.navScrollContent}
+        showsVerticalScrollIndicator={false}
+      >
+        {sections.map((section, sectionIdx) => (
+          <View key={section.title} style={sectionIdx > 0 ? styles.sectionGroup : undefined}>
+            <Text style={[styles.sectionHeading, { color: colors.textMuted }]}>
+              {section.title}
+            </Text>
+
+            <View style={styles.sectionTabs}>
+              {section.tabs.map((tab) => {
+                const isSelected =
+                  activeTab === tab.id || (activeTab === 'users' && tab.id === 'customers');
+                const hasAlert = tab.highlightAlert && !isSelected;
+
+                return (
+                  <TouchableOpacity
+                    key={tab.id}
+                    testID={`admin-tab-${tab.id}`}
+                    accessibilityRole="tab"
+                    accessibilityState={{ selected: isSelected }}
                     style={[
-                      styles.countBadgeText,
+                      styles.sidebarItem,
                       {
-                        color: isSelected ? '#FFFFFF' : colors.textSecondary,
+                        backgroundColor: isSelected
+                          ? isDark
+                            ? 'rgba(234, 88, 12, 0.18)'
+                            : colors.primaryLight
+                          : 'transparent',
+                        borderColor: isSelected
+                          ? isDark
+                            ? 'rgba(234, 88, 12, 0.35)'
+                            : '#FED7AA'
+                          : 'transparent',
+                        borderRadius: radii.md,
                       },
+                      isSelected ? shadows.soft : null,
                     ]}
+                    onPress={() => onTabChange(tab.id)}
+                    activeOpacity={0.7}
                   >
-                    {tab.count}
-                  </Text>
-                </View>
-              ) : null}
-            </TouchableOpacity>
-          );
-        })}
+                    {/* Active accent strip indicator */}
+                    {isSelected && (
+                      <View
+                        style={[
+                          styles.activeIndicator,
+                          {
+                            backgroundColor: colors.primary,
+                          },
+                        ]}
+                      />
+                    )}
+
+                    {/* Icon container */}
+                    <View
+                      style={[
+                        styles.itemIconBox,
+                        {
+                          backgroundColor: isSelected
+                            ? colors.primary
+                            : isDark
+                              ? 'rgba(255, 255, 255, 0.05)'
+                              : colors.bgSubtle,
+                        },
+                      ]}
+                    >
+                      <Icon
+                        name={tab.icon}
+                        size={15}
+                        color={
+                          isSelected ? '#FFFFFF' : hasAlert ? colors.danger : colors.textSecondary
+                        }
+                      />
+                    </View>
+
+                    {/* Label */}
+                    <Text
+                      numberOfLines={1}
+                      style={[
+                        styles.itemLabel,
+                        {
+                          color: isSelected
+                            ? colors.primary
+                            : hasAlert
+                              ? colors.danger
+                              : colors.textPrimary,
+                          fontWeight: isSelected ? '700' : '600',
+                        },
+                      ]}
+                    >
+                      {tab.label}
+                    </Text>
+
+                    {/* Badge on Right */}
+                    {tab.alertBadge ? (
+                      <View
+                        testID={`admin-tab-${tab.id}-badge`}
+                        style={[
+                          styles.sidebarAlertBadge,
+                          {
+                            backgroundColor: '#DC2626',
+                          },
+                        ]}
+                      >
+                        <Text style={styles.sidebarAlertBadgeText}>{tab.alertBadge}</Text>
+                      </View>
+                    ) : tab.count !== undefined ? (
+                      <View
+                        testID={`admin-tab-${tab.id}-badge`}
+                        style={[
+                          styles.sidebarCountBadge,
+                          {
+                            backgroundColor: isSelected
+                              ? isDark
+                                ? 'rgba(234, 88, 12, 0.3)'
+                                : '#FDBA74'
+                              : isDark
+                                ? 'rgba(255, 255, 255, 0.08)'
+                                : colors.borderLight,
+                          },
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.sidebarCountBadgeText,
+                            {
+                              color: isSelected
+                                ? isDark
+                                  ? '#FFAA64'
+                                  : '#9A3412'
+                                : colors.textSecondary,
+                            },
+                          ]}
+                        >
+                          {tab.count}
+                        </Text>
+                      </View>
+                    ) : null}
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
+        ))}
       </ScrollView>
+
+      {/* Sidebar Footer: Current Admin Account */}
+      <View
+        style={[
+          styles.sidebarFooter,
+          {
+            backgroundColor: isDark ? 'rgba(0,0,0,0.2)' : colors.bgSubtle,
+            borderTopColor: colors.borderLight,
+          },
+        ]}
+      >
+        {/* User Card */}
+        <View style={styles.adminAccountCard}>
+          <View
+            style={[
+              styles.adminAvatar,
+              {
+                backgroundColor: isSuperAdmin ? '#FEF3C7' : colors.primaryLight,
+                borderColor: isSuperAdmin ? '#F59E0B' : colors.primary,
+              },
+            ]}
+          >
+            <Text
+              style={[styles.adminAvatarText, { color: isSuperAdmin ? '#B45309' : colors.primary }]}
+            >
+              {adminEmail.charAt(0).toUpperCase()}
+            </Text>
+          </View>
+
+          <View style={styles.adminDetailsCol}>
+            <Text numberOfLines={1} style={[styles.adminEmailText, { color: colors.textPrimary }]}>
+              {adminEmail}
+            </Text>
+            <Text
+              numberOfLines={1}
+              style={[
+                styles.adminRoleText,
+                { color: isSuperAdmin ? '#D97706' : colors.textSecondary },
+              ]}
+            >
+              {adminRoleLabel || (isSuperAdmin ? 'Super Admin' : 'Regional Admin')}
+            </Text>
+          </View>
+
+          {onLogout && (
+            <TouchableOpacity
+              onPress={onLogout}
+              style={[styles.logoutIconBtn, { borderColor: colors.borderLight }]}
+              accessibilityLabel="Sign out"
+              accessibilityRole="button"
+            >
+              <Icon name="exit" size={14} color={colors.danger} />
+            </TouchableOpacity>
+          )}
+        </View>
+      </View>
     </View>
+  );
+
+  // Desktop view: return sidebar inline
+  if (isDesktop) {
+    return <View style={[styles.desktopSidebarContainer, style]}>{renderSidebarContent()}</View>;
+  }
+
+  // Mobile view: Modal Drawer
+  return (
+    <Modal visible={mobileOpen} transparent animationType="fade" onRequestClose={onCloseMobile}>
+      <View style={styles.mobileModalBackdrop}>
+        <Pressable style={styles.mobileBackdropPressable} onPress={onCloseMobile} />
+        <View style={styles.mobileDrawerContainer}>{renderSidebarContent()}</View>
+      </View>
+    </Modal>
   );
 };
 
 const styles = StyleSheet.create({
-  menuContainer: {
-    height: 54,
+  desktopSidebarContainer: {
+    width: 270,
+    height: '100%',
+    flexShrink: 0,
+  },
+  sidebarWrapper: {
+    width: '100%',
+    height: '100%',
+    borderRightWidth: 1,
+    display: 'flex',
+    flexDirection: 'column',
+  },
+  brandHeader: {
+    paddingHorizontal: 18,
+    paddingVertical: 18,
     borderBottomWidth: 1,
-  },
-  tabsContent: {
-    flexDirection: 'row',
-    paddingHorizontal: 14,
-    alignItems: 'center',
-    gap: 8,
-  },
-  tabPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 13,
-    paddingVertical: 7,
+    justifyContent: 'space-between',
+  },
+  brandLogoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  brandIconBox: {
+    width: 38,
+    height: 38,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  brandInfo: {
+    justifyContent: 'center',
+  },
+  brandTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    letterSpacing: -0.3,
+  },
+  adminTag: {
+    paddingHorizontal: 5,
+    paddingVertical: 1.5,
+    borderRadius: 4,
     borderWidth: 1,
   },
-  tabLabel: {
-    fontSize: 12.5,
+  adminTagText: {
+    fontSize: 9,
+    fontWeight: '900',
+    letterSpacing: 0.6,
   },
-  countBadgeContainer: {
-    marginLeft: 6,
+  brandSubtitle: {
+    fontSize: 11,
+    fontWeight: '500',
+    marginTop: 2,
+  },
+  closeMobileBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  navScrollView: {
+    flex: 1,
+  },
+  navScrollContent: {
+    paddingVertical: 14,
+    paddingHorizontal: 12,
+  },
+  sectionGroup: {
+    marginTop: 18,
+  },
+  sectionHeading: {
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.8,
+    paddingHorizontal: 10,
+    marginBottom: 6,
+    textTransform: 'uppercase',
+  },
+  sectionTabs: {
+    gap: 3,
+  },
+  sidebarItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 9,
+    paddingHorizontal: 10,
+    borderWidth: 1,
+    position: 'relative',
+  },
+  activeIndicator: {
+    position: 'absolute',
+    left: 0,
+    top: 6,
+    bottom: 6,
+    width: 3.5,
+    borderTopRightRadius: 3,
+    borderBottomRightRadius: 3,
+  },
+  itemIconBox: {
+    width: 28,
+    height: 28,
+    borderRadius: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 10,
+  },
+  itemLabel: {
+    flex: 1,
+    fontSize: 13,
+  },
+  sidebarCountBadge: {
     paddingHorizontal: 6,
-    paddingVertical: 1.5,
-    borderRadius: 999,
+    paddingVertical: 2,
+    borderRadius: 4,
+    marginLeft: 6,
   },
-  countBadgeText: {
+  sidebarCountBadgeText: {
     fontSize: 11,
     fontWeight: '700',
   },
-  alertBadgeContainer: {
-    marginLeft: 6,
-    paddingHorizontal: 7,
+  sidebarAlertBadge: {
+    paddingHorizontal: 6,
     paddingVertical: 2,
-    borderRadius: 999,
+    borderRadius: 4,
+    marginLeft: 6,
   },
-  alertBadgeText: {
-    fontSize: 10.5,
+  sidebarAlertBadgeText: {
+    fontSize: 10,
     fontWeight: '800',
+    color: '#FFFFFF',
+  },
+  sidebarFooter: {
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    borderTopWidth: 1,
+  },
+  adminAccountCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  adminAvatar: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  adminAvatarText: {
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  adminDetailsCol: {
+    flex: 1,
+  },
+  adminEmailText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  adminRoleText: {
+    fontSize: 10.5,
+    fontWeight: '600',
+    marginTop: 1,
+  },
+  logoutIconBtn: {
+    width: 30,
+    height: 30,
+    borderRadius: 6,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  mobileModalBackdrop: {
+    flex: 1,
+    flexDirection: 'row',
+    backgroundColor: 'rgba(0,0,0,0.5)',
+  },
+  mobileBackdropPressable: {
+    flex: 1,
+  },
+  mobileDrawerContainer: {
+    width: 290,
+    height: '100%',
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
   },
 });

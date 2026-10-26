@@ -85,6 +85,7 @@ export const CartView: React.FC = () => {
   } = useFamily();
   const [familyHubVisible, setFamilyHubVisible] = useState(false);
   const { activeOrders } = useCookMode();
+  const headerPaddingTop = useHeaderTopPadding(6);
 
   const handleMoveToFamilyBasket = async (item: {
     kit: MealKit;
@@ -324,8 +325,6 @@ export const CartView: React.FC = () => {
       </View>
     );
   }
-
-  const headerPaddingTop = useHeaderTopPadding(6);
 
   return (
     <View style={[styles.container, { backgroundColor: colors.bgPrimary }]}>

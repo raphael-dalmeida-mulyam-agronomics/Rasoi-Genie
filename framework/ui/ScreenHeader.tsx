@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useContext } from 'react';
 import {
   View,
   Text,
@@ -8,18 +8,39 @@ import {
   ViewStyle,
   StyleProp,
 } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaInsetsContext, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Icon } from './Icon';
 
 /**
  * Returns safe top padding for screen headers across Web, iOS (notch/dynamic island), and Android.
  */
 export function useHeaderTopPadding(extraOffset: number = 8): number {
-  const insets = useSafeAreaInsets();
   if (Platform.OS === 'web') {
     return 16 + extraOffset;
   }
-  return Math.max(insets.top, 16) + extraOffset;
+
+  let topInset = 0;
+  if (SafeAreaInsetsContext) {
+    try {
+      const insets = useContext(SafeAreaInsetsContext);
+      if (insets && typeof insets.top === 'number') {
+        topInset = insets.top;
+      }
+    } catch {
+      topInset = 0;
+    }
+  } else if (typeof useSafeAreaInsets === 'function') {
+    try {
+      const insets = useSafeAreaInsets();
+      if (insets && typeof insets.top === 'number') {
+        topInset = insets.top;
+      }
+    } catch {
+      topInset = 0;
+    }
+  }
+
+  return Math.max(topInset, 16) + extraOffset;
 }
 
 export interface ScreenHeaderProps {

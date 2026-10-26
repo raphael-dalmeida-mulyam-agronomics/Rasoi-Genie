@@ -6,15 +6,14 @@ import {
   ThemeProvider as NavigationThemeProvider,
 } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import { View } from 'react-native';
 import 'react-native-reanimated';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
-import { useColorScheme } from '@/components/useColorScheme';
 import { AppLoadingCoverScreen } from '../features/splash/AppLoadingCoverScreen';
 import { AuthProvider } from '../framework/context/AuthContext';
-import { ThemeProvider as RasoiThemeProvider } from '../framework/theme/ThemeContext';
+import { ThemeProvider as RasoiThemeProvider, useTheme } from '../framework/theme/ThemeContext';
 import { PreferencesProvider } from '../framework/context/PreferencesContext';
 import { WishlistProvider } from '../framework/context/WishlistContext';
 import { CartProvider } from '../framework/context/CartContext';
@@ -23,7 +22,8 @@ import { WalletProvider } from '../framework/context/WalletContext';
 import { CookModeProvider } from '../framework/context/CookModeContext';
 import { FamilyProvider } from '../framework/context/FamilyContext';
 import { ToastProvider } from '../framework/ui/Toast';
-import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { SafeAreaProvider, initialWindowMetrics } from 'react-native-safe-area-context';
+import { Platform } from 'react-native';
 
 export {
   // Catch any errors thrown by the Layout component.
@@ -31,7 +31,6 @@ export {
 } from 'expo-router';
 
 export const unstable_settings = {
-  // Ensure that reloading on `/modal` keeps a back button present.
   initialRouteName: '(tabs)',
 };
 
@@ -63,10 +62,16 @@ export default function RootLayout() {
 }
 
 function RootLayoutNav() {
-  const colorScheme = useColorScheme();
+  const initialMetrics =
+    Platform.OS === 'web'
+      ? {
+          frame: { x: 0, y: 0, width: 0, height: 0 },
+          insets: { top: 0, left: 0, right: 0, bottom: 0 },
+        }
+      : initialWindowMetrics;
 
   return (
-    <SafeAreaProvider>
+    <SafeAreaProvider initialMetrics={initialMetrics}>
       <RasoiThemeProvider>
         <ToastProvider>
           <AuthProvider>
@@ -77,26 +82,7 @@ function RootLayoutNav() {
                     <CartProvider>
                       <InAppDialogProvider>
                         <CookModeProvider>
-                          <NavigationThemeProvider
-                            value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}
-                          >
-                            <View style={{ flex: 1 }}>
-                              <Stack>
-                                <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-                                <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
-                                <Stack.Screen
-                                  name="cook/[orderId]"
-                                  options={{ headerShown: false, animation: 'slide_from_bottom' }}
-                                />
-                                <Stack.Screen
-                                  name="join/[token]"
-                                  options={{ headerShown: false, animation: 'slide_from_bottom' }}
-                                />
-                                <Stack.Screen name="family" options={{ headerShown: false }} />
-                              </Stack>
-                              <AppLoadingCoverScreen />
-                            </View>
-                          </NavigationThemeProvider>
+                          <NavigationWithTheme />
                         </CookModeProvider>
                       </InAppDialogProvider>
                     </CartProvider>
@@ -108,5 +94,47 @@ function RootLayoutNav() {
         </ToastProvider>
       </RasoiThemeProvider>
     </SafeAreaProvider>
+  );
+}
+
+function NavigationWithTheme() {
+  const { isDark, colors } = useTheme();
+
+  const navTheme = useMemo(() => {
+    const base = isDark ? DarkTheme : DefaultTheme;
+    return {
+      ...base,
+      colors: {
+        ...base.colors,
+        background: colors.bgPrimary,
+        card: colors.bgSurface,
+        text: colors.textPrimary,
+        border: colors.borderLight,
+        primary: colors.primary,
+      },
+    };
+  }, [isDark, colors]);
+
+  return (
+    <NavigationThemeProvider value={navTheme}>
+      <View style={{ flex: 1, backgroundColor: colors.bgPrimary }}>
+        <Stack
+          screenOptions={{
+            contentStyle: { backgroundColor: colors.bgPrimary },
+          }}
+        >
+          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+          <Stack.Screen
+            name="cook/[orderId]"
+            options={{ headerShown: false, animation: 'slide_from_bottom' }}
+          />
+          <Stack.Screen
+            name="join/[token]"
+            options={{ headerShown: false, animation: 'slide_from_bottom' }}
+          />
+        </Stack>
+        <AppLoadingCoverScreen />
+      </View>
+    </NavigationThemeProvider>
   );
 }

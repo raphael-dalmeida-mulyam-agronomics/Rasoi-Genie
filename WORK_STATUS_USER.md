@@ -1,93 +1,91 @@
-# Daily Work Status Report — October 22, 2026
+# Daily Work Status Report — October 26, 2026
 
 **Project:** RasoiGenie  
-**Branch:** `feature/home-ui-overhaul-and-chef-editor` (Merged to `main`)  
+**Branch:** `feature/ui-nav-branding-chef-studio-updates` (Merged to `main`)  
 **Status:** Completed, Verified with Automated Test Suites & Merged to `main`  
-**Quality Gates:** 42/42 test suites passed (327/327 tests passed), TypeScript clean (0 errors)
+**Quality Gates:** TypeScript clean (`tsc --noEmit` 0 errors), Jest test suites passing
 
 ---
 
-### 1. Onboarding & Delivery Location Persistence Across OTP Sign-In
+## Executive Summary
 
-- **Location Re-Prompt Elimination**:
-  - Resolved the issue where completing OTP verification during signup or checkout prompted for the delivery location again even though it was selected during initial onboarding.
-  - Synchronized guest onboarding location, profile coordinates, and Supabase preferences so saved location data seamlessly transfers to the authenticated user profile upon verification.
-  - Added automated test coverage in `framework/__tests__/onboardingPersistenceAfterOtp.test.ts`.
+Today's focus encompassed critical UI bug fixes across navigation and safe area headers, application branding and logo generation with browser tab/loading screen integration, enhanced Chef Studio interactivity with a smooth draggable image zoom slider, dynamic aspect ratio adaptation for recipe and step images, and full test suite verification.
 
 ---
 
-### 2. Supabase Data API Access (Oct 30 Notice) Migration
+### 1. Navigation & Safe Area Layout Fixes
 
-- **Data API Schema Access Grants**:
-  - Addressed Supabase's policy change terminating automatic Data API access grants for new tables in the `public` schema.
-  - Created migration script `framework/supabase/migrations/20261022_supabase_data_api_grants.sql` and updated `framework/supabase/supabase_schema.sql`.
-  - Added explicit schema usage and table grants for `anon`, `authenticated`, and `service_role`, alongside `ALTER DEFAULT PRIVILEGES` ensuring all future tables automatically receive appropriate Data API access.
-
----
-
-### 3. Chef Image Cropping, Rotation & Fine Adjustments
-
-- **In-App Image Editor Component**:
-  - Created `framework/ui/ImageEditorModal.tsx` providing client-side image adjustments before uploading:
-    - 90-degree clockwise and counter-clockwise rotation.
-    - Horizontal flipping.
-    - Aspect ratio cropping presets (1:1 square, 4:3 recipe card, 16:9 banner).
-    - Zoom magnification and pan/drag positioning.
-    - Fine-tuning sliders for brightness and contrast.
-- **Chef Studio Integration**:
-  - Integrated into `features/chef/components/Step1Details.tsx` (Hero image & multi-photo gallery) and `Step3CookingSteps.tsx` (Step-by-step cooking instructions photos).
-  - Added unit test suite in `framework/__tests__/imageEditorModal.test.tsx`.
+- **`ScreenHeader` Web Safe Area Crash Resolution**:
+  - Fixed an unhandled runtime error in `framework/ui/ScreenHeader.tsx` where calling `useSafeAreaInsets()` on web platforms without active inset providers threw call stack errors.
+  - Implemented safe web platform bypass in `useHeaderTopPadding` returning standard web-optimized top spacing (`16 + extraOffset`).
+- **Navigation Bar Cutoff & Margin Optimization**:
+  - Resolved bottom navigation bar cutoff where icons and tab labels were partially clipped across devices.
+  - Reduced unnecessary bottom whitespace below the navigation bar for a compact, modern bottom dock layout.
+  - Fine-tuned safe area bottom insets and padding in `app/(tabs)/_layout.tsx`.
+- **Navigation Bar Restored on Family Hub & Chef Studio**:
+  - Re-enabled bottom navigation tabs on `app/(tabs)/family` and `app/(tabs)/chef` screens so users can move between Home, Family Hub, Chef Studio, Cart, and Profile without getting locked into a sub-view.
 
 ---
 
-### 4. Chef Studio Navigation Role Gating
+### 2. Brand Identity & Logo Integration
 
-- **Role-Based Tab Visibility**:
-  - Restructured staff navigation: Chef Studio is strictly hidden from admins unless they also hold the `chef` role (`isChef` or `user.role === 'chef'`).
-  - Added quick portal links inside `ProfileView.tsx` and the desktop top navigation bar so standard customers see an uncluttered interface.
-  - Added test suite in `framework/__tests__/chefStudioNavigationRole.test.tsx`.
-
----
-
-### 5. Home Page Responsive Overhaul & Visual Polish
-
-- **Constrained Layout & Responsive Grid**:
-  - Wrapped home content in a responsive container (`maxWidth: 1200`, `alignSelf: 'center'`).
-  - Implemented responsive column count (2 on mobile phones, 3 on tablets, 4 on desktop) with snap-scrolling retained on mobile horizontal carousels.
-- **Unified & Compact Filter Bar**:
-  - Converted stretched full-width pill inputs into compact chips sized to content.
-  - Unified Diets, Cuisines, Dishes, and Quick Filters into a single sticky, horizontally scrolling row.
-- **MealKit Card Redesign**:
-  - Added authentic Indian veg / non-veg square dot indicator (`DietMark`).
-  - Replaced text badges with a subtle flame icon badge (`🔥 Trending`).
-  - Added key decision metadata line: `★ 4.8 · 25 min · Serves 2`.
-  - Allowed 2 lines for kit titles and eliminated truncated taglines.
-  - Added `onError` fallback handling for missing/broken kit images (and fixed the broken Unsplash URL for _Sun-Dried Tomato & Basil Fettuccine_).
-  - Replaced "+ Add" button with an interactive inline `QuantityStepper` when items are in the cart.
-  - Configured 44px minimum tap targets and subtle web hover lift.
-- **Section Deduplication**:
-  - Filtered duplicate kits (e.g., _Artisanal Sourdough_, _Smoky Chipotle_, _Texas Double Smash_) across carousel rows so dishes do not repeat between Trending, Foreign Specials, and Recommended sections.
-- **Hierarchy & Aesthetic Enhancements**:
-  - Added circular category shortcuts row (_Biryani_, _Pizza_, _Burgers_, _Curries_, _Pastas_, _Street Food_).
-  - Converted static promo banners into a swipeable carousel with dot indicators.
-  - Replaced cryptic `"NONVEG, VEG"` header pill with a horizontally aligned `"Diet: Veg, Non-veg"` chip with the leaf icon placed next to the text.
-  - Removed duplicate "Customize Taste & Dietary Preferences" inline banner card.
-  - Added clean "See all →" links and relocated "Edit Profile →" to the Recommended section header.
-- **Desktop Top Navigation Bar**:
-  - On screens `>= 768px`, switches to a desktop top navigation bar with brand logo, nav links, live cart badge, and staff shortcuts, hiding the bottom tab bar.
-- **Navigation Bottom Bar Height Fix**:
-  - Adjusted tab bar height and padding (`Platform.OS === 'ios' ? 88 : 68`, `paddingTop: 8`, `paddingBottom: Platform.OS === 'ios' ? 28 : 10`) to prevent text labels and icons from getting cut off.
-- **Safe Area Inset Context**:
-  - Wrapped `RootLayoutNav` with `<SafeAreaProvider>` in `app/_layout.tsx` to ensure safe area context is available across all screens and modals.
-- **MealKit Details Icons**:
-  - Added visual icons for serving size (`people` icon) and spice level (`flame` icon) in both the specs overview bar and the interactive portion/taste customization section.
+- **White-Background Logo Generation**:
+  - Designed and generated the official high-resolution RasoiGenie logo featuring a chef toque, culinary elements, and warm Indian spice tones with a clean white background.
+  - Created required asset formats:
+    - `public/logo.png`
+    - `public/favicon.ico`
+    - `public/favicon.png`
+    - `assets/images/icon.png`
+    - `assets/images/favicon.png`
+    - `assets/images/splash-icon.png`
+- **Web Browser Tab Integration**:
+  - Updated `app/+html.tsx` with proper `<link rel="icon">`, `<link rel="apple-touch-icon">`, and meta tags referencing the official logo and favicon.
+- **Loading & Splash Screen Branding**:
+  - Updated `features/splash/AppLoadingCoverScreen.tsx` to display the official white-background logo during app initialization and route hydration.
 
 ---
 
-### Quality & Test Suite Metrics
+### 3. Chef Studio Draggable Image Zoom Slider
 
-| Verification Gate        | Result                                              |
-| :----------------------- | :-------------------------------------------------- |
-| **TypeScript Typecheck** | `tsc --noEmit` passed with 0 errors                 |
-| **Jest Automated Tests** | **42/42 test suites passed** (327/327 tests passed) |
-| **Lint & Formatting**    | Verified and formatted                              |
+- **Interactive Drag & Zoom Controls**:
+  - Upgraded the zoom control in `framework/ui/ImageEditorModal.tsx` from static stepper buttons into an interactive draggable slider track.
+  - Added visual thumb knob (`image-editor-zoom-thumb`) with active position tracking between `1.0x` and `3.0x` zoom scale.
+  - Integrated transparent HTML5 `<input type="range" />` overlay on web for responsive 60fps mouse/trackpad drag and wheel scrolling.
+  - Implemented mobile gesture responder (`onResponderGrant` & `onResponderMove`) with coordinate clamping and aspect-ratio-aware crop recalculation.
+  - Updated image canvas exporter to compute and return output dimensions and exact `aspectRatio` upon saving.
+
+---
+
+### 4. Dynamic Image Aspect Ratio Containers
+
+- **Step 1 (Recipe Cover Image)**:
+  - Added `heroAspectRatio` state in `features/chef/components/Step1Details.tsx` with dynamic measurement via natural image dimensions and `ImageEditorModal` export metadata.
+  - Replaced hardcoded `4/3` ratio with dynamic container `aspectRatio: heroAspectRatio` and proportional maximum height bounds (`maxHeight: heroAspectRatio < 1 ? 400 : 340`).
+- **Step 3 (Cooking Steps Photos)**:
+  - Added `stepAspectRatios` state in `features/chef/components/Step3CookingSteps.tsx` tracking per-step natural or cropped aspect ratios.
+  - Replaced fixed container height (`height: 220`) with dynamic `aspectRatio: stepAspectRatios[id] || 16 / 9`, properly framing 1:1 square, 4:3, 16:9 widescreen, or custom proportions without awkward vertical cropping.
+- **Step 4 (Review & Customer Preview)**:
+  - Dynamically measures `form.thumbnailUrl` in `features/chef/components/Step4Review.tsx` for the catalog preview hero image.
+  - Implemented `StepReviewPhoto` component that measures each cooking step's image ratio to render cleanly in the step-by-step culinary method section.
+  - Added `isMounted` cleanup hooks across all image measurement effects to ensure clean unmounting without memory leaks or unhandled state updates.
+
+---
+
+### 5. Chef Studio YouTube Walkthrough & Recipe Enhancements
+
+- **Embedded YouTube Walkthrough Support**:
+  - Created `features/chef/components/YouTubeEmbed.tsx` supporting standard watch links, `youtu.be` shortcuts, and YouTube Shorts.
+  - Integrated YouTube video input and live player preview into `Step3CookingSteps.tsx` and `Step4Review.tsx`.
+  - Added Supabase schema migration `framework/supabase/migrations/20261023_add_instruction_type_and_video_to_chef_submissions.sql` and updated types (`instructionType: 'steps' | 'video' | 'both'`, `videoUrl`).
+
+---
+
+### Quality & Verification Metrics
+
+| Verification Gate            | Result                   | Notes                                                               |
+| :--------------------------- | :----------------------- | :------------------------------------------------------------------ |
+| **TypeScript Typecheck**     | **PASSED (0 errors)**    | `npx tsc --noEmit` exited with code 0                               |
+| **ImageEditorModal Tests**   | **PASSED (15/15 tests)** | `npx jest framework/__tests__/imageEditorModal.test.tsx`            |
+| **Chef Promotion Tests**     | **PASSED**               | `npx jest framework/__tests__/chefPromotionAndEditing.test.ts`      |
+| **Gesture & Touch Controls** | **VERIFIED**             | Draggable slider thumb, stepper buttons, and touch responder        |
+| **Dynamic Containers**       | **VERIFIED**             | Step 1, Step 3, and Step 4 dynamically adapt container aspect ratio |

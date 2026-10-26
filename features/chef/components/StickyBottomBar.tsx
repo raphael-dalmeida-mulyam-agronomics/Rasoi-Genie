@@ -169,7 +169,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    maxWidth: 960,
+    maxWidth: 1160,
     width: '100%',
     alignSelf: 'center',
   },

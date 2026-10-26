@@ -3,7 +3,12 @@
  * Strongly-typed definitions for the full-page multi-step recipe authoring experience.
  */
 
-import { DietTag, CuisineType, DishCategory, SpiceLevel } from '../../framework/services/mealKitsService';
+import {
+  DietTag,
+  CuisineType,
+  DishCategory,
+  SpiceLevel,
+} from '../../framework/services/mealKitsService';
 
 export const VALID_UNITS = [
   'g',
@@ -34,9 +39,12 @@ export interface StructuredStep {
   title: string;
   instruction: string;
   imageUrl: string;
+  originalImageUrl?: string;
 }
 
 export type ChefStudioStage = 'details' | 'ingredients' | 'steps' | 'review';
+
+export type InstructionType = 'steps' | 'video' | 'both';
 
 export interface ChefRecipeFormState {
   // Step 1: Details
@@ -44,6 +52,7 @@ export interface ChefRecipeFormState {
   tagline: string;
   description: string;
   thumbnailUrl: string;
+  originalThumbnailUrl?: string;
   dietType: DietTag;
   cuisine: CuisineType;
   dishCategory: DishCategory;
@@ -57,7 +66,9 @@ export interface ChefRecipeFormState {
   // Step 2: Ingredients
   ingredients: StructuredIngredient[];
 
-  // Step 3: Cooking Steps
+  // Step 3: Cooking Instructions
+  instructionType: InstructionType;
+  videoUrl?: string;
   steps: StructuredStep[];
 }
 

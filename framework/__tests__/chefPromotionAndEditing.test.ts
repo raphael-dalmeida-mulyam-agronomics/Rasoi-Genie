@@ -10,6 +10,7 @@ import {
   fetchChefSubmissions,
   publishChefSubmission,
   deleteChefSubmission,
+  subscribeToAllChefSubmissions,
   ChefRecipeSubmission,
 } from '../services/chefMealKitsService';
 import {
@@ -192,6 +193,51 @@ describe('Chef Promotion & Meal Kit Authoring / Editing', () => {
     afterAll(async () => {
       deleteMealKit(submissionId);
       await deleteMealKitFromSupabase(submissionId);
+    });
+  });
+
+  describe('Real-time / Async Subscription for Admin Dashboard', () => {
+    it('notifies admin dashboard subscribers asynchronously when a chef creates a recipe', async () => {
+      const receivedSnapshots: any[][] = [];
+      const unsub = subscribeToAllChefSubmissions((submissions) => {
+        receivedSnapshots.push(submissions);
+      });
+
+      expect(receivedSnapshots.length).toBeGreaterThan(0);
+
+      const testSubData: ChefRecipeSubmission = {
+        name: 'Realtime Butter Chicken',
+        tagline: 'Freshly submitted kit',
+        description: 'Velvety makhani gravy',
+        heroImage: 'https://example.com/rc.jpg',
+        galleryImages: [],
+        diet: 'nonveg',
+        cuisine: 'North Indian',
+        spiceLevel: 'Mild',
+        servings: 2,
+        prepTimeMinutes: 10,
+        cookTimeMinutes: 20,
+        dietaryTags: ['nonveg'],
+        allergens: ['Dairy'],
+        ingredients: [{ name: 'Chicken', quantity: '300 g' }],
+        recipeSteps: [{ stepNumber: 1, title: 'Simmer', instruction: 'Simmer gently' }],
+        chefId: 'chef_realtime_test',
+        chefName: 'Chef Sanjeev',
+      };
+
+      const res = await createChefSubmission(testSubData);
+      expect(res.success).toBe(true);
+
+      const latest = receivedSnapshots[receivedSnapshots.length - 1];
+      expect(latest?.some((s) => s.id === res.id && s.name === 'Realtime Butter Chicken')).toBe(
+        true,
+      );
+
+      // Clean up
+      if (res.id) {
+        await deleteChefSubmission(res.id, 'chef_realtime_test', true);
+      }
+      unsub();
     });
   });
 });

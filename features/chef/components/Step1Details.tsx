@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { View, Text, TextInput, TouchableOpacity, Image, StyleSheet, Platform } from 'react-native';
 import { useTheme } from '../../../framework/theme/ThemeContext';
 import { Icon } from '../../../framework/ui/Icon';
@@ -109,8 +109,39 @@ export function Step1Details({ form, onChange }: Step1DetailsProps) {
 
   const [editorVisible, setEditorVisible] = useState(false);
   const [editingImageUri, setEditingImageUri] = useState<string | null>(null);
+  const [heroAspectRatio, setHeroAspectRatio] = useState<number>(4 / 3);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Measure natural aspect ratio of thumbnail photo dynamically
+  useEffect(() => {
+    let isMounted = true;
+    if (!form.thumbnailUrl) return;
+
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+      const img = new (window as any).Image();
+      img.onload = () => {
+        if (isMounted && img.naturalWidth && img.naturalHeight) {
+          setHeroAspectRatio(img.naturalWidth / img.naturalHeight);
+        }
+      };
+      img.src = form.thumbnailUrl;
+    } else if (typeof Image.getSize === 'function') {
+      try {
+        Image.getSize(
+          form.thumbnailUrl,
+          (w, h) => {
+            if (isMounted && w && h) setHeroAspectRatio(w / h);
+          },
+          () => {},
+        );
+      } catch {}
+    }
+
+    return () => {
+      isMounted = false;
+    };
+  }, [form.thumbnailUrl]);
 
   const handlePickOrUpload = async () => {
     if (Platform.OS === 'web' && fileInputRef.current) {
@@ -126,6 +157,7 @@ export function Step1Details({ form, onChange }: Step1DetailsProps) {
       if (!result.canceled && result.assets && result.assets.length > 0) {
         const uri = result.assets[0]?.uri;
         if (uri) {
+          onChange({ originalThumbnailUrl: uri });
           setEditingImageUri(uri);
           setEditorVisible(true);
         }
@@ -142,6 +174,7 @@ export function Step1Details({ form, onChange }: Step1DetailsProps) {
       reader.onload = (event) => {
         const result = event.target?.result as string;
         if (result) {
+          onChange({ originalThumbnailUrl: result });
           setEditingImageUri(result);
           setEditorVisible(true);
         }
@@ -197,10 +230,18 @@ export function Step1Details({ form, onChange }: Step1DetailsProps) {
 
         <View style={styles.thumbnailContainer}>
           {form.thumbnailUrl ? (
-            <View style={styles.imagePreviewWrapper}>
+            <View
+              style={[
+                styles.imagePreviewWrapper,
+                {
+                  aspectRatio: heroAspectRatio,
+                  maxHeight: heroAspectRatio < 1 ? 400 : 340,
+                },
+              ]}
+            >
               <Image
                 source={{ uri: form.thumbnailUrl }}
-                style={styles.thumbnailPreview}
+                style={[styles.thumbnailPreview, { aspectRatio: heroAspectRatio }]}
                 resizeMode="cover"
               />
               <View style={styles.imageOverlayActions}>
@@ -208,7 +249,8 @@ export function Step1Details({ form, onChange }: Step1DetailsProps) {
                   testID="step1-crop-adjust-btn"
                   style={[styles.overlayBtn, { backgroundColor: colors.primary }]}
                   onPress={() => {
-                    setEditingImageUri(form.thumbnailUrl);
+                    const masterImage = form.originalThumbnailUrl || form.thumbnailUrl;
+                    setEditingImageUri(masterImage);
                     setEditorVisible(true);
                   }}
                 >
@@ -226,7 +268,7 @@ export function Step1Details({ form, onChange }: Step1DetailsProps) {
                 <TouchableOpacity
                   testID="step1-remove-photo-btn"
                   style={[styles.overlayBtn, { backgroundColor: 'rgba(239,68,68,0.85)' }]}
-                  onPress={() => onChange({ thumbnailUrl: '' })}
+                  onPress={() => onChange({ thumbnailUrl: '', originalThumbnailUrl: '' })}
                 >
                   <Icon name="trash-outline" size={14} color="#FFFFFF" />
                   <Text style={styles.overlayBtnText}>Remove</Text>
@@ -271,8 +313,14 @@ export function Step1Details({ form, onChange }: Step1DetailsProps) {
             imageUri={editingImageUri}
             title="Crop, Rotate & Adjust Recipe Cover"
             defaultAspectRatio="4:3"
-            onSave={(editedUri) => {
-              onChange({ thumbnailUrl: editedUri });
+            onSave={(editedUri, meta) => {
+              if (meta?.aspectRatio) {
+                setHeroAspectRatio(meta.aspectRatio);
+              }
+              onChange({
+                thumbnailUrl: editedUri,
+                originalThumbnailUrl: form.originalThumbnailUrl || editingImageUri || editedUri,
+              });
               setEditorVisible(false);
               setEditingImageUri(null);
             }}
@@ -298,7 +346,9 @@ export function Step1Details({ form, onChange }: Step1DetailsProps) {
                         form.thumbnailUrl === sample.url ? colors.primary : 'transparent',
                     },
                   ]}
-                  onPress={() => onChange({ thumbnailUrl: sample.url })}
+                  onPress={() =>
+                    onChange({ thumbnailUrl: sample.url, originalThumbnailUrl: sample.url })
+                  }
                 >
                   <Image source={{ uri: sample.url }} style={styles.presetImage} />
                   <Text
@@ -959,9 +1009,9 @@ const styles = StyleSheet.create({
     position: 'relative',
     borderRadius: 12,
     overflow: 'hidden',
-    aspectRatio: 4 / 3,
     maxHeight: 340,
     width: '100%',
+    backgroundColor: '#000',
   },
   thumbnailPreview: {
     width: '100%',

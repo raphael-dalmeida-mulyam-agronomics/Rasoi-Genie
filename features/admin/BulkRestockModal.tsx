@@ -327,7 +327,7 @@ export const BulkRestockModal: React.FC<BulkRestockModalProps> = ({
                       activeSection === 'low_stock' ? colors.primary : colors.bgSubtle,
                     borderColor:
                       activeSection === 'low_stock' ? colors.primary : colors.borderLight,
-                    borderRadius: radii.pill,
+                    borderRadius: radii.md,
                   },
                 ]}
               >
@@ -358,7 +358,7 @@ export const BulkRestockModal: React.FC<BulkRestockModalProps> = ({
                       activeSection === 'raw_ingredients' ? colors.primary : colors.bgSubtle,
                     borderColor:
                       activeSection === 'raw_ingredients' ? colors.primary : colors.borderLight,
-                    borderRadius: radii.pill,
+                    borderRadius: radii.md,
                   },
                 ]}
               >
@@ -389,7 +389,7 @@ export const BulkRestockModal: React.FC<BulkRestockModalProps> = ({
                       activeSection === 'seasonings' ? colors.primary : colors.bgSubtle,
                     borderColor:
                       activeSection === 'seasonings' ? colors.primary : colors.borderLight,
-                    borderRadius: radii.pill,
+                    borderRadius: radii.md,
                   },
                 ]}
               >
@@ -420,7 +420,7 @@ export const BulkRestockModal: React.FC<BulkRestockModalProps> = ({
                       activeSection === 'packaging' ? colors.primary : colors.bgSubtle,
                     borderColor:
                       activeSection === 'packaging' ? colors.primary : colors.borderLight,
-                    borderRadius: radii.pill,
+                    borderRadius: radii.md,
                   },
                 ]}
               >
@@ -449,7 +449,7 @@ export const BulkRestockModal: React.FC<BulkRestockModalProps> = ({
                   {
                     backgroundColor: activeSection === 'all' ? colors.primary : colors.bgSubtle,
                     borderColor: activeSection === 'all' ? colors.primary : colors.borderLight,
-                    borderRadius: radii.pill,
+                    borderRadius: radii.md,
                   },
                 ]}
               >
@@ -956,6 +956,7 @@ const styles = StyleSheet.create({
     gap: 6,
     paddingHorizontal: 14,
     paddingVertical: 8,
+    borderRadius: 6,
     borderWidth: 1,
   },
   pillText: {
@@ -973,6 +974,7 @@ const styles = StyleSheet.create({
   subPill: {
     paddingHorizontal: 10,
     paddingVertical: 5,
+    borderRadius: 6,
     borderWidth: 1,
   },
   subPillText: {

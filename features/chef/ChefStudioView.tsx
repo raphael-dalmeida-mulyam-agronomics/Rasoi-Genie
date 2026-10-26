@@ -17,6 +17,8 @@ import {
   ChefSubmissionRecord,
   ChefRecipeSubmission,
   fetchChefSubmissions,
+  subscribeToChefSubmissions,
+  initChefSubmissionsRealtime,
   createChefSubmission,
   updateChefSubmission,
   deleteChefSubmission,
@@ -39,6 +41,7 @@ import { Step4Review } from './components/Step4Review';
 import { StickyBottomBar } from './components/StickyBottomBar';
 import { ChefSubmissionsList } from './ChefSubmissionsList';
 import { SAMPLE_RECIPE_THUMBNAILS, SAMPLE_STEP_IMAGES } from './sampleImages';
+import { extractYouTubeVideoId } from './components/YouTubeEmbed';
 
 const DEFAULT_FORM_STATE: ChefRecipeFormState = {
   name: '',
@@ -64,6 +67,8 @@ const DEFAULT_FORM_STATE: ChefRecipeFormState = {
       quantityStr: '250 g',
     },
   ],
+  instructionType: 'steps',
+  videoUrl: '',
   steps: [
     {
       id: 'default-step-1',
@@ -138,12 +143,30 @@ export function ChefStudioView() {
 
   useEffect(() => {
     loadSubmissions();
-  }, [loadSubmissions]);
+    const unsubRealtime = initChefSubmissionsRealtime();
+    const unsubChef = subscribeToChefSubmissions(chefId, (updated) => {
+      setSubmissions(updated);
+    });
+    return () => {
+      unsubRealtime();
+      unsubChef();
+    };
+  }, [chefId, loadSubmissions]);
 
   // Handle Form changes with auto-save scheduling
   const handleFormChange = (updates: Partial<ChefRecipeFormState>) => {
     setForm((prev) => {
       const next = { ...prev, ...updates };
+      const hasVid = !!extractYouTubeVideoId(next.videoUrl);
+      const hasStp =
+        next.steps.length > 0 && next.steps.some((s) => s.instruction.trim().length > 0);
+      if (hasVid && hasStp) {
+        next.instructionType = 'both';
+      } else if (hasVid) {
+        next.instructionType = 'video';
+      } else {
+        next.instructionType = 'steps';
+      }
       scheduleDraftSave(next);
       return next;
     });
@@ -164,9 +187,19 @@ export function ChefStudioView() {
       form.ingredients.length > 0 &&
       form.ingredients.every((i) => i.name.trim().length > 0 && i.amount > 0);
 
-    const stepsValid =
+    const hasVideo = !!extractYouTubeVideoId(form.videoUrl);
+    const hasSteps =
       form.steps.length > 0 &&
       form.steps.every((s) => s.instruction.trim().length >= 10 && !!s.imageUrl);
+
+    let stepsValid = false;
+    if (hasVideo && form.steps.length > 0) {
+      stepsValid = hasVideo && hasSteps;
+    } else if (hasVideo) {
+      stepsValid = true;
+    } else if (hasSteps) {
+      stepsValid = true;
+    }
 
     return {
       details: detailsValid,
@@ -185,7 +218,10 @@ export function ChefStudioView() {
       return form.ingredients.length > 0 && form.ingredients.some((i) => i.name.trim().length > 0);
     }
     if (currentStage === 'steps') {
-      return form.steps.length > 0 && form.steps.some((s) => s.instruction.trim().length > 0);
+      const hasVideo = !!extractYouTubeVideoId(form.videoUrl);
+      const hasSomeSteps =
+        form.steps.length > 0 && form.steps.some((s) => s.instruction.trim().length > 0);
+      return hasVideo || hasSomeSteps;
     }
     if (currentStage === 'review') {
       return completedStages.details && completedStages.ingredients && completedStages.steps;
@@ -241,6 +277,11 @@ export function ChefStudioView() {
       title: st.title || '',
       instruction: st.instruction || '',
       imageUrl: st.imageUrl || SAMPLE_STEP_IMAGES[idx % SAMPLE_STEP_IMAGES.length]?.url || '',
+      originalImageUrl:
+        (st as any).originalImageUrl ||
+        st.imageUrl ||
+        SAMPLE_STEP_IMAGES[idx % SAMPLE_STEP_IMAGES.length]?.url ||
+        '',
     }));
 
     setForm({
@@ -248,6 +289,11 @@ export function ChefStudioView() {
       tagline: recipe.tagline || '',
       description: recipe.description || '',
       thumbnailUrl: recipe.heroImage || SAMPLE_RECIPE_THUMBNAILS[0]?.url || '',
+      originalThumbnailUrl:
+        (recipe as any).originalHeroImage ||
+        recipe.heroImage ||
+        SAMPLE_RECIPE_THUMBNAILS[0]?.url ||
+        '',
       dietType: recipe.diet || 'veg',
       cuisine: recipe.cuisine || 'North Indian',
       dishCategory: recipe.dishCategory || 'Curries & Gravies',
@@ -259,6 +305,10 @@ export function ChefStudioView() {
       allergens: recipe.allergens || [],
       ingredients:
         mappedIngredients.length > 0 ? mappedIngredients : DEFAULT_FORM_STATE.ingredients,
+      instructionType:
+        recipe.instructionType ||
+        (recipe.videoUrl ? (recipe.recipeSteps?.length ? 'both' : 'video') : 'steps'),
+      videoUrl: recipe.videoUrl || '',
       steps: mappedSteps.length > 0 ? mappedSteps : DEFAULT_FORM_STATE.steps,
     });
 
@@ -303,6 +353,8 @@ export function ChefStudioView() {
       tagline: form.tagline.trim(),
       description: form.description.trim(),
       heroImage: form.thumbnailUrl.trim() || SAMPLE_RECIPE_THUMBNAILS[0]!.url,
+      originalHeroImage:
+        form.originalThumbnailUrl || form.thumbnailUrl.trim() || SAMPLE_RECIPE_THUMBNAILS[0]!.url,
       galleryImages: form.thumbnailUrl.trim() ? [form.thumbnailUrl.trim()] : [],
       diet: form.dietType,
       cuisine: form.cuisine,
@@ -325,7 +377,10 @@ export function ChefStudioView() {
         title: st.title.trim(),
         instruction: st.instruction.trim(),
         imageUrl: st.imageUrl.trim() || SAMPLE_STEP_IMAGES[0]!.url,
+        originalImageUrl: st.originalImageUrl || st.imageUrl.trim() || SAMPLE_STEP_IMAGES[0]!.url,
       })),
+      instructionType: form.instructionType,
+      videoUrl: form.videoUrl?.trim() || '',
       chefId,
       chefName: chefDisplayName,
     };
@@ -454,7 +509,11 @@ export function ChefStudioView() {
           {currentStage === 'steps' && (
             <Step3CookingSteps
               steps={form.steps}
-              onChange={(steps) => handleFormChange({ steps })}
+              instructionType={form.instructionType}
+              videoUrl={form.videoUrl || ''}
+              onStepsChange={(steps) => handleFormChange({ steps })}
+              onInstructionTypeChange={(instructionType) => handleFormChange({ instructionType })}
+              onVideoUrlChange={(videoUrl) => handleFormChange({ videoUrl })}
             />
           )}
 
@@ -486,16 +545,18 @@ export function ChefStudioView() {
 
   // Otherwise, render Chef Submissions List View
   return (
-    <ChefSubmissionsList
-      submissions={submissions}
-      loading={loading}
-      activeChefProfile={activeChefProfile}
-      fallbackChefName={chefDisplayName}
-      deletingId={deletingId}
-      onNewRecipe={handleStartNewRecipe}
-      onEditRecipe={handleEditRecipe}
-      onDeleteRecipe={handleDeleteSubmission}
-    />
+    <View style={[styles.root, { backgroundColor: colors.bgPrimary }]}>
+      <ChefSubmissionsList
+        submissions={submissions}
+        loading={loading}
+        activeChefProfile={activeChefProfile}
+        fallbackChefName={chefDisplayName}
+        deletingId={deletingId}
+        onNewRecipe={handleStartNewRecipe}
+        onEditRecipe={handleEditRecipe}
+        onDeleteRecipe={handleDeleteSubmission}
+      />
+    </View>
   );
 }
 
@@ -509,7 +570,7 @@ const styles = StyleSheet.create({
   builderContent: {
     paddingHorizontal: 20,
     paddingVertical: 24,
-    maxWidth: 960,
+    maxWidth: 1160,
     width: '100%',
     alignSelf: 'center',
   },

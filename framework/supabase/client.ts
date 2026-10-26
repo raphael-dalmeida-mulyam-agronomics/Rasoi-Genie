@@ -1,5 +1,5 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import { CONFIG } from '../../src/constants/config';
+import { CONFIG } from '../config';
 
 let clientInstance: SupabaseClient | null = null;
 let currentAuthToken: string | null = null;

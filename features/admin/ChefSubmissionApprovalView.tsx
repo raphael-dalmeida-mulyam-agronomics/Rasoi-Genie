@@ -23,6 +23,7 @@ import {
   legacyHubForCity,
   SubRegion,
 } from '../../framework/services/regionService';
+import { YouTubeEmbed, extractYouTubeVideoId } from '../chef/components/YouTubeEmbed';
 
 interface ChefSubmissionApprovalViewProps {
   submission: ChefSubmissionRecord;
@@ -51,7 +52,12 @@ const STAGES: StageTab[] = [
   { key: 'details', label: 'Details', subtitle: 'Basic & Dietary', icon: 'document-text-outline' },
   { key: 'ingredients', label: 'Ingredients', subtitle: 'Formulation', icon: 'nutrition-outline' },
   { key: 'steps', label: 'Cooking Steps', subtitle: 'Method & Photos', icon: 'restaurant-outline' },
-  { key: 'review', label: 'Approval & Pricing', subtitle: 'Readiness & Publish', icon: 'checkmark-circle-outline' },
+  {
+    key: 'review',
+    label: 'Approval & Pricing',
+    subtitle: 'Readiness & Publish',
+    icon: 'checkmark-circle-outline',
+  },
 ];
 
 export interface GeoCityOption {
@@ -90,12 +96,8 @@ export function ChefSubmissionApprovalView({
 
   // Default to 'review' stage so that admin pricing controls and publish button are instantly accessible
   const [currentStage, setCurrentStage] = useState<ApprovalStage>('review');
-  const [price, setPrice] = useState<string>(
-    submission.price ? String(submission.price) : '299',
-  );
-  const [rejectNotes, setRejectNotes] = useState<string>(
-    submission.reviewNotes || '',
-  );
+  const [price, setPrice] = useState<string>(submission.price ? String(submission.price) : '299');
+  const [rejectNotes, setRejectNotes] = useState<string>(submission.reviewNotes || '');
 
   // Multiple target cities and sub-areas selection state
   const [selectedCities, setSelectedCities] = useState<string[]>(() => {
@@ -142,8 +144,8 @@ export function ChefSubmissionApprovalView({
       submission.cities && submission.cities.length > 0
         ? submission.cities
         : submission.originCity
-        ? [submission.originCity]
-        : ['Pune'];
+          ? [submission.originCity]
+          : ['Pune'];
     const ids: string[] = [];
     for (const city of initialCities) {
       const subs = getSubRegionsForCity(city);
@@ -211,7 +213,10 @@ export function ChefSubmissionApprovalView({
     {
       key: 'timings',
       label: 'Portion Servings & Prep/Cook Times',
-      isValid: submission.servings >= 1 && submission.prepTimeMinutes > 0 && submission.cookTimeMinutes > 0,
+      isValid:
+        submission.servings >= 1 &&
+        submission.prepTimeMinutes > 0 &&
+        submission.cookTimeMinutes > 0,
     },
     {
       key: 'ingredients',
@@ -220,20 +225,62 @@ export function ChefSubmissionApprovalView({
         submission.ingredients.length > 0 &&
         submission.ingredients.every((ing) => ing.name.trim().length > 0),
     },
-    {
-      key: 'steps',
-      label: 'Cooking Steps Defined with Instructions',
-      isValid:
-        submission.recipeSteps.length > 0 &&
-        submission.recipeSteps.every((s) => s.instruction.trim().length >= 10),
-    },
-    {
-      key: 'stepImages',
-      label: 'Photos Provided for Cooking Steps',
-      isValid:
-        submission.recipeSteps.length > 0 &&
-        submission.recipeSteps.every((s) => !!s.imageUrl && s.imageUrl.trim().length > 0),
-    },
+    ...(submission.videoUrl &&
+    submission.videoUrl.trim().length > 0 &&
+    submission.recipeSteps.length > 0
+      ? [
+          {
+            key: 'youtubeVideo',
+            label: 'Embedded YouTube Video Tutorial Provided',
+            isValid: !!submission.videoUrl && extractYouTubeVideoId(submission.videoUrl) !== null,
+          },
+          {
+            key: 'steps',
+            label: 'Cooking Steps Defined with Instructions',
+            isValid:
+              submission.recipeSteps.length > 0 &&
+              submission.recipeSteps.every((s) => s.instruction.trim().length >= 10),
+          },
+          {
+            key: 'stepImages',
+            label: 'Photos Provided for Cooking Steps',
+            isValid:
+              submission.recipeSteps.length > 0 &&
+              submission.recipeSteps.every((s) => !!s.imageUrl && s.imageUrl.trim().length > 0),
+          },
+        ]
+      : submission.videoUrl && submission.videoUrl.trim().length > 0
+        ? [
+            {
+              key: 'youtubeVideo',
+              label: 'Embedded YouTube Video Tutorial Provided',
+              isValid: !!submission.videoUrl && extractYouTubeVideoId(submission.videoUrl) !== null,
+            },
+          ]
+        : submission.recipeSteps.length > 0
+          ? [
+              {
+                key: 'steps',
+                label: 'Cooking Steps Defined with Instructions',
+                isValid:
+                  submission.recipeSteps.length > 0 &&
+                  submission.recipeSteps.every((s) => s.instruction.trim().length >= 10),
+              },
+              {
+                key: 'stepImages',
+                label: 'Photos Provided for Cooking Steps',
+                isValid:
+                  submission.recipeSteps.length > 0 &&
+                  submission.recipeSteps.every((s) => !!s.imageUrl && s.imageUrl.trim().length > 0),
+              },
+            ]
+          : [
+              {
+                key: 'instructions',
+                label: 'Cooking Instructions Provided (Video or Steps)',
+                isValid: false,
+              },
+            ]),
   ];
 
   const passedChecksCount = readinessChecks.filter((c) => c.isValid).length;
@@ -248,7 +295,7 @@ export function ChefSubmissionApprovalView({
         const citySubs = getSubRegionsForCity(cityName).map((s) => s.id);
         const citySlug = cityName.toLowerCase().replace(/[^a-z0-9]+/g, '-');
         setSelectedSubAreas((subPrev) =>
-          subPrev.filter((id) => !citySubs.includes(id) && !id.startsWith(`${citySlug}-`))
+          subPrev.filter((id) => !citySubs.includes(id) && !id.startsWith(`${citySlug}-`)),
         );
         return next;
       } else {
@@ -305,9 +352,10 @@ export function ChefSubmissionApprovalView({
   // Toggle all sub-areas for a specific city
   const toggleCitySubAreas = (cityName: string) => {
     const citySubs = getSubRegionsForCity(cityName);
-    const citySubIds = citySubs.length > 0
-      ? citySubs.map((s) => s.id)
-      : [`${cityName.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-central`];
+    const citySubIds =
+      citySubs.length > 0
+        ? citySubs.map((s) => s.id)
+        : [`${cityName.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-central`];
     const allChecked = citySubIds.every((id) => selectedSubAreas.includes(id));
     if (allChecked) {
       setSelectedSubAreas((prev) => prev.filter((id) => !citySubIds.includes(id)));
@@ -346,11 +394,31 @@ export function ChefSubmissionApprovalView({
         citySubs && citySubs.length > 0
           ? citySubs
           : [
-              { id: `${city.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-central`, name: `${city} Central / Downtown`, keywords: [city] },
-              { id: `${city.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-north`, name: `${city} North Zone`, keywords: [city] },
-              { id: `${city.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-south`, name: `${city} South Zone`, keywords: [city] },
-              { id: `${city.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-east`, name: `${city} East Zone`, keywords: [city] },
-              { id: `${city.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-west`, name: `${city} West Zone`, keywords: [city] },
+              {
+                id: `${city.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-central`,
+                name: `${city} Central / Downtown`,
+                keywords: [city],
+              },
+              {
+                id: `${city.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-north`,
+                name: `${city} North Zone`,
+                keywords: [city],
+              },
+              {
+                id: `${city.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-south`,
+                name: `${city} South Zone`,
+                keywords: [city],
+              },
+              {
+                id: `${city.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-east`,
+                name: `${city} East Zone`,
+                keywords: [city],
+              },
+              {
+                id: `${city.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-west`,
+                name: `${city} West Zone`,
+                keywords: [city],
+              },
             ];
 
       const filtered = !areaSearch.trim()
@@ -380,7 +448,10 @@ export function ChefSubmissionApprovalView({
     }
 
     if (selectedCities.length === 0) {
-      Alert.alert('Target City Required', 'Please select at least one target operational city before publishing.');
+      Alert.alert(
+        'Target City Required',
+        'Please select at least one target operational city before publishing.',
+      );
       return;
     }
 
@@ -398,7 +469,9 @@ export function ChefSubmissionApprovalView({
     // Map selected cities & sub-areas to corresponding storage centre depot IDs
     const targetStorageCentres = STORAGE_CENTRE_REGIONS.filter((sc) => {
       const matchCity = selectedCities.some(
-        (c) => sc.city.toLowerCase() === c.toLowerCase() || sc.name.toLowerCase().includes(c.toLowerCase()),
+        (c) =>
+          sc.city.toLowerCase() === c.toLowerCase() ||
+          sc.name.toLowerCase().includes(c.toLowerCase()),
       );
       const matchZone = legacyHubs.includes(sc.zone);
       return matchCity || matchZone;
@@ -409,7 +482,10 @@ export function ChefSubmissionApprovalView({
 
   const handleRejectClick = async () => {
     if (!rejectNotes.trim()) {
-      Alert.alert('Feedback Required', 'Please enter a reason or notes explaining why the submission was rejected.');
+      Alert.alert(
+        'Feedback Required',
+        'Please enter a reason or notes explaining why the submission was rejected.',
+      );
       return;
     }
     await onReject(rejectNotes.trim());
@@ -429,18 +505,27 @@ export function ChefSubmissionApprovalView({
         <View style={styles.headerLeft}>
           <TouchableOpacity
             onPress={onClose}
-            style={[styles.backBtn, { borderColor: colors.borderLight, backgroundColor: colors.bgSubtle }]}
+            style={[
+              styles.backBtn,
+              { borderColor: colors.borderLight, backgroundColor: colors.bgSubtle },
+            ]}
             accessibilityLabel="Back to Chef Submissions"
           >
             <Icon name="arrow-back" size={18} color={colors.textPrimary} />
           </TouchableOpacity>
           <View style={styles.headerTitleWrap}>
             <View style={styles.breadcrumbRow}>
-              <Text style={[styles.breadcrumbRoot, { color: colors.textMuted }]}>Admin Kitchen</Text>
+              <Text style={[styles.breadcrumbRoot, { color: colors.textMuted }]}>
+                Admin Kitchen
+              </Text>
               <Text style={[styles.breadcrumbDivider, { color: colors.textMuted }]}>/</Text>
-              <Text style={[styles.breadcrumbRoot, { color: colors.textMuted }]}>Chef Submissions</Text>
+              <Text style={[styles.breadcrumbRoot, { color: colors.textMuted }]}>
+                Chef Submissions
+              </Text>
               <Text style={[styles.breadcrumbDivider, { color: colors.textMuted }]}>/</Text>
-              <Text style={[styles.breadcrumbCurrent, { color: colors.primary }]}>Review & Approval</Text>
+              <Text style={[styles.breadcrumbCurrent, { color: colors.primary }]}>
+                Review & Approval
+              </Text>
             </View>
             <Text style={[styles.headerTitle, { color: colors.textPrimary }]} numberOfLines={1}>
               {submission.name || 'Untitled Recipe'}
@@ -458,14 +543,14 @@ export function ChefSubmissionApprovalView({
                   submission.submissionStatus === 'published'
                     ? '#DCFCE7'
                     : submission.submissionStatus === 'rejected'
-                    ? '#FEE2E2'
-                    : '#FEF3C7',
+                      ? '#FEE2E2'
+                      : '#FEF3C7',
                 borderColor:
                   submission.submissionStatus === 'published'
                     ? '#86EFAC'
                     : submission.submissionStatus === 'rejected'
-                    ? '#FECACA'
-                    : '#FDE68A',
+                      ? '#FECACA'
+                      : '#FDE68A',
               },
             ]}
           >
@@ -474,16 +559,16 @@ export function ChefSubmissionApprovalView({
                 submission.submissionStatus === 'published'
                   ? 'checkmark-circle'
                   : submission.submissionStatus === 'rejected'
-                  ? 'alert-circle'
-                  : 'timer'
+                    ? 'alert-circle'
+                    : 'timer'
               }
               size={14}
               color={
                 submission.submissionStatus === 'published'
                   ? '#166534'
                   : submission.submissionStatus === 'rejected'
-                  ? '#991B1B'
-                  : '#92400E'
+                    ? '#991B1B'
+                    : '#92400E'
               }
             />
             <Text
@@ -494,22 +579,25 @@ export function ChefSubmissionApprovalView({
                     submission.submissionStatus === 'published'
                       ? '#166534'
                       : submission.submissionStatus === 'rejected'
-                      ? '#991B1B'
-                      : '#92400E',
+                        ? '#991B1B'
+                        : '#92400E',
                 },
               ]}
             >
               {submission.submissionStatus === 'published'
                 ? 'Published Live'
                 : submission.submissionStatus === 'rejected'
-                ? 'Rejected'
-                : 'Pending Review'}
+                  ? 'Rejected'
+                  : 'Pending Review'}
             </Text>
           </View>
 
           <TouchableOpacity
             onPress={onClose}
-            style={[styles.closeIconBtn, { borderColor: colors.borderLight, backgroundColor: colors.bgSubtle }]}
+            style={[
+              styles.closeIconBtn,
+              { borderColor: colors.borderLight, backgroundColor: colors.bgSubtle },
+            ]}
           >
             <Icon name="close" size={18} color={colors.textSecondary} />
           </TouchableOpacity>
@@ -523,12 +611,18 @@ export function ChefSubmissionApprovalView({
           { backgroundColor: colors.bgSurface, borderBottomColor: colors.borderLight },
         ]}
       >
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.navScrollContent}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.navScrollContent}
+        >
           {STAGES.map((s, idx) => {
             const isActive = s.key === currentStage;
             return (
               <React.Fragment key={s.key}>
-                {idx > 0 && <View style={[styles.navConnector, { backgroundColor: colors.borderLight }]} />}
+                {idx > 0 && (
+                  <View style={[styles.navConnector, { backgroundColor: colors.borderLight }]} />
+                )}
                 <TouchableOpacity
                   onPress={() => setCurrentStage(s.key)}
                   style={[
@@ -589,7 +683,12 @@ export function ChefSubmissionApprovalView({
         {currentStage === 'details' && (
           <View style={styles.stageWrap}>
             {/* Hero Image Card */}
-            <View style={[styles.card, { backgroundColor: colors.bgSurface, borderColor: colors.borderLight }]}>
+            <View
+              style={[
+                styles.card,
+                { backgroundColor: colors.bgSurface, borderColor: colors.borderLight },
+              ]}
+            >
               <View style={styles.heroImageWrapper}>
                 <Image source={{ uri: heroImg }} style={styles.heroImage} resizeMode="cover" />
                 <View style={styles.floatingBadgesRow}>
@@ -620,11 +719,15 @@ export function ChefSubmissionApprovalView({
                 <View style={styles.chefAuthorRow}>
                   <Icon name="person-circle-outline" size={16} color={colors.primary} />
                   <Text style={[styles.chefAuthorText, { color: colors.textSecondary }]}>
-                    Authored by <Text style={{ fontWeight: '700', color: colors.textPrimary }}>{submission.chefName}</Text>
+                    Authored by{' '}
+                    <Text style={{ fontWeight: '700', color: colors.textPrimary }}>
+                      {submission.chefName}
+                    </Text>
                   </Text>
                   <Text style={[styles.metaDot, { color: colors.textMuted }]}>•</Text>
                   <Text style={[styles.chefAuthorDate, { color: colors.textMuted }]}>
-                    Submitted {new Date(submission.submittedAt).toLocaleDateString('en-IN', {
+                    Submitted{' '}
+                    {new Date(submission.submittedAt).toLocaleDateString('en-IN', {
                       day: 'numeric',
                       month: 'short',
                       year: 'numeric',
@@ -635,12 +738,22 @@ export function ChefSubmissionApprovalView({
             </View>
 
             {/* Timings & Portion Stats */}
-            <View style={[styles.card, { backgroundColor: colors.bgSurface, borderColor: colors.borderLight }]}>
+            <View
+              style={[
+                styles.card,
+                { backgroundColor: colors.bgSurface, borderColor: colors.borderLight },
+              ]}
+            >
               <Text style={[styles.cardSectionTitle, { color: colors.textPrimary }]}>
                 Portions & Preparation Schedule
               </Text>
               <View style={styles.statsGrid}>
-                <View style={[styles.statWidget, { backgroundColor: colors.bgSubtle, borderColor: colors.borderLight }]}>
+                <View
+                  style={[
+                    styles.statWidget,
+                    { backgroundColor: colors.bgSubtle, borderColor: colors.borderLight },
+                  ]}
+                >
                   <Icon name="people" size={20} color={colors.primary} />
                   <Text style={[styles.statWidgetVal, { color: colors.textPrimary }]}>
                     {submission.servings} Servings
@@ -648,34 +761,60 @@ export function ChefSubmissionApprovalView({
                   <Text style={[styles.statWidgetLbl, { color: colors.textMuted }]}>Pack Size</Text>
                 </View>
 
-                <View style={[styles.statWidget, { backgroundColor: colors.bgSubtle, borderColor: colors.borderLight }]}>
+                <View
+                  style={[
+                    styles.statWidget,
+                    { backgroundColor: colors.bgSubtle, borderColor: colors.borderLight },
+                  ]}
+                >
                   <Icon name="time" size={20} color={colors.primary} />
                   <Text style={[styles.statWidgetVal, { color: colors.textPrimary }]}>
                     {submission.prepTimeMinutes} mins
                   </Text>
-                  <Text style={[styles.statWidgetLbl, { color: colors.textMuted }]}>Prep Duration</Text>
+                  <Text style={[styles.statWidgetLbl, { color: colors.textMuted }]}>
+                    Prep Duration
+                  </Text>
                 </View>
 
-                <View style={[styles.statWidget, { backgroundColor: colors.bgSubtle, borderColor: colors.borderLight }]}>
+                <View
+                  style={[
+                    styles.statWidget,
+                    { backgroundColor: colors.bgSubtle, borderColor: colors.borderLight },
+                  ]}
+                >
                   <Icon name="restaurant" size={20} color={colors.primary} />
                   <Text style={[styles.statWidgetVal, { color: colors.textPrimary }]}>
                     {submission.cookTimeMinutes} mins
                   </Text>
-                  <Text style={[styles.statWidgetLbl, { color: colors.textMuted }]}>Cook Duration</Text>
+                  <Text style={[styles.statWidgetLbl, { color: colors.textMuted }]}>
+                    Cook Duration
+                  </Text>
                 </View>
 
-                <View style={[styles.statWidget, { backgroundColor: colors.bgSubtle, borderColor: colors.borderLight }]}>
+                <View
+                  style={[
+                    styles.statWidget,
+                    { backgroundColor: colors.bgSubtle, borderColor: colors.borderLight },
+                  ]}
+                >
                   <Icon name="timer" size={20} color={colors.primary} />
                   <Text style={[styles.statWidgetVal, { color: colors.textPrimary }]}>
                     {submission.prepTimeMinutes + submission.cookTimeMinutes} mins
                   </Text>
-                  <Text style={[styles.statWidgetLbl, { color: colors.textMuted }]}>Total Time</Text>
+                  <Text style={[styles.statWidgetLbl, { color: colors.textMuted }]}>
+                    Total Time
+                  </Text>
                 </View>
               </View>
             </View>
 
             {/* Culinary Description */}
-            <View style={[styles.card, { backgroundColor: colors.bgSurface, borderColor: colors.borderLight }]}>
+            <View
+              style={[
+                styles.card,
+                { backgroundColor: colors.bgSurface, borderColor: colors.borderLight },
+              ]}
+            >
               <Text style={[styles.cardSectionTitle, { color: colors.textPrimary }]}>
                 About this Recipe
               </Text>
@@ -685,13 +824,20 @@ export function ChefSubmissionApprovalView({
             </View>
 
             {/* Dietary Tags & Allergens */}
-            <View style={[styles.card, { backgroundColor: colors.bgSurface, borderColor: colors.borderLight }]}>
+            <View
+              style={[
+                styles.card,
+                { backgroundColor: colors.bgSurface, borderColor: colors.borderLight },
+              ]}
+            >
               <Text style={[styles.cardSectionTitle, { color: colors.textPrimary }]}>
                 Dietary Highlights & Allergen Warnings
               </Text>
               {submission.dietaryTags && submission.dietaryTags.length > 0 && (
                 <View style={{ marginBottom: 14 }}>
-                  <Text style={[styles.subSectionTitle, { color: colors.textMuted }]}>DIETARY TAGS</Text>
+                  <Text style={[styles.subSectionTitle, { color: colors.textMuted }]}>
+                    DIETARY TAGS
+                  </Text>
                   <View style={styles.pillWrap}>
                     {submission.dietaryTags.map((tag) => (
                       <View key={tag} style={styles.dietPill}>
@@ -727,14 +873,20 @@ export function ChefSubmissionApprovalView({
             ======================================================== */}
         {currentStage === 'ingredients' && (
           <View style={styles.stageWrap}>
-            <View style={[styles.card, { backgroundColor: colors.bgSurface, borderColor: colors.borderLight }]}>
+            <View
+              style={[
+                styles.card,
+                { backgroundColor: colors.bgSurface, borderColor: colors.borderLight },
+              ]}
+            >
               <View style={styles.sectionHeaderRow}>
                 <View>
                   <Text style={[styles.cardSectionTitle, { color: colors.textPrimary }]}>
                     Recipe Ingredients Formulation
                   </Text>
                   <Text style={[styles.cardSectionSub, { color: colors.textMuted }]}>
-                    {submission.ingredients.length} items will be packed from regional inventory fulfilment centres.
+                    {submission.ingredients.length} items will be packed from regional inventory
+                    fulfilment centres.
                   </Text>
                 </View>
                 <View style={[styles.countBadge, { backgroundColor: colors.bgSubtle }]}>
@@ -754,7 +906,12 @@ export function ChefSubmissionApprovalView({
                     ]}
                   >
                     <View style={styles.ingredientLeft}>
-                      <View style={[styles.ingredientIconCircle, { backgroundColor: `${colors.primary}15` }]}>
+                      <View
+                        style={[
+                          styles.ingredientIconCircle,
+                          { backgroundColor: `${colors.primary}15` },
+                        ]}
+                      >
                         <Icon name="nutrition" size={16} color={colors.primary} />
                       </View>
                       <View>
@@ -767,7 +924,12 @@ export function ChefSubmissionApprovalView({
                       </View>
                     </View>
 
-                    <View style={[styles.quantityPill, { backgroundColor: colors.bgSurface, borderColor: colors.borderLight }]}>
+                    <View
+                      style={[
+                        styles.quantityPill,
+                        { backgroundColor: colors.bgSurface, borderColor: colors.borderLight },
+                      ]}
+                    >
                       <Text style={[styles.quantityPillText, { color: colors.primary }]}>
                         {ing.quantity || '1 unit'}
                       </Text>
@@ -784,22 +946,51 @@ export function ChefSubmissionApprovalView({
             ======================================================== */}
         {currentStage === 'steps' && (
           <View style={styles.stageWrap}>
-            <View style={[styles.card, { backgroundColor: colors.bgSurface, borderColor: colors.borderLight }]}>
+            <View
+              style={[
+                styles.card,
+                { backgroundColor: colors.bgSurface, borderColor: colors.borderLight },
+              ]}
+            >
               <View style={styles.sectionHeaderRow}>
                 <View>
                   <Text style={[styles.cardSectionTitle, { color: colors.textPrimary }]}>
                     Step-by-Step Cooking Instructions
                   </Text>
                   <Text style={[styles.cardSectionSub, { color: colors.textMuted }]}>
-                    Structured method designed for customers to prepare this dish in their home kitchen.
+                    Structured method designed for customers to prepare this dish in their home
+                    kitchen.
                   </Text>
                 </View>
                 <View style={[styles.countBadge, { backgroundColor: colors.bgSubtle }]}>
                   <Text style={[styles.countBadgeText, { color: colors.primary }]}>
-                    {submission.recipeSteps.length} Steps
+                    {submission.videoUrl && submission.recipeSteps?.length
+                      ? `${submission.recipeSteps.length} Steps + Video`
+                      : submission.videoUrl
+                        ? 'YouTube Video Only'
+                        : `${submission.recipeSteps?.length || 0} Steps`}
                   </Text>
                 </View>
               </View>
+
+              {/* YouTube Video Embed Preview if present */}
+              {submission.videoUrl ? (
+                <View style={{ marginBottom: 20 }}>
+                  <Text
+                    style={[
+                      styles.cardSectionSub,
+                      { color: colors.textPrimary, fontWeight: '700', marginBottom: 8 },
+                    ]}
+                  >
+                    Chef Walkthrough Video (YouTube)
+                  </Text>
+                  <YouTubeEmbed
+                    videoUrl={submission.videoUrl}
+                    title={`${submission.name} Cooking Video`}
+                    height={260}
+                  />
+                </View>
+              ) : null}
 
               <View style={styles.stepsList}>
                 {submission.recipeSteps.map((step) => (
@@ -829,7 +1020,11 @@ export function ChefSubmissionApprovalView({
 
                     {step.imageUrl ? (
                       <View style={styles.stepImageWrap}>
-                        <Image source={{ uri: step.imageUrl }} style={styles.stepImage} resizeMode="cover" />
+                        <Image
+                          source={{ uri: step.imageUrl }}
+                          style={styles.stepImage}
+                          resizeMode="cover"
+                        />
                       </View>
                     ) : null}
                   </View>
@@ -867,7 +1062,8 @@ export function ChefSubmissionApprovalView({
                     </Text>
                   </View>
                   <Text style={[styles.checklistSubtitle, { color: colors.textSecondary }]}>
-                    {passedChecksCount} of 12 standards met. Verified against RasoiGenie culinary requirements.
+                    {passedChecksCount} of 12 standards met. Verified against RasoiGenie culinary
+                    requirements.
                   </Text>
                 </View>
 
@@ -886,7 +1082,9 @@ export function ChefSubmissionApprovalView({
                       { color: allChecksPassed ? '#166534' : '#92400E' },
                     ]}
                   >
-                    {allChecksPassed ? 'Quality Standards Met ✓' : `${12 - passedChecksCount} Items Flagged`}
+                    {allChecksPassed
+                      ? 'Quality Standards Met ✓'
+                      : `${12 - passedChecksCount} Items Flagged`}
                   </Text>
                 </View>
               </View>
@@ -925,7 +1123,12 @@ export function ChefSubmissionApprovalView({
             </View>
 
             {/* 2. Customer View Preview */}
-            <View style={[styles.card, { backgroundColor: colors.bgSurface, borderColor: colors.borderLight }]}>
+            <View
+              style={[
+                styles.card,
+                { backgroundColor: colors.bgSurface, borderColor: colors.borderLight },
+              ]}
+            >
               <View style={styles.previewModeBanner}>
                 <Icon name="eye-outline" size={16} color="#4338CA" />
                 <Text style={styles.previewModeText}>
@@ -937,17 +1140,29 @@ export function ChefSubmissionApprovalView({
                 <Image source={{ uri: heroImg }} style={styles.previewHero} resizeMode="cover" />
                 <View style={styles.previewBody}>
                   <View style={styles.previewMetaRow}>
-                    <Text style={styles.previewDietBadge}>{(submission.diet || 'veg').toUpperCase()}</Text>
+                    <Text style={styles.previewDietBadge}>
+                      {(submission.diet || 'veg').toUpperCase()}
+                    </Text>
                     <Text style={[styles.metaDot, { color: colors.textMuted }]}>•</Text>
-                    <Text style={[styles.metaText, { color: colors.textSecondary }]}>{submission.cuisine}</Text>
+                    <Text style={[styles.metaText, { color: colors.textSecondary }]}>
+                      {submission.cuisine}
+                    </Text>
                     <Text style={[styles.metaDot, { color: colors.textMuted }]}>•</Text>
-                    <Text style={[styles.metaText, { color: colors.textSecondary }]}>{submission.dishCategory}</Text>
+                    <Text style={[styles.metaText, { color: colors.textSecondary }]}>
+                      {submission.dishCategory}
+                    </Text>
                     <Text style={[styles.metaDot, { color: colors.textMuted }]}>•</Text>
-                    <Text style={[styles.metaText, { color: colors.textSecondary }]}>Heat: {submission.spiceLevel}</Text>
+                    <Text style={[styles.metaText, { color: colors.textSecondary }]}>
+                      Heat: {submission.spiceLevel}
+                    </Text>
                   </View>
-                  <Text style={[styles.previewTitle, { color: colors.textPrimary }]}>{submission.name}</Text>
+                  <Text style={[styles.previewTitle, { color: colors.textPrimary }]}>
+                    {submission.name}
+                  </Text>
                   {submission.tagline ? (
-                    <Text style={[styles.previewTagline, { color: colors.textSecondary }]}>{submission.tagline}</Text>
+                    <Text style={[styles.previewTagline, { color: colors.textSecondary }]}>
+                      {submission.tagline}
+                    </Text>
                   ) : null}
                   <View style={styles.previewFooterRow}>
                     <Text style={[styles.previewChefName, { color: colors.textMuted }]}>
@@ -965,7 +1180,11 @@ export function ChefSubmissionApprovalView({
             <View
               style={[
                 styles.card,
-                { backgroundColor: colors.bgSurface, borderColor: colors.primary, borderWidth: 1.5 },
+                {
+                  backgroundColor: colors.bgSurface,
+                  borderColor: colors.primary,
+                  borderWidth: 1.5,
+                },
               ]}
             >
               <View style={styles.pricingHeaderRow}>
@@ -988,8 +1207,15 @@ export function ChefSubmissionApprovalView({
                   RETAIL MEAL KIT PRICE (₹) *
                 </Text>
                 <View style={styles.priceInputWrapper}>
-                  <View style={[styles.currencyPrefix, { backgroundColor: colors.bgSubtle, borderColor: colors.border }]}>
-                    <Text style={[styles.currencyPrefixText, { color: colors.textPrimary }]}>₹</Text>
+                  <View
+                    style={[
+                      styles.currencyPrefix,
+                      { backgroundColor: colors.bgSubtle, borderColor: colors.border },
+                    ]}
+                  >
+                    <Text style={[styles.currencyPrefixText, { color: colors.textPrimary }]}>
+                      ₹
+                    </Text>
                   </View>
                   <TextInput
                     testID="admin-chef-price-input"
@@ -1009,7 +1235,8 @@ export function ChefSubmissionApprovalView({
                   />
                 </View>
                 <Text style={[styles.helperText, { color: colors.textMuted }]}>
-                  Suggested price: ₹249 – ₹399 based on {submission.servings} servings and {submission.ingredients.length} fresh ingredients.
+                  Suggested price: ₹249 – ₹399 based on {submission.servings} servings and{' '}
+                  {submission.ingredients.length} fresh ingredients.
                 </Text>
               </View>
 
@@ -1019,7 +1246,12 @@ export function ChefSubmissionApprovalView({
                   <Text style={[styles.inputLabel, { color: colors.textPrimary, marginBottom: 0 }]}>
                     DELIVERY COVERAGE & AREA FULFILMENT *
                   </Text>
-                  <View style={[styles.scopeSummaryBadge, { backgroundColor: colors.bgSubtle, borderColor: colors.borderLight }]}>
+                  <View
+                    style={[
+                      styles.scopeSummaryBadge,
+                      { backgroundColor: colors.bgSubtle, borderColor: colors.borderLight },
+                    ]}
+                  >
                     <Text style={[styles.scopeSummaryText, { color: colors.primary }]}>
                       {selectedCities.length === 1
                         ? `${selectedCities[0]} • ${selectedSubAreas.length} Areas`
@@ -1028,7 +1260,8 @@ export function ChefSubmissionApprovalView({
                   </View>
                 </View>
                 <Text style={[styles.helperText, { color: colors.textMuted, marginBottom: 12 }]}>
-                  Select one or more target operational cities and manually check each sub-area or neighbourhood where this meal kit can be delivered.
+                  Select one or more target operational cities and manually check each sub-area or
+                  neighbourhood where this meal kit can be delivered.
                 </Text>
 
                 {/* ── 1. CITY DROPDOWN MENU (MULTI-CITY SELECT) ── */}
@@ -1069,16 +1302,21 @@ export function ChefSubmissionApprovalView({
                     ]}
                   >
                     <View style={styles.dropdownTriggerLeft}>
-                      <View style={[styles.triggerIconWrap, { backgroundColor: `${colors.primary}12` }]}>
+                      <View
+                        style={[styles.triggerIconWrap, { backgroundColor: `${colors.primary}12` }]}
+                      >
                         <Icon name="business-outline" size={18} color={colors.primary} />
                       </View>
                       <View style={styles.triggerTextCol}>
-                        <Text style={[styles.triggerTitle, { color: colors.textPrimary }]} numberOfLines={1}>
+                        <Text
+                          style={[styles.triggerTitle, { color: colors.textPrimary }]}
+                          numberOfLines={1}
+                        >
                           {selectedCities.length === 0
                             ? 'No Cities Selected (Click to Select)'
                             : selectedCities.length === 1
-                            ? `${selectedCities[0]}${getStateForCity(selectedCities[0] ?? '') ? `, ${getStateForCity(selectedCities[0] ?? '')}` : ''}`
-                            : `${selectedCities.length} Cities Selected: ${selectedCities.join(', ')}`}
+                              ? `${selectedCities[0]}${getStateForCity(selectedCities[0] ?? '') ? `, ${getStateForCity(selectedCities[0] ?? '')}` : ''}`
+                              : `${selectedCities.length} Cities Selected: ${selectedCities.join(', ')}`}
                         </Text>
                         <Text style={[styles.triggerSubtitle, { color: colors.textMuted }]}>
                           {isCityDropdownOpen
@@ -1131,11 +1369,27 @@ export function ChefSubmissionApprovalView({
                       </View>
 
                       {/* Quick City Shortcuts */}
-                      <View style={[styles.quickCitiesBar, { backgroundColor: colors.bgSubtle, borderBottomColor: colors.borderLight }]}>
-                        <Text style={[styles.quickCitiesLabel, { color: colors.textMuted }]}>Quick Hubs:</Text>
-                        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.quickCitiesScroll}>
+                      <View
+                        style={[
+                          styles.quickCitiesBar,
+                          {
+                            backgroundColor: colors.bgSubtle,
+                            borderBottomColor: colors.borderLight,
+                          },
+                        ]}
+                      >
+                        <Text style={[styles.quickCitiesLabel, { color: colors.textMuted }]}>
+                          Quick Hubs:
+                        </Text>
+                        <ScrollView
+                          horizontal
+                          showsHorizontalScrollIndicator={false}
+                          style={styles.quickCitiesScroll}
+                        >
                           {POPULAR_CITIES.map((popCity) => {
-                            const isCurrent = selectedCities.some((c) => c.toLowerCase() === popCity.toLowerCase());
+                            const isCurrent = selectedCities.some(
+                              (c) => c.toLowerCase() === popCity.toLowerCase(),
+                            );
                             return (
                               <TouchableOpacity
                                 key={popCity}
@@ -1181,7 +1435,9 @@ export function ChefSubmissionApprovalView({
                                 style={[
                                   styles.dropdownOptionRow,
                                   {
-                                    backgroundColor: isSelected ? `${colors.primary}0E` : 'transparent',
+                                    backgroundColor: isSelected
+                                      ? `${colors.primary}0E`
+                                      : 'transparent',
                                     borderColor: isSelected ? colors.primary : colors.borderLight,
                                   },
                                 ]}
@@ -1192,7 +1448,9 @@ export function ChefSubmissionApprovalView({
                                       styles.checkboxBox,
                                       {
                                         borderColor: isSelected ? colors.primary : colors.border,
-                                        backgroundColor: isSelected ? colors.primary : 'transparent',
+                                        backgroundColor: isSelected
+                                          ? colors.primary
+                                          : 'transparent',
                                       },
                                     ]}
                                   >
@@ -1212,8 +1470,18 @@ export function ChefSubmissionApprovalView({
                                       >
                                         {c.name}
                                       </Text>
-                                      <View style={[styles.statePill, { backgroundColor: colors.bgSubtle }]}>
-                                        <Text style={[styles.statePillText, { color: colors.textMuted }]}>
+                                      <View
+                                        style={[
+                                          styles.statePill,
+                                          { backgroundColor: colors.bgSubtle },
+                                        ]}
+                                      >
+                                        <Text
+                                          style={[
+                                            styles.statePillText,
+                                            { color: colors.textMuted },
+                                          ]}
+                                        >
                                           {c.state}
                                         </Text>
                                       </View>
@@ -1301,21 +1569,29 @@ export function ChefSubmissionApprovalView({
                     ]}
                   >
                     <View style={styles.dropdownTriggerLeft}>
-                      <View style={[styles.triggerIconWrap, { backgroundColor: `${colors.primary}12` }]}>
+                      <View
+                        style={[styles.triggerIconWrap, { backgroundColor: `${colors.primary}12` }]}
+                      >
                         <Icon name="map-outline" size={18} color={colors.primary} />
                       </View>
                       <View style={styles.triggerTextCol}>
-                        <Text style={[styles.triggerTitle, { color: colors.textPrimary }]} numberOfLines={1}>
-                          {selectedSubAreas.length === availableSubRegions.length && availableSubRegions.length > 0
+                        <Text
+                          style={[styles.triggerTitle, { color: colors.textPrimary }]}
+                          numberOfLines={1}
+                        >
+                          {selectedSubAreas.length === availableSubRegions.length &&
+                          availableSubRegions.length > 0
                             ? `All ${availableSubRegions.length} Sub-Areas Selected across ${selectedCities.length} ${selectedCities.length === 1 ? 'City' : 'Cities'}`
                             : selectedSubAreas.length > 0
-                            ? `${selectedSubAreas.length} of ${availableSubRegions.length} Sub-Areas Selected`
-                            : selectedCities.length === 0
-                            ? 'Select target cities above first'
-                            : 'No Sub-Areas Selected (Click to Check)'}
+                              ? `${selectedSubAreas.length} of ${availableSubRegions.length} Sub-Areas Selected`
+                              : selectedCities.length === 0
+                                ? 'Select target cities above first'
+                                : 'No Sub-Areas Selected (Click to Check)'}
                         </Text>
                         <Text style={[styles.triggerSubtitle, { color: colors.textMuted }]}>
-                          {isAreaDropdownOpen ? 'Click to close checklist' : 'Click to manually check or uncheck individual areas'}
+                          {isAreaDropdownOpen
+                            ? 'Click to close checklist'
+                            : 'Click to manually check or uncheck individual areas'}
                         </Text>
                       </View>
                     </View>
@@ -1365,7 +1641,9 @@ export function ChefSubmissionApprovalView({
                       {/* Action Bar */}
                       <View style={styles.dropdownActionBar}>
                         <View style={styles.dropdownAreaCounterBadge}>
-                          <Text style={[styles.dropdownAreaCounterText, { color: colors.textPrimary }]}>
+                          <Text
+                            style={[styles.dropdownAreaCounterText, { color: colors.textPrimary }]}
+                          >
                             {selectedSubAreas.length} of {availableSubRegions.length} checked
                           </Text>
                         </View>
@@ -1408,7 +1686,8 @@ export function ChefSubmissionApprovalView({
                             subRegionsByCity.map(({ city, subRegions }) => {
                               const citySubIds = subRegions.map((sr) => sr.id);
                               const allCityChecked =
-                                citySubIds.length > 0 && citySubIds.every((id) => selectedSubAreas.includes(id));
+                                citySubIds.length > 0 &&
+                                citySubIds.every((id) => selectedSubAreas.includes(id));
                               const checkedInCityCount = citySubIds.filter((id) =>
                                 selectedSubAreas.includes(id),
                               ).length;
@@ -1419,14 +1698,24 @@ export function ChefSubmissionApprovalView({
                                   <View
                                     style={[
                                       styles.cityGroupHeader,
-                                      { backgroundColor: colors.bgSubtle, borderColor: colors.borderLight },
+                                      {
+                                        backgroundColor: colors.bgSubtle,
+                                        borderColor: colors.borderLight,
+                                      },
                                     ]}
                                   >
                                     <View style={styles.cityGroupTitleCol}>
-                                      <Text style={[styles.cityGroupTitle, { color: colors.textPrimary }]}>
+                                      <Text
+                                        style={[
+                                          styles.cityGroupTitle,
+                                          { color: colors.textPrimary },
+                                        ]}
+                                      >
                                         {city.toUpperCase()}
                                       </Text>
-                                      <Text style={[styles.cityGroupCount, { color: colors.textMuted }]}>
+                                      <Text
+                                        style={[styles.cityGroupCount, { color: colors.textMuted }]}
+                                      >
                                         {checkedInCityCount} of {subRegions.length} areas active
                                       </Text>
                                     </View>
@@ -1434,7 +1723,12 @@ export function ChefSubmissionApprovalView({
                                       onPress={() => toggleCitySubAreas(city)}
                                       style={styles.cityGroupToggleBtn}
                                     >
-                                      <Text style={[styles.cityGroupToggleText, { color: colors.primary }]}>
+                                      <Text
+                                        style={[
+                                          styles.cityGroupToggleText,
+                                          { color: colors.primary },
+                                        ]}
+                                      >
                                         {allCityChecked ? 'Uncheck All' : 'Check All'}
                                       </Text>
                                     </TouchableOpacity>
@@ -1451,8 +1745,12 @@ export function ChefSubmissionApprovalView({
                                         style={[
                                           styles.dropdownOptionRow,
                                           {
-                                            backgroundColor: isChecked ? `${colors.primary}0D` : 'transparent',
-                                            borderColor: isChecked ? colors.primary : colors.borderLight,
+                                            backgroundColor: isChecked
+                                              ? `${colors.primary}0D`
+                                              : 'transparent',
+                                            borderColor: isChecked
+                                              ? colors.primary
+                                              : colors.borderLight,
                                             marginBottom: 4,
                                           },
                                         ]}
@@ -1463,12 +1761,18 @@ export function ChefSubmissionApprovalView({
                                             style={[
                                               styles.checkboxBox,
                                               {
-                                                backgroundColor: isChecked ? colors.primary : colors.bgSurface,
-                                                borderColor: isChecked ? colors.primary : colors.border,
+                                                backgroundColor: isChecked
+                                                  ? colors.primary
+                                                  : colors.bgSurface,
+                                                borderColor: isChecked
+                                                  ? colors.primary
+                                                  : colors.border,
                                               },
                                             ]}
                                           >
-                                            {isChecked && <Icon name="check" size={12} color="#fff" />}
+                                            {isChecked && (
+                                              <Icon name="check" size={12} color="#fff" />
+                                            )}
                                           </View>
 
                                           <View style={styles.optionTextCol}>
@@ -1486,11 +1790,18 @@ export function ChefSubmissionApprovalView({
                                               </Text>
                                               {isChecked && (
                                                 <View style={styles.activeTagPill}>
-                                                  <Text style={styles.activeTagPillText}>Deliverable ✓</Text>
+                                                  <Text style={styles.activeTagPillText}>
+                                                    Deliverable ✓
+                                                  </Text>
                                                 </View>
                                               )}
                                             </View>
-                                            <Text style={[styles.optionDesc, { color: colors.textMuted }]}>
+                                            <Text
+                                              style={[
+                                                styles.optionDesc,
+                                                { color: colors.textMuted },
+                                              ]}
+                                            >
                                               {sub.pincodes && sub.pincodes.length > 0
                                                 ? `Pincodes: ${sub.pincodes.join(', ')}`
                                                 : 'Standard Delivery Hub'}
@@ -1518,7 +1829,8 @@ export function ChefSubmissionApprovalView({
                         ]}
                       >
                         <Text style={[styles.dropdownFooterSummary, { color: colors.textMuted }]}>
-                          {selectedSubAreas.length} sub-areas activated across {selectedCities.length} {selectedCities.length === 1 ? 'city' : 'cities'}
+                          {selectedSubAreas.length} sub-areas activated across{' '}
+                          {selectedCities.length} {selectedCities.length === 1 ? 'city' : 'cities'}
                         </Text>
                         <TouchableOpacity
                           onPress={() => setIsAreaDropdownOpen(false)}
@@ -1645,9 +1957,7 @@ export function ChefSubmissionApprovalView({
             ) : (
               <>
                 <Icon name="checkmark-circle" size={18} color="#fff" />
-                <Text style={styles.publishBtnText}>
-                  Publish & Approve at ₹{price || '—'}
-                </Text>
+                <Text style={styles.publishBtnText}>Publish & Approve at ₹{price || '—'}</Text>
               </>
             )}
           </TouchableOpacity>
@@ -1717,7 +2027,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 10,
     paddingVertical: 4,
-    borderRadius: 20,
+    borderRadius: 6,
     borderWidth: 1,
     gap: 6,
   },
@@ -2072,7 +2382,7 @@ const styles = StyleSheet.create({
   scorePill: {
     paddingHorizontal: 12,
     paddingVertical: 6,
-    borderRadius: 20,
+    borderRadius: 6,
     borderWidth: 1,
   },
   scorePillText: {

@@ -33,16 +33,18 @@ import { WalletView } from '../wallet/WalletView';
 import { ReferralView } from '../referral/ReferralView';
 import { WishlistView } from '../wishlist/WishlistView';
 import { ScreenHeader } from '../../framework/ui/ScreenHeader';
+import { ThemeSelectorModal } from '../../framework/ui/ThemeSelectorModal';
 
 export const ProfileView: React.FC = () => {
   const { user, isAdmin, isChef, logout } = useAuth();
-  const { colors, radii, shadows, isDark, toggleColorMode } = useTheme();
+  const { colors, radii, shadows, isDark, toggleColorMode, palette } = useTheme();
   const { preferences, defaultAddress, preferredPaymentMethod, setPreferredPaymentMethod } =
     usePreferences();
   const { availableBalance } = useWallet();
   const { family, role, members, invites, refreshFamily } = useFamily();
   const [pendingApprovalCount, setPendingApprovalCount] = useState<number>(0);
   const [paymentModalVisible, setPaymentModalVisible] = useState<boolean>(false);
+  const [themeModalVisible, setThemeModalVisible] = useState<boolean>(false);
   const [createFamilySheetVisible, setCreateFamilySheetVisible] = useState<boolean>(false);
 
   React.useEffect(() => {
@@ -62,6 +64,7 @@ export const ProfileView: React.FC = () => {
     | 'wishlist'
   >('main');
   const [dietModalVisible, setDietModalVisible] = useState(false);
+  const headerPaddingTop = useHeaderTopPadding(6);
 
   const handleReferFriend = () => {
     setSubView('referral');
@@ -146,8 +149,6 @@ export const ProfileView: React.FC = () => {
 
   const userDisplayName = user?.displayName || user?.email?.split('@')[0] || 'Gourmet Home Chef';
   const userContact = user?.email || user?.phoneNumber || '+91 98765 43210';
-
-  const headerPaddingTop = useHeaderTopPadding(6);
 
   return (
     <View style={[styles.container, { backgroundColor: colors.bgPrimary }]}>
@@ -525,10 +526,10 @@ export const ProfileView: React.FC = () => {
             onPress={() => setSubView('notifications')}
           />
           <MenuRow
-            icon={isDark ? 'moon' : 'sun'}
-            title={`Appearance: ${isDark ? 'Dark Mode' : 'Light Mode'}`}
-            subtitle={`Currently in ${isDark ? 'Dark (Obsidian)' : 'Light (Warm Cream)'} — Tap to switch`}
-            onPress={toggleColorMode}
+            icon="adjust"
+            title="Appearance & Theme"
+            subtitle={`${isDark ? 'Dark Mode' : 'Light Mode'} • ${palette.name} Palette — Tap to change`}
+            onPress={() => setThemeModalVisible(true)}
             isLast
           />
         </View>
@@ -637,6 +638,9 @@ export const ProfileView: React.FC = () => {
         visible={dietModalVisible}
         onClose={() => setDietModalVisible(false)}
       />
+
+      {/* Theme & Palette Selection Modal */}
+      <ThemeSelectorModal visible={themeModalVisible} onClose={() => setThemeModalVisible(false)} />
 
       {/* Preferred Payment Method Selection Modal */}
       <Modal

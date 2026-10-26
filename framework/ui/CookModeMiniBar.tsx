@@ -1,5 +1,13 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Platform } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  Platform,
+  useWindowDimensions,
+} from 'react-native';
+import { SafeAreaInsetsContext, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router, usePathname } from 'expo-router';
 import { useCookMode } from '../context/CookModeContext';
 import { useTheme } from '../theme/ThemeContext';
@@ -13,6 +21,31 @@ export const CookModeMiniBar: React.FC = () => {
   const { colors, radii, shadows, isDark } = useTheme();
   const pathname = usePathname();
   const [selectorVisible, setSelectorVisible] = useState(false);
+  let bottomInset = 0;
+  if (SafeAreaInsetsContext) {
+    try {
+      const insets = React.useContext(SafeAreaInsetsContext);
+      bottomInset = insets?.bottom ?? 0;
+    } catch {
+      bottomInset = 0;
+    }
+  } else if (typeof useSafeAreaInsets === 'function') {
+    try {
+      bottomInset = useSafeAreaInsets()?.bottom ?? 0;
+    } catch {
+      bottomInset = 0;
+    }
+  }
+  const { width } = useWindowDimensions();
+  const isWide = width >= 768;
+
+  const dockedBottom = isWide
+    ? 16
+    : Platform.select({
+        ios: 80,
+        web: 68 + bottomInset,
+        default: 68 + bottomInset,
+      });
 
   // If currently inside the full-screen cook mode route, hide the docked mini-bar
   if (pathname && pathname.startsWith('/cook')) {
@@ -90,6 +123,7 @@ export const CookModeMiniBar: React.FC = () => {
         style={[
           styles.container,
           {
+            bottom: dockedBottom,
             backgroundColor: isDark ? '#1E293B' : '#FFFBEB',
             borderColor: colors.primary,
             borderRadius: radii.xl,

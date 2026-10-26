@@ -8,7 +8,9 @@ import {
   Alert,
   useWindowDimensions,
   Platform,
+  Image,
 } from 'react-native';
+import { SafeAreaInsetsContext, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Icon } from '../../framework/ui/Icon';
 import { RoleBadge } from '../../framework/ui/RoleBadge';
 import { useAuth } from '../../framework/context/AuthContext';
@@ -44,6 +46,28 @@ export default function TabLayout() {
   const router = useRouter();
   const { width } = useWindowDimensions();
   const isWide = width >= 768;
+  let bottomInset = 0;
+  if (SafeAreaInsetsContext) {
+    try {
+      const insets = React.useContext(SafeAreaInsetsContext);
+      bottomInset = insets?.bottom ?? 0;
+    } catch {
+      bottomInset = 0;
+    }
+  } else if (typeof useSafeAreaInsets === 'function') {
+    try {
+      bottomInset = useSafeAreaInsets()?.bottom ?? 0;
+    } catch {
+      bottomInset = 0;
+    }
+  }
+  const safeBottomPadding = bottomInset > 0 ? bottomInset : Platform.OS === 'ios' ? 16 : 2;
+  const computedTabHeight = Platform.select({
+    ios: 52 + (bottomInset > 0 ? bottomInset : 20),
+    android: 58 + bottomInset,
+    web: 58 + (bottomInset > 0 ? bottomInset : 0),
+    default: 58 + bottomInset,
+  });
 
   // Route guard: Dependent accounts cannot access search, login/account, admin, or chef
   useEffect(() => {
@@ -173,18 +197,18 @@ export default function TabLayout() {
               style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}
               activeOpacity={0.8}
             >
-              <View
+              <Image
+                source={require('../../assets/images/icon.png')}
                 style={{
-                  width: 34,
-                  height: 34,
+                  width: 36,
+                  height: 36,
                   borderRadius: 10,
-                  backgroundColor: colors.primary,
-                  alignItems: 'center',
-                  justifyContent: 'center',
+                  backgroundColor: '#FFFFFF',
+                  borderWidth: 1,
+                  borderColor: colors.borderLight,
                 }}
-              >
-                <Icon name="restaurant" size={20} color="#FFFFFF" />
-              </View>
+                resizeMode="cover"
+              />
               <View>
                 <Text
                   style={{
@@ -227,9 +251,18 @@ export default function TabLayout() {
                   icon: 'time' as const,
                 },
                 {
+                  label: 'Family Hub',
+                  path: '/family',
+                  icon: 'people' as const,
+                  badge:
+                    canApproveItems && familyCartState.pendingCount > 0
+                      ? familyCartState.pendingCount
+                      : undefined,
+                },
+                {
                   label: user ? 'Account' : 'Sign In',
                   path: '/(tabs)/login',
-                  icon: 'people' as const,
+                  icon: 'user' as const,
                   hidden: Boolean(isDependent && family),
                 },
               ]
@@ -238,7 +271,8 @@ export default function TabLayout() {
                   const isActive =
                     nav.path === '/'
                       ? pathname === '/' || pathname === '/(tabs)' || pathname === ''
-                      : pathname.startsWith(nav.path);
+                      : pathname?.startsWith(nav.path) ||
+                        (nav.path === '/family' && pathname?.includes('/family'));
                   return (
                     <TouchableOpacity
                       key={nav.path}
@@ -323,7 +357,7 @@ export default function TabLayout() {
                   )}
                 </TouchableOpacity>
               )}
-              {isChef && (
+              {(isChef || pathname?.includes('/chef')) && (
                 <TouchableOpacity
                   onPress={() => router.push('/(tabs)/chef' as any)}
                   style={{
@@ -333,12 +367,24 @@ export default function TabLayout() {
                     paddingHorizontal: 12,
                     paddingVertical: 7,
                     borderRadius: 20,
-                    backgroundColor: colors.bgSubtle,
+                    backgroundColor: pathname?.includes('/chef')
+                      ? colors.primaryLight
+                      : colors.bgSubtle,
                   }}
                   activeOpacity={0.7}
                 >
-                  <Icon name="chef" size={15} color={colors.textSecondary} />
-                  <Text style={{ fontSize: 12, fontWeight: '600', color: colors.textSecondary }}>
+                  <Icon
+                    name="chef"
+                    size={15}
+                    color={pathname?.includes('/chef') ? colors.primary : colors.textSecondary}
+                  />
+                  <Text
+                    style={{
+                      fontSize: 12,
+                      fontWeight: '600',
+                      color: pathname?.includes('/chef') ? colors.primary : colors.textSecondary,
+                    }}
+                  >
                     Chef Studio
                   </Text>
                 </TouchableOpacity>
@@ -401,14 +447,20 @@ export default function TabLayout() {
             : {
                 backgroundColor: colors.bgSurface,
                 borderTopColor: colors.borderLight,
-                height: Platform.OS === 'ios' ? 88 : 68,
-                paddingTop: 8,
-                paddingBottom: Platform.OS === 'ios' ? 28 : 10,
+                height: computedTabHeight,
+                paddingTop: 2,
+                paddingBottom: safeBottomPadding,
               },
           tabBarLabelStyle: {
             fontSize: 11,
             fontWeight: '600',
+            lineHeight: 14,
             marginTop: 1,
+            marginBottom: 0,
+          },
+          tabBarIconStyle: {
+            height: 24,
+            width: 26,
           },
           tabBarItemStyle: {
             justifyContent: 'center',
@@ -464,6 +516,23 @@ export default function TabLayout() {
         />
 
         <Tabs.Screen
+          name="family"
+          options={{
+            title: 'Family Hub',
+            tabBarBadge:
+              canApproveItems && familyCartState.pendingCount > 0
+                ? familyCartState.pendingCount
+                : undefined,
+            tabBarBadgeStyle: {
+              backgroundColor: '#D97706',
+              fontSize: 10,
+              fontWeight: '800',
+            },
+            tabBarIcon: ({ color }) => <Icon name="people" size={22} color={color as string} />,
+          }}
+        />
+
+        <Tabs.Screen
           name="orders"
           options={{
             title: isDependent && family ? 'Family Orders' : 'My Orders',
@@ -472,32 +541,29 @@ export default function TabLayout() {
         />
 
         <Tabs.Screen
+          name="chef"
+          options={{
+            title: 'Chef',
+            href:
+              (isChef || pathname?.includes('/chef')) && !(isDependent && family)
+                ? undefined
+                : null,
+            tabBarIcon: ({ color }) => <Icon name="chef" size={22} color={color as string} />,
+          }}
+        />
+
+        <Tabs.Screen
           name="login"
           options={{
             title: user ? 'Account' : 'Sign In',
             href: isDependent && family ? null : undefined,
-            tabBarIcon: ({ color }) => <Icon name="people" size={22} color={color as string} />,
+            tabBarIcon: ({ color }) => <Icon name="user" size={22} color={color as string} />,
           }}
         />
 
-        {/* Admin and Chef are reached from the Profile screen and desktop top bar */}
+        {/* Admin is reached from the Profile screen and desktop top bar */}
         <Tabs.Screen
           name="admin"
-          options={{
-            href: null,
-          }}
-        />
-
-        <Tabs.Screen
-          name="chef"
-          options={{
-            href: null,
-          }}
-        />
-
-        {/* Hide legacy tab */}
-        <Tabs.Screen
-          name="two"
           options={{
             href: null,
           }}

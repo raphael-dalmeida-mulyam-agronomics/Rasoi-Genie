@@ -8,7 +8,7 @@ import {
   Platform,
   useWindowDimensions,
 } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaInsetsContext, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../theme/ThemeContext';
 import { Icon } from './Icon';
 
@@ -31,7 +31,22 @@ const ToastContext = createContext<ToastContextType | undefined>(undefined);
 
 export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { colors, radii, shadows, isDark } = useTheme();
-  const insets = useSafeAreaInsets();
+  let insets = { top: 0, bottom: 0, left: 0, right: 0 };
+  if (SafeAreaInsetsContext) {
+    try {
+      const ctxInsets = React.useContext(SafeAreaInsetsContext);
+      if (ctxInsets) insets = ctxInsets;
+    } catch {
+      // fallback to zeros
+    }
+  } else if (typeof useSafeAreaInsets === 'function') {
+    try {
+      const hookInsets = useSafeAreaInsets();
+      if (hookInsets) insets = hookInsets;
+    } catch {
+      // fallback to zeros
+    }
+  }
   const { width } = useWindowDimensions();
 
   const [toast, setToast] = useState<ToastOptions | null>(null);

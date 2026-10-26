@@ -19,8 +19,13 @@ interface StageConfig {
 
 const STAGES: StageConfig[] = [
   { key: 'details', label: 'Details', subtitle: 'Basic & Dietary', icon: 'document-text-outline' },
-  { key: 'ingredients', label: 'Ingredients', subtitle: 'Inventory Items', icon: 'nutrition-outline' },
-  { key: 'steps', label: 'Cooking Steps', subtitle: 'Method & Photos', icon: 'restaurant-outline' },
+  {
+    key: 'ingredients',
+    label: 'Ingredients',
+    subtitle: 'Inventory Items',
+    icon: 'nutrition-outline',
+  },
+  { key: 'steps', label: 'Instructions', subtitle: 'Method & Video', icon: 'restaurant-outline' },
   { key: 'review', label: 'Review', subtitle: 'Readiness Check', icon: 'checkmark-circle-outline' },
 ];
 
@@ -57,8 +62,7 @@ export function StepNavigation({
                   style={[
                     styles.connectorLine,
                     {
-                      backgroundColor:
-                        idx <= currentIndex ? colors.primary : colors.borderLight,
+                      backgroundColor: idx <= currentIndex ? colors.primary : colors.borderLight,
                     },
                   ]}
                 />
@@ -85,13 +89,13 @@ export function StepNavigation({
                       backgroundColor: isActive
                         ? colors.primary
                         : isCompleted
-                        ? '#10B981'
-                        : colors.bgSubtle,
+                          ? '#10B981'
+                          : colors.bgSubtle,
                       borderColor: isActive
                         ? colors.primary
                         : isCompleted
-                        ? '#10B981'
-                        : colors.borderLight,
+                          ? '#10B981'
+                          : colors.borderLight,
                     },
                   ]}
                 >
@@ -120,8 +124,8 @@ export function StepNavigation({
                         color: isActive
                           ? colors.primary
                           : isCompleted
-                          ? colors.textPrimary
-                          : colors.textSecondary,
+                            ? colors.textPrimary
+                            : colors.textSecondary,
                         fontWeight: isActive ? '800' : '600',
                       },
                     ]}
@@ -158,7 +162,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    maxWidth: 960,
+    maxWidth: 1160,
     alignSelf: 'center',
     width: '100%',
   },

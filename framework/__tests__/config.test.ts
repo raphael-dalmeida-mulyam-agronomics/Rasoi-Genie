@@ -1,4 +1,4 @@
-import { CONFIG } from '../../constants/config';
+import { CONFIG } from '../config';
 
 describe('App Configuration', () => {
   it('should have valid API base URL and default settings', () => {

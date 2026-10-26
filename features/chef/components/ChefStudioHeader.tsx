@@ -36,7 +36,10 @@ export function ChefStudioHeader({
       <View style={styles.leftRow}>
         <TouchableOpacity
           onPress={onBack}
-          style={[styles.backBtn, { borderColor: colors.borderLight, backgroundColor: colors.bgSubtle }]}
+          style={[
+            styles.backBtn,
+            { borderColor: colors.borderLight, backgroundColor: colors.bgSubtle },
+          ]}
           accessibilityLabel="Back to Recipes"
         >
           <Icon name="arrow-back" size={18} color={colors.textPrimary} />
@@ -65,10 +68,9 @@ export function ChefStudioHeader({
                 draftStatus === 'saving'
                   ? colors.bgSubtle
                   : draftStatus === 'saved'
-                  ? '#ECFDF5'
-                  : colors.bgSubtle,
-              borderColor:
-                draftStatus === 'saved' ? '#A7F3D0' : colors.borderLight,
+                    ? '#ECFDF5'
+                    : colors.bgSubtle,
+              borderColor: draftStatus === 'saved' ? '#A7F3D0' : colors.borderLight,
             },
           ]}
         >
@@ -86,18 +88,18 @@ export function ChefStudioHeader({
                   draftStatus === 'saving'
                     ? colors.textMuted
                     : draftStatus === 'saved'
-                    ? '#065F46'
-                    : colors.textSecondary,
+                      ? '#065F46'
+                      : colors.textSecondary,
               },
             ]}
           >
             {draftStatus === 'saving'
               ? 'Saving draft...'
               : draftStatus === 'saved'
-              ? lastSavedTime
-                ? `Draft saved at ${lastSavedTime}`
-                : 'Draft saved'
-              : 'Auto-save enabled'}
+                ? lastSavedTime
+                  ? `Draft saved at ${lastSavedTime}`
+                  : 'Draft saved'
+                : 'Auto-save enabled'}
           </Text>
         </View>
 
@@ -126,7 +128,7 @@ export function ChefStudioHeader({
 
 const styles = StyleSheet.create({
   container: {
-    paddingHorizontal: 20,
+    paddingHorizontal: 24,
     paddingTop: 16,
     paddingBottom: 16,
     borderBottomWidth: 1,
@@ -135,6 +137,9 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     flexWrap: 'wrap',
     gap: 12,
+    maxWidth: 1160,
+    width: '100%',
+    alignSelf: 'center',
   },
   leftRow: {
     flexDirection: 'row',
@@ -184,7 +189,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 10,
     paddingVertical: 5,
-    borderRadius: 16,
+    borderRadius: 6,
     borderWidth: 1,
   },
   statusText: {

@@ -1,9 +1,9 @@
 import React from 'react';
 import { Stack } from 'expo-router';
-import { useTheme } from '../../framework/theme/ThemeContext';
+import { useTheme } from '../../../framework/theme/ThemeContext';
 
 export default function FamilyLayout() {
-  const { colors, isDark } = useTheme();
+  const { colors } = useTheme();
 
   return (
     <Stack

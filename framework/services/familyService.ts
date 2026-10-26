@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { parsePhoneNumber, isValidPhoneNumber } from 'libphonenumber-js';
 import { getSupabaseClient } from '../supabase/client';
 import { isMissingSchemaError } from './supabaseUtils';
-import { CONFIG } from '../../src/constants/config';
+import { CONFIG } from '../config';
 import { subscribeToTable } from './realtimeService';
 
 // ─── Interfaces & Types ──────────────────────────────────────────────────────

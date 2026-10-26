@@ -431,7 +431,7 @@ const styles = StyleSheet.create({
   },
   scrollBody: {
     padding: 16,
-    paddingBottom: 40,
+    paddingBottom: 80,
     gap: 16,
   },
   notInFamilyCard: {

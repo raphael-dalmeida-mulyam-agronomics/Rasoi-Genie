@@ -31,6 +31,7 @@ import { SegmentedControl } from '../../framework/ui/SegmentedControl';
 import { Icon } from '../../framework/ui/Icon';
 import { EmptyState } from '../../framework/ui/EmptyState';
 import { getReviewsByKit } from '../../framework/services/reviewsService';
+import { YouTubeEmbed } from '../chef/components/YouTubeEmbed';
 
 export interface MealDetailModalProps {
   kit: MealKit | null;
@@ -971,6 +972,24 @@ export const MealDetailModal: React.FC<MealDetailModalProps> = ({
                 <Text style={[styles.subHeading, { color: colors.textSecondary }]}>
                   Follow each step. Tap the built-in timer to monitor your stovetop cooking!
                 </Text>
+
+                {kit.videoUrl ? (
+                  <View style={{ marginTop: 12, marginBottom: 16 }}>
+                    <Text
+                      style={[
+                        styles.subHeading,
+                        { color: colors.primary, fontWeight: '700', marginBottom: 8 },
+                      ]}
+                    >
+                      📹 Chef Video Tutorial
+                    </Text>
+                    <YouTubeEmbed
+                      videoUrl={kit.videoUrl}
+                      title={`${kit.name} Cooking Video`}
+                      height={220}
+                    />
+                  </View>
+                ) : null}
 
                 {kit.recipeSteps.map((step) => {
                   const remainingSeconds =

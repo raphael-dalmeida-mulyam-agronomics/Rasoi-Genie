@@ -20,7 +20,10 @@ export interface ImageEditorModalProps {
   imageUri: string | null;
   title?: string;
   defaultAspectRatio?: AspectRatioPreset;
-  onSave: (editedUri: string) => void;
+  onSave: (
+    editedUri: string,
+    meta?: { width: number; height: number; aspectRatio: number },
+  ) => void;
   onCancel: () => void;
 }
 
@@ -31,10 +34,6 @@ interface ImageAdjustmentState {
   flipV: boolean;
   aspectRatio: AspectRatioPreset;
   zoom: number; // 1.0 to 3.0
-  brightness: number; // 50 to 150 (100 is default)
-  contrast: number; // 50 to 150 (100 is default)
-  saturation: number; // 0 to 200 (100 is default)
-  warmth: number; // -30 to +30 (0 is default)
 }
 
 const DEFAULT_ADJUSTMENTS: ImageAdjustmentState = {
@@ -44,10 +43,6 @@ const DEFAULT_ADJUSTMENTS: ImageAdjustmentState = {
   flipV: false,
   aspectRatio: '4:3',
   zoom: 1.0,
-  brightness: 100,
-  contrast: 100,
-  saturation: 100,
-  warmth: 0,
 };
 
 const ASPECT_RATIO_VALUES: Record<AspectRatioPreset, number | null> = {
@@ -58,12 +53,10 @@ const ASPECT_RATIO_VALUES: Record<AspectRatioPreset, number | null> = {
   free: null,
 };
 
-type ActiveTab = 'crop' | 'rotate' | 'adjust';
-
 export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
   visible,
   imageUri,
-  title = 'Crop, Rotate & Adjust Photo',
+  title = 'Crop, Frame & Rotate Photo',
   defaultAspectRatio = '4:3',
   onSave,
   onCancel,
@@ -91,7 +84,6 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
   }
   const { colors, radii, shadows, isDark } = themeValues;
 
-  const [activeTab, setActiveTab] = useState<ActiveTab>('crop');
   const [adjustments, setAdjustments] = useState<ImageAdjustmentState>({
     ...DEFAULT_ADJUSTMENTS,
     aspectRatio: defaultAspectRatio,
@@ -104,6 +96,20 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
 
   const prevVisibleRef = useRef(visible);
   const prevUriRef = useRef(imageUri);
+  const zoomTrackRef = useRef<View>(null);
+  const zoomTrackLayoutRef = useRef<{ pageX: number; width: number }>({ pageX: 0, width: 200 });
+
+  const handleZoomChange = (newZoom: number) => {
+    const clamped = Math.max(1.0, Math.min(3.0, parseFloat(newZoom.toFixed(2))));
+    setAdjustments((p) => ({ ...p, zoom: clamped }));
+  };
+
+  const handleZoomTrackTouch = (clientX: number) => {
+    const { pageX, width } = zoomTrackLayoutRef.current;
+    if (width <= 0) return;
+    const ratio = Math.max(0, Math.min(1, (clientX - pageX) / width));
+    handleZoomChange(1.0 + ratio * 2.0);
+  };
 
   // Reset state when opening a new image
   useEffect(() => {
@@ -118,7 +124,6 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
         ...DEFAULT_ADJUSTMENTS,
         aspectRatio: defaultAspectRatio,
       });
-      setActiveTab('crop');
 
       // Fetch natural image size if available
       if (Platform.OS === 'web' && typeof window !== 'undefined') {
@@ -156,58 +161,6 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
     });
   };
 
-  // Preset Filters
-  const applyPresetFilter = (presetName: string) => {
-    switch (presetName) {
-      case 'vibrant':
-        setAdjustments((prev) => ({
-          ...prev,
-          contrast: 118,
-          saturation: 135,
-          brightness: 104,
-          warmth: 8,
-        }));
-        break;
-      case 'warm':
-        setAdjustments((prev) => ({
-          ...prev,
-          contrast: 110,
-          saturation: 115,
-          brightness: 108,
-          warmth: 20,
-        }));
-        break;
-      case 'crisp':
-        setAdjustments((prev) => ({
-          ...prev,
-          contrast: 125,
-          saturation: 110,
-          brightness: 102,
-          warmth: -6,
-        }));
-        break;
-      case 'moody':
-        setAdjustments((prev) => ({
-          ...prev,
-          contrast: 130,
-          saturation: 95,
-          brightness: 92,
-          warmth: 12,
-        }));
-        break;
-      case 'normal':
-      default:
-        setAdjustments((prev) => ({
-          ...prev,
-          contrast: 100,
-          saturation: 100,
-          brightness: 100,
-          warmth: 0,
-        }));
-        break;
-    }
-  };
-
   // Perform Final Canvas Export (Web & Native Fallback)
   const handleApplyAndSave = async () => {
     if (!imageUri) return;
@@ -215,7 +168,12 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
 
     try {
       if (Platform.OS === 'web' && typeof document !== 'undefined') {
-        const renderedDataUrl = await new Promise<string>((resolve) => {
+        const renderedData = await new Promise<{
+          dataUrl: string;
+          width: number;
+          height: number;
+          aspectRatio: number;
+        }>((resolve) => {
           const img = new (window as any).Image();
           img.crossOrigin = 'anonymous';
           img.onload = () => {
@@ -223,7 +181,14 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
               const canvas = document.createElement('canvas');
               const ctx = canvas.getContext('2d');
               if (!ctx) {
-                resolve(imageUri);
+                const targetAspect = ASPECT_RATIO_VALUES[adjustments.aspectRatio];
+                const fbAspect = targetAspect ?? imageDimensions.width / imageDimensions.height;
+                resolve({
+                  dataUrl: imageUri,
+                  width: imageDimensions.width,
+                  height: imageDimensions.height,
+                  aspectRatio: fbAspect,
+                });
                 return;
               }
 
@@ -278,48 +243,69 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
               ctx.rotate(angleRad);
               ctx.scale(adjustments.flipH ? -1 : 1, adjustments.flipV ? -1 : 1);
 
-              // Apply CSS Filters (Brightness, Contrast, Saturation)
-              const filterParts = [
-                `brightness(${adjustments.brightness}%)`,
-                `contrast(${adjustments.contrast}%)`,
-                `saturate(${adjustments.saturation}%)`,
-              ];
-              if (adjustments.warmth !== 0) {
-                // Approximate warmth with slight sepia and hue-rotate
-                if (adjustments.warmth > 0) {
-                  filterParts.push(`sepia(${Math.min(40, adjustments.warmth * 1.2)}%)`);
-                } else {
-                  filterParts.push(`hue-rotate(${adjustments.warmth}deg)`);
-                }
-              }
-              ctx.filter = filterParts.join(' ');
-
               // Draw image centered
-              const drawW = canvas.width * (srcWidth / effectiveCropW) * adjustments.zoom;
-              const drawH = canvas.height * (srcHeight / effectiveCropH) * adjustments.zoom;
+              const drawW = canvas.width * (srcWidth / effectiveCropW);
+              const drawH = canvas.height * (srcHeight / effectiveCropH);
 
               ctx.drawImage(img, -drawW / 2, -drawH / 2, drawW, drawH);
               ctx.restore();
 
               const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
-              resolve(dataUrl);
+              resolve({
+                dataUrl,
+                width: canvas.width,
+                height: canvas.height,
+                aspectRatio: canvas.width / canvas.height,
+              });
             } catch (canvasErr) {
               console.warn('[ImageEditorModal] Canvas processing fallback:', canvasErr);
-              resolve(imageUri);
+              const targetAspect = ASPECT_RATIO_VALUES[adjustments.aspectRatio];
+              const fbAspect = targetAspect ?? imageDimensions.width / imageDimensions.height;
+              resolve({
+                dataUrl: imageUri,
+                width: imageDimensions.width,
+                height: imageDimensions.height,
+                aspectRatio: fbAspect,
+              });
             }
           };
-          img.onerror = () => resolve(imageUri);
+          img.onerror = () => {
+            const targetAspect = ASPECT_RATIO_VALUES[adjustments.aspectRatio];
+            const fbAspect = targetAspect ?? imageDimensions.width / imageDimensions.height;
+            resolve({
+              dataUrl: imageUri,
+              width: imageDimensions.width,
+              height: imageDimensions.height,
+              aspectRatio: fbAspect,
+            });
+          };
           img.src = imageUri;
         });
 
-        onSave(renderedDataUrl);
+        onSave(renderedData.dataUrl, {
+          width: renderedData.width,
+          height: renderedData.height,
+          aspectRatio: renderedData.aspectRatio,
+        });
       } else {
         // Native / headless test fallback
-        onSave(imageUri);
+        const targetAspect = ASPECT_RATIO_VALUES[adjustments.aspectRatio];
+        const fbAspect = targetAspect ?? imageDimensions.width / imageDimensions.height;
+        onSave(imageUri, {
+          width: imageDimensions.width,
+          height: imageDimensions.height,
+          aspectRatio: fbAspect,
+        });
       }
     } catch (err) {
       console.warn('[ImageEditorModal] Error applying edits:', err);
-      onSave(imageUri);
+      const targetAspect = ASPECT_RATIO_VALUES[adjustments.aspectRatio];
+      const fbAspect = targetAspect ?? imageDimensions.width / imageDimensions.height;
+      onSave(imageUri, {
+        width: imageDimensions.width,
+        height: imageDimensions.height,
+        aspectRatio: fbAspect,
+      });
     } finally {
       setIsProcessing(false);
     }
@@ -329,7 +315,11 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
 
   // Compute live visual style transforms for container & image
   const totalAngle = (adjustments.rotation + adjustments.fineAngle) % 360;
-  const targetAspectVal = ASPECT_RATIO_VALUES[adjustments.aspectRatio] ?? 4 / 3;
+  const targetAspectVal =
+    ASPECT_RATIO_VALUES[adjustments.aspectRatio] ??
+    (imageDimensions.width && imageDimensions.height
+      ? imageDimensions.width / imageDimensions.height
+      : 4 / 3);
 
   const imageTransformStyle = {
     transform: [
@@ -338,12 +328,6 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
       { scaleY: adjustments.flipV ? -1 : 1 },
       { scale: adjustments.zoom },
     ],
-    // Web CSS filter string for ultra smooth real-time feedback
-    ...(Platform.OS === 'web'
-      ? ({
-          filter: `brightness(${adjustments.brightness}%) contrast(${adjustments.contrast}%) saturate(${adjustments.saturation}%)`,
-        } as any)
-      : {}),
   };
 
   return (
@@ -374,7 +358,7 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
               <View>
                 <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>{title}</Text>
                 <Text style={[styles.headerSubtitle, { color: colors.textMuted }]}>
-                  Frame, rotate, and enhance your recipe photo
+                  Crop, frame, rotate, and flip your recipe photo
                 </Text>
               </View>
             </View>
@@ -449,161 +433,140 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
             </View>
           </View>
 
-          {/* Tab Navigation */}
-          <View style={[styles.tabBar, { borderBottomColor: colors.borderLight }]}>
-            <TouchableOpacity
-              testID="image-editor-tab-crop"
-              style={[
-                styles.tabItem,
-                activeTab === 'crop' && [
-                  styles.activeTabItem,
-                  { borderBottomColor: colors.primary },
-                ],
-              ]}
-              onPress={() => setActiveTab('crop')}
-            >
-              <Icon
-                name="crop"
-                size={16}
-                color={activeTab === 'crop' ? colors.primary : colors.textMuted}
-              />
-              <Text
-                style={[
-                  styles.tabLabel,
-                  { color: activeTab === 'crop' ? colors.primary : colors.textMuted },
-                ]}
-              >
-                1. Crop & Frame
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              testID="image-editor-tab-rotate"
-              style={[
-                styles.tabItem,
-                activeTab === 'rotate' && [
-                  styles.activeTabItem,
-                  { borderBottomColor: colors.primary },
-                ],
-              ]}
-              onPress={() => setActiveTab('rotate')}
-            >
-              <Icon
-                name="rotate"
-                size={16}
-                color={activeTab === 'rotate' ? colors.primary : colors.textMuted}
-              />
-              <Text
-                style={[
-                  styles.tabLabel,
-                  { color: activeTab === 'rotate' ? colors.primary : colors.textMuted },
-                ]}
-              >
-                2. Rotate & Flip
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              testID="image-editor-tab-adjust"
-              style={[
-                styles.tabItem,
-                activeTab === 'adjust' && [
-                  styles.activeTabItem,
-                  { borderBottomColor: colors.primary },
-                ],
-              ]}
-              onPress={() => setActiveTab('adjust')}
-            >
-              <Icon
-                name="adjust"
-                size={16}
-                color={activeTab === 'adjust' ? colors.primary : colors.textMuted}
-              />
-              <Text
-                style={[
-                  styles.tabLabel,
-                  { color: activeTab === 'adjust' ? colors.primary : colors.textMuted },
-                ]}
-              >
-                3. Adjust & Enhance
-              </Text>
-            </TouchableOpacity>
-          </View>
-
-          {/* Controls Panel (Contextual to Active Tab) */}
+          {/* Unified Controls Panel (Cropping, Framing, Rotating & Flipping in One Menu) */}
           <ScrollView
             style={styles.controlsScroll}
             contentContainerStyle={styles.controlsContent}
             showsVerticalScrollIndicator={false}
           >
-            {/* TAB 1: CROP & FRAME */}
-            {activeTab === 'crop' && (
-              <View style={styles.panelSection}>
-                <Text style={[styles.sectionHeading, { color: colors.textPrimary }]}>
-                  Select Aspect Ratio:
-                </Text>
-                <View style={styles.aspectPillRow}>
-                  {[
-                    { key: '4:3' as AspectRatioPreset, label: '4:3 Hero', hint: 'Recommended' },
-                    { key: '1:1' as AspectRatioPreset, label: '1:1 Square', hint: 'Standard' },
-                    { key: '16:9' as AspectRatioPreset, label: '16:9 Wide', hint: 'Cinematic' },
-                    { key: '3:4' as AspectRatioPreset, label: '3:4 Portrait', hint: 'Mobile' },
-                    { key: 'free' as AspectRatioPreset, label: 'Freeform', hint: 'Auto' },
-                  ].map((preset) => {
-                    const isSelected = adjustments.aspectRatio === preset.key;
-                    return (
-                      <TouchableOpacity
-                        key={preset.key}
-                        testID={`image-editor-aspect-${preset.key}`}
-                        style={[
-                          styles.aspectPill,
-                          {
-                            backgroundColor: isSelected ? colors.primaryLight : colors.bgSubtle,
-                            borderColor: isSelected ? colors.primary : colors.borderLight,
-                          },
-                        ]}
-                        onPress={() =>
-                          setAdjustments((prev) => ({ ...prev, aspectRatio: preset.key }))
-                        }
-                      >
-                        <Text
-                          style={[
-                            styles.aspectPillTitle,
-                            { color: isSelected ? colors.primary : colors.textPrimary },
-                          ]}
-                        >
-                          {preset.label}
-                        </Text>
-                        <Text style={[styles.aspectPillHint, { color: colors.textMuted }]}>
-                          {preset.hint}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-
-                {/* Zoom Level Control */}
-                <View style={[styles.sliderCard, { backgroundColor: colors.bgSubtle }]}>
-                  <View style={styles.sliderHeader}>
-                    <Text style={[styles.sliderLabel, { color: colors.textPrimary }]}>
-                      Zoom & Scale
-                    </Text>
-                    <Text style={[styles.sliderValue, { color: colors.primary }]}>
-                      {adjustments.zoom.toFixed(1)}x
-                    </Text>
-                  </View>
-                  <View style={styles.buttonSliderRow}>
+            <View style={styles.panelSection}>
+              {/* Aspect Ratio Presets */}
+              <Text style={[styles.sectionHeading, { color: colors.textPrimary }]}>
+                Select Aspect Ratio:
+              </Text>
+              <View style={styles.aspectPillRow}>
+                {[
+                  { key: '4:3' as AspectRatioPreset, label: '4:3 Hero', hint: 'Recommended' },
+                  { key: '1:1' as AspectRatioPreset, label: '1:1 Square', hint: 'Standard' },
+                  { key: '16:9' as AspectRatioPreset, label: '16:9 Wide', hint: 'Cinematic' },
+                  { key: '3:4' as AspectRatioPreset, label: '3:4 Portrait', hint: 'Mobile' },
+                  { key: 'free' as AspectRatioPreset, label: 'Freeform', hint: 'Auto' },
+                ].map((preset) => {
+                  const isSelected = adjustments.aspectRatio === preset.key;
+                  return (
                     <TouchableOpacity
-                      testID="image-editor-zoom-out"
-                      style={[styles.stepperBtn, { backgroundColor: colors.bgSurface }]}
+                      key={preset.key}
+                      testID={`image-editor-aspect-${preset.key}`}
+                      style={[
+                        styles.aspectPill,
+                        {
+                          backgroundColor: isSelected ? colors.primaryLight : colors.bgSubtle,
+                          borderColor: isSelected ? colors.primary : colors.borderLight,
+                        },
+                      ]}
                       onPress={() =>
-                        setAdjustments((p) => ({ ...p, zoom: Math.max(1.0, p.zoom - 0.2) }))
+                        setAdjustments((prev) => ({ ...prev, aspectRatio: preset.key }))
                       }
                     >
-                      <Text style={[styles.stepperSymbol, { color: colors.textPrimary }]}>−</Text>
+                      <Text
+                        style={[
+                          styles.aspectPillTitle,
+                          { color: isSelected ? colors.primary : colors.textPrimary },
+                        ]}
+                      >
+                        {preset.label}
+                      </Text>
+                      <Text style={[styles.aspectPillHint, { color: colors.textMuted }]}>
+                        {preset.hint}
+                      </Text>
                     </TouchableOpacity>
+                  );
+                })}
+              </View>
 
-                    <View style={styles.zoomTrack}>
+              {/* Zoom & Scale Stepper */}
+              <View
+                style={[styles.sliderCard, { backgroundColor: colors.bgSubtle, marginTop: 10 }]}
+              >
+                <View style={styles.sliderHeader}>
+                  <Text style={[styles.sliderLabel, { color: colors.textPrimary }]}>
+                    Zoom & Scale
+                  </Text>
+                  <Text style={[styles.sliderValue, { color: colors.primary }]}>
+                    {adjustments.zoom.toFixed(1)}x
+                  </Text>
+                </View>
+                <View style={styles.buttonSliderRow}>
+                  <TouchableOpacity
+                    testID="image-editor-zoom-out"
+                    style={[styles.stepperBtn, { backgroundColor: colors.bgSurface }]}
+                    onPress={() => handleZoomChange(adjustments.zoom - 0.2)}
+                  >
+                    <Text style={[styles.stepperSymbol, { color: colors.textPrimary }]}>−</Text>
+                  </TouchableOpacity>
+
+                  {/* Interactive Draggable Zoom Slider Track */}
+                  <View
+                    ref={zoomTrackRef}
+                    testID="image-editor-zoom-track"
+                    style={styles.zoomTrackInteractive}
+                    onLayout={(e) => {
+                      const { width } = e.nativeEvent.layout;
+                      if (width) {
+                        zoomTrackLayoutRef.current.width = width;
+                      }
+                      if (
+                        Platform.OS === 'web' &&
+                        typeof (e.target as any)?.getBoundingClientRect === 'function'
+                      ) {
+                        const rect = (e.target as any).getBoundingClientRect();
+                        zoomTrackLayoutRef.current = {
+                          pageX: rect.left,
+                          width: rect.width || width,
+                        };
+                      }
+                    }}
+                    onStartShouldSetResponder={() => true}
+                    onMoveShouldSetResponder={() => true}
+                    onResponderGrant={(e) => {
+                      if (typeof e.nativeEvent?.locationX === 'number') {
+                        const ratio = Math.max(
+                          0,
+                          Math.min(
+                            1,
+                            e.nativeEvent.locationX / (zoomTrackLayoutRef.current.width || 200),
+                          ),
+                        );
+                        handleZoomChange(1.0 + ratio * 2.0);
+                      } else {
+                        const pageX =
+                          (e.nativeEvent as any)?.pageX ?? (e.nativeEvent as any)?.clientX;
+                        if (typeof pageX === 'number') {
+                          handleZoomTrackTouch(pageX);
+                        }
+                      }
+                    }}
+                    onResponderMove={(e) => {
+                      if (typeof e.nativeEvent?.locationX === 'number') {
+                        const ratio = Math.max(
+                          0,
+                          Math.min(
+                            1,
+                            e.nativeEvent.locationX / (zoomTrackLayoutRef.current.width || 200),
+                          ),
+                        );
+                        handleZoomChange(1.0 + ratio * 2.0);
+                      } else {
+                        const pageX =
+                          (e.nativeEvent as any)?.pageX ?? (e.nativeEvent as any)?.clientX;
+                        if (typeof pageX === 'number') {
+                          handleZoomTrackTouch(pageX);
+                        }
+                      }
+                    }}
+                  >
+                    {/* Background Track Line */}
+                    <View style={styles.zoomTrackBg}>
                       <View
                         style={[
                           styles.zoomProgress,
@@ -615,365 +578,195 @@ export const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
                       />
                     </View>
 
-                    <TouchableOpacity
-                      testID="image-editor-zoom-in"
-                      style={[styles.stepperBtn, { backgroundColor: colors.bgSurface }]}
-                      onPress={() =>
-                        setAdjustments((p) => ({ ...p, zoom: Math.min(3.0, p.zoom + 0.2) }))
-                      }
-                    >
-                      <Text style={[styles.stepperSymbol, { color: colors.textPrimary }]}>+</Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              </View>
-            )}
-
-            {/* TAB 2: ROTATE & FLIP */}
-            {activeTab === 'rotate' && (
-              <View style={styles.panelSection}>
-                <Text style={[styles.sectionHeading, { color: colors.textPrimary }]}>
-                  Quick Orientation:
-                </Text>
-                <View style={styles.rotateActionsRow}>
-                  <TouchableOpacity
-                    testID="image-editor-rotate-left"
-                    style={[
-                      styles.rotateBtn,
-                      { backgroundColor: colors.bgSubtle, borderColor: colors.borderLight },
-                    ]}
-                    onPress={() => handleRotate90(false)}
-                  >
-                    <Icon name="rotate-left" size={20} color={colors.primary} />
-                    <Text style={[styles.rotateBtnLabel, { color: colors.textPrimary }]}>
-                      Rotate −90°
-                    </Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    testID="image-editor-rotate-right"
-                    style={[
-                      styles.rotateBtn,
-                      { backgroundColor: colors.bgSubtle, borderColor: colors.borderLight },
-                    ]}
-                    onPress={() => handleRotate90(true)}
-                  >
-                    <Icon name="rotate-right" size={20} color={colors.primary} />
-                    <Text style={[styles.rotateBtnLabel, { color: colors.textPrimary }]}>
-                      Rotate +90°
-                    </Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    testID="image-editor-flip-h"
-                    style={[
-                      styles.rotateBtn,
-                      {
-                        backgroundColor: adjustments.flipH ? colors.primaryLight : colors.bgSubtle,
-                        borderColor: adjustments.flipH ? colors.primary : colors.borderLight,
-                      },
-                    ]}
-                    onPress={handleToggleFlipH}
-                  >
-                    <Icon
-                      name="flip"
-                      size={20}
-                      color={adjustments.flipH ? colors.primary : colors.textPrimary}
-                    />
-                    <Text
+                    {/* Draggable Knob / Thumb */}
+                    <View
+                      testID="image-editor-zoom-thumb"
                       style={[
-                        styles.rotateBtnLabel,
-                        { color: adjustments.flipH ? colors.primary : colors.textPrimary },
-                      ]}
-                    >
-                      Flip Horiz
-                    </Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    testID="image-editor-flip-v"
-                    style={[
-                      styles.rotateBtn,
-                      {
-                        backgroundColor: adjustments.flipV ? colors.primaryLight : colors.bgSubtle,
-                        borderColor: adjustments.flipV ? colors.primary : colors.borderLight,
-                      },
-                    ]}
-                    onPress={handleToggleFlipV}
-                  >
-                    <Icon
-                      name="expand"
-                      size={20}
-                      color={adjustments.flipV ? colors.primary : colors.textPrimary}
-                    />
-                    <Text
-                      style={[
-                        styles.rotateBtnLabel,
-                        { color: adjustments.flipV ? colors.primary : colors.textPrimary },
-                      ]}
-                    >
-                      Flip Vert
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-
-                {/* Fine Angle Straighten */}
-                <View
-                  style={[styles.sliderCard, { backgroundColor: colors.bgSubtle, marginTop: 12 }]}
-                >
-                  <View style={styles.sliderHeader}>
-                    <Text style={[styles.sliderLabel, { color: colors.textPrimary }]}>
-                      Fine Angle Alignment
-                    </Text>
-                    <Text
-                      testID="image-editor-fine-angle-value"
-                      style={[styles.sliderValue, { color: colors.primary }]}
-                    >
-                      {adjustments.fineAngle > 0
-                        ? `+${adjustments.fineAngle}°`
-                        : `${adjustments.fineAngle}°`}
-                    </Text>
-                  </View>
-
-                  <View style={styles.buttonSliderRow}>
-                    <TouchableOpacity
-                      testID="image-editor-angle-minus"
-                      style={[styles.stepperBtn, { backgroundColor: colors.bgSurface }]}
-                      onPress={() =>
-                        setAdjustments((p) => ({ ...p, fineAngle: Math.max(-45, p.fineAngle - 2) }))
-                      }
-                    >
-                      <Text style={[styles.stepperSymbol, { color: colors.textPrimary }]}>−</Text>
-                    </TouchableOpacity>
-
-                    <TouchableOpacity
-                      testID="image-editor-angle-reset"
-                      style={[styles.fineResetBtn, { backgroundColor: colors.bgSurface }]}
-                      onPress={() => setAdjustments((p) => ({ ...p, fineAngle: 0 }))}
-                    >
-                      <Text style={[styles.fineResetText, { color: colors.textMuted }]}>
-                        0° (Level)
-                      </Text>
-                    </TouchableOpacity>
-
-                    <TouchableOpacity
-                      testID="image-editor-angle-plus"
-                      style={[styles.stepperBtn, { backgroundColor: colors.bgSurface }]}
-                      onPress={() =>
-                        setAdjustments((p) => ({ ...p, fineAngle: Math.min(45, p.fineAngle + 2) }))
-                      }
-                    >
-                      <Text style={[styles.stepperSymbol, { color: colors.textPrimary }]}>+</Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              </View>
-            )}
-
-            {/* TAB 3: ADJUST & ENHANCE */}
-            {activeTab === 'adjust' && (
-              <View style={styles.panelSection}>
-                {/* One-touch Food Presets */}
-                <Text style={[styles.sectionHeading, { color: colors.textPrimary }]}>
-                  Chef Food Enhancements:
-                </Text>
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  style={styles.presetScroll}
-                >
-                  {[
-                    { id: 'normal', label: 'Original', desc: 'No Filter' },
-                    { id: 'vibrant', label: '✨ Vibrant Curry', desc: '+Contrast & Saturation' },
-                    { id: 'warm', label: '🔥 Golden Tandoor', desc: '+Warm Amber Glow' },
-                    { id: 'crisp', label: '🥗 Fresh & Crisp', desc: 'Crisp High Clarity' },
-                    { id: 'moody', label: '🍽️ Moody Gourmet', desc: 'Deep Rich Shadows' },
-                  ].map((preset) => (
-                    <TouchableOpacity
-                      key={preset.id}
-                      testID={`image-editor-preset-${preset.id}`}
-                      style={[
-                        styles.presetCard,
+                        styles.zoomThumb,
                         {
-                          backgroundColor: colors.bgSubtle,
-                          borderColor: colors.borderLight,
+                          left: `${((adjustments.zoom - 1.0) / 2.0) * 100}%`,
+                          borderColor: colors.primary,
                         },
                       ]}
-                      onPress={() => applyPresetFilter(preset.id)}
-                    >
-                      <Text style={[styles.presetCardTitle, { color: colors.textPrimary }]}>
-                        {preset.label}
-                      </Text>
-                      <Text style={[styles.presetCardDesc, { color: colors.textMuted }]}>
-                        {preset.desc}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </ScrollView>
+                    />
 
-                {/* Brightness Slider */}
-                <View
-                  style={[styles.sliderCard, { backgroundColor: colors.bgSubtle, marginTop: 12 }]}
-                >
-                  <View style={styles.sliderHeader}>
-                    <View style={styles.sliderLabelRow}>
-                      <Icon name="brightness" size={15} color={colors.primary} />
-                      <Text style={[styles.sliderLabel, { color: colors.textPrimary }]}>
-                        Brightness
-                      </Text>
-                    </View>
-                    <Text style={[styles.sliderValue, { color: colors.primary }]}>
-                      {adjustments.brightness}%
-                    </Text>
-                  </View>
-                  <View style={styles.buttonSliderRow}>
-                    <TouchableOpacity
-                      testID="image-editor-bright-minus"
-                      style={[styles.stepperBtn, { backgroundColor: colors.bgSurface }]}
-                      onPress={() =>
-                        setAdjustments((p) => ({
-                          ...p,
-                          brightness: Math.max(50, p.brightness - 5),
-                        }))
-                      }
-                    >
-                      <Text style={[styles.stepperSymbol, { color: colors.textPrimary }]}>−</Text>
-                    </TouchableOpacity>
-                    <View style={styles.zoomTrack}>
-                      <View
-                        style={[
-                          styles.zoomProgress,
-                          {
-                            backgroundColor: colors.primary,
-                            width: `${((adjustments.brightness - 50) / 100) * 100}%`,
-                          },
-                        ]}
+                    {/* Web Native Range Input for instant responsive dragging & wheel support */}
+                    {Platform.OS === 'web' && (
+                      <input
+                        type="range"
+                        id="image-editor-zoom-slider"
+                        data-testid="image-editor-zoom-slider"
+                        {...({ testID: 'image-editor-zoom-slider' } as any)}
+                        min="1.0"
+                        max="3.0"
+                        step="0.05"
+                        value={adjustments.zoom}
+                        onChange={(e) => {
+                          handleZoomChange(parseFloat((e.target as HTMLInputElement).value));
+                        }}
+                        style={{
+                          position: 'absolute',
+                          top: 0,
+                          left: 0,
+                          width: '100%',
+                          height: '100%',
+                          opacity: 0,
+                          cursor: 'ew-resize',
+                          margin: 0,
+                          padding: 0,
+                          zIndex: 10,
+                        }}
                       />
-                    </View>
-                    <TouchableOpacity
-                      testID="image-editor-bright-plus"
-                      style={[styles.stepperBtn, { backgroundColor: colors.bgSurface }]}
-                      onPress={() =>
-                        setAdjustments((p) => ({
-                          ...p,
-                          brightness: Math.min(150, p.brightness + 5),
-                        }))
-                      }
-                    >
-                      <Text style={[styles.stepperSymbol, { color: colors.textPrimary }]}>+</Text>
-                    </TouchableOpacity>
+                    )}
                   </View>
-                </View>
 
-                {/* Contrast Slider */}
-                <View
-                  style={[styles.sliderCard, { backgroundColor: colors.bgSubtle, marginTop: 8 }]}
-                >
-                  <View style={styles.sliderHeader}>
-                    <View style={styles.sliderLabelRow}>
-                      <Icon name="contrast" size={15} color={colors.primary} />
-                      <Text style={[styles.sliderLabel, { color: colors.textPrimary }]}>
-                        Contrast
-                      </Text>
-                    </View>
-                    <Text style={[styles.sliderValue, { color: colors.primary }]}>
-                      {adjustments.contrast}%
-                    </Text>
-                  </View>
-                  <View style={styles.buttonSliderRow}>
-                    <TouchableOpacity
-                      testID="image-editor-contrast-minus"
-                      style={[styles.stepperBtn, { backgroundColor: colors.bgSurface }]}
-                      onPress={() =>
-                        setAdjustments((p) => ({
-                          ...p,
-                          contrast: Math.max(50, p.contrast - 5),
-                        }))
-                      }
-                    >
-                      <Text style={[styles.stepperSymbol, { color: colors.textPrimary }]}>−</Text>
-                    </TouchableOpacity>
-                    <View style={styles.zoomTrack}>
-                      <View
-                        style={[
-                          styles.zoomProgress,
-                          {
-                            backgroundColor: colors.primary,
-                            width: `${((adjustments.contrast - 50) / 100) * 100}%`,
-                          },
-                        ]}
-                      />
-                    </View>
-                    <TouchableOpacity
-                      testID="image-editor-contrast-plus"
-                      style={[styles.stepperBtn, { backgroundColor: colors.bgSurface }]}
-                      onPress={() =>
-                        setAdjustments((p) => ({
-                          ...p,
-                          contrast: Math.min(150, p.contrast + 5),
-                        }))
-                      }
-                    >
-                      <Text style={[styles.stepperSymbol, { color: colors.textPrimary }]}>+</Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-
-                {/* Saturation Slider */}
-                <View
-                  style={[styles.sliderCard, { backgroundColor: colors.bgSubtle, marginTop: 8 }]}
-                >
-                  <View style={styles.sliderHeader}>
-                    <View style={styles.sliderLabelRow}>
-                      <Icon name="adjust" size={15} color={colors.primary} />
-                      <Text style={[styles.sliderLabel, { color: colors.textPrimary }]}>
-                        Saturation (Food Vibrance)
-                      </Text>
-                    </View>
-                    <Text style={[styles.sliderValue, { color: colors.primary }]}>
-                      {adjustments.saturation}%
-                    </Text>
-                  </View>
-                  <View style={styles.buttonSliderRow}>
-                    <TouchableOpacity
-                      testID="image-editor-sat-minus"
-                      style={[styles.stepperBtn, { backgroundColor: colors.bgSurface }]}
-                      onPress={() =>
-                        setAdjustments((p) => ({
-                          ...p,
-                          saturation: Math.max(0, p.saturation - 10),
-                        }))
-                      }
-                    >
-                      <Text style={[styles.stepperSymbol, { color: colors.textPrimary }]}>−</Text>
-                    </TouchableOpacity>
-                    <View style={styles.zoomTrack}>
-                      <View
-                        style={[
-                          styles.zoomProgress,
-                          {
-                            backgroundColor: colors.primary,
-                            width: `${(adjustments.saturation / 200) * 100}%`,
-                          },
-                        ]}
-                      />
-                    </View>
-                    <TouchableOpacity
-                      testID="image-editor-sat-plus"
-                      style={[styles.stepperBtn, { backgroundColor: colors.bgSurface }]}
-                      onPress={() =>
-                        setAdjustments((p) => ({
-                          ...p,
-                          saturation: Math.min(200, p.saturation + 10),
-                        }))
-                      }
-                    >
-                      <Text style={[styles.stepperSymbol, { color: colors.textPrimary }]}>+</Text>
-                    </TouchableOpacity>
-                  </View>
+                  <TouchableOpacity
+                    testID="image-editor-zoom-in"
+                    style={[styles.stepperBtn, { backgroundColor: colors.bgSurface }]}
+                    onPress={() => handleZoomChange(adjustments.zoom + 0.2)}
+                  >
+                    <Text style={[styles.stepperSymbol, { color: colors.textPrimary }]}>+</Text>
+                  </TouchableOpacity>
                 </View>
               </View>
-            )}
+
+              {/* Quick Orientation & Flip Controls */}
+              <Text style={[styles.sectionHeading, { color: colors.textPrimary, marginTop: 12 }]}>
+                Quick Orientation:
+              </Text>
+              <View style={styles.rotateActionsRow}>
+                <TouchableOpacity
+                  testID="image-editor-rotate-left"
+                  style={[
+                    styles.rotateBtn,
+                    { backgroundColor: colors.bgSubtle, borderColor: colors.borderLight },
+                  ]}
+                  onPress={() => handleRotate90(false)}
+                >
+                  <Icon name="rotate-left" size={20} color={colors.primary} />
+                  <Text style={[styles.rotateBtnLabel, { color: colors.textPrimary }]}>
+                    Rotate −90°
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  testID="image-editor-rotate-right"
+                  style={[
+                    styles.rotateBtn,
+                    { backgroundColor: colors.bgSubtle, borderColor: colors.borderLight },
+                  ]}
+                  onPress={() => handleRotate90(true)}
+                >
+                  <Icon name="rotate-right" size={20} color={colors.primary} />
+                  <Text style={[styles.rotateBtnLabel, { color: colors.textPrimary }]}>
+                    Rotate +90°
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  testID="image-editor-flip-h"
+                  style={[
+                    styles.rotateBtn,
+                    {
+                      backgroundColor: adjustments.flipH ? colors.primaryLight : colors.bgSubtle,
+                      borderColor: adjustments.flipH ? colors.primary : colors.borderLight,
+                    },
+                  ]}
+                  onPress={handleToggleFlipH}
+                >
+                  <Icon
+                    name="flip"
+                    size={20}
+                    color={adjustments.flipH ? colors.primary : colors.textPrimary}
+                  />
+                  <Text
+                    style={[
+                      styles.rotateBtnLabel,
+                      { color: adjustments.flipH ? colors.primary : colors.textPrimary },
+                    ]}
+                  >
+                    Flip Horiz
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  testID="image-editor-flip-v"
+                  style={[
+                    styles.rotateBtn,
+                    {
+                      backgroundColor: adjustments.flipV ? colors.primaryLight : colors.bgSubtle,
+                      borderColor: adjustments.flipV ? colors.primary : colors.borderLight,
+                    },
+                  ]}
+                  onPress={handleToggleFlipV}
+                >
+                  <Icon
+                    name="expand"
+                    size={20}
+                    color={adjustments.flipV ? colors.primary : colors.textPrimary}
+                  />
+                  <Text
+                    style={[
+                      styles.rotateBtnLabel,
+                      { color: adjustments.flipV ? colors.primary : colors.textPrimary },
+                    ]}
+                  >
+                    Flip Vert
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* Fine Angle Alignment */}
+              <View
+                style={[styles.sliderCard, { backgroundColor: colors.bgSubtle, marginTop: 10 }]}
+              >
+                <View style={styles.sliderHeader}>
+                  <Text style={[styles.sliderLabel, { color: colors.textPrimary }]}>
+                    Fine Angle Alignment
+                  </Text>
+                  <Text
+                    testID="image-editor-fine-angle-value"
+                    style={[styles.sliderValue, { color: colors.primary }]}
+                  >
+                    {adjustments.fineAngle > 0
+                      ? `+${adjustments.fineAngle}°`
+                      : `${adjustments.fineAngle}°`}
+                  </Text>
+                </View>
+
+                <View style={styles.buttonSliderRow}>
+                  <TouchableOpacity
+                    testID="image-editor-angle-minus"
+                    style={[styles.stepperBtn, { backgroundColor: colors.bgSurface }]}
+                    onPress={() =>
+                      setAdjustments((p) => ({ ...p, fineAngle: Math.max(-45, p.fineAngle - 2) }))
+                    }
+                  >
+                    <Text style={[styles.stepperSymbol, { color: colors.textPrimary }]}>−</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    testID="image-editor-angle-reset"
+                    style={[styles.fineResetBtn, { backgroundColor: colors.bgSurface }]}
+                    onPress={() => setAdjustments((p) => ({ ...p, fineAngle: 0 }))}
+                  >
+                    <Text style={[styles.fineResetText, { color: colors.textMuted }]}>
+                      0° (Level)
+                    </Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    testID="image-editor-angle-plus"
+                    style={[styles.stepperBtn, { backgroundColor: colors.bgSurface }]}
+                    onPress={() =>
+                      setAdjustments((p) => ({ ...p, fineAngle: Math.min(45, p.fineAngle + 2) }))
+                    }
+                  >
+                    <Text style={[styles.stepperSymbol, { color: colors.textPrimary }]}>+</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </View>
           </ScrollView>
 
           {/* Bottom Action Footer */}
@@ -1091,6 +884,7 @@ const styles = StyleSheet.create({
   cropFrame: {
     height: '100%',
     maxHeight: 260,
+    maxWidth: '92%',
     borderRadius: 10,
     borderWidth: 2,
     position: 'relative',
@@ -1184,29 +978,8 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '700',
   },
-  tabBar: {
-    flexDirection: 'row',
-    borderBottomWidth: 1,
-  },
-  tabItem: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    paddingVertical: 12,
-    borderBottomWidth: 2,
-    borderBottomColor: 'transparent',
-  },
-  activeTabItem: {
-    borderBottomWidth: 2,
-  },
-  tabLabel: {
-    fontSize: 13,
-    fontWeight: '700',
-  },
   controlsScroll: {
-    maxHeight: 220,
+    maxHeight: 280,
   },
   controlsContent: {
     padding: 16,
@@ -1252,11 +1025,6 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginBottom: 8,
   },
-  sliderLabelRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
   sliderLabel: {
     fontSize: 13,
     fontWeight: '700',
@@ -1284,6 +1052,21 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     lineHeight: 20,
   },
+  zoomTrackInteractive: {
+    flex: 1,
+    height: 36,
+    justifyContent: 'center',
+    marginHorizontal: 8,
+    position: 'relative',
+    cursor: 'pointer',
+  },
+  zoomTrackBg: {
+    width: '100%',
+    height: 6,
+    backgroundColor: 'rgba(128,128,128,0.25)',
+    borderRadius: 3,
+    overflow: 'hidden',
+  },
   zoomTrack: {
     flex: 1,
     height: 6,
@@ -1294,6 +1077,29 @@ const styles = StyleSheet.create({
   zoomProgress: {
     height: '100%',
     borderRadius: 3,
+  },
+  zoomThumb: {
+    position: 'absolute',
+    top: 8,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 2.5,
+    marginLeft: -10,
+    pointerEvents: 'none',
+    ...Platform.select({
+      web: {
+        boxShadow: '0px 2px 5px rgba(0,0,0,0.25)',
+      },
+      default: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.25,
+        shadowRadius: 3,
+        elevation: 4,
+      },
+    }),
   },
   rotateActionsRow: {
     flexDirection: 'row',
@@ -1327,25 +1133,6 @@ const styles = StyleSheet.create({
   fineResetText: {
     fontSize: 11,
     fontWeight: '600',
-  },
-  presetScroll: {
-    flexDirection: 'row',
-    marginBottom: 4,
-  },
-  presetCard: {
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 10,
-    borderWidth: 1,
-    marginRight: 8,
-  },
-  presetCardTitle: {
-    fontSize: 12,
-    fontWeight: '800',
-  },
-  presetCardDesc: {
-    fontSize: 10,
-    marginTop: 2,
   },
   footerBar: {
     flexDirection: 'row',

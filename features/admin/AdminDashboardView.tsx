@@ -10,6 +10,7 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import { useAuth } from '../../framework/context/AuthContext';
@@ -49,6 +50,8 @@ import {
   fetchAllChefSubmissions,
   publishChefSubmission,
   rejectChefSubmission,
+  subscribeToAllChefSubmissions,
+  initChefSubmissionsRealtime,
 } from '../../framework/services/chefMealKitsService';
 import {
   Coupon,
@@ -80,6 +83,7 @@ import {
   OutOfStockAlertPayload,
   dismissOutOfStockAlert,
   notifyRegionalAdminsOutOfStock,
+  playOrderAlertSound,
   subscribeToOutOfStockAlerts,
   subscribeToPendingApprovalCount,
 } from '../../framework/services/notificationService';
@@ -241,11 +245,73 @@ const ThinScrollView: React.FC<{
     </View>
   );
 };
+const TAB_HEADER_META: Record<AdminTab, { title: string; subtitle: string }> = {
+  overview: {
+    title: 'Operations Overview',
+    subtitle: 'Real-time kitchen orders, catalog health, capacity & fulfillment metrics',
+  },
+  orders: {
+    title: 'Live Orders & Fulfillment',
+    subtitle: 'Monitor kitchen workflow, update order statuses, approve meal kits, and dispatch',
+  },
+  kits: {
+    title: 'Meal Kit Catalog',
+    subtitle: 'Curate recipes, pricing, ingredients, photos, regional availability, and masalas',
+  },
+  inventory: {
+    title: 'Inventory Hub',
+    subtitle: 'Real-time ingredient levels, shelf-life tracker, automated restock & forecasting',
+  },
+  analytics: {
+    title: 'Regional Logistics & Analytics',
+    subtitle: 'Track order density, delivery SLA speed, customer retention & geographic trends',
+  },
+  customers: {
+    title: 'Customer Directory',
+    subtitle: 'Customer profiles, order frequency, phone verification, and wallet balances',
+  },
+  admins: {
+    title: 'Staff Admin Access Control',
+    subtitle: 'Role-based access control (RBAC), multi-region scoping, and team permissions',
+  },
+  users: {
+    title: 'User Management',
+    subtitle: 'Unified customer and staff accounts directory',
+  },
+  chefs: {
+    title: 'Chef Recipe Submissions',
+    subtitle: 'Review, test, adjust nutritional data, and publish chef community submissions',
+  },
+  coupons: {
+    title: 'Coupons & Promotions',
+    subtitle: 'Manage discount codes, campaign rules, limits, and customer usage',
+  },
+  revenue: {
+    title: 'Revenue & Financials',
+    subtitle: 'Financial insights, order totals, average order value (AOV), and settlements',
+  },
+  reviews: {
+    title: 'Customer Reviews Moderation',
+    subtitle: 'Customer ratings, photos, recipe feedback, and public moderation controls',
+  },
+  wallets: {
+    title: 'Customer Wallets & Credits',
+    subtitle: 'Issue promotional wallet credits, manage transactions, and track ledger balances',
+  },
+  referrals: {
+    title: 'Referral Programme',
+    subtitle: 'Manage viral referral rewards, affiliate conversions, and tracking codes',
+  },
+};
+
 export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = ({
   onNavigateToLogin,
 }) => {
   const { user, isAdmin, isSuperAdmin, isRegionalAdmin, assignedRegions, logout } = useAuth();
   const { colors, radii, shadows } = useTheme();
+  const { width } = useWindowDimensions();
+  const isDesktop = width >= 800;
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const [activeTab, setActiveTab] = useState<AdminTab>('overview');
   const [orders, setOrders] = useState<Order[]>([]);
@@ -516,6 +582,9 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
   const [grantChefModalVisible, setGrantChefModalVisible] = useState(false);
   const [grantChefTargetUser, setGrantChefTargetUser] = useState<ManagedUser | null>(null);
 
+  const knownPendingChefIdsRef = useRef<Set<string>>(new Set());
+  const isInitialChefLoadRef = useRef(true);
+
   // Reviews State
   const [moderationReviews, setModerationReviews] = useState<ExtendedReview[]>(
     getAllReviewsForModeration(),
@@ -640,6 +709,7 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
         refreshPendingApprovalCount(),
         syncMealKitsWithSupabase(),
         reloadLiveUsers(),
+        reloadChefData(),
       ]);
     } catch (err) {
       console.warn('[AdminDashboard] Error during full resync:', err);
@@ -716,10 +786,40 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
       setOutOfStockAlerts(alerts);
     });
 
+    const unsubscribeChefSb = initChefSubmissionsRealtime();
+    const unsubscribeChefSubmissions = subscribeToAllChefSubmissions((updatedSubmissions) => {
+      setChefSubmissions(updatedSubmissions);
+
+      // Detect newly arrived submissions that need admin review
+      const currentPending = updatedSubmissions.filter(
+        (s) => s.submissionStatus === 'pending_review',
+      );
+      if (isInitialChefLoadRef.current) {
+        isInitialChefLoadRef.current = false;
+        knownPendingChefIdsRef.current = new Set(currentPending.map((s) => s.id));
+      } else {
+        const newlyArrived = currentPending.filter(
+          (s) => !knownPendingChefIdsRef.current.has(s.id),
+        );
+        if (newlyArrived.length > 0) {
+          currentPending.forEach((s) => knownPendingChefIdsRef.current.add(s.id));
+          playOrderAlertSound();
+          const first = newlyArrived[0]!;
+          showInAppAlert(
+            'New Chef Submission For Review',
+            `Chef ${first.chefName || 'Partner'} submitted "${first.name}". You can review and approve it now in the Chef Submissions tab.`,
+          );
+        } else {
+          knownPendingChefIdsRef.current = new Set(currentPending.map((s) => s.id));
+        }
+      }
+    });
+
     const handleStorageChange = () => {
       reloadSupabaseOrders();
       refreshPendingApprovalCount();
       reloadLiveUsers();
+      reloadChefData();
     };
 
     if (typeof window !== 'undefined' && window.addEventListener) {
@@ -767,6 +867,8 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
       unsubscribeKits();
       unsubscribeOos();
       unsubscribeUsers();
+      unsubscribeChefSb();
+      unsubscribeChefSubmissions();
       appStateSub.remove();
       clearInterval(usersInterval);
       clearInterval(fallbackPollingInterval);
@@ -786,6 +888,12 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
       }
     };
   }, [isMulyamAdmin]);
+
+  useEffect(() => {
+    if (isMulyamAdmin && activeTab === 'chefs') {
+      reloadChefData();
+    }
+  }, [isMulyamAdmin, activeTab]);
 
   const handleApproveOrder = async (orderId: string) => {
     setUpdatingOrderId(orderId);
@@ -1385,122 +1493,22 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
   }
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.bgPrimary }]}>
-      {/* Top Header Bar */}
-      <View
-        style={[
-          styles.header,
-          { backgroundColor: colors.bgSurface, borderBottomColor: colors.borderLight },
-        ]}
-      >
-        <View style={styles.headerTitleCol}>
-          <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>
-            RasoiGenie Admin Control
-          </Text>
-          <Text style={[styles.headerSubtitle, { color: colors.textSecondary }]}>
-            Master operations, catalog, kitchen orders & regional logistics
-          </Text>
-        </View>
-
-        <View style={styles.headerRightActions}>
-          {/* Supabase Realtime Connection Indicator Pill */}
-          <View
-            style={[
-              styles.connectionPill,
-              {
-                backgroundColor:
-                  realtimeStatus === 'live'
-                    ? '#ECFDF5'
-                    : realtimeStatus === 'reconnecting' || realtimeStatus === 'connecting'
-                      ? '#FFFBEB'
-                      : '#F3F4F6',
-                borderColor:
-                  realtimeStatus === 'live'
-                    ? '#10B98160'
-                    : realtimeStatus === 'reconnecting' || realtimeStatus === 'connecting'
-                      ? '#F59E0B60'
-                      : '#9CA3AF60',
-              },
-            ]}
-          >
-            <View
-              style={[
-                styles.connectionDot,
-                {
-                  backgroundColor:
-                    realtimeStatus === 'live'
-                      ? '#10B981'
-                      : realtimeStatus === 'reconnecting' || realtimeStatus === 'connecting'
-                        ? '#F59E0B'
-                        : '#9CA3AF',
-                },
-              ]}
-            />
-            <Text
-              style={[
-                styles.connectionText,
-                {
-                  color:
-                    realtimeStatus === 'live'
-                      ? '#047857'
-                      : realtimeStatus === 'reconnecting' || realtimeStatus === 'connecting'
-                        ? '#B45309'
-                        : '#4B5563',
-                },
-              ]}
-            >
-              {realtimeStatus === 'live'
-                ? 'Live'
-                : realtimeStatus === 'reconnecting'
-                  ? 'Reconnecting'
-                  : realtimeStatus === 'connecting'
-                    ? 'Connecting'
-                    : 'Offline'}
-            </Text>
-          </View>
-
-          <View
-            style={[
-              styles.adminPill,
-              {
-                backgroundColor: isSuperAdmin ? '#FEF3C7' : colors.primaryLight,
-                borderColor: isSuperAdmin ? '#F59E0B' : colors.primary + '40',
-                flexDirection: 'row',
-                alignItems: 'center',
-                paddingHorizontal: 10,
-                paddingVertical: 5,
-              },
-            ]}
-          >
-            <Text
-              style={[
-                styles.adminPillText,
-                {
-                  color: isSuperAdmin ? '#B45309' : colors.primary,
-                  fontWeight: '700',
-                  fontSize: 12,
-                },
-              ]}
-            >
-              {isSuperAdmin
-                ? 'Super Admin (All Regions)'
-                : `Regional Admin (${assignedRegions && assignedRegions.length > 0 ? assignedRegions.map(formatRegionName).join(', ') : 'Pune City (Pune)'})`}
-            </Text>
-          </View>
-
-          <TouchableOpacity
-            style={[styles.logoutBtn, { borderColor: colors.borderLight }]}
-            onPress={logout}
-          >
-            <Text style={[styles.logoutText, { color: colors.danger }]}>Logout</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-
-      {/* Main Unified Navigation Menu Bar */}
+    <View
+      style={[
+        styles.container,
+        {
+          backgroundColor: colors.bgPrimary,
+          flexDirection: isDesktop ? 'row' : 'column',
+        },
+      ]}
+    >
+      {/* Left Modern ERP Sidebar */}
       <AdminNavigationMenu
         activeTab={activeTab}
-        onTabChange={setActiveTab}
+        onTabChange={(tab) => {
+          setActiveTab(tab);
+          if (!isDesktop) setMobileMenuOpen(false);
+        }}
         ordersCount={scopedOrders.length}
         pendingApprovalCount={effectivePendingApprovalCount}
         kitsCount={scopedKits.length}
@@ -1513,1497 +1521,607 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
         }
         couponsCount={coupons.length}
         reviewsCount={moderationReviews.length}
+        adminEmail={user?.email || 'admin@mulyam.in'}
+        adminRoleLabel={
+          isSuperAdmin
+            ? 'Super Admin (All Regions)'
+            : `Regional Admin (${assignedRegions && assignedRegions.length > 0 ? assignedRegions.map(formatRegionName).join(', ') : 'Pune City'})`
+        }
+        isSuperAdmin={isSuperAdmin}
+        realtimeStatus={realtimeStatus}
+        onLogout={logout}
+        onResync={handleFullResync}
+        isResyncing={isResyncing}
+        isDesktop={isDesktop}
+        mobileOpen={mobileMenuOpen}
+        onCloseMobile={() => setMobileMenuOpen(false)}
       />
 
-      <ScrollView
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-        refreshControl={<RefreshControl refreshing={isResyncing} onRefresh={handleFullResync} />}
-      >
-        {/* MODULE 0: OVERVIEW HOME */}
-        {activeTab === 'overview' && (
-          <View>
-            {/* Small subtle status indicator replacing the large card */}
+      {/* Right Main Content Pane */}
+      <View style={[styles.mainContentPane, { backgroundColor: colors.bgPrimary }]}>
+        {/* Desktop Top Bar */}
+        <View
+          style={[
+            styles.desktopTopBar,
+            {
+              backgroundColor: colors.bgSurface,
+              borderBottomColor: colors.borderLight,
+            },
+          ]}
+        >
+          <View style={styles.topBarTitleSection}>
+            {!isDesktop && (
+              <TouchableOpacity
+                onPress={() => setMobileMenuOpen(true)}
+                style={[styles.mobileMenuToggleBtn, { backgroundColor: colors.bgSubtle }]}
+                accessibilityLabel="Open navigation menu"
+              >
+                <Icon name="menu" size={20} color={colors.textPrimary} />
+              </TouchableOpacity>
+            )}
+
+            <View style={styles.topBarTitleCol}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <Text style={[styles.desktopTopBarTitle, { color: colors.textPrimary }]}>
+                  {TAB_HEADER_META[activeTab]?.title || 'Admin Control'}
+                </Text>
+              </View>
+              <Text
+                numberOfLines={1}
+                style={[styles.desktopTopBarSubtitle, { color: colors.textSecondary }]}
+              >
+                {TAB_HEADER_META[activeTab]?.subtitle || 'RasoiGenie master operations'}
+              </Text>
+            </View>
+          </View>
+
+          <View style={styles.topBarRightSection}>
+            {/* Admin Region Badge */}
             <View
-              style={{
-                flexDirection: 'row',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                marginBottom: 12,
-              }}
+              style={[
+                styles.adminBadge,
+                {
+                  backgroundColor: isSuperAdmin ? '#FEF3C7' : colors.primaryLight,
+                  borderColor: isSuperAdmin ? '#F59E0B' : colors.primary + '40',
+                },
+              ]}
             >
+              <Text
+                style={[
+                  styles.adminBadgeText,
+                  {
+                    color: isSuperAdmin ? '#B45309' : colors.primary,
+                  },
+                ]}
+              >
+                {isSuperAdmin
+                  ? 'Super Admin (All Regions)'
+                  : `Regional Admin (${assignedRegions && assignedRegions.length > 0 ? assignedRegions.map(formatRegionName).join(', ') : 'Pune City'})`}
+              </Text>
+            </View>
+
+            {/* Quick Resync Button */}
+            <TouchableOpacity
+              style={[
+                styles.resyncBtn,
+                {
+                  backgroundColor: colors.bgSubtle,
+                  borderColor: colors.borderLight,
+                },
+              ]}
+              onPress={handleFullResync}
+              disabled={isResyncing}
+              accessibilityLabel="Refresh Data"
+            >
+              <Icon
+                name="refresh"
+                size={13}
+                color={isResyncing ? colors.primary : colors.textPrimary}
+              />
+              <Text
+                style={[
+                  styles.resyncBtnText,
+                  { color: isResyncing ? colors.primary : colors.textPrimary },
+                ]}
+              >
+                {isResyncing ? 'Syncing...' : 'Sync'}
+              </Text>
+            </TouchableOpacity>
+
+            {!isDesktop && (
+              <TouchableOpacity
+                style={[styles.logoutBtn, { borderColor: colors.borderLight }]}
+                onPress={logout}
+              >
+                <Text style={[styles.logoutText, { color: colors.danger }]}>Logout</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        </View>
+
+        <ScrollView
+          style={styles.mainScrollView}
+          contentContainerStyle={[styles.scrollContent, isDesktop && styles.desktopScrollContent]}
+          showsVerticalScrollIndicator={true}
+          refreshControl={<RefreshControl refreshing={isResyncing} onRefresh={handleFullResync} />}
+        >
+          {/* MODULE 0: OVERVIEW HOME */}
+          {activeTab === 'overview' && (
+            <View>
+              {/* Small subtle status indicator replacing the large card */}
               <View
                 style={{
                   flexDirection: 'row',
                   alignItems: 'center',
-                  gap: 6,
-                  backgroundColor: isSuperAdmin ? '#FEF3C7' : colors.bgSubtle,
-                  borderColor: isSuperAdmin ? '#F59E0B60' : colors.borderLight,
-                  borderWidth: 1,
-                  borderRadius: radii.pill,
-                  paddingHorizontal: 10,
-                  paddingVertical: 4,
+                  justifyContent: 'space-between',
+                  marginBottom: 12,
                 }}
               >
                 <View
                   style={{
-                    width: 6,
-                    height: 6,
-                    borderRadius: 3,
-                    backgroundColor: isSuperAdmin ? '#D97706' : colors.primary,
-                  }}
-                />
-                <Text
-                  style={{
-                    fontSize: 11,
-                    fontWeight: '700',
-                    color: isSuperAdmin ? '#92400E' : colors.textSecondary,
-                  }}
-                >
-                  {isSuperAdmin
-                    ? 'Super Admin Mode • Pan-India Region Access'
-                    : `Regional Admin Scope: ${assignedRegions && assignedRegions.length > 0 ? assignedRegions.map(formatRegionName).join(', ') : 'Pune City (Pune)'}`}
-                </Text>
-              </View>
-            </View>
-
-            {/* Realtime Pending Approval Alert Banner */}
-            {pendingApprovalCount > 0 && (
-              <View
-                style={{
-                  backgroundColor: '#FEF2F2',
-                  borderColor: '#F87171',
-                  borderWidth: 1.5,
-                  borderRadius: radii.lg,
-                  padding: 16,
-                  marginBottom: 16,
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  ...shadows.card,
-                }}
-              >
-                <View style={{ flex: 1, marginRight: 10 }}>
-                  <View
-                    style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 2 }}
-                  >
-                    <Icon name="alert" size={18} color="#DC2626" />
-                    <Text
-                      style={{
-                        fontSize: 15,
-                        fontWeight: '800',
-                        color: '#991B1B',
-                      }}
-                    >
-                      {pendingApprovalCount} New Order(s) Awaiting Approval!
-                    </Text>
-                  </View>
-                  <Text style={{ fontSize: 12, color: '#B91C1C' }}>
-                    Customer orders are currently in 'Placed' status. Click to approve and confirm.
-                  </Text>
-                </View>
-                <Button
-                  title="Review Orders"
-                  size="sm"
-                  onPress={() => setActiveTab('orders')}
-                  style={{ backgroundColor: '#DC2626' }}
-                />
-              </View>
-            )}
-
-            {/* Quick Metrics KPI Cards */}
-            <View style={styles.metricsGrid}>
-              <TouchableOpacity
-                style={[
-                  styles.metricCard,
-                  { backgroundColor: colors.bgSurface, borderRadius: radii.xl, ...shadows.card },
-                ]}
-                onPress={() => setActiveTab('orders')}
-                activeOpacity={0.8}
-              >
-                <Text
-                  style={[
-                    styles.metricVal,
-                    { color: pendingApprovalCount > 0 ? '#DC2626' : colors.primary },
-                  ]}
-                >
-                  {orders.length}
-                </Text>
-                <Text style={[styles.metricLabel, { color: colors.textSecondary }]}>
-                  {pendingApprovalCount > 0
-                    ? `${pendingApprovalCount} Awaiting Approval`
-                    : 'Customer Orders'}
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[
-                  styles.metricCard,
-                  { backgroundColor: colors.bgSurface, borderRadius: radii.xl, ...shadows.card },
-                ]}
-                onPress={() => setActiveTab('kits')}
-                activeOpacity={0.8}
-              >
-                <Text style={[styles.metricVal, { color: colors.primary }]}>{kits.length}</Text>
-                <Text style={[styles.metricLabel, { color: colors.textSecondary }]}>
-                  Active Meal Kits
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[
-                  styles.metricCard,
-                  { backgroundColor: colors.bgSurface, borderRadius: radii.xl, ...shadows.card },
-                ]}
-                onPress={() => setActiveTab('inventory')}
-                activeOpacity={0.8}
-              >
-                <Text style={[styles.metricVal, { color: colors.primary }]}>4</Text>
-                <Text style={[styles.metricLabel, { color: colors.textSecondary }]}>
-                  Operating Regions
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[
-                  styles.metricCard,
-                  { backgroundColor: colors.bgSurface, borderRadius: radii.xl, ...shadows.card },
-                ]}
-                onPress={() => setActiveTab('analytics')}
-                activeOpacity={0.8}
-              >
-                <Text style={[styles.metricVal, { color: colors.primary }]}>
-                  ₹{(orders.reduce((acc, o) => acc + o.totalAmount, 0) / 1000).toFixed(1)}k
-                </Text>
-                <Text style={[styles.metricLabel, { color: colors.textSecondary }]}>
-                  Gross Revenue
-                </Text>
-              </TouchableOpacity>
-            </View>
-
-            {/* Quick-Access Operational Modules Grid */}
-            <Text
-              style={[
-                styles.sectionHeading,
-                { color: colors.textPrimary, marginTop: 14, marginBottom: 12 },
-              ]}
-            >
-              Control Center Modules
-            </Text>
-
-            <View style={styles.modulesGrid}>
-              {[
-                {
-                  id: 'orders' as AdminTab,
-                  title: 'Orders & Live Approvals',
-                  desc: 'Real-time order feed, approval workflow, status changes & customer refunds',
-                  icon: 'cube' as AppIconName,
-                  badge:
-                    pendingApprovalCount > 0
-                      ? `${pendingApprovalCount} Awaiting Approval`
-                      : `${orders.length} Orders`,
-                  badgeVariant:
-                    pendingApprovalCount > 0
-                      ? ('danger' as BadgeVariant)
-                      : ('primary' as BadgeVariant),
-                },
-                {
-                  id: 'kits' as AdminTab,
-                  title: 'Meal Kits & Recipes',
-                  desc: 'Publish chef-crafted recipes, modify spice levels, servings, ingredients & prices',
-                  icon: 'restaurant' as AppIconName,
-                  badge: `${kits.length} Kits Active`,
-                  badgeVariant: 'success' as BadgeVariant,
-                },
-                {
-                  id: 'inventory' as AdminTab,
-                  title: 'Regional Inventory',
-                  desc: 'Monitor cold-chain safety buffer stocks across South, West, North & East Regions',
-                  icon: 'business' as AppIconName,
-                  badge: '4 Regions',
-                  badgeVariant: 'neutral' as BadgeVariant,
-                },
-                {
-                  id: 'analytics' as AdminTab,
-                  title: 'Regional Analytics',
-                  desc: 'State-by-state consumption trends, dietary split, and downloadable CSV exports',
-                  icon: 'bar-chart' as AppIconName,
-                  badge: 'India Live',
-                  badgeVariant: 'accent' as BadgeVariant,
-                },
-                {
-                  id: 'customers' as AdminTab,
-                  title: 'Customer Accounts',
-                  desc: 'Real registered customers, live wallet credits, Customer IDs & quick credit issuance',
-                  icon: 'people' as AppIconName,
-                  badge: `${users.filter((u) => u.role !== 'admin').length} Customers`,
-                  badgeVariant: 'info' as BadgeVariant,
-                },
-                {
-                  id: 'admins' as AdminTab,
-                  title: 'Staff Admins & RBAC',
-                  desc: 'Manage staff admin accounts, multi-region jurisdictions & RBAC permissions',
-                  icon: 'lock' as AppIconName,
-                  badge: `${adminProfiles.length} Staff Admins`,
-                  badgeVariant: 'warning' as BadgeVariant,
-                },
-                {
-                  id: 'coupons' as AdminTab,
-                  title: 'Promotions & Coupons',
-                  desc: 'Create discount codes, flat reductions, and minimum cart value requirements',
-                  icon: 'tag' as AppIconName,
-                  badge: `${coupons.length} Coupons`,
-                  badgeVariant: 'warning' as BadgeVariant,
-                },
-                {
-                  id: 'revenue' as AdminTab,
-                  title: 'Revenue & Financials',
-                  desc: 'Monthly sales metrics, Average Order Value (AOV), and customer repeat rates',
-                  icon: 'trending-up' as AppIconName,
-                  badge: 'Financials',
-                  badgeVariant: 'success' as BadgeVariant,
-                },
-                {
-                  id: 'reviews' as AdminTab,
-                  title: 'Review Moderation',
-                  desc: 'Inspect customer meal kit reviews, verify feedback, and moderate flagged entries',
-                  icon: 'star' as AppIconName,
-                  badge: `${moderationReviews.length} Reviews`,
-                  badgeVariant: 'neutral' as BadgeVariant,
-                },
-                {
-                  id: 'wallets' as AdminTab,
-                  title: 'Customer Credits Wallets',
-                  desc: 'Inspect customer balances, active credit lots, transaction ledger, and issue promotional adjustments',
-                  icon: 'wallet' as AppIconName,
-                  badge: 'Credits Hub',
-                  badgeVariant: 'warning' as BadgeVariant,
-                },
-                {
-                  id: 'referrals' as AdminTab,
-                  title: 'Referral & Rewards Engine',
-                  desc: 'Configure reward amounts, qualification rules, credit expiration dates, and monitor referrals',
-                  icon: 'gift' as AppIconName,
-                  badge: 'Growth Engine',
-                  badgeVariant: 'success' as BadgeVariant,
-                },
-              ].map((mod) => (
-                <TouchableOpacity
-                  key={mod.id}
-                  style={[
-                    styles.moduleCard,
-                    {
-                      backgroundColor: colors.bgSurface,
-                      borderColor: colors.borderLight,
-                      borderRadius: radii.xl,
-                      ...shadows.card,
-                    },
-                  ]}
-                  onPress={() => setActiveTab(mod.id)}
-                  activeOpacity={0.7}
-                >
-                  <View style={styles.moduleCardTop}>
-                    <View style={{ marginRight: 12 }}>
-                      <Icon name={mod.icon} size={26} color={colors.primary} />
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={[styles.moduleCardTitle, { color: colors.textPrimary }]}>
-                        {mod.title}
-                      </Text>
-                      <Text
-                        style={[styles.moduleCardDesc, { color: colors.textSecondary }]}
-                        numberOfLines={2}
-                      >
-                        {mod.desc}
-                      </Text>
-                    </View>
-                  </View>
-
-                  <View style={styles.moduleCardBottom}>
-                    <Badge label={mod.badge} variant={mod.badgeVariant} size="sm" />
-                    <Text style={[styles.moduleCardArrow, { color: colors.primary }]}>
-                      Open Module
-                    </Text>
-                  </View>
-                </TouchableOpacity>
-              ))}
-            </View>
-          </View>
-        )}
-
-        {/* MODULE 1: ORDERS MANAGEMENT */}
-        {activeTab === 'orders' && (
-          <View>
-            {/* Orders Header Row with Clear All Orders Button */}
-            <View
-              style={{
-                flexDirection: 'row',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                marginBottom: 12,
-              }}
-            >
-              <View>
-                <Text style={[styles.moduleTitle, { color: colors.textPrimary }]}>
-                  Customer Orders ({scopedOrders.length})
-                </Text>
-                <Text style={[styles.moduleSubtitle, { color: colors.textSecondary }]}>
-                  Live kitchen order flow & fulfillment
-                </Text>
-              </View>
-              {scopedOrders.length > 0 && (
-                <Button
-                  title={isClearingOrders ? 'Clearing...' : 'Clear All Orders'}
-                  variant="outline"
-                  size="sm"
-                  loading={isClearingOrders}
-                  style={{ borderColor: '#DC2626' }}
-                  textStyle={{ color: '#DC2626', fontSize: 11 }}
-                  onPress={handleClearAllOrders}
-                />
-              )}
-            </View>
-
-            {/* Realtime Pending Approval Alert Banner */}
-            {effectivePendingApprovalCount > 0 && (
-              <View
-                style={{
-                  backgroundColor: '#FEF2F2',
-                  borderColor: '#F87171',
-                  borderWidth: 1.5,
-                  borderRadius: radii.lg,
-                  padding: 12,
-                  marginBottom: 14,
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                }}
-              >
-                <View style={{ flex: 1, marginRight: 10 }}>
-                  <View
-                    style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 2 }}
-                  >
-                    <Icon name="alert" size={16} color="#DC2626" />
-                    <Text style={{ color: '#991B1B', fontWeight: '800', fontSize: 13 }}>
-                      {effectivePendingApprovalCount} New Order(s) Awaiting Approval!
-                    </Text>
-                  </View>
-                  <Text style={{ color: '#B91C1C', fontSize: 11, marginTop: 2 }}>
-                    Review customer recipe orders and approve them to start kitchen prep.
-                  </Text>
-                </View>
-                <TouchableOpacity
-                  style={{
-                    backgroundColor: '#DC2626',
-                    paddingHorizontal: 12,
-                    paddingVertical: 6,
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 6,
+                    backgroundColor: isSuperAdmin ? '#FEF3C7' : colors.bgSubtle,
+                    borderColor: isSuperAdmin ? '#F59E0B60' : colors.borderLight,
+                    borderWidth: 1,
                     borderRadius: radii.sm,
+                    paddingHorizontal: 10,
+                    paddingVertical: 4,
                   }}
-                  onPress={() => setSelectedStatusFilter('Placed')}
                 >
-                  <Text style={{ color: '#FFFFFF', fontSize: 11, fontWeight: '800' }}>
-                    View Placed
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            )}
-
-            {/* Filter pills */}
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              style={styles.statusFilterRow}
-            >
-              {STATUS_FILTERS.map((s) => (
-                <TouchableOpacity
-                  key={s}
-                  style={[
-                    styles.statusFilterChip,
-                    {
-                      backgroundColor:
-                        selectedStatusFilter === s ? colors.primary : colors.bgSurface,
-                      borderColor: selectedStatusFilter === s ? colors.primary : colors.borderLight,
-                      borderRadius: radii.pill,
-                    },
-                  ]}
-                  onPress={() => setSelectedStatusFilter(s)}
-                >
+                  <View
+                    style={{
+                      width: 6,
+                      height: 6,
+                      borderRadius: 3,
+                      backgroundColor: isSuperAdmin ? '#D97706' : colors.primary,
+                    }}
+                  />
                   <Text
                     style={{
-                      color: selectedStatusFilter === s ? '#FFFFFF' : colors.textPrimary,
-                      fontSize: 12,
+                      fontSize: 11,
                       fontWeight: '700',
+                      color: isSuperAdmin ? '#92400E' : colors.textSecondary,
                     }}
                   >
-                    {s}
+                    {isSuperAdmin
+                      ? 'Super Admin Mode • Pan-India Region Access'
+                      : `Regional Admin Scope: ${assignedRegions && assignedRegions.length > 0 ? assignedRegions.map(formatRegionName).join(', ') : 'Pune City (Pune)'}`}
+                  </Text>
+                </View>
+              </View>
+
+              {/* Realtime Pending Approval Alert Banner */}
+              {pendingApprovalCount > 0 && (
+                <View
+                  style={{
+                    backgroundColor: '#FEF2F2',
+                    borderColor: '#F87171',
+                    borderWidth: 1.5,
+                    borderRadius: radii.lg,
+                    padding: 16,
+                    marginBottom: 16,
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    ...shadows.card,
+                  }}
+                >
+                  <View style={{ flex: 1, marginRight: 10 }}>
+                    <View
+                      style={{
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        gap: 6,
+                        marginBottom: 2,
+                      }}
+                    >
+                      <Icon name="alert" size={18} color="#DC2626" />
+                      <Text
+                        style={{
+                          fontSize: 15,
+                          fontWeight: '800',
+                          color: '#991B1B',
+                        }}
+                      >
+                        {pendingApprovalCount} New Order(s) Awaiting Approval!
+                      </Text>
+                    </View>
+                    <Text style={{ fontSize: 12, color: '#B91C1C' }}>
+                      Customer orders are currently in 'Placed' status. Click to approve and
+                      confirm.
+                    </Text>
+                  </View>
+                  <Button
+                    title="Review Orders"
+                    size="sm"
+                    onPress={() => setActiveTab('orders')}
+                    style={{ backgroundColor: '#DC2626' }}
+                  />
+                </View>
+              )}
+
+              {/* Quick Metrics KPI Cards */}
+              <View style={styles.metricsGrid}>
+                <TouchableOpacity
+                  style={[
+                    styles.metricCard,
+                    { backgroundColor: colors.bgSurface, borderRadius: radii.xl, ...shadows.card },
+                  ]}
+                  onPress={() => setActiveTab('orders')}
+                  activeOpacity={0.8}
+                >
+                  <Text
+                    style={[
+                      styles.metricVal,
+                      { color: pendingApprovalCount > 0 ? '#DC2626' : colors.primary },
+                    ]}
+                  >
+                    {orders.length}
+                  </Text>
+                  <Text style={[styles.metricLabel, { color: colors.textSecondary }]}>
+                    {pendingApprovalCount > 0
+                      ? `${pendingApprovalCount} Awaiting Approval`
+                      : 'Customer Orders'}
                   </Text>
                 </TouchableOpacity>
-              ))}
-            </ScrollView>
 
-            {filteredOrders.length === 0 ? (
+                <TouchableOpacity
+                  style={[
+                    styles.metricCard,
+                    { backgroundColor: colors.bgSurface, borderRadius: radii.xl, ...shadows.card },
+                  ]}
+                  onPress={() => setActiveTab('kits')}
+                  activeOpacity={0.8}
+                >
+                  <Text style={[styles.metricVal, { color: colors.primary }]}>{kits.length}</Text>
+                  <Text style={[styles.metricLabel, { color: colors.textSecondary }]}>
+                    Active Meal Kits
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[
+                    styles.metricCard,
+                    { backgroundColor: colors.bgSurface, borderRadius: radii.xl, ...shadows.card },
+                  ]}
+                  onPress={() => setActiveTab('inventory')}
+                  activeOpacity={0.8}
+                >
+                  <Text style={[styles.metricVal, { color: colors.primary }]}>4</Text>
+                  <Text style={[styles.metricLabel, { color: colors.textSecondary }]}>
+                    Operating Regions
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[
+                    styles.metricCard,
+                    { backgroundColor: colors.bgSurface, borderRadius: radii.xl, ...shadows.card },
+                  ]}
+                  onPress={() => setActiveTab('analytics')}
+                  activeOpacity={0.8}
+                >
+                  <Text style={[styles.metricVal, { color: colors.primary }]}>
+                    ₹{(orders.reduce((acc, o) => acc + o.totalAmount, 0) / 1000).toFixed(1)}k
+                  </Text>
+                  <Text style={[styles.metricLabel, { color: colors.textSecondary }]}>
+                    Gross Revenue
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* Quick-Access Operational Modules Grid */}
+              <Text
+                style={[
+                  styles.sectionHeading,
+                  { color: colors.textPrimary, marginTop: 14, marginBottom: 12 },
+                ]}
+              >
+                Control Center Modules
+              </Text>
+
+              <View style={styles.modulesGrid}>
+                {[
+                  {
+                    id: 'orders' as AdminTab,
+                    title: 'Orders & Live Approvals',
+                    desc: 'Real-time order feed, approval workflow, status changes & customer refunds',
+                    icon: 'cube' as AppIconName,
+                    badge:
+                      pendingApprovalCount > 0
+                        ? `${pendingApprovalCount} Awaiting Approval`
+                        : `${orders.length} Orders`,
+                    badgeVariant:
+                      pendingApprovalCount > 0
+                        ? ('danger' as BadgeVariant)
+                        : ('primary' as BadgeVariant),
+                  },
+                  {
+                    id: 'kits' as AdminTab,
+                    title: 'Meal Kits & Recipes',
+                    desc: 'Publish chef-crafted recipes, modify spice levels, servings, ingredients & prices',
+                    icon: 'restaurant' as AppIconName,
+                    badge: `${kits.length} Kits Active`,
+                    badgeVariant: 'success' as BadgeVariant,
+                  },
+                  {
+                    id: 'inventory' as AdminTab,
+                    title: 'Regional Inventory',
+                    desc: 'Monitor cold-chain safety buffer stocks across South, West, North & East Regions',
+                    icon: 'business' as AppIconName,
+                    badge: '4 Regions',
+                    badgeVariant: 'neutral' as BadgeVariant,
+                  },
+                  {
+                    id: 'analytics' as AdminTab,
+                    title: 'Regional Analytics',
+                    desc: 'State-by-state consumption trends, dietary split, and downloadable CSV exports',
+                    icon: 'bar-chart' as AppIconName,
+                    badge: 'India Live',
+                    badgeVariant: 'accent' as BadgeVariant,
+                  },
+                  {
+                    id: 'customers' as AdminTab,
+                    title: 'Customer Accounts',
+                    desc: 'Real registered customers, live wallet credits, Customer IDs & quick credit issuance',
+                    icon: 'people' as AppIconName,
+                    badge: `${users.filter((u) => u.role !== 'admin').length} Customers`,
+                    badgeVariant: 'info' as BadgeVariant,
+                  },
+                  {
+                    id: 'admins' as AdminTab,
+                    title: 'Staff Admins & RBAC',
+                    desc: 'Manage staff admin accounts, multi-region jurisdictions & RBAC permissions',
+                    icon: 'lock' as AppIconName,
+                    badge: `${adminProfiles.length} Staff Admins`,
+                    badgeVariant: 'warning' as BadgeVariant,
+                  },
+                  {
+                    id: 'coupons' as AdminTab,
+                    title: 'Promotions & Coupons',
+                    desc: 'Create discount codes, flat reductions, and minimum cart value requirements',
+                    icon: 'tag' as AppIconName,
+                    badge: `${coupons.length} Coupons`,
+                    badgeVariant: 'warning' as BadgeVariant,
+                  },
+                  {
+                    id: 'revenue' as AdminTab,
+                    title: 'Revenue & Financials',
+                    desc: 'Monthly sales metrics, Average Order Value (AOV), and customer repeat rates',
+                    icon: 'trending-up' as AppIconName,
+                    badge: 'Financials',
+                    badgeVariant: 'success' as BadgeVariant,
+                  },
+                  {
+                    id: 'reviews' as AdminTab,
+                    title: 'Review Moderation',
+                    desc: 'Inspect customer meal kit reviews, verify feedback, and moderate flagged entries',
+                    icon: 'star' as AppIconName,
+                    badge: `${moderationReviews.length} Reviews`,
+                    badgeVariant: 'neutral' as BadgeVariant,
+                  },
+                  {
+                    id: 'wallets' as AdminTab,
+                    title: 'Customer Credits Wallets',
+                    desc: 'Inspect customer balances, active credit lots, transaction ledger, and issue promotional adjustments',
+                    icon: 'wallet' as AppIconName,
+                    badge: 'Credits Hub',
+                    badgeVariant: 'warning' as BadgeVariant,
+                  },
+                  {
+                    id: 'referrals' as AdminTab,
+                    title: 'Referral & Rewards Engine',
+                    desc: 'Configure reward amounts, qualification rules, credit expiration dates, and monitor referrals',
+                    icon: 'gift' as AppIconName,
+                    badge: 'Growth Engine',
+                    badgeVariant: 'success' as BadgeVariant,
+                  },
+                ].map((mod) => (
+                  <TouchableOpacity
+                    key={mod.id}
+                    style={[
+                      styles.moduleCard,
+                      {
+                        backgroundColor: colors.bgSurface,
+                        borderColor: colors.borderLight,
+                        borderRadius: radii.xl,
+                        ...shadows.card,
+                      },
+                    ]}
+                    onPress={() => setActiveTab(mod.id)}
+                    activeOpacity={0.7}
+                  >
+                    <View style={styles.moduleCardTop}>
+                      <View style={{ marginRight: 12 }}>
+                        <Icon name={mod.icon} size={26} color={colors.primary} />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={[styles.moduleCardTitle, { color: colors.textPrimary }]}>
+                          {mod.title}
+                        </Text>
+                        <Text
+                          style={[styles.moduleCardDesc, { color: colors.textSecondary }]}
+                          numberOfLines={2}
+                        >
+                          {mod.desc}
+                        </Text>
+                      </View>
+                    </View>
+
+                    <View style={styles.moduleCardBottom}>
+                      <Badge label={mod.badge} variant={mod.badgeVariant} size="sm" />
+                      <Text style={[styles.moduleCardArrow, { color: colors.primary }]}>
+                        Open Module
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+          )}
+
+          {/* MODULE 1: ORDERS MANAGEMENT */}
+          {activeTab === 'orders' && (
+            <View>
+              {/* Orders Header Row with Clear All Orders Button */}
+              <View
+                style={{
+                  flexDirection: 'row',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  marginBottom: 12,
+                }}
+              >
+                <View>
+                  <Text style={[styles.moduleTitle, { color: colors.textPrimary }]}>
+                    Customer Orders ({scopedOrders.length})
+                  </Text>
+                  <Text style={[styles.moduleSubtitle, { color: colors.textSecondary }]}>
+                    Live kitchen order flow & fulfillment
+                  </Text>
+                </View>
+                {scopedOrders.length > 0 && (
+                  <Button
+                    title={isClearingOrders ? 'Clearing...' : 'Clear All Orders'}
+                    variant="outline"
+                    size="sm"
+                    loading={isClearingOrders}
+                    style={{ borderColor: '#DC2626' }}
+                    textStyle={{ color: '#DC2626', fontSize: 11 }}
+                    onPress={handleClearAllOrders}
+                  />
+                )}
+              </View>
+
+              {/* Realtime Pending Approval Alert Banner */}
+              {effectivePendingApprovalCount > 0 && (
+                <View
+                  style={{
+                    backgroundColor: '#FEF2F2',
+                    borderColor: '#F87171',
+                    borderWidth: 1.5,
+                    borderRadius: radii.lg,
+                    padding: 12,
+                    marginBottom: 14,
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                  }}
+                >
+                  <View style={{ flex: 1, marginRight: 10 }}>
+                    <View
+                      style={{
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        gap: 6,
+                        marginBottom: 2,
+                      }}
+                    >
+                      <Icon name="alert" size={16} color="#DC2626" />
+                      <Text style={{ color: '#991B1B', fontWeight: '800', fontSize: 13 }}>
+                        {effectivePendingApprovalCount} New Order(s) Awaiting Approval!
+                      </Text>
+                    </View>
+                    <Text style={{ color: '#B91C1C', fontSize: 11, marginTop: 2 }}>
+                      Review customer recipe orders and approve them to start kitchen prep.
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    style={{
+                      backgroundColor: '#DC2626',
+                      paddingHorizontal: 12,
+                      paddingVertical: 6,
+                      borderRadius: radii.sm,
+                    }}
+                    onPress={() => setSelectedStatusFilter('Placed')}
+                  >
+                    <Text style={{ color: '#FFFFFF', fontSize: 11, fontWeight: '800' }}>
+                      View Placed
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+
+              {/* Order Status Tabs */}
               <View
                 style={[
-                  styles.adminKitCard,
+                  styles.statusTabBar,
                   {
-                    backgroundColor: colors.bgSurface,
-                    padding: 32,
-                    alignItems: 'center',
-                    borderRadius: radii.xl,
+                    borderBottomColor: colors.borderLight,
                   },
                 ]}
               >
-                <View style={{ marginBottom: 12 }}>
-                  <Icon name="cube" size={38} color={colors.textMuted} />
-                </View>
-                <Text style={{ fontSize: 16, fontWeight: '700', color: colors.textPrimary }}>
-                  No Orders Found
-                </Text>
-                <Text
-                  style={{
-                    fontSize: 13,
-                    color: colors.textSecondary,
-                    marginTop: 4,
-                    textAlign: 'center',
-                  }}
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.statusTabsContent}
                 >
-                  There are currently no orders under "{selectedStatusFilter}".
-                </Text>
+                  {STATUS_FILTERS.map((s) => {
+                    const isSelected = selectedStatusFilter === s;
+                    return (
+                      <TouchableOpacity
+                        key={s}
+                        style={[
+                          styles.statusTabItem,
+                          {
+                            backgroundColor: isSelected ? colors.primaryLight : 'transparent',
+                            borderColor: isSelected ? colors.primary : colors.borderLight,
+                          },
+                        ]}
+                        onPress={() => setSelectedStatusFilter(s)}
+                      >
+                        <Text
+                          style={{
+                            color: isSelected ? colors.primary : colors.textSecondary,
+                            fontSize: 13,
+                            fontWeight: isSelected ? '800' : '600',
+                          }}
+                        >
+                          {s}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
               </View>
-            ) : (
-              filteredOrders.map((order) => (
+
+              {filteredOrders.length === 0 ? (
                 <View
-                  key={order.id}
                   style={[
-                    styles.adminOrderCard,
+                    styles.adminKitCard,
                     {
                       backgroundColor: colors.bgSurface,
+                      padding: 32,
+                      alignItems: 'center',
                       borderRadius: radii.xl,
-                      borderColor: colors.borderLight,
-                      ...shadows.card,
                     },
                   ]}
                 >
-                  <TouchableOpacity
-                    activeOpacity={0.7}
-                    onPress={() => {
-                      setInspectOrder(order);
-                      setInspectModalVisible(true);
-                    }}
-                    style={{ marginBottom: 4 }}
-                  >
-                    <View style={styles.orderTopRow}>
-                      <View style={{ flex: 1 }}>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                          <Text style={[styles.adminOrderId, { color: colors.textPrimary }]}>
-                            {order.id}
-                          </Text>
-                          {recentOrderIds.has(order.id) && (
-                            <View style={styles.newOrderTag}>
-                              <Text style={styles.newOrderTagText}>NEW</Text>
-                            </View>
-                          )}
-                          <Text style={{ fontSize: 11, color: colors.primary, fontWeight: '700' }}>
-                            View Details
-                          </Text>
-                        </View>
-                        <Text style={[styles.adminOrderCustomer, { color: colors.textSecondary }]}>
-                          {order.customerName} ({order.customerPhone})
-                        </Text>
-                      </View>
-                      <View testID={`admin-order-status-${order.id}`}>
-                        <Badge label={order.status} variant={getBadgeVariant(order.status)} />
-                      </View>
-                    </View>
-
-                    <View
-                      style={{
-                        flexDirection: 'row',
-                        alignItems: 'center',
-                        gap: 4,
-                        marginVertical: 2,
-                      }}
-                    >
-                      <Icon name="location" size={13} color={colors.textSecondary} />
-                      <Text
-                        style={[
-                          styles.adminOrderAddress,
-                          { color: colors.textSecondary, marginBottom: 0 },
-                        ]}
-                      >
-                        {order.deliveryAddress}
-                      </Text>
-                    </View>
-                    {(() => {
-                      const sc = resolveStorageCentre(order.deliveryAddress);
-                      return (
-                        <View
-                          style={{
-                            flexDirection: 'row',
-                            alignItems: 'center',
-                            gap: 5,
-                            marginTop: 4,
-                            marginBottom: 4,
-                            paddingHorizontal: 8,
-                            paddingVertical: 3,
-                            backgroundColor: colors.bgSubtle,
-                            borderRadius: radii.sm,
-                            borderLeftWidth: 2,
-                            borderLeftColor: colors.primary,
-                            alignSelf: 'flex-start',
-                          }}
-                        >
-                          <Icon name="cube" size={11} color={colors.primary} />
-                          <Text style={{ fontSize: 11, fontWeight: '700', color: colors.primary }}>
-                            Fulfillment: {sc.storageCentreName} ({sc.name})
-                          </Text>
-                        </View>
-                      );
-                    })()}
-                    <Text style={[styles.adminOrderSlot, { color: colors.textMuted }]}>
-                      Slot: {order.deliverySlot} • Paid: ₹{order.totalAmount} via{' '}
-                      {order.paymentMethod}
-                    </Text>
-
-                    {/* Summary Preview of Ordered Dishes & Customizations */}
-                    {order.items && order.items.length > 0 && (
-                      <View
-                        style={{
-                          backgroundColor: colors.bgSubtle,
-                          borderRadius: radii.md,
-                          padding: 10,
-                          marginTop: 8,
-                          borderWidth: 1,
-                          borderColor: colors.borderLight,
-                        }}
-                      >
-                        <View
-                          style={{
-                            flexDirection: 'row',
-                            justifyContent: 'space-between',
-                            alignItems: 'center',
-                            marginBottom: 4,
-                          }}
-                        >
-                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                            <Icon name="restaurant" size={14} color={colors.textPrimary} />
-                            <Text
-                              style={{ fontSize: 12, fontWeight: '800', color: colors.textPrimary }}
-                            >
-                              Ordered Dishes ({order.items.length}):
-                            </Text>
-                          </View>
-                          <Text style={{ fontSize: 11, color: colors.primary, fontWeight: '700' }}>
-                            Inspect Details
-                          </Text>
-                        </View>
-                        {order.items.map((it, idx) => (
-                          <View
-                            key={idx}
-                            style={{
-                              flexDirection: 'row',
-                              justifyContent: 'space-between',
-                              alignItems: 'center',
-                              marginTop: 4,
-                            }}
-                          >
-                            <Text
-                              style={{ fontSize: 12, color: colors.textSecondary, flex: 1 }}
-                              numberOfLines={1}
-                            >
-                              • {it.quantity}x {it.name}
-                            </Text>
-                            <View style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
-                              <Text style={{ fontSize: 11, color: colors.textMuted }}>
-                                {it.servings || 2}p
-                              </Text>
-                              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 2 }}>
-                                <Icon
-                                  name="flame"
-                                  size={11}
-                                  color={
-                                    (it.spiceLevel || '').toLowerCase().includes('spicy')
-                                      ? '#DC2626'
-                                      : colors.primary
-                                  }
-                                />
-                                <Text
-                                  style={{
-                                    fontSize: 11,
-                                    fontWeight: '700',
-                                    color: (it.spiceLevel || '').toLowerCase().includes('spicy')
-                                      ? '#DC2626'
-                                      : colors.primary,
-                                  }}
-                                >
-                                  {it.spiceLevel || 'Medium'}
-                                </Text>
-                              </View>
-                            </View>
-                          </View>
-                        ))}
-                      </View>
-                    )}
-                  </TouchableOpacity>
-
-                  {/* Cancelled Order Notice */}
-                  {order.status === 'Cancelled' && (
-                    <View
-                      style={{
-                        marginVertical: 10,
-                        padding: 12,
-                        backgroundColor: '#FEF2F2',
-                        borderRadius: radii.md,
-                        borderWidth: 1.5,
-                        borderColor: '#F87171',
-                      }}
-                    >
-                      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                        <View style={{ marginRight: 8 }}>
-                          <Icon name="close" size={16} color="#DC2626" />
-                        </View>
-                        <View style={{ flex: 1 }}>
-                          <Text style={{ color: '#991B1B', fontWeight: '800', fontSize: 12 }}>
-                            Order Cancelled
-                          </Text>
-                          <Text style={{ color: '#B91C1C', fontSize: 11 }}>
-                            Reason:{' '}
-                            {order.cancellationReason ||
-                              order.adminNotes ||
-                              'Cancelled by Kitchen Management.'}
-                          </Text>
-                        </View>
-                      </View>
-                    </View>
-                  )}
-
-                  {/* Direct Action Required Approval Section */}
-                  {order.status === 'Placed' && !order.isApproved && !isOrderApproved(order.id) && (
-                    <View
-                      style={{
-                        marginVertical: 10,
-                        padding: 12,
-                        backgroundColor: '#FEF2F2',
-                        borderRadius: radii.md,
-                        borderWidth: 1.5,
-                        borderColor: '#F87171',
-                      }}
-                    >
-                      <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
-                        <View style={{ marginRight: 6 }}>
-                          <Icon name="time" size={16} color="#DC2626" />
-                        </View>
-                        <View style={{ flex: 1 }}>
-                          <Text style={{ color: '#991B1B', fontWeight: '800', fontSize: 12 }}>
-                            Awaiting Admin Approval
-                          </Text>
-                          <Text style={{ color: '#B91C1C', fontSize: 11 }}>
-                            Customer placed this order. Approve to confirm and begin fresh
-                            ingredient packaging.
-                          </Text>
-                        </View>
-                      </View>
-                      <View style={{ flexDirection: 'row', gap: 8, marginTop: 4 }}>
-                        <Button
-                          testID={`admin-approve-order-${order.id}`}
-                          title={updatingOrderId === order.id ? 'Approving...' : 'Approve Order'}
-                          variant="primary"
-                          size="sm"
-                          loading={updatingOrderId === order.id}
-                          style={{ backgroundColor: '#16A34A', flex: 1 }}
-                          onPress={() => handleApproveOrder(order.id)}
-                        />
-                        <Button
-                          testID={`admin-reject-order-${order.id}`}
-                          title="Reject / Cancel"
-                          variant="outline"
-                          size="sm"
-                          style={{ borderColor: '#DC2626', flex: 1 }}
-                          textStyle={{ color: '#DC2626' }}
-                          onPress={() => handleCancelOrder(order.id)}
-                        />
-                      </View>
-                    </View>
-                  )}
-
-                  {/* Status transition buttons (only for active orders) */}
-                  {order.status !== 'Cancelled' &&
-                    order.status !== 'Delivered' &&
-                    order.status !== 'Refunded' && (
-                      <View style={styles.orderActionsRow}>
-                        <Text style={[styles.actionLabel, { color: colors.textMuted }]}>
-                          Update Status:
-                        </Text>
-                        <ScrollView
-                          horizontal
-                          showsHorizontalScrollIndicator={false}
-                          style={{ marginVertical: 6 }}
-                        >
-                          {(
-                            [
-                              'Placed',
-                              'Confirmed',
-                              'Preparing',
-                              'Out for Delivery',
-                              'Delivered',
-                              'Cancelled',
-                            ] as OrderStatus[]
-                          ).map((st) => (
-                            <TouchableOpacity
-                              key={st}
-                              style={[
-                                styles.statusBtn,
-                                {
-                                  backgroundColor:
-                                    order.status === st ? colors.primary : colors.bgSubtle,
-                                  borderColor: colors.borderLight,
-                                  borderRadius: radii.sm,
-                                },
-                              ]}
-                              onPress={() => handleStatusChange(order.id, st)}
-                            >
-                              <Text
-                                style={{
-                                  fontSize: 11,
-                                  color: order.status === st ? '#FFFFFF' : colors.textPrimary,
-                                  fontWeight: order.status === st ? '800' : '500',
-                                }}
-                              >
-                                {st}
-                              </Text>
-                            </TouchableOpacity>
-                          ))}
-                        </ScrollView>
-                      </View>
-                    )}
-
-                  <View style={styles.orderBottomBar}>
-                    {order.status !== 'Cancelled' &&
-                      order.status !== 'Delivered' &&
-                      order.status !== 'Refunded' && (
-                        <Button
-                          testID={`mark-delivered-btn-${order.id}`}
-                          title={updatingOrderId === order.id ? 'Marking...' : 'Mark as Delivered'}
-                          variant="primary"
-                          size="sm"
-                          style={{
-                            backgroundColor: '#10B981',
-                            borderColor: '#10B981',
-                            marginRight: 8,
-                          }}
-                          textStyle={{ color: '#FFFFFF', fontWeight: '800', fontSize: 11 }}
-                          disabled={updatingOrderId === order.id}
-                          onPress={() => handleStatusChange(order.id, 'Delivered')}
-                        />
-                      )}
-
-                    <Button
-                      title={`Inspect Items (${order.items?.length || 0})`}
-                      variant="outline"
-                      size="sm"
-                      style={{ borderColor: colors.primary, marginRight: 8 }}
-                      textStyle={{ color: colors.primary, fontWeight: '700', fontSize: 11 }}
-                      onPress={() => {
-                        setInspectOrder(order);
-                        setInspectModalVisible(true);
-                      }}
-                    />
-
-                    <TouchableOpacity
-                      onPress={() => Alert.alert('Invoice', generateInvoiceText(order))}
-                      style={styles.actionLink}
-                    >
-                      <Text style={[styles.actionLinkText, { color: colors.primary }]}>
-                        View Invoice
-                      </Text>
-                    </TouchableOpacity>
-
-                    {order.status !== 'Cancelled' &&
-                      order.status !== 'Delivered' &&
-                      order.status !== 'Refunded' && (
-                        <Button
-                          title="Cancel Order"
-                          variant="outline"
-                          size="sm"
-                          style={{ borderColor: '#DC2626', marginRight: 8 }}
-                          textStyle={{ color: '#DC2626', fontSize: 11 }}
-                          onPress={() => handleCancelOrder(order.id)}
-                        />
-                      )}
-
-                    {order.status !== 'Refunded' && (
-                      <Button
-                        title="Issue Refund"
-                        variant="outline"
-                        size="sm"
-                        textStyle={{ fontSize: 11 }}
-                        onPress={() => handleOpenRefund(order)}
-                      />
-                    )}
+                  <View style={{ marginBottom: 12 }}>
+                    <Icon name="cube" size={38} color={colors.textMuted} />
                   </View>
-                </View>
-              ))
-            )}
-          </View>
-        )}
-
-        {/* MODULE 2: MEAL KITS CATALOG MANAGEMENT */}
-        {activeTab === 'kits' && (
-          <View>
-            <View style={styles.moduleHeaderRow}>
-              <View>
-                <Text style={[styles.moduleTitle, { color: colors.textPrimary }]}>
-                  Meal Prep Kits ({scopedKits.length})
-                </Text>
-                <Text style={[styles.moduleSubtitle, { color: colors.textSecondary }]}>
-                  {isSuperAdmin
-                    ? 'All regions catalog (Super Admin view - full access)'
-                    : `Dishes scoped to your assigned region(s): ${assignedRegions && assignedRegions.length > 0 ? assignedRegions.map(formatRegionName).join(', ') : 'Pune City (Pune)'}`}
-                </Text>
-              </View>
-              <Button
-                title="+ Add Meal Kit"
-                size="sm"
-                onPress={() => {
-                  setEditingKit(null);
-                  setKitModalVisible(true);
-                }}
-              />
-            </View>
-
-            {/* Super Admin Region Filter Pills */}
-            {isSuperAdmin && (
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                style={{ marginBottom: 12 }}
-              >
-                {[
-                  { id: 'All', label: 'All Regions' },
-                  { id: 'West', label: 'West Hub' },
-                  { id: 'pune-city', label: 'Pune City' },
-                  { id: 'pune-pcmc', label: 'Pimpri Chinchwad' },
-                  { id: 'pune-west', label: 'Pune West (Hinjawadi)' },
-                  { id: 'mumbai-south', label: 'South Mumbai' },
-                  { id: 'mumbai-suburbs-west', label: 'Mumbai West' },
-                  { id: 'South', label: 'South Hub' },
-                  { id: 'blr-east', label: 'Bengaluru East (Whitefield)' },
-                  { id: 'blr-south', label: 'Bengaluru South (Koramangala)' },
-                  { id: 'hyd-west', label: 'Hyderabad West (Hitec)' },
-                  { id: 'chn-south', label: 'Chennai South (OMR)' },
-                  { id: 'North', label: 'North Hub' },
-                  { id: 'delhi-south-central', label: 'Delhi South' },
-                  { id: 'delhi-noida', label: 'Noida' },
-                  { id: 'delhi-gurugram', label: 'Gurugram' },
-                  { id: 'East', label: 'East Hub' },
-                  { id: 'kol-south-central', label: 'Kolkata South' },
-                ].map((item) => {
-                  const isSelected = superAdminRegionFilter === item.id;
-                  return (
-                    <TouchableOpacity
-                      key={item.id}
-                      onPress={() => setSuperAdminRegionFilter(item.id as any)}
-                      style={[
-                        styles.statePill,
-                        {
-                          backgroundColor: isSelected ? colors.primary : colors.bgSurface,
-                          borderColor: isSelected ? colors.primary : colors.borderLight,
-                          borderRadius: radii.pill,
-                        },
-                      ]}
-                    >
-                      <Text
-                        style={{
-                          color: isSelected ? '#fff' : colors.textPrimary,
-                          fontWeight: '700',
-                          fontSize: 12,
-                        }}
-                      >
-                        {item.label}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </ScrollView>
-            )}
-
-            {/* MEAL KITS SEARCH BAR & FILTERING SYSTEM */}
-            <View
-              style={[
-                styles.kitFilterContainer,
-                {
-                  backgroundColor: colors.bgSurface,
-                  borderRadius: radii.xl,
-                  borderColor: colors.borderLight,
-                  position: 'relative',
-                  ...shadows.card,
-                },
-                {
-                  zIndex: openDropdown ? 99999 : 10,
-                  elevation: openDropdown ? 99999 : 2,
-                },
-              ]}
-            >
-              {/* Search Bar Input */}
-              <View
-                style={[
-                  styles.kitSearchBar,
-                  {
-                    backgroundColor: colors.bgSubtle,
-                    borderColor: colors.border,
-                    borderRadius: radii.lg,
-                  },
-                ]}
-              >
-                <Icon name="search" size={18} color={colors.textSecondary} />
-                <TextInput
-                  style={[styles.kitSearchInput, { color: colors.textPrimary }]}
-                  placeholder="Search meal kits by name, ingredient, cuisine..."
-                  placeholderTextColor={colors.textMuted}
-                  value={kitSearchQuery}
-                  onChangeText={setKitSearchQuery}
-                  autoCorrect={false}
-                />
-                {kitSearchQuery.length > 0 && (
-                  <TouchableOpacity
-                    onPress={() => setKitSearchQuery('')}
-                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                    style={{ padding: 4 }}
-                  >
-                    <Icon name="close" size={16} color={colors.textSecondary} />
-                  </TouchableOpacity>
-                )}
-              </View>
-
-              {/* Dropdown Filters Row: Diet, Cuisine Type & Dish Type */}
-              <View
-                style={[
-                  styles.dropdownFiltersRow,
-                  {
-                    position: 'relative',
-                    zIndex: openDropdown ? 99999 : 5,
-                    elevation: openDropdown ? 99999 : 1,
-                  },
-                ]}
-              >
-                {/* 1. Diet Dropdown */}
-                <View
-                  style={[
-                    styles.dropdownContainer,
-                    {
-                      zIndex: openDropdown === 'diet' ? 99999 : 1,
-                      elevation: openDropdown === 'diet' ? 99999 : 1,
-                    },
-                  ]}
-                >
-                  <Text style={[styles.dropdownLabel, { color: colors.textSecondary }]}>DIET</Text>
-                  <TouchableOpacity
-                    style={[
-                      styles.dropdownTrigger,
-                      {
-                        backgroundColor:
-                          selectedKitDietFilter !== 'All' ? colors.primary + '12' : colors.bgSubtle,
-                        borderColor:
-                          openDropdown === 'diet'
-                            ? colors.primary
-                            : selectedKitDietFilter !== 'All'
-                              ? colors.primary
-                              : colors.border,
-                        borderRadius: radii.md,
-                      },
-                    ]}
-                    onPress={() => setOpenDropdown((prev) => (prev === 'diet' ? null : 'diet'))}
-                    activeOpacity={0.8}
-                  >
-                    <View style={styles.dropdownTriggerContent}>
-                      <Icon
-                        name="restaurant"
-                        size={14}
-                        color={
-                          selectedKitDietFilter !== 'All' ? colors.primary : colors.textSecondary
-                        }
-                      />
-                      <Text
-                        style={[
-                          styles.dropdownTriggerText,
-                          {
-                            color:
-                              selectedKitDietFilter !== 'All' ? colors.primary : colors.textPrimary,
-                            fontWeight: selectedKitDietFilter !== 'All' ? '700' : '500',
-                          },
-                        ]}
-                        numberOfLines={1}
-                      >
-                        {selectedKitDietFilter === 'All'
-                          ? 'All Diets'
-                          : ADMIN_DIET_FILTERS.find((d) => d.id === selectedKitDietFilter)?.label ||
-                            selectedKitDietFilter}
-                      </Text>
-                    </View>
-                    <Icon
-                      name={openDropdown === 'diet' ? 'chevron-up' : 'chevron-down'}
-                      size={14}
-                      color={selectedKitDietFilter !== 'All' ? colors.primary : colors.textMuted}
-                    />
-                  </TouchableOpacity>
-
-                  {openDropdown === 'diet' && (
-                    <View
-                      style={[
-                        styles.dropdownMenu,
-                        {
-                          backgroundColor: colors.bgSurface,
-                          borderColor: colors.borderLight,
-                          borderRadius: radii.lg,
-                          ...shadows.card,
-                        },
-                      ]}
-                    >
-                      <ScrollView
-                        nestedScrollEnabled
-                        style={styles.dropdownMenuList}
-                        showsVerticalScrollIndicator
-                      >
-                        {ADMIN_DIET_FILTERS.map((f) => {
-                          const isSelected = selectedKitDietFilter === f.id;
-                          return (
-                            <TouchableOpacity
-                              key={f.id}
-                              style={[
-                                styles.dropdownMenuItem,
-                                {
-                                  backgroundColor: isSelected
-                                    ? colors.primary + '15'
-                                    : 'transparent',
-                                },
-                              ]}
-                              onPress={() => {
-                                setSelectedKitDietFilter(f.id);
-                                setOpenDropdown(null);
-                              }}
-                            >
-                              <Text
-                                style={[
-                                  styles.dropdownMenuItemText,
-                                  {
-                                    color: isSelected ? colors.primary : colors.textPrimary,
-                                    fontWeight: isSelected ? '700' : '500',
-                                  },
-                                ]}
-                              >
-                                {f.label}
-                              </Text>
-                              {isSelected && <Icon name="check" size={14} color={colors.primary} />}
-                            </TouchableOpacity>
-                          );
-                        })}
-                      </ScrollView>
-                    </View>
-                  )}
-                </View>
-
-                {/* 2. Cuisine Type Dropdown */}
-                <View
-                  style={[
-                    styles.dropdownContainer,
-                    {
-                      zIndex: openDropdown === 'cuisine' ? 99999 : 1,
-                      elevation: openDropdown === 'cuisine' ? 99999 : 1,
-                    },
-                  ]}
-                >
-                  <Text style={[styles.dropdownLabel, { color: colors.textSecondary }]}>
-                    CUISINE TYPE
+                  <Text style={{ fontSize: 16, fontWeight: '700', color: colors.textPrimary }}>
+                    No Orders Found
                   </Text>
-                  <TouchableOpacity
-                    style={[
-                      styles.dropdownTrigger,
-                      {
-                        backgroundColor:
-                          selectedKitCuisineFilter !== 'All'
-                            ? colors.primary + '12'
-                            : colors.bgSubtle,
-                        borderColor:
-                          openDropdown === 'cuisine'
-                            ? colors.primary
-                            : selectedKitCuisineFilter !== 'All'
-                              ? colors.primary
-                              : colors.border,
-                        borderRadius: radii.md,
-                      },
-                    ]}
-                    onPress={() =>
-                      setOpenDropdown((prev) => (prev === 'cuisine' ? null : 'cuisine'))
-                    }
-                    activeOpacity={0.8}
-                  >
-                    <View style={styles.dropdownTriggerContent}>
-                      <Icon
-                        name="globe"
-                        size={14}
-                        color={
-                          selectedKitCuisineFilter !== 'All' ? colors.primary : colors.textSecondary
-                        }
-                      />
-                      <Text
-                        style={[
-                          styles.dropdownTriggerText,
-                          {
-                            color:
-                              selectedKitCuisineFilter !== 'All'
-                                ? colors.primary
-                                : colors.textPrimary,
-                            fontWeight: selectedKitCuisineFilter !== 'All' ? '700' : '500',
-                          },
-                        ]}
-                        numberOfLines={1}
-                      >
-                        {selectedKitCuisineFilter === 'All'
-                          ? 'All Cuisines'
-                          : selectedKitCuisineFilter}
-                      </Text>
-                    </View>
-                    <Icon
-                      name={openDropdown === 'cuisine' ? 'chevron-up' : 'chevron-down'}
-                      size={14}
-                      color={selectedKitCuisineFilter !== 'All' ? colors.primary : colors.textMuted}
-                    />
-                  </TouchableOpacity>
-
-                  {openDropdown === 'cuisine' && (
-                    <View
-                      style={[
-                        styles.dropdownMenu,
-                        {
-                          backgroundColor: colors.bgSurface,
-                          borderColor: colors.borderLight,
-                          borderRadius: radii.lg,
-                          ...shadows.card,
-                        },
-                      ]}
-                    >
-                      <ScrollView
-                        nestedScrollEnabled
-                        style={styles.dropdownMenuList}
-                        showsVerticalScrollIndicator
-                      >
-                        {ADMIN_CUISINE_FILTERS.map((c) => {
-                          const isSelected = selectedKitCuisineFilter === c;
-                          return (
-                            <TouchableOpacity
-                              key={c}
-                              style={[
-                                styles.dropdownMenuItem,
-                                {
-                                  backgroundColor: isSelected
-                                    ? colors.primary + '15'
-                                    : 'transparent',
-                                },
-                              ]}
-                              onPress={() => {
-                                setSelectedKitCuisineFilter(c);
-                                setOpenDropdown(null);
-                              }}
-                            >
-                              <Text
-                                style={[
-                                  styles.dropdownMenuItemText,
-                                  {
-                                    color: isSelected ? colors.primary : colors.textPrimary,
-                                    fontWeight: isSelected ? '700' : '500',
-                                  },
-                                ]}
-                              >
-                                {c === 'All' ? 'All Cuisines' : c}
-                              </Text>
-                              {isSelected && <Icon name="check" size={14} color={colors.primary} />}
-                            </TouchableOpacity>
-                          );
-                        })}
-                      </ScrollView>
-                    </View>
-                  )}
-                </View>
-
-                {/* 3. Dish Type Dropdown */}
-                <View
-                  style={[
-                    styles.dropdownContainer,
-                    {
-                      zIndex: openDropdown === 'dish' ? 99999 : 1,
-                      elevation: openDropdown === 'dish' ? 99999 : 1,
-                    },
-                  ]}
-                >
-                  <Text style={[styles.dropdownLabel, { color: colors.textSecondary }]}>
-                    DISH TYPE
-                  </Text>
-                  <TouchableOpacity
-                    style={[
-                      styles.dropdownTrigger,
-                      {
-                        backgroundColor:
-                          selectedKitDishFilter !== 'All' ? colors.primary + '12' : colors.bgSubtle,
-                        borderColor:
-                          openDropdown === 'dish'
-                            ? colors.primary
-                            : selectedKitDishFilter !== 'All'
-                              ? colors.primary
-                              : colors.border,
-                        borderRadius: radii.md,
-                      },
-                    ]}
-                    onPress={() => setOpenDropdown((prev) => (prev === 'dish' ? null : 'dish'))}
-                    activeOpacity={0.8}
-                  >
-                    <View style={styles.dropdownTriggerContent}>
-                      <Icon
-                        name="options"
-                        size={14}
-                        color={
-                          selectedKitDishFilter !== 'All' ? colors.primary : colors.textSecondary
-                        }
-                      />
-                      <Text
-                        style={[
-                          styles.dropdownTriggerText,
-                          {
-                            color:
-                              selectedKitDishFilter !== 'All' ? colors.primary : colors.textPrimary,
-                            fontWeight: selectedKitDishFilter !== 'All' ? '700' : '500',
-                          },
-                        ]}
-                        numberOfLines={1}
-                      >
-                        {selectedKitDishFilter === 'All' ? 'All Dish Types' : selectedKitDishFilter}
-                      </Text>
-                    </View>
-                    <Icon
-                      name={openDropdown === 'dish' ? 'chevron-up' : 'chevron-down'}
-                      size={14}
-                      color={selectedKitDishFilter !== 'All' ? colors.primary : colors.textMuted}
-                    />
-                  </TouchableOpacity>
-
-                  {openDropdown === 'dish' && (
-                    <View
-                      style={[
-                        styles.dropdownMenu,
-                        {
-                          backgroundColor: colors.bgSurface,
-                          borderColor: colors.borderLight,
-                          borderRadius: radii.lg,
-                          ...shadows.card,
-                        },
-                      ]}
-                    >
-                      <ScrollView
-                        nestedScrollEnabled
-                        style={styles.dropdownMenuList}
-                        showsVerticalScrollIndicator
-                      >
-                        {ADMIN_DISH_FILTERS.map((d) => {
-                          const isSelected = selectedKitDishFilter === d;
-                          return (
-                            <TouchableOpacity
-                              key={d}
-                              style={[
-                                styles.dropdownMenuItem,
-                                {
-                                  backgroundColor: isSelected
-                                    ? colors.primary + '15'
-                                    : 'transparent',
-                                },
-                              ]}
-                              onPress={() => {
-                                setSelectedKitDishFilter(d);
-                                setOpenDropdown(null);
-                              }}
-                            >
-                              <Text
-                                style={[
-                                  styles.dropdownMenuItemText,
-                                  {
-                                    color: isSelected ? colors.primary : colors.textPrimary,
-                                    fontWeight: isSelected ? '700' : '500',
-                                  },
-                                ]}
-                              >
-                                {d === 'All' ? 'All Dish Types' : d}
-                              </Text>
-                              {isSelected && <Icon name="check" size={14} color={colors.primary} />}
-                            </TouchableOpacity>
-                          );
-                        })}
-                      </ScrollView>
-                    </View>
-                  )}
-                </View>
-
-                {/* 4. Most Recently Created Filter Button */}
-                <View
-                  style={[
-                    styles.dropdownContainer,
-                    {
-                      zIndex: 1,
-                      elevation: 1,
-                    },
-                  ]}
-                >
-                  <Text style={[styles.dropdownLabel, { color: colors.textSecondary }]}>
-                    SORT / RECENCY
-                  </Text>
-                  <TouchableOpacity
-                    testID="admin-filter-recently-created-btn"
-                    style={[
-                      styles.dropdownTrigger,
-                      {
-                        backgroundColor: sortByRecentlyCreated
-                          ? colors.primary + '18'
-                          : colors.bgSubtle,
-                        borderColor: sortByRecentlyCreated ? colors.primary : colors.border,
-                        borderRadius: radii.md,
-                      },
-                    ]}
-                    onPress={() => setSortByRecentlyCreated((prev) => !prev)}
-                    activeOpacity={0.8}
-                  >
-                    <View style={styles.dropdownTriggerContent}>
-                      <Icon
-                        name="time"
-                        size={14}
-                        color={sortByRecentlyCreated ? colors.primary : colors.textSecondary}
-                      />
-                      <Text
-                        style={[
-                          styles.dropdownTriggerText,
-                          {
-                            color: sortByRecentlyCreated ? colors.primary : colors.textPrimary,
-                            fontWeight: sortByRecentlyCreated ? '700' : '500',
-                          },
-                        ]}
-                        numberOfLines={1}
-                      >
-                        Most Recent
-                      </Text>
-                    </View>
-                    <Icon
-                      name={sortByRecentlyCreated ? 'check' : 'filter'}
-                      size={14}
-                      color={sortByRecentlyCreated ? colors.primary : colors.textMuted}
-                    />
-                  </TouchableOpacity>
-                </View>
-              </View>
-
-              {/* Active Filter Counter & Quick Reset Bar */}
-              <View style={[styles.filterStatsBar, { borderTopColor: colors.borderLight }]}>
-                <View
-                  style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}
-                >
-                  <Text style={[styles.filterStatsText, { color: colors.textSecondary }]}>
-                    Showing{' '}
-                    <Text style={{ fontWeight: '800', color: colors.textPrimary }}>
-                      {filteredKits.length}
-                    </Text>{' '}
-                    of {kits.length} meal kits
-                  </Text>
-                  {sortByRecentlyCreated && (
-                    <View
-                      style={{
-                        backgroundColor: colors.primary + '18',
-                        paddingHorizontal: 8,
-                        paddingVertical: 2,
-                        borderRadius: radii.pill,
-                        borderWidth: 1,
-                        borderColor: colors.primary + '35',
-                        flexDirection: 'row',
-                        alignItems: 'center',
-                        gap: 4,
-                      }}
-                    >
-                      <Icon name="time" size={11} color={colors.primary} />
-                      <Text style={{ fontSize: 11, fontWeight: '700', color: colors.primary }}>
-                        Most Recent First
-                      </Text>
-                    </View>
-                  )}
-                </View>
-                {activeKitFilterCount > 0 && (
-                  <TouchableOpacity style={styles.clearAllBtn} onPress={handleClearKitFilters}>
-                    <Icon name="close-circle" size={14} color="#DC2626" />
-                    <Text style={styles.clearAllBtnText}>
-                      Clear Filters ({activeKitFilterCount})
-                    </Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-            </View>
-
-            {/* Results or Empty State */}
-            {filteredKits.length === 0 ? (
-              <View
-                style={[
-                  styles.adminKitCard,
-                  {
-                    backgroundColor: colors.bgSurface,
-                    padding: 32,
-                    alignItems: 'center',
-                    borderRadius: radii.xl,
-                    borderColor: colors.borderLight,
-                    ...shadows.card,
-                    position: 'relative',
-                    zIndex: 1,
-                    elevation: 1,
-                  },
-                ]}
-              >
-                <View style={{ marginBottom: 12 }}>
-                  <Icon name="search" size={40} color={colors.textMuted} />
-                </View>
-                <Text
-                  style={{
-                    fontSize: 16,
-                    fontWeight: '700',
-                    color: colors.textPrimary,
-                    marginBottom: 4,
-                  }}
-                >
-                  No Meal Kits Found
-                </Text>
-                <Text
-                  style={{
-                    fontSize: 13,
-                    color: colors.textSecondary,
-                    textAlign: 'center',
-                    marginBottom: 16,
-                    lineHeight: 18,
-                  }}
-                >
-                  {kitSearchQuery
-                    ? `No meal kits matched "${kitSearchQuery}" with current filter options.`
-                    : 'No meal kits matched the selected filter criteria.'}
-                </Text>
-                <Button
-                  title="Reset All Filters"
-                  variant="outline"
-                  size="sm"
-                  onPress={handleClearKitFilters}
-                />
-              </View>
-            ) : (
-              <View style={styles.kitsCardsListContainer}>
-                {filteredKits.map((kit) => (
-                  <TouchableOpacity
-                    key={kit.id}
-                    testID={`admin-meal-kit-card-${kit.id}`}
-                    activeOpacity={0.88}
-                    onPress={() => {
-                      setEditingKit(kit);
-                      setKitModalVisible(true);
+                  <Text
+                    style={{
+                      fontSize: 13,
+                      color: colors.textSecondary,
+                      marginTop: 4,
+                      textAlign: 'center',
                     }}
+                  >
+                    There are currently no orders under "{selectedStatusFilter}".
+                  </Text>
+                </View>
+              ) : (
+                filteredOrders.map((order) => (
+                  <View
+                    key={order.id}
                     style={[
-                      styles.adminKitCard,
+                      styles.adminOrderCard,
                       {
                         backgroundColor: colors.bgSurface,
                         borderRadius: radii.xl,
@@ -3012,472 +2130,1564 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
                       },
                     ]}
                   >
-                    <View style={styles.kitCardTop}>
-                      <View style={{ flex: 1 }}>
-                        <View
-                          style={{
-                            flexDirection: 'row',
-                            alignItems: 'center',
-                            justifyContent: 'space-between',
-                          }}
-                        >
-                          <Text style={[styles.kitCardName, { color: colors.textPrimary }]}>
-                            {kit.name}
+                    <TouchableOpacity
+                      activeOpacity={0.7}
+                      onPress={() => {
+                        setInspectOrder(order);
+                        setInspectModalVisible(true);
+                      }}
+                      style={{ marginBottom: 4 }}
+                    >
+                      <View style={styles.orderTopRow}>
+                        <View style={{ flex: 1 }}>
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                            <Text style={[styles.adminOrderId, { color: colors.textPrimary }]}>
+                              {order.id}
+                            </Text>
+                            {recentOrderIds.has(order.id) && (
+                              <View style={styles.newOrderTag}>
+                                <Text style={styles.newOrderTagText}>NEW</Text>
+                              </View>
+                            )}
+                            <Text
+                              style={{ fontSize: 11, color: colors.primary, fontWeight: '700' }}
+                            >
+                              View Details
+                            </Text>
+                          </View>
+                          <Text
+                            style={[styles.adminOrderCustomer, { color: colors.textSecondary }]}
+                          >
+                            {order.customerName} ({order.customerPhone})
                           </Text>
-                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                        </View>
+                        <View testID={`admin-order-status-${order.id}`}>
+                          <Badge label={order.status} variant={getBadgeVariant(order.status)} />
+                        </View>
+                      </View>
+
+                      <View
+                        style={{
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          gap: 4,
+                          marginVertical: 2,
+                        }}
+                      >
+                        <Icon name="location" size={13} color={colors.textSecondary} />
+                        <Text
+                          style={[
+                            styles.adminOrderAddress,
+                            { color: colors.textSecondary, marginBottom: 0 },
+                          ]}
+                        >
+                          {order.deliveryAddress}
+                        </Text>
+                      </View>
+                      {(() => {
+                        const sc = resolveStorageCentre(order.deliveryAddress);
+                        return (
+                          <View
+                            style={{
+                              flexDirection: 'row',
+                              alignItems: 'center',
+                              gap: 5,
+                              marginTop: 4,
+                              marginBottom: 4,
+                              paddingHorizontal: 8,
+                              paddingVertical: 3,
+                              backgroundColor: colors.bgSubtle,
+                              borderRadius: radii.sm,
+                              borderLeftWidth: 2,
+                              borderLeftColor: colors.primary,
+                              alignSelf: 'flex-start',
+                            }}
+                          >
+                            <Icon name="cube" size={11} color={colors.primary} />
                             <Text
                               style={{ fontSize: 11, fontWeight: '700', color: colors.primary }}
                             >
-                              Edit Details
+                              Fulfillment: {sc.storageCentreName} ({sc.name})
                             </Text>
-                            <Icon name="chevron-right" size={12} color={colors.primary} />
                           </View>
-                        </View>
-                        <Text style={[styles.kitCardTag, { color: colors.textSecondary }]}>
-                          {kit.tagline}
-                        </Text>
+                        );
+                      })()}
+                      <Text style={[styles.adminOrderSlot, { color: colors.textMuted }]}>
+                        Slot: {order.deliverySlot} • Paid: ₹{order.totalAmount} via{' '}
+                        {order.paymentMethod}
+                      </Text>
 
-                        {/* Categorized Meal Kit Tags: Diet, Cuisine, Dish Type, Allergens (Excluding region and subregion tags) */}
+                      {/* Summary Preview of Ordered Dishes & Customizations */}
+                      {order.items && order.items.length > 0 && (
                         <View
                           style={{
-                            flexDirection: 'row',
-                            flexWrap: 'wrap',
-                            gap: 6,
-                            marginTop: 6,
-                            marginBottom: 6,
+                            backgroundColor: colors.bgSubtle,
+                            borderRadius: radii.md,
+                            padding: 10,
+                            marginTop: 8,
+                            borderWidth: 1,
+                            borderColor: colors.borderLight,
                           }}
                         >
-                          {parseCategorizedTags(
-                            kit.tags && kit.tags.length > 0 ? kit.tags : compileMealKitTags(kit),
-                          )
-                            .filter(
-                              (tag) =>
-                                tag.category !== 'region' &&
-                                !tag.label.toLowerCase().startsWith('region:') &&
-                                !tag.label.toLowerCase().startsWith('subregion:') &&
-                                !tag.label.toLowerCase().startsWith('state:'),
-                            )
-                            .map((tag, idx) => (
-                              <Badge
-                                key={`${kit.id}-tag-${tag.category}-${idx}`}
-                                label={tag.label}
-                                variant={tag.variant}
-                                size="sm"
-                              />
-                            ))}
-                        </View>
-
-                        <Text style={[styles.kitCardMeta, { color: colors.textMuted }]}>
-                          {kit.spiceLevel} Spice • ₹{kit.price} • {kit.prepTimeMinutes || 15}m prep
-                        </Text>
-                      </View>
-                      <View style={{ alignItems: 'flex-end', gap: 4, marginLeft: 8 }}>
-                        {kit.createdAt ? (
-                          <Badge
-                            label={`Added ${new Date(kit.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`}
-                            variant="neutral"
-                            size="sm"
-                          />
-                        ) : null}
-                        {kit.isTrending ? (
-                          <Badge label="TRENDING" variant="warning" size="sm" />
-                        ) : null}
-                        {kit.isOutOfStock ? (
-                          <Badge label="OUT OF STOCK" variant="danger" size="sm" />
-                        ) : null}
-                      </View>
-                    </View>
-
-                    <View style={styles.kitActionsRow}>
-                      <Button
-                        title={kit.isTrending ? 'Remove Trending' : 'Set Trending'}
-                        variant={kit.isTrending ? 'secondary' : 'outline'}
-                        size="sm"
-                        style={{ marginRight: 8, marginBottom: 4 }}
-                        onPress={() => handleToggleTrending(kit)}
-                      />
-                      <Button
-                        title="Print Recipe Card"
-                        variant="primary"
-                        size="sm"
-                        style={{ marginRight: 8, marginBottom: 4 }}
-                        onPress={() => {
-                          setPrintCardKit(kit);
-                          setPrintCardModalVisible(true);
-                        }}
-                      />
-                      <Button
-                        title="Edit Recipe & Price"
-                        variant="outline"
-                        size="sm"
-                        style={{ marginRight: 8, marginBottom: 4 }}
-                        onPress={() => {
-                          setEditingKit(kit);
-                          setKitModalVisible(true);
-                        }}
-                      />
-                      <Button
-                        title={kit.isOutOfStock ? 'Mark In Stock' : 'Mark Out of Stock'}
-                        variant={kit.isOutOfStock ? 'secondary' : 'outline'}
-                        size="sm"
-                        style={{ marginRight: 8, marginBottom: 4 }}
-                        onPress={() => handleToggleOutOfStock(kit)}
-                      />
-                      <Button
-                        title="Delete"
-                        variant="danger"
-                        size="sm"
-                        style={{ marginBottom: 4 }}
-                        onPress={() => handleRequestDeleteKit(kit)}
-                      />
-                    </View>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            )}
-          </View>
-        )}
-
-        {/* MODULE 3: INVENTORY & STOCK MANAGEMENT */}
-        {activeTab === 'inventory' && <InventoryManagementView />}
-
-        {/* MODULE 4: REGIONAL ANALYTICS DASHBOARD */}
-        {activeTab === 'analytics' && (
-          <View>
-            <View style={styles.moduleHeaderRow}>
-              <View style={{ marginBottom: 14 }}>
-                <Text style={[styles.moduleTitle, { color: colors.textPrimary }]}>
-                  {isSuperAdmin
-                    ? 'Pan-India Regional Analytics (Super Admin View)'
-                    : 'Regional Analytics (' +
-                      (assignedRegions && assignedRegions.length > 0
-                        ? assignedRegions.map(formatRegionName).join(', ')
-                        : 'Pune City (Pune)') +
-                      ')'}
-                </Text>
-                <Text style={[styles.moduleSubtitle, { color: colors.textSecondary }]}>
-                  {isSuperAdmin
-                    ? 'Complete sales data, growth metrics & dietary split across all India operating regions'
-                    : 'State & fulfillment metrics strictly restricted to your assigned jurisdiction: ' +
-                      (assignedRegions && assignedRegions.length > 0
-                        ? assignedRegions.map(formatRegionName).join(', ')
-                        : 'Pune City (Pune)')}
-                </Text>
-                <View style={{ marginTop: 10, alignSelf: 'flex-start' }}>
-                  <Button title="Export CSV" size="sm" onPress={handleExportCSV} />
-                </View>
-              </View>
-            </View>
-
-            {/* RLS Status Badge Banner */}
-            <View
-              style={{
-                backgroundColor: isSuperAdmin ? '#FFFBEB' : colors.primaryLight,
-                borderColor: isSuperAdmin ? '#F59E0B' : colors.primary + '50',
-                borderWidth: 1,
-                borderRadius: radii.md,
-                padding: 10,
-                marginBottom: 12,
-                flexDirection: 'row',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-              }}
-            >
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 }}>
-                <Icon
-                  name={isSuperAdmin ? 'globe' : 'shield-checkmark'}
-                  size={16}
-                  color={isSuperAdmin ? '#B45309' : colors.primary}
-                />
-                <Text
-                  style={{
-                    fontSize: 12,
-                    color: isSuperAdmin ? '#92400E' : colors.textPrimary,
-                    fontWeight: '600',
-                  }}
-                >
-                  {isSuperAdmin
-                    ? 'Super Admin: Full visibility across North, South, West & East Regions'
-                    : 'Row Level Security (RLS) Active: Showing statistics only for ' +
-                      (assignedRegions && assignedRegions.length > 0
-                        ? assignedRegions.map(formatRegionName).join(', ')
-                        : 'Pune City (Pune)')}
-                </Text>
-              </View>
-              <Badge
-                label={isSuperAdmin ? 'ALL STATES' : 'SCOPED REGIONS'}
-                variant={isSuperAdmin ? 'warning' : 'info'}
-                size="sm"
-              />
-            </View>
-
-            {/* Region Filters: State | City | Area in one horizontal row */}
-            <View
-              style={{
-                flexDirection: 'row',
-                gap: 10,
-                marginBottom: 14,
-                zIndex: 1000,
-                elevation: 1000,
-              }}
-            >
-              {/* STATE */}
-              <View
-                style={{ flex: 1, position: 'relative', zIndex: showAnalyticsStateDD ? 3000 : 1 }}
-              >
-                <Text style={analyticsLabelStyle}>State</Text>
-                <TouchableOpacity
-                  activeOpacity={1}
-                  style={analyticsFieldStyle(showAnalyticsStateDD)}
-                  onPress={() => {
-                    setShowAnalyticsStateDD(true);
-                    stateInputRef.current?.focus();
-                  }}
-                >
-                  <TextInput
-                    ref={stateInputRef}
-                    style={{
-                      flex: 1,
-                      height: '100%',
-                      fontSize: 14,
-                      color: colors.textPrimary,
-                      paddingVertical: 0,
-                    }}
-                    placeholder="Search state..."
-                    placeholderTextColor={colors.textMuted}
-                    value={selectedState || analyticsStateSearch}
-                    onChangeText={(t) => {
-                      setAnalyticsStateSearch(t);
-                      setSelectedState('');
-                      setSelectedCity('');
-                      setSelectedSubRegion('');
-                      if (t) setShowAnalyticsStateDD(true);
-                    }}
-                    onFocus={() => setShowAnalyticsStateDD(true)}
-                    onBlur={() => setTimeout(() => setShowAnalyticsStateDD(false), 200)}
-                  />
-                </TouchableOpacity>
-
-                {showAnalyticsStateDD &&
-                  (() => {
-                    const filtered = analyticsStateSearch
-                      ? accessibleStates.filter((s) =>
-                          s.stateName.toLowerCase().includes(analyticsStateSearch.toLowerCase()),
-                        )
-                      : accessibleStates;
-                    return filtered.length > 0 ? (
-                      <View style={analyticsMenuStyle}>
-                        <ThinScrollView maxHeight={200} keyboardShouldPersistTaps="handled">
-                          {filtered.map((st) => (
-                            <TouchableOpacity
-                              key={st.stateCode}
+                          <View
+                            style={{
+                              flexDirection: 'row',
+                              justifyContent: 'space-between',
+                              alignItems: 'center',
+                              marginBottom: 4,
+                            }}
+                          >
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                              <Icon name="restaurant" size={14} color={colors.textPrimary} />
+                              <Text
+                                style={{
+                                  fontSize: 12,
+                                  fontWeight: '800',
+                                  color: colors.textPrimary,
+                                }}
+                              >
+                                Ordered Dishes ({order.items.length}):
+                              </Text>
+                            </View>
+                            <Text
+                              style={{ fontSize: 11, color: colors.primary, fontWeight: '700' }}
+                            >
+                              Inspect Details
+                            </Text>
+                          </View>
+                          {order.items.map((it, idx) => (
+                            <View
+                              key={idx}
                               style={{
-                                paddingVertical: 12,
-                                paddingHorizontal: 14,
-                                backgroundColor:
-                                  selectedState === st.stateName
-                                    ? colors.primaryLight
-                                    : 'transparent',
-                              }}
-                              onPress={() => {
-                                setSelectedState(st.stateName);
-                                setSelectedCity('');
-                                setSelectedSubRegion('');
-                                setShowAnalyticsStateDD(false);
-                                setAnalyticsStateSearch('');
+                                flexDirection: 'row',
+                                justifyContent: 'space-between',
+                                alignItems: 'center',
+                                marginTop: 4,
                               }}
                             >
                               <Text
-                                style={{
-                                  fontSize: 14,
-                                  color:
-                                    selectedState === st.stateName
-                                      ? colors.primary
-                                      : colors.textPrimary,
-                                  fontWeight: selectedState === st.stateName ? '700' : '400',
+                                style={{ fontSize: 12, color: colors.textSecondary, flex: 1 }}
+                                numberOfLines={1}
+                              >
+                                • {it.quantity}x {it.name}
+                              </Text>
+                              <View style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+                                <Text style={{ fontSize: 11, color: colors.textMuted }}>
+                                  {it.servings || 2}p
+                                </Text>
+                                <View
+                                  style={{ flexDirection: 'row', alignItems: 'center', gap: 2 }}
+                                >
+                                  <Icon
+                                    name="flame"
+                                    size={11}
+                                    color={
+                                      (it.spiceLevel || '').toLowerCase().includes('spicy')
+                                        ? '#DC2626'
+                                        : colors.primary
+                                    }
+                                  />
+                                  <Text
+                                    style={{
+                                      fontSize: 11,
+                                      fontWeight: '700',
+                                      color: (it.spiceLevel || '').toLowerCase().includes('spicy')
+                                        ? '#DC2626'
+                                        : colors.primary,
+                                    }}
+                                  >
+                                    {it.spiceLevel || 'Medium'}
+                                  </Text>
+                                </View>
+                              </View>
+                            </View>
+                          ))}
+                        </View>
+                      )}
+                    </TouchableOpacity>
+
+                    {/* Cancelled Order Notice */}
+                    {order.status === 'Cancelled' && (
+                      <View
+                        style={{
+                          marginVertical: 10,
+                          padding: 12,
+                          backgroundColor: '#FEF2F2',
+                          borderRadius: radii.md,
+                          borderWidth: 1.5,
+                          borderColor: '#F87171',
+                        }}
+                      >
+                        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                          <View style={{ marginRight: 8 }}>
+                            <Icon name="close" size={16} color="#DC2626" />
+                          </View>
+                          <View style={{ flex: 1 }}>
+                            <Text style={{ color: '#991B1B', fontWeight: '800', fontSize: 12 }}>
+                              Order Cancelled
+                            </Text>
+                            <Text style={{ color: '#B91C1C', fontSize: 11 }}>
+                              Reason:{' '}
+                              {order.cancellationReason ||
+                                order.adminNotes ||
+                                'Cancelled by Kitchen Management.'}
+                            </Text>
+                          </View>
+                        </View>
+                      </View>
+                    )}
+
+                    {/* Direct Action Required Approval Section */}
+                    {order.status === 'Placed' &&
+                      !order.isApproved &&
+                      !isOrderApproved(order.id) && (
+                        <View
+                          style={{
+                            marginVertical: 10,
+                            padding: 12,
+                            backgroundColor: '#FEF2F2',
+                            borderRadius: radii.md,
+                            borderWidth: 1.5,
+                            borderColor: '#F87171',
+                          }}
+                        >
+                          <View
+                            style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}
+                          >
+                            <View style={{ marginRight: 6 }}>
+                              <Icon name="time" size={16} color="#DC2626" />
+                            </View>
+                            <View style={{ flex: 1 }}>
+                              <Text style={{ color: '#991B1B', fontWeight: '800', fontSize: 12 }}>
+                                Awaiting Admin Approval
+                              </Text>
+                              <Text style={{ color: '#B91C1C', fontSize: 11 }}>
+                                Customer placed this order. Approve to confirm and begin fresh
+                                ingredient packaging.
+                              </Text>
+                            </View>
+                          </View>
+                          <View style={{ flexDirection: 'row', gap: 8, marginTop: 4 }}>
+                            <Button
+                              testID={`admin-approve-order-${order.id}`}
+                              title={
+                                updatingOrderId === order.id ? 'Approving...' : 'Approve Order'
+                              }
+                              variant="primary"
+                              size="sm"
+                              loading={updatingOrderId === order.id}
+                              style={{ backgroundColor: '#16A34A', flex: 1 }}
+                              onPress={() => handleApproveOrder(order.id)}
+                            />
+                            <Button
+                              testID={`admin-reject-order-${order.id}`}
+                              title="Reject / Cancel"
+                              variant="outline"
+                              size="sm"
+                              style={{ borderColor: '#DC2626', flex: 1 }}
+                              textStyle={{ color: '#DC2626' }}
+                              onPress={() => handleCancelOrder(order.id)}
+                            />
+                          </View>
+                        </View>
+                      )}
+
+                    {/* Status transition buttons (only for active orders) */}
+                    {order.status !== 'Cancelled' &&
+                      order.status !== 'Delivered' &&
+                      order.status !== 'Refunded' && (
+                        <View style={styles.orderActionsRow}>
+                          <Text style={[styles.actionLabel, { color: colors.textMuted }]}>
+                            Update Status:
+                          </Text>
+                          <ScrollView
+                            horizontal
+                            showsHorizontalScrollIndicator={false}
+                            style={{ marginVertical: 6 }}
+                          >
+                            {(
+                              [
+                                'Placed',
+                                'Confirmed',
+                                'Preparing',
+                                'Out for Delivery',
+                                'Delivered',
+                                'Cancelled',
+                              ] as OrderStatus[]
+                            ).map((st) => (
+                              <TouchableOpacity
+                                key={st}
+                                style={[
+                                  styles.statusBtn,
+                                  {
+                                    backgroundColor:
+                                      order.status === st ? colors.primary : colors.bgSubtle,
+                                    borderColor: colors.borderLight,
+                                    borderRadius: radii.sm,
+                                  },
+                                ]}
+                                onPress={() => handleStatusChange(order.id, st)}
+                              >
+                                <Text
+                                  style={{
+                                    fontSize: 11,
+                                    color: order.status === st ? '#FFFFFF' : colors.textPrimary,
+                                    fontWeight: order.status === st ? '800' : '500',
+                                  }}
+                                >
+                                  {st}
+                                </Text>
+                              </TouchableOpacity>
+                            ))}
+                          </ScrollView>
+                        </View>
+                      )}
+
+                    <View style={styles.orderBottomBar}>
+                      {order.status !== 'Cancelled' &&
+                        order.status !== 'Delivered' &&
+                        order.status !== 'Refunded' && (
+                          <Button
+                            testID={`mark-delivered-btn-${order.id}`}
+                            title={
+                              updatingOrderId === order.id ? 'Marking...' : 'Mark as Delivered'
+                            }
+                            variant="primary"
+                            size="sm"
+                            style={{
+                              backgroundColor: '#10B981',
+                              borderColor: '#10B981',
+                              marginRight: 8,
+                            }}
+                            textStyle={{ color: '#FFFFFF', fontWeight: '800', fontSize: 11 }}
+                            disabled={updatingOrderId === order.id}
+                            onPress={() => handleStatusChange(order.id, 'Delivered')}
+                          />
+                        )}
+
+                      <Button
+                        title={`Inspect Items (${order.items?.length || 0})`}
+                        variant="outline"
+                        size="sm"
+                        style={{ borderColor: colors.primary, marginRight: 8 }}
+                        textStyle={{ color: colors.primary, fontWeight: '700', fontSize: 11 }}
+                        onPress={() => {
+                          setInspectOrder(order);
+                          setInspectModalVisible(true);
+                        }}
+                      />
+
+                      <TouchableOpacity
+                        onPress={() => Alert.alert('Invoice', generateInvoiceText(order))}
+                        style={styles.actionLink}
+                      >
+                        <Text style={[styles.actionLinkText, { color: colors.primary }]}>
+                          View Invoice
+                        </Text>
+                      </TouchableOpacity>
+
+                      {order.status !== 'Cancelled' &&
+                        order.status !== 'Delivered' &&
+                        order.status !== 'Refunded' && (
+                          <Button
+                            title="Cancel Order"
+                            variant="outline"
+                            size="sm"
+                            style={{ borderColor: '#DC2626', marginRight: 8 }}
+                            textStyle={{ color: '#DC2626', fontSize: 11 }}
+                            onPress={() => handleCancelOrder(order.id)}
+                          />
+                        )}
+
+                      {order.status !== 'Refunded' && (
+                        <Button
+                          title="Issue Refund"
+                          variant="outline"
+                          size="sm"
+                          textStyle={{ fontSize: 11 }}
+                          onPress={() => handleOpenRefund(order)}
+                        />
+                      )}
+                    </View>
+                  </View>
+                ))
+              )}
+            </View>
+          )}
+
+          {/* MODULE 2: MEAL KITS CATALOG MANAGEMENT */}
+          {activeTab === 'kits' && (
+            <View>
+              <View style={styles.moduleHeaderRow}>
+                <View>
+                  <Text style={[styles.moduleTitle, { color: colors.textPrimary }]}>
+                    Meal Prep Kits ({scopedKits.length})
+                  </Text>
+                  <Text style={[styles.moduleSubtitle, { color: colors.textSecondary }]}>
+                    {isSuperAdmin
+                      ? 'All regions catalog (Super Admin view - full access)'
+                      : `Dishes scoped to your assigned region(s): ${assignedRegions && assignedRegions.length > 0 ? assignedRegions.map(formatRegionName).join(', ') : 'Pune City (Pune)'}`}
+                  </Text>
+                </View>
+                <Button
+                  title="+ Add Meal Kit"
+                  size="sm"
+                  onPress={() => {
+                    setEditingKit(null);
+                    setKitModalVisible(true);
+                  }}
+                />
+              </View>
+
+              {/* Super Admin Region Filter Tabs */}
+              {isSuperAdmin && (
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  style={{ marginBottom: 12 }}
+                >
+                  {[
+                    { id: 'All', label: 'All Regions' },
+                    { id: 'West', label: 'West Hub' },
+                    { id: 'pune-city', label: 'Pune City' },
+                    { id: 'pune-pcmc', label: 'Pimpri Chinchwad' },
+                    { id: 'pune-west', label: 'Pune West (Hinjawadi)' },
+                    { id: 'mumbai-south', label: 'South Mumbai' },
+                    { id: 'mumbai-suburbs-west', label: 'Mumbai West' },
+                    { id: 'South', label: 'South Hub' },
+                    { id: 'blr-east', label: 'Bengaluru East (Whitefield)' },
+                    { id: 'blr-south', label: 'Bengaluru South (Koramangala)' },
+                    { id: 'hyd-west', label: 'Hyderabad West (Hitec)' },
+                    { id: 'chn-south', label: 'Chennai South (OMR)' },
+                    { id: 'North', label: 'North Hub' },
+                    { id: 'delhi-south-central', label: 'Delhi South' },
+                    { id: 'delhi-noida', label: 'Noida' },
+                    { id: 'delhi-gurugram', label: 'Gurugram' },
+                    { id: 'East', label: 'East Hub' },
+                    { id: 'kol-south-central', label: 'Kolkata South' },
+                  ].map((item) => {
+                    const isSelected = superAdminRegionFilter === item.id;
+                    return (
+                      <TouchableOpacity
+                        key={item.id}
+                        onPress={() => setSuperAdminRegionFilter(item.id as any)}
+                        style={[
+                          styles.stateTab,
+                          {
+                            backgroundColor: isSelected ? colors.primary : colors.bgSurface,
+                            borderColor: isSelected ? colors.primary : colors.borderLight,
+                            borderRadius: radii.md,
+                          },
+                        ]}
+                      >
+                        <Text
+                          style={{
+                            color: isSelected ? '#fff' : colors.textPrimary,
+                            fontWeight: '700',
+                            fontSize: 12,
+                          }}
+                        >
+                          {item.label}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+              )}
+
+              {/* MEAL KITS SEARCH BAR & FILTERING SYSTEM */}
+              <View
+                style={[
+                  styles.kitFilterContainer,
+                  {
+                    backgroundColor: colors.bgSurface,
+                    borderRadius: radii.xl,
+                    borderColor: colors.borderLight,
+                    position: 'relative',
+                    ...shadows.card,
+                  },
+                  {
+                    zIndex: openDropdown ? 99999 : 10,
+                    elevation: openDropdown ? 99999 : 2,
+                  },
+                ]}
+              >
+                {/* Search Bar Input */}
+                <View
+                  style={[
+                    styles.kitSearchBar,
+                    {
+                      backgroundColor: colors.bgSubtle,
+                      borderColor: colors.border,
+                      borderRadius: radii.lg,
+                    },
+                  ]}
+                >
+                  <Icon name="search" size={18} color={colors.textSecondary} />
+                  <TextInput
+                    style={[styles.kitSearchInput, { color: colors.textPrimary }]}
+                    placeholder="Search meal kits by name, ingredient, cuisine..."
+                    placeholderTextColor={colors.textMuted}
+                    value={kitSearchQuery}
+                    onChangeText={setKitSearchQuery}
+                    autoCorrect={false}
+                  />
+                  {kitSearchQuery.length > 0 && (
+                    <TouchableOpacity
+                      onPress={() => setKitSearchQuery('')}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                      style={{ padding: 4 }}
+                    >
+                      <Icon name="close" size={16} color={colors.textSecondary} />
+                    </TouchableOpacity>
+                  )}
+                </View>
+
+                {/* Dropdown Filters Row: Diet, Cuisine Type & Dish Type */}
+                <View
+                  style={[
+                    styles.dropdownFiltersRow,
+                    {
+                      position: 'relative',
+                      zIndex: openDropdown ? 99999 : 5,
+                      elevation: openDropdown ? 99999 : 1,
+                    },
+                  ]}
+                >
+                  {/* 1. Diet Dropdown */}
+                  <View
+                    style={[
+                      styles.dropdownContainer,
+                      {
+                        zIndex: openDropdown === 'diet' ? 99999 : 1,
+                        elevation: openDropdown === 'diet' ? 99999 : 1,
+                      },
+                    ]}
+                  >
+                    <Text style={[styles.dropdownLabel, { color: colors.textSecondary }]}>
+                      DIET
+                    </Text>
+                    <TouchableOpacity
+                      style={[
+                        styles.dropdownTrigger,
+                        {
+                          backgroundColor:
+                            selectedKitDietFilter !== 'All'
+                              ? colors.primary + '12'
+                              : colors.bgSubtle,
+                          borderColor:
+                            openDropdown === 'diet'
+                              ? colors.primary
+                              : selectedKitDietFilter !== 'All'
+                                ? colors.primary
+                                : colors.border,
+                          borderRadius: radii.md,
+                        },
+                      ]}
+                      onPress={() => setOpenDropdown((prev) => (prev === 'diet' ? null : 'diet'))}
+                      activeOpacity={0.8}
+                    >
+                      <View style={styles.dropdownTriggerContent}>
+                        <Icon
+                          name="restaurant"
+                          size={14}
+                          color={
+                            selectedKitDietFilter !== 'All' ? colors.primary : colors.textSecondary
+                          }
+                        />
+                        <Text
+                          style={[
+                            styles.dropdownTriggerText,
+                            {
+                              color:
+                                selectedKitDietFilter !== 'All'
+                                  ? colors.primary
+                                  : colors.textPrimary,
+                              fontWeight: selectedKitDietFilter !== 'All' ? '700' : '500',
+                            },
+                          ]}
+                          numberOfLines={1}
+                        >
+                          {selectedKitDietFilter === 'All'
+                            ? 'All Diets'
+                            : ADMIN_DIET_FILTERS.find((d) => d.id === selectedKitDietFilter)
+                                ?.label || selectedKitDietFilter}
+                        </Text>
+                      </View>
+                      <Icon
+                        name={openDropdown === 'diet' ? 'chevron-up' : 'chevron-down'}
+                        size={14}
+                        color={selectedKitDietFilter !== 'All' ? colors.primary : colors.textMuted}
+                      />
+                    </TouchableOpacity>
+
+                    {openDropdown === 'diet' && (
+                      <View
+                        style={[
+                          styles.dropdownMenu,
+                          {
+                            backgroundColor: colors.bgSurface,
+                            borderColor: colors.borderLight,
+                            borderRadius: radii.lg,
+                            ...shadows.card,
+                          },
+                        ]}
+                      >
+                        <ScrollView
+                          nestedScrollEnabled
+                          style={styles.dropdownMenuList}
+                          showsVerticalScrollIndicator
+                        >
+                          {ADMIN_DIET_FILTERS.map((f) => {
+                            const isSelected = selectedKitDietFilter === f.id;
+                            return (
+                              <TouchableOpacity
+                                key={f.id}
+                                style={[
+                                  styles.dropdownMenuItem,
+                                  {
+                                    backgroundColor: isSelected
+                                      ? colors.primary + '15'
+                                      : 'transparent',
+                                  },
+                                ]}
+                                onPress={() => {
+                                  setSelectedKitDietFilter(f.id);
+                                  setOpenDropdown(null);
                                 }}
                               >
-                                {st.stateName}
-                              </Text>
-                            </TouchableOpacity>
-                          ))}
-                        </ThinScrollView>
+                                <Text
+                                  style={[
+                                    styles.dropdownMenuItemText,
+                                    {
+                                      color: isSelected ? colors.primary : colors.textPrimary,
+                                      fontWeight: isSelected ? '700' : '500',
+                                    },
+                                  ]}
+                                >
+                                  {f.label}
+                                </Text>
+                                {isSelected && (
+                                  <Icon name="check" size={14} color={colors.primary} />
+                                )}
+                              </TouchableOpacity>
+                            );
+                          })}
+                        </ScrollView>
                       </View>
-                    ) : null;
-                  })()}
-              </View>
+                    )}
+                  </View>
 
-              {/* CITY */}
-              <View
-                style={{ flex: 1, position: 'relative', zIndex: showAnalyticsCityDD ? 3000 : 1 }}
-              >
-                <Text style={analyticsLabelStyle}>City</Text>
-                <TouchableOpacity
-                  activeOpacity={1}
-                  disabled={availableCities.length === 0}
-                  style={analyticsFieldStyle(showAnalyticsCityDD, availableCities.length === 0)}
-                  onPress={() => {
-                    setShowAnalyticsCityDD(true);
-                    cityInputRef.current?.focus();
-                  }}
-                >
-                  <TextInput
-                    ref={cityInputRef}
-                    editable={availableCities.length > 0}
-                    style={{
-                      flex: 1,
-                      height: '100%',
-                      fontSize: 14,
-                      color: colors.textPrimary,
-                      paddingVertical: 0,
-                    }}
-                    placeholder="All cities"
-                    placeholderTextColor={colors.textMuted}
-                    value={selectedCity || analyticsCitySearch}
-                    onChangeText={(t) => {
-                      setAnalyticsCitySearch(t);
-                      setSelectedCity('');
-                      setSelectedSubRegion('');
-                      if (t) setShowAnalyticsCityDD(true);
-                    }}
-                    onFocus={() => setShowAnalyticsCityDD(true)}
-                    onBlur={() => setTimeout(() => setShowAnalyticsCityDD(false), 200)}
-                  />
-                  {!!selectedCity && (
+                  {/* 2. Cuisine Type Dropdown */}
+                  <View
+                    style={[
+                      styles.dropdownContainer,
+                      {
+                        zIndex: openDropdown === 'cuisine' ? 99999 : 1,
+                        elevation: openDropdown === 'cuisine' ? 99999 : 1,
+                      },
+                    ]}
+                  >
+                    <Text style={[styles.dropdownLabel, { color: colors.textSecondary }]}>
+                      CUISINE TYPE
+                    </Text>
                     <TouchableOpacity
-                      onPress={() => {
-                        setSelectedCity('');
-                        setSelectedSubRegion('');
-                        setAnalyticsCitySearch('');
-                      }}
-                      hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                      style={[
+                        styles.dropdownTrigger,
+                        {
+                          backgroundColor:
+                            selectedKitCuisineFilter !== 'All'
+                              ? colors.primary + '12'
+                              : colors.bgSubtle,
+                          borderColor:
+                            openDropdown === 'cuisine'
+                              ? colors.primary
+                              : selectedKitCuisineFilter !== 'All'
+                                ? colors.primary
+                                : colors.border,
+                          borderRadius: radii.md,
+                        },
+                      ]}
+                      onPress={() =>
+                        setOpenDropdown((prev) => (prev === 'cuisine' ? null : 'cuisine'))
+                      }
+                      activeOpacity={0.8}
                     >
-                      <Icon name="close" size={14} color={colors.textMuted} />
+                      <View style={styles.dropdownTriggerContent}>
+                        <Icon
+                          name="globe"
+                          size={14}
+                          color={
+                            selectedKitCuisineFilter !== 'All'
+                              ? colors.primary
+                              : colors.textSecondary
+                          }
+                        />
+                        <Text
+                          style={[
+                            styles.dropdownTriggerText,
+                            {
+                              color:
+                                selectedKitCuisineFilter !== 'All'
+                                  ? colors.primary
+                                  : colors.textPrimary,
+                              fontWeight: selectedKitCuisineFilter !== 'All' ? '700' : '500',
+                            },
+                          ]}
+                          numberOfLines={1}
+                        >
+                          {selectedKitCuisineFilter === 'All'
+                            ? 'All Cuisines'
+                            : selectedKitCuisineFilter}
+                        </Text>
+                      </View>
+                      <Icon
+                        name={openDropdown === 'cuisine' ? 'chevron-up' : 'chevron-down'}
+                        size={14}
+                        color={
+                          selectedKitCuisineFilter !== 'All' ? colors.primary : colors.textMuted
+                        }
+                      />
+                    </TouchableOpacity>
+
+                    {openDropdown === 'cuisine' && (
+                      <View
+                        style={[
+                          styles.dropdownMenu,
+                          {
+                            backgroundColor: colors.bgSurface,
+                            borderColor: colors.borderLight,
+                            borderRadius: radii.lg,
+                            ...shadows.card,
+                          },
+                        ]}
+                      >
+                        <ScrollView
+                          nestedScrollEnabled
+                          style={styles.dropdownMenuList}
+                          showsVerticalScrollIndicator
+                        >
+                          {ADMIN_CUISINE_FILTERS.map((c) => {
+                            const isSelected = selectedKitCuisineFilter === c;
+                            return (
+                              <TouchableOpacity
+                                key={c}
+                                style={[
+                                  styles.dropdownMenuItem,
+                                  {
+                                    backgroundColor: isSelected
+                                      ? colors.primary + '15'
+                                      : 'transparent',
+                                  },
+                                ]}
+                                onPress={() => {
+                                  setSelectedKitCuisineFilter(c);
+                                  setOpenDropdown(null);
+                                }}
+                              >
+                                <Text
+                                  style={[
+                                    styles.dropdownMenuItemText,
+                                    {
+                                      color: isSelected ? colors.primary : colors.textPrimary,
+                                      fontWeight: isSelected ? '700' : '500',
+                                    },
+                                  ]}
+                                >
+                                  {c === 'All' ? 'All Cuisines' : c}
+                                </Text>
+                                {isSelected && (
+                                  <Icon name="check" size={14} color={colors.primary} />
+                                )}
+                              </TouchableOpacity>
+                            );
+                          })}
+                        </ScrollView>
+                      </View>
+                    )}
+                  </View>
+
+                  {/* 3. Dish Type Dropdown */}
+                  <View
+                    style={[
+                      styles.dropdownContainer,
+                      {
+                        zIndex: openDropdown === 'dish' ? 99999 : 1,
+                        elevation: openDropdown === 'dish' ? 99999 : 1,
+                      },
+                    ]}
+                  >
+                    <Text style={[styles.dropdownLabel, { color: colors.textSecondary }]}>
+                      DISH TYPE
+                    </Text>
+                    <TouchableOpacity
+                      style={[
+                        styles.dropdownTrigger,
+                        {
+                          backgroundColor:
+                            selectedKitDishFilter !== 'All'
+                              ? colors.primary + '12'
+                              : colors.bgSubtle,
+                          borderColor:
+                            openDropdown === 'dish'
+                              ? colors.primary
+                              : selectedKitDishFilter !== 'All'
+                                ? colors.primary
+                                : colors.border,
+                          borderRadius: radii.md,
+                        },
+                      ]}
+                      onPress={() => setOpenDropdown((prev) => (prev === 'dish' ? null : 'dish'))}
+                      activeOpacity={0.8}
+                    >
+                      <View style={styles.dropdownTriggerContent}>
+                        <Icon
+                          name="options"
+                          size={14}
+                          color={
+                            selectedKitDishFilter !== 'All' ? colors.primary : colors.textSecondary
+                          }
+                        />
+                        <Text
+                          style={[
+                            styles.dropdownTriggerText,
+                            {
+                              color:
+                                selectedKitDishFilter !== 'All'
+                                  ? colors.primary
+                                  : colors.textPrimary,
+                              fontWeight: selectedKitDishFilter !== 'All' ? '700' : '500',
+                            },
+                          ]}
+                          numberOfLines={1}
+                        >
+                          {selectedKitDishFilter === 'All'
+                            ? 'All Dish Types'
+                            : selectedKitDishFilter}
+                        </Text>
+                      </View>
+                      <Icon
+                        name={openDropdown === 'dish' ? 'chevron-up' : 'chevron-down'}
+                        size={14}
+                        color={selectedKitDishFilter !== 'All' ? colors.primary : colors.textMuted}
+                      />
+                    </TouchableOpacity>
+
+                    {openDropdown === 'dish' && (
+                      <View
+                        style={[
+                          styles.dropdownMenu,
+                          {
+                            backgroundColor: colors.bgSurface,
+                            borderColor: colors.borderLight,
+                            borderRadius: radii.lg,
+                            ...shadows.card,
+                          },
+                        ]}
+                      >
+                        <ScrollView
+                          nestedScrollEnabled
+                          style={styles.dropdownMenuList}
+                          showsVerticalScrollIndicator
+                        >
+                          {ADMIN_DISH_FILTERS.map((d) => {
+                            const isSelected = selectedKitDishFilter === d;
+                            return (
+                              <TouchableOpacity
+                                key={d}
+                                style={[
+                                  styles.dropdownMenuItem,
+                                  {
+                                    backgroundColor: isSelected
+                                      ? colors.primary + '15'
+                                      : 'transparent',
+                                  },
+                                ]}
+                                onPress={() => {
+                                  setSelectedKitDishFilter(d);
+                                  setOpenDropdown(null);
+                                }}
+                              >
+                                <Text
+                                  style={[
+                                    styles.dropdownMenuItemText,
+                                    {
+                                      color: isSelected ? colors.primary : colors.textPrimary,
+                                      fontWeight: isSelected ? '700' : '500',
+                                    },
+                                  ]}
+                                >
+                                  {d === 'All' ? 'All Dish Types' : d}
+                                </Text>
+                                {isSelected && (
+                                  <Icon name="check" size={14} color={colors.primary} />
+                                )}
+                              </TouchableOpacity>
+                            );
+                          })}
+                        </ScrollView>
+                      </View>
+                    )}
+                  </View>
+
+                  {/* 4. Most Recently Created Filter Button */}
+                  <View
+                    style={[
+                      styles.dropdownContainer,
+                      {
+                        zIndex: 1,
+                        elevation: 1,
+                      },
+                    ]}
+                  >
+                    <Text style={[styles.dropdownLabel, { color: colors.textSecondary }]}>
+                      SORT / RECENCY
+                    </Text>
+                    <TouchableOpacity
+                      testID="admin-filter-recently-created-btn"
+                      style={[
+                        styles.dropdownTrigger,
+                        {
+                          backgroundColor: sortByRecentlyCreated
+                            ? colors.primary + '18'
+                            : colors.bgSubtle,
+                          borderColor: sortByRecentlyCreated ? colors.primary : colors.border,
+                          borderRadius: radii.md,
+                        },
+                      ]}
+                      onPress={() => setSortByRecentlyCreated((prev) => !prev)}
+                      activeOpacity={0.8}
+                    >
+                      <View style={styles.dropdownTriggerContent}>
+                        <Icon
+                          name="time"
+                          size={14}
+                          color={sortByRecentlyCreated ? colors.primary : colors.textSecondary}
+                        />
+                        <Text
+                          style={[
+                            styles.dropdownTriggerText,
+                            {
+                              color: sortByRecentlyCreated ? colors.primary : colors.textPrimary,
+                              fontWeight: sortByRecentlyCreated ? '700' : '500',
+                            },
+                          ]}
+                          numberOfLines={1}
+                        >
+                          Most Recent
+                        </Text>
+                      </View>
+                      <Icon
+                        name={sortByRecentlyCreated ? 'check' : 'filter'}
+                        size={14}
+                        color={sortByRecentlyCreated ? colors.primary : colors.textMuted}
+                      />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+
+                {/* Active Filter Counter & Quick Reset Bar */}
+                <View style={[styles.filterStatsBar, { borderTopColor: colors.borderLight }]}>
+                  <View
+                    style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}
+                  >
+                    <Text style={[styles.filterStatsText, { color: colors.textSecondary }]}>
+                      Showing{' '}
+                      <Text style={{ fontWeight: '800', color: colors.textPrimary }}>
+                        {filteredKits.length}
+                      </Text>{' '}
+                      of {kits.length} meal kits
+                    </Text>
+                    {sortByRecentlyCreated && (
+                      <View
+                        style={{
+                          backgroundColor: colors.primary + '18',
+                          paddingHorizontal: 8,
+                          paddingVertical: 2,
+                          borderRadius: radii.sm,
+                          borderWidth: 1,
+                          borderColor: colors.primary + '35',
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          gap: 4,
+                        }}
+                      >
+                        <Icon name="time" size={11} color={colors.primary} />
+                        <Text style={{ fontSize: 11, fontWeight: '700', color: colors.primary }}>
+                          Most Recent First
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                  {activeKitFilterCount > 0 && (
+                    <TouchableOpacity style={styles.clearAllBtn} onPress={handleClearKitFilters}>
+                      <Icon name="close-circle" size={14} color="#DC2626" />
+                      <Text style={styles.clearAllBtnText}>
+                        Clear Filters ({activeKitFilterCount})
+                      </Text>
                     </TouchableOpacity>
                   )}
-                </TouchableOpacity>
-
-                {showAnalyticsCityDD && filteredAnalyticsCities.length > 0 && (
-                  <View style={analyticsMenuStyle}>
-                    <ThinScrollView maxHeight={200} keyboardShouldPersistTaps="handled">
-                      {filteredAnalyticsCities.map((city: string) => (
-                        <TouchableOpacity
-                          key={city}
-                          style={{
-                            paddingVertical: 12,
-                            paddingHorizontal: 14,
-                            backgroundColor:
-                              selectedCity === city ? colors.primaryLight : 'transparent',
-                          }}
-                          onPress={() => {
-                            setSelectedCity(city);
-                            setSelectedSubRegion('');
-                            setShowAnalyticsCityDD(false);
-                            setAnalyticsCitySearch('');
-                          }}
-                        >
-                          <Text
-                            style={{
-                              fontSize: 14,
-                              color: selectedCity === city ? colors.primary : colors.textPrimary,
-                              fontWeight: selectedCity === city ? '700' : '400',
-                            }}
-                          >
-                            {city}
-                          </Text>
-                        </TouchableOpacity>
-                      ))}
-                    </ThinScrollView>
-                  </View>
-                )}
+                </View>
               </View>
 
-              {/* AREA / NEIGHBORHOOD */}
-              <View
-                style={{
-                  flex: 1,
-                  position: 'relative',
-                  zIndex: showAnalyticsSubRegionDD ? 3000 : 1,
-                }}
-              >
-                <Text style={analyticsLabelStyle}>Area</Text>
-                <TouchableOpacity
-                  activeOpacity={0.8}
-                  disabled={!selectedCity || availableSubRegions.length === 0}
-                  style={analyticsFieldStyle(
-                    showAnalyticsSubRegionDD,
-                    !selectedCity || availableSubRegions.length === 0,
-                  )}
-                  onPress={() => setShowAnalyticsSubRegionDD((v) => !v)}
+              {/* Results or Empty State */}
+              {filteredKits.length === 0 ? (
+                <View
+                  style={[
+                    styles.adminKitCard,
+                    {
+                      backgroundColor: colors.bgSurface,
+                      padding: 32,
+                      alignItems: 'center',
+                      borderRadius: radii.xl,
+                      borderColor: colors.borderLight,
+                      ...shadows.card,
+                      position: 'relative',
+                      zIndex: 1,
+                      elevation: 1,
+                    },
+                  ]}
                 >
+                  <View style={{ marginBottom: 12 }}>
+                    <Icon name="search" size={40} color={colors.textMuted} />
+                  </View>
                   <Text
-                    numberOfLines={1}
                     style={{
-                      flex: 1,
-                      fontSize: 14,
-                      color: selectedSubRegion ? colors.textPrimary : colors.textMuted,
+                      fontSize: 16,
+                      fontWeight: '700',
+                      color: colors.textPrimary,
+                      marginBottom: 4,
                     }}
                   >
-                    {selectedSubRegion
-                      ? availableSubRegions.find((sr) => sr.id === selectedSubRegion)?.name ||
-                        'All areas'
-                      : selectedCity
-                        ? 'All areas'
-                        : 'Select city first'}
+                    No Meal Kits Found
                   </Text>
-                  {!!selectedSubRegion && (
+                  <Text
+                    style={{
+                      fontSize: 13,
+                      color: colors.textSecondary,
+                      textAlign: 'center',
+                      marginBottom: 16,
+                      lineHeight: 18,
+                    }}
+                  >
+                    {kitSearchQuery
+                      ? `No meal kits matched "${kitSearchQuery}" with current filter options.`
+                      : 'No meal kits matched the selected filter criteria.'}
+                  </Text>
+                  <Button
+                    title="Reset All Filters"
+                    variant="outline"
+                    size="sm"
+                    onPress={handleClearKitFilters}
+                  />
+                </View>
+              ) : (
+                <View style={styles.kitsCardsListContainer}>
+                  {filteredKits.map((kit) => (
                     <TouchableOpacity
+                      key={kit.id}
+                      testID={`admin-meal-kit-card-${kit.id}`}
+                      activeOpacity={0.88}
                       onPress={() => {
-                        setSelectedSubRegion('');
-                        setShowAnalyticsSubRegionDD(false);
+                        setEditingKit(kit);
+                        setKitModalVisible(true);
                       }}
-                      hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                      style={[
+                        styles.adminKitCard,
+                        {
+                          backgroundColor: colors.bgSurface,
+                          borderRadius: radii.xl,
+                          borderColor: colors.borderLight,
+                          ...shadows.card,
+                        },
+                      ]}
                     >
-                      <Icon name="close" size={14} color={colors.textMuted} />
-                    </TouchableOpacity>
-                  )}
-                </TouchableOpacity>
-
-                {showAnalyticsSubRegionDD && availableSubRegions.length > 0 && (
-                  <View style={analyticsMenuStyle}>
-                    <ThinScrollView maxHeight={200}>
-                      {availableSubRegions.map((sr) => (
-                        <TouchableOpacity
-                          key={sr.id}
-                          style={{
-                            paddingVertical: 12,
-                            paddingHorizontal: 14,
-                            backgroundColor:
-                              selectedSubRegion === sr.id ? colors.primaryLight : 'transparent',
-                          }}
-                          onPress={() => {
-                            setSelectedSubRegion(sr.id);
-                            setShowAnalyticsSubRegionDD(false);
-                          }}
-                        >
-                          <Text
+                      <View style={styles.kitCardTop}>
+                        <View style={{ flex: 1 }}>
+                          <View
                             style={{
-                              fontSize: 14,
-                              color:
-                                selectedSubRegion === sr.id ? colors.primary : colors.textPrimary,
-                              fontWeight: selectedSubRegion === sr.id ? '700' : '400',
+                              flexDirection: 'row',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
                             }}
                           >
-                            {sr.name}
+                            <Text style={[styles.kitCardName, { color: colors.textPrimary }]}>
+                              {kit.name}
+                            </Text>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                              <Text
+                                style={{ fontSize: 11, fontWeight: '700', color: colors.primary }}
+                              >
+                                Edit Details
+                              </Text>
+                              <Icon name="chevron-right" size={12} color={colors.primary} />
+                            </View>
+                          </View>
+                          <Text style={[styles.kitCardTag, { color: colors.textSecondary }]}>
+                            {kit.tagline}
                           </Text>
-                        </TouchableOpacity>
-                      ))}
-                    </ThinScrollView>
-                  </View>
-                )}
-              </View>
-            </View>
 
-            {/* State Deep-Dive Card */}
-            {(() => {
-              const stateData =
-                accessibleStates.find((s) => s.stateName === selectedState) || accessibleStates[0];
-              if (!stateData) {
+                          {/* Categorized Meal Kit Tags: Diet, Cuisine, Dish Type, Allergens (Excluding region and subregion tags) */}
+                          <View
+                            style={{
+                              flexDirection: 'row',
+                              flexWrap: 'wrap',
+                              gap: 6,
+                              marginTop: 6,
+                              marginBottom: 6,
+                            }}
+                          >
+                            {parseCategorizedTags(
+                              kit.tags && kit.tags.length > 0 ? kit.tags : compileMealKitTags(kit),
+                            )
+                              .filter(
+                                (tag) =>
+                                  tag.category !== 'region' &&
+                                  !tag.label.toLowerCase().startsWith('region:') &&
+                                  !tag.label.toLowerCase().startsWith('subregion:') &&
+                                  !tag.label.toLowerCase().startsWith('state:'),
+                              )
+                              .map((tag, idx) => (
+                                <Badge
+                                  key={`${kit.id}-tag-${tag.category}-${idx}`}
+                                  label={tag.label}
+                                  variant={tag.variant}
+                                  size="sm"
+                                />
+                              ))}
+                          </View>
+
+                          <Text style={[styles.kitCardMeta, { color: colors.textMuted }]}>
+                            {kit.spiceLevel} Spice • ₹{kit.price} • {kit.prepTimeMinutes || 15}m
+                            prep
+                          </Text>
+                        </View>
+                        <View style={{ alignItems: 'flex-end', gap: 4, marginLeft: 8 }}>
+                          {kit.createdAt ? (
+                            <Badge
+                              label={`Added ${new Date(kit.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`}
+                              variant="neutral"
+                              size="sm"
+                            />
+                          ) : null}
+                          {kit.isTrending ? (
+                            <Badge label="TRENDING" variant="warning" size="sm" />
+                          ) : null}
+                          {kit.isOutOfStock ? (
+                            <Badge label="OUT OF STOCK" variant="danger" size="sm" />
+                          ) : null}
+                        </View>
+                      </View>
+
+                      <View style={styles.kitActionsRow}>
+                        <Button
+                          title={kit.isTrending ? 'Remove Trending' : 'Set Trending'}
+                          variant={kit.isTrending ? 'secondary' : 'outline'}
+                          size="sm"
+                          style={{ marginRight: 8, marginBottom: 4 }}
+                          onPress={() => handleToggleTrending(kit)}
+                        />
+                        <Button
+                          title="Print Recipe Card"
+                          variant="primary"
+                          size="sm"
+                          style={{ marginRight: 8, marginBottom: 4 }}
+                          onPress={() => {
+                            setPrintCardKit(kit);
+                            setPrintCardModalVisible(true);
+                          }}
+                        />
+                        <Button
+                          title="Edit Recipe & Price"
+                          variant="outline"
+                          size="sm"
+                          style={{ marginRight: 8, marginBottom: 4 }}
+                          onPress={() => {
+                            setEditingKit(kit);
+                            setKitModalVisible(true);
+                          }}
+                        />
+                        <Button
+                          title={kit.isOutOfStock ? 'Mark In Stock' : 'Mark Out of Stock'}
+                          variant={kit.isOutOfStock ? 'secondary' : 'outline'}
+                          size="sm"
+                          style={{ marginRight: 8, marginBottom: 4 }}
+                          onPress={() => handleToggleOutOfStock(kit)}
+                        />
+                        <Button
+                          title="Delete"
+                          variant="danger"
+                          size="sm"
+                          style={{ marginBottom: 4 }}
+                          onPress={() => handleRequestDeleteKit(kit)}
+                        />
+                      </View>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
+            </View>
+          )}
+
+          {/* MODULE 3: INVENTORY & STOCK MANAGEMENT */}
+          {activeTab === 'inventory' && <InventoryManagementView />}
+
+          {/* MODULE 4: REGIONAL ANALYTICS DASHBOARD */}
+          {activeTab === 'analytics' && (
+            <View>
+              <View style={styles.moduleHeaderRow}>
+                <View style={{ marginBottom: 14 }}>
+                  <Text style={[styles.moduleTitle, { color: colors.textPrimary }]}>
+                    {isSuperAdmin
+                      ? 'Pan-India Regional Analytics (Super Admin View)'
+                      : 'Regional Analytics (' +
+                        (assignedRegions && assignedRegions.length > 0
+                          ? assignedRegions.map(formatRegionName).join(', ')
+                          : 'Pune City (Pune)') +
+                        ')'}
+                  </Text>
+                  <Text style={[styles.moduleSubtitle, { color: colors.textSecondary }]}>
+                    {isSuperAdmin
+                      ? 'Complete sales data, growth metrics & dietary split across all India operating regions'
+                      : 'State & fulfillment metrics strictly restricted to your assigned jurisdiction: ' +
+                        (assignedRegions && assignedRegions.length > 0
+                          ? assignedRegions.map(formatRegionName).join(', ')
+                          : 'Pune City (Pune)')}
+                  </Text>
+                  <View style={{ marginTop: 10, alignSelf: 'flex-start' }}>
+                    <Button title="Export CSV" size="sm" onPress={handleExportCSV} />
+                  </View>
+                </View>
+              </View>
+
+              {/* RLS Status Badge Banner */}
+              <View
+                style={{
+                  backgroundColor: isSuperAdmin ? '#FFFBEB' : colors.primaryLight,
+                  borderColor: isSuperAdmin ? '#F59E0B' : colors.primary + '50',
+                  borderWidth: 1,
+                  borderRadius: radii.md,
+                  padding: 10,
+                  marginBottom: 12,
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                }}
+              >
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 }}>
+                  <Icon
+                    name={isSuperAdmin ? 'globe' : 'shield-checkmark'}
+                    size={16}
+                    color={isSuperAdmin ? '#B45309' : colors.primary}
+                  />
+                  <Text
+                    style={{
+                      fontSize: 12,
+                      color: isSuperAdmin ? '#92400E' : colors.textPrimary,
+                      fontWeight: '600',
+                    }}
+                  >
+                    {isSuperAdmin
+                      ? 'Super Admin: Full visibility across North, South, West & East Regions'
+                      : 'Row Level Security (RLS) Active: Showing statistics only for ' +
+                        (assignedRegions && assignedRegions.length > 0
+                          ? assignedRegions.map(formatRegionName).join(', ')
+                          : 'Pune City (Pune)')}
+                  </Text>
+                </View>
+                <Badge
+                  label={isSuperAdmin ? 'ALL STATES' : 'SCOPED REGIONS'}
+                  variant={isSuperAdmin ? 'warning' : 'info'}
+                  size="sm"
+                />
+              </View>
+
+              {/* Region Filters: State | City | Area in one horizontal row */}
+              <View
+                style={{
+                  flexDirection: 'row',
+                  gap: 10,
+                  marginBottom: 14,
+                  zIndex: 1000,
+                  elevation: 1000,
+                }}
+              >
+                {/* STATE */}
+                <View
+                  style={{ flex: 1, position: 'relative', zIndex: showAnalyticsStateDD ? 3000 : 1 }}
+                >
+                  <Text style={analyticsLabelStyle}>State</Text>
+                  <TouchableOpacity
+                    activeOpacity={1}
+                    style={analyticsFieldStyle(showAnalyticsStateDD)}
+                    onPress={() => {
+                      setShowAnalyticsStateDD(true);
+                      stateInputRef.current?.focus();
+                    }}
+                  >
+                    <TextInput
+                      ref={stateInputRef}
+                      style={{
+                        flex: 1,
+                        height: '100%',
+                        fontSize: 14,
+                        color: colors.textPrimary,
+                        paddingVertical: 0,
+                      }}
+                      placeholder="Search state..."
+                      placeholderTextColor={colors.textMuted}
+                      value={selectedState || analyticsStateSearch}
+                      onChangeText={(t) => {
+                        setAnalyticsStateSearch(t);
+                        setSelectedState('');
+                        setSelectedCity('');
+                        setSelectedSubRegion('');
+                        if (t) setShowAnalyticsStateDD(true);
+                      }}
+                      onFocus={() => setShowAnalyticsStateDD(true)}
+                      onBlur={() => setTimeout(() => setShowAnalyticsStateDD(false), 200)}
+                    />
+                  </TouchableOpacity>
+
+                  {showAnalyticsStateDD &&
+                    (() => {
+                      const filtered = analyticsStateSearch
+                        ? accessibleStates.filter((s) =>
+                            s.stateName.toLowerCase().includes(analyticsStateSearch.toLowerCase()),
+                          )
+                        : accessibleStates;
+                      return filtered.length > 0 ? (
+                        <View style={analyticsMenuStyle}>
+                          <ThinScrollView maxHeight={200} keyboardShouldPersistTaps="handled">
+                            {filtered.map((st) => (
+                              <TouchableOpacity
+                                key={st.stateCode}
+                                style={{
+                                  paddingVertical: 12,
+                                  paddingHorizontal: 14,
+                                  backgroundColor:
+                                    selectedState === st.stateName
+                                      ? colors.primaryLight
+                                      : 'transparent',
+                                }}
+                                onPress={() => {
+                                  setSelectedState(st.stateName);
+                                  setSelectedCity('');
+                                  setSelectedSubRegion('');
+                                  setShowAnalyticsStateDD(false);
+                                  setAnalyticsStateSearch('');
+                                }}
+                              >
+                                <Text
+                                  style={{
+                                    fontSize: 14,
+                                    color:
+                                      selectedState === st.stateName
+                                        ? colors.primary
+                                        : colors.textPrimary,
+                                    fontWeight: selectedState === st.stateName ? '700' : '400',
+                                  }}
+                                >
+                                  {st.stateName}
+                                </Text>
+                              </TouchableOpacity>
+                            ))}
+                          </ThinScrollView>
+                        </View>
+                      ) : null;
+                    })()}
+                </View>
+
+                {/* CITY */}
+                <View
+                  style={{ flex: 1, position: 'relative', zIndex: showAnalyticsCityDD ? 3000 : 1 }}
+                >
+                  <Text style={analyticsLabelStyle}>City</Text>
+                  <TouchableOpacity
+                    activeOpacity={1}
+                    disabled={availableCities.length === 0}
+                    style={analyticsFieldStyle(showAnalyticsCityDD, availableCities.length === 0)}
+                    onPress={() => {
+                      setShowAnalyticsCityDD(true);
+                      cityInputRef.current?.focus();
+                    }}
+                  >
+                    <TextInput
+                      ref={cityInputRef}
+                      editable={availableCities.length > 0}
+                      style={{
+                        flex: 1,
+                        height: '100%',
+                        fontSize: 14,
+                        color: colors.textPrimary,
+                        paddingVertical: 0,
+                      }}
+                      placeholder="All cities"
+                      placeholderTextColor={colors.textMuted}
+                      value={selectedCity || analyticsCitySearch}
+                      onChangeText={(t) => {
+                        setAnalyticsCitySearch(t);
+                        setSelectedCity('');
+                        setSelectedSubRegion('');
+                        if (t) setShowAnalyticsCityDD(true);
+                      }}
+                      onFocus={() => setShowAnalyticsCityDD(true)}
+                      onBlur={() => setTimeout(() => setShowAnalyticsCityDD(false), 200)}
+                    />
+                    {!!selectedCity && (
+                      <TouchableOpacity
+                        onPress={() => {
+                          setSelectedCity('');
+                          setSelectedSubRegion('');
+                          setAnalyticsCitySearch('');
+                        }}
+                        hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                      >
+                        <Icon name="close" size={14} color={colors.textMuted} />
+                      </TouchableOpacity>
+                    )}
+                  </TouchableOpacity>
+
+                  {showAnalyticsCityDD && filteredAnalyticsCities.length > 0 && (
+                    <View style={analyticsMenuStyle}>
+                      <ThinScrollView maxHeight={200} keyboardShouldPersistTaps="handled">
+                        {filteredAnalyticsCities.map((city: string) => (
+                          <TouchableOpacity
+                            key={city}
+                            style={{
+                              paddingVertical: 12,
+                              paddingHorizontal: 14,
+                              backgroundColor:
+                                selectedCity === city ? colors.primaryLight : 'transparent',
+                            }}
+                            onPress={() => {
+                              setSelectedCity(city);
+                              setSelectedSubRegion('');
+                              setShowAnalyticsCityDD(false);
+                              setAnalyticsCitySearch('');
+                            }}
+                          >
+                            <Text
+                              style={{
+                                fontSize: 14,
+                                color: selectedCity === city ? colors.primary : colors.textPrimary,
+                                fontWeight: selectedCity === city ? '700' : '400',
+                              }}
+                            >
+                              {city}
+                            </Text>
+                          </TouchableOpacity>
+                        ))}
+                      </ThinScrollView>
+                    </View>
+                  )}
+                </View>
+
+                {/* AREA / NEIGHBORHOOD */}
+                <View
+                  style={{
+                    flex: 1,
+                    position: 'relative',
+                    zIndex: showAnalyticsSubRegionDD ? 3000 : 1,
+                  }}
+                >
+                  <Text style={analyticsLabelStyle}>Area</Text>
+                  <TouchableOpacity
+                    activeOpacity={0.8}
+                    disabled={!selectedCity || availableSubRegions.length === 0}
+                    style={analyticsFieldStyle(
+                      showAnalyticsSubRegionDD,
+                      !selectedCity || availableSubRegions.length === 0,
+                    )}
+                    onPress={() => setShowAnalyticsSubRegionDD((v) => !v)}
+                  >
+                    <Text
+                      numberOfLines={1}
+                      style={{
+                        flex: 1,
+                        fontSize: 14,
+                        color: selectedSubRegion ? colors.textPrimary : colors.textMuted,
+                      }}
+                    >
+                      {selectedSubRegion
+                        ? availableSubRegions.find((sr) => sr.id === selectedSubRegion)?.name ||
+                          'All areas'
+                        : selectedCity
+                          ? 'All areas'
+                          : 'Select city first'}
+                    </Text>
+                    {!!selectedSubRegion && (
+                      <TouchableOpacity
+                        onPress={() => {
+                          setSelectedSubRegion('');
+                          setShowAnalyticsSubRegionDD(false);
+                        }}
+                        hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                      >
+                        <Icon name="close" size={14} color={colors.textMuted} />
+                      </TouchableOpacity>
+                    )}
+                  </TouchableOpacity>
+
+                  {showAnalyticsSubRegionDD && availableSubRegions.length > 0 && (
+                    <View style={analyticsMenuStyle}>
+                      <ThinScrollView maxHeight={200}>
+                        {availableSubRegions.map((sr) => (
+                          <TouchableOpacity
+                            key={sr.id}
+                            style={{
+                              paddingVertical: 12,
+                              paddingHorizontal: 14,
+                              backgroundColor:
+                                selectedSubRegion === sr.id ? colors.primaryLight : 'transparent',
+                            }}
+                            onPress={() => {
+                              setSelectedSubRegion(sr.id);
+                              setShowAnalyticsSubRegionDD(false);
+                            }}
+                          >
+                            <Text
+                              style={{
+                                fontSize: 14,
+                                color:
+                                  selectedSubRegion === sr.id ? colors.primary : colors.textPrimary,
+                                fontWeight: selectedSubRegion === sr.id ? '700' : '400',
+                              }}
+                            >
+                              {sr.name}
+                            </Text>
+                          </TouchableOpacity>
+                        ))}
+                      </ThinScrollView>
+                    </View>
+                  )}
+                </View>
+              </View>
+
+              {/* State Deep-Dive Card */}
+              {(() => {
+                const stateData =
+                  accessibleStates.find((s) => s.stateName === selectedState) ||
+                  accessibleStates[0];
+                if (!stateData) {
+                  return (
+                    <View
+                      style={[
+                        styles.stateDetailCard,
+                        {
+                          backgroundColor: colors.bgSurface,
+                          borderRadius: radii.xl,
+                          padding: 24,
+                          alignItems: 'center',
+                        },
+                      ]}
+                    >
+                      <Text style={{ color: colors.textSecondary }}>
+                        No state data available for your assigned regions.
+                      </Text>
+                    </View>
+                  );
+                }
                 return (
                   <View
                     style={[
@@ -3485,1576 +3695,1602 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
                       {
                         backgroundColor: colors.bgSurface,
                         borderRadius: radii.xl,
-                        padding: 24,
-                        alignItems: 'center',
-                      },
-                    ]}
-                  >
-                    <Text style={{ color: colors.textSecondary }}>
-                      No state data available for your assigned regions.
-                    </Text>
-                  </View>
-                );
-              }
-              return (
-                <View
-                  style={[
-                    styles.stateDetailCard,
-                    {
-                      backgroundColor: colors.bgSurface,
-                      borderRadius: radii.xl,
-                      borderColor: colors.borderLight,
-                      ...shadows.card,
-                    },
-                  ]}
-                >
-                  <View style={styles.stateDetailTop}>
-                    <View>
-                      <Text style={[styles.stateName, { color: colors.textPrimary }]}>
-                        {stateData.stateName} ({stateData.capitalCity})
-                      </Text>
-                      <Text style={[styles.stateHub, { color: colors.textSecondary }]}>
-                        Fulfillment: {stateData.hubName}
-                      </Text>
-                    </View>
-                    <Badge label={`+${stateData.growthRate}% MoM`} variant="success" />
-                  </View>
-
-                  <View style={styles.metricsGrid}>
-                    <View
-                      style={[
-                        styles.metricCard,
-                        { backgroundColor: colors.bgSubtle, borderRadius: radii.md },
-                      ]}
-                    >
-                      <Text style={[styles.metricVal, { color: colors.primary }]}>
-                        {stateData.totalOrders}
-                      </Text>
-                      <Text style={[styles.metricLabel, { color: colors.textMuted }]}>
-                        TOTAL ORDERS
-                      </Text>
-                    </View>
-                    <View
-                      style={[
-                        styles.metricCard,
-                        { backgroundColor: colors.bgSubtle, borderRadius: radii.md },
-                      ]}
-                    >
-                      <Text style={[styles.metricVal, { color: colors.textPrimary }]}>
-                        ₹{(stateData.totalRevenue / 100000).toFixed(1)}L
-                      </Text>
-                      <Text style={[styles.metricLabel, { color: colors.textMuted }]}>REVENUE</Text>
-                    </View>
-                    <View
-                      style={[
-                        styles.metricCard,
-                        { backgroundColor: colors.bgSubtle, borderRadius: radii.md },
-                      ]}
-                    >
-                      <Text style={[styles.metricVal, { color: colors.veg }]}>
-                        {stateData.vegOrderPercentage}%
-                      </Text>
-                      <Text style={[styles.metricLabel, { color: colors.textMuted }]}>
-                        VEG SHARE
-                      </Text>
-                    </View>
-                  </View>
-
-                  <View
-                    style={[
-                      styles.topSellingCallout,
-                      {
-                        backgroundColor: colors.primaryLight,
-                        flexDirection: 'row',
-                        alignItems: 'center',
-                        gap: 6,
-                      },
-                    ]}
-                  >
-                    <Icon name="star" size={14} color={colors.primaryDark} />
-                    <Text style={{ color: colors.primaryDark, fontWeight: '700', fontSize: 13 }}>
-                      Top Selling: {stateData.topMealKitName}
-                    </Text>
-                  </View>
-                </View>
-              );
-            })()}
-
-            {/* Cross-Tab View: E.g., Top Meals among Vegetarians in Maharashtra */}
-            <View
-              style={[
-                styles.crossTabCard,
-                {
-                  backgroundColor: colors.bgSurface,
-                  borderRadius: radii.xl,
-                  borderColor: colors.borderLight,
-                  ...shadows.card,
-                },
-                { zIndex: showCrossTabDietDD ? 2000 : 1, elevation: showCrossTabDietDD ? 2000 : 1 },
-              ]}
-            >
-              <Text style={[styles.crossTabTitle, { color: colors.textPrimary }]}>
-                Cross-Tab: Top Meals Among {crossTabDiet.toUpperCase()} in {selectedState}
-              </Text>
-              <View
-                style={{
-                  position: 'relative',
-                  zIndex: showCrossTabDietDD ? 3000 : 1,
-                  marginBottom: 12,
-                  maxWidth: 280,
-                }}
-              >
-                <Text style={analyticsLabelStyle}>Diet</Text>
-                <TouchableOpacity
-                  activeOpacity={0.8}
-                  style={analyticsFieldStyle(showCrossTabDietDD)}
-                  onPress={() => setShowCrossTabDietDD((v) => !v)}
-                >
-                  <Text
-                    numberOfLines={1}
-                    style={{ flex: 1, fontSize: 14, color: colors.textPrimary, fontWeight: '600' }}
-                  >
-                    {crossTabDietOptions.find((d) => d.id === crossTabDiet)?.label || 'All Diets'}
-                  </Text>
-                </TouchableOpacity>
-
-                {showCrossTabDietDD && (
-                  <View style={analyticsMenuStyle}>
-                    <ThinScrollView maxHeight={200}>
-                      {crossTabDietOptions.map((d) => (
-                        <TouchableOpacity
-                          key={d.id}
-                          style={{
-                            paddingVertical: 12,
-                            paddingHorizontal: 14,
-                            backgroundColor:
-                              crossTabDiet === d.id ? colors.primaryLight : 'transparent',
-                          }}
-                          onPress={() => {
-                            setCrossTabDiet(d.id);
-                            setShowCrossTabDietDD(false);
-                          }}
-                        >
-                          <Text
-                            style={{
-                              fontSize: 14,
-                              color: crossTabDiet === d.id ? colors.primary : colors.textPrimary,
-                              fontWeight: crossTabDiet === d.id ? '700' : '400',
-                            }}
-                          >
-                            {d.label}
-                          </Text>
-                        </TouchableOpacity>
-                      ))}
-                    </ThinScrollView>
-                  </View>
-                )}
-              </View>
-
-              <View style={{ gap: 8 }}>
-                {crossTabResult.topItems.map((dish, idx) => (
-                  <View
-                    key={dish.mealKitId || idx}
-                    style={[
-                      styles.crossTabItem,
-                      {
-                        backgroundColor: colors.bgSubtle,
-                        borderRadius: radii.md,
-                        paddingHorizontal: 12,
-                      },
-                    ]}
-                  >
-                    <Text style={[styles.crossTabRank, { color: colors.primary }]}>#{idx + 1}</Text>
-                    <View style={{ flex: 1, marginLeft: 8 }}>
-                      <Text style={[styles.crossTabName, { color: colors.textPrimary }]}>
-                        {dish.name}
-                      </Text>
-                      <Text style={[styles.crossTabCuisine, { color: colors.textSecondary }]}>
-                        {dish.unitsSold} kits sold • {dish.shareInRegion}% region share
-                      </Text>
-                    </View>
-                    <Text style={[styles.crossTabUnits, { color: colors.primary }]}>
-                      ₹{dish.revenueGenerated.toLocaleString('en-IN')}
-                    </Text>
-                  </View>
-                ))}
-              </View>
-            </View>
-          </View>
-        )}
-
-        {/* MODULE 5A: STAFF ADMIN MANAGEMENT */}
-        {activeTab === 'admins' && (
-          <View>
-            {/* Top Subtab Switcher */}
-            <View style={{ flexDirection: 'row', gap: 10, marginBottom: 16 }}>
-              <TouchableOpacity
-                onPress={() => setActiveTab('customers')}
-                style={{
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  gap: 6,
-                  paddingHorizontal: 16,
-                  paddingVertical: 10,
-                  borderRadius: radii.pill,
-                  backgroundColor: colors.bgSurface,
-                  borderColor: colors.borderLight,
-                  borderWidth: 1,
-                }}
-              >
-                <Icon name="people" size={16} color={colors.textSecondary} />
-                <Text style={{ fontWeight: '700', fontSize: 13, color: colors.textSecondary }}>
-                  Customers ({users.filter((u) => u.role !== 'admin').length})
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                onPress={() => setActiveTab('admins')}
-                style={{
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  gap: 6,
-                  paddingHorizontal: 16,
-                  paddingVertical: 10,
-                  borderRadius: radii.pill,
-                  backgroundColor: colors.primary,
-                  borderColor: colors.primary,
-                  borderWidth: 1,
-                }}
-              >
-                <Icon name="lock" size={16} color="#FFF" />
-                <Text style={{ fontWeight: '700', fontSize: 13, color: '#FFF' }}>
-                  Staff Admins ({adminProfiles.length})
-                </Text>
-              </TouchableOpacity>
-            </View>
-
-            {/* Regional Admin Role & Many-to-Many Region Assignments */}
-            <View
-              style={[
-                {
-                  backgroundColor: colors.bgSurface,
-                  borderRadius: radii.xl,
-                  padding: 20,
-                  marginBottom: 20,
-                  borderColor: isSuperAdmin ? '#F59E0B' : colors.borderLight,
-                  borderWidth: isSuperAdmin ? 1.5 : 1,
-                  ...shadows.card,
-                },
-              ]}
-            >
-              <View
-                style={{
-                  flexDirection: 'row',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  marginBottom: 8,
-                }}
-              >
-                <View style={{ flex: 1, marginRight: 10 }}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                    <Text style={[styles.moduleTitle, { color: colors.textPrimary, fontSize: 18 }]}>
-                      {isSuperAdmin
-                        ? `Staff Admin Management (${adminProfiles.length})`
-                        : 'Your Regional Admin Jurisdiction'}
-                    </Text>
-                  </View>
-                  <Text style={[styles.moduleSubtitle, { color: colors.textSecondary }]}>
-                    {isSuperAdmin
-                      ? 'Super Admin (raphael.dalmeida@mulyam.in) can assign staff admins to specific regions. Admins and regions have a many-to-many relationship.'
-                      : `You are authenticated with regional access to: ${assignedRegions && assignedRegions.length > 0 ? assignedRegions.map(formatRegionName).join(', ') : 'Pune City (Pune)'}. Only the Super Admin can reassign regional access.`}
-                  </Text>
-                </View>
-
-                {isSuperAdmin && (
-                  <Button
-                    title="+ Assign Regional Admin"
-                    size="sm"
-                    onPress={handleOpenAddAdminModal}
-                    style={{ backgroundColor: '#F59E0B' }}
-                  />
-                )}
-              </View>
-
-              {/* Admin Staff List */}
-              <View style={{ gap: 10, marginTop: 12 }}>
-                {adminProfiles.map((adm) => (
-                  <View
-                    key={adm.id}
-                    style={{
-                      backgroundColor: colors.bgSubtle,
-                      borderColor: colors.borderLight,
-                      borderWidth: 1,
-                      borderRadius: radii.lg,
-                      padding: 14,
-                      flexDirection: 'row',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                    }}
-                  >
-                    <View style={{ flex: 1, marginRight: 10 }}>
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                        <Text
-                          style={{ fontSize: 14, fontWeight: '700', color: colors.textPrimary }}
-                        >
-                          {adm.name}
-                        </Text>
-                        <Badge
-                          label={adm.role === 'super_admin' ? 'SUPER ADMIN' : 'REGIONAL ADMIN'}
-                          variant={adm.role === 'super_admin' ? 'warning' : 'info'}
-                          size="sm"
-                        />
-                      </View>
-                      <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 2 }}>
-                        {adm.email}
-                      </Text>
-
-                      {/* Many-to-Many Assigned Regions Tags */}
-                      <View
-                        style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 8 }}
-                      >
-                        {adm.role === 'super_admin' ? (
-                          <Badge
-                            label="All Operating Regions (Pan-India)"
-                            variant="neutral"
-                            size="sm"
-                          />
-                        ) : adm.regions && adm.regions.length > 0 ? (
-                          adm.regions.map((reg) => {
-                            const sc = STORAGE_CENTRE_REGIONS.find(
-                              (r) => r.id === reg || r.name.toLowerCase() === reg.toLowerCase(),
-                            );
-                            return (
-                              <Badge
-                                key={reg}
-                                label={sc ? `${sc.name} (${sc.city})` : `${reg} Region`}
-                                variant="accent"
-                                size="sm"
-                              />
-                            );
-                          })
-                        ) : (
-                          <Badge label="No Region Assigned" variant="danger" size="sm" />
-                        )}
-                      </View>
-                    </View>
-
-                    {isSuperAdmin && (
-                      <View style={{ flexDirection: 'row', gap: 6 }}>
-                        <Button
-                          title="Edit Access"
-                          size="sm"
-                          variant="outline"
-                          onPress={() => handleOpenEditAdminModal(adm)}
-                        />
-                        {adm.role !== 'super_admin' && adm.email !== SUPER_ADMIN_EMAIL && (
-                          <Button
-                            title="Revoke"
-                            size="sm"
-                            variant="danger"
-                            onPress={() => handleDeleteAdmin(adm.email)}
-                          />
-                        )}
-                      </View>
-                    )}
-                  </View>
-                ))}
-              </View>
-            </View>
-          </View>
-        )}
-
-        {/* MODULE 5B: CUSTOMER ACCOUNTS (LIVE) */}
-        {(activeTab === 'customers' || activeTab === 'users') && (
-          <View>
-            {/* Top Subtab Switcher */}
-            <View style={{ flexDirection: 'row', gap: 10, marginBottom: 16 }}>
-              <TouchableOpacity
-                onPress={() => setActiveTab('customers')}
-                style={{
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  gap: 6,
-                  paddingHorizontal: 16,
-                  paddingVertical: 10,
-                  borderRadius: radii.pill,
-                  backgroundColor: colors.primary,
-                  borderColor: colors.primary,
-                  borderWidth: 1,
-                }}
-              >
-                <Icon name="people" size={16} color="#FFF" />
-                <Text style={{ fontWeight: '700', fontSize: 13, color: '#FFF' }}>
-                  Customers ({users.filter((u) => u.role !== 'admin').length})
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                onPress={() => setActiveTab('admins')}
-                style={{
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  gap: 6,
-                  paddingHorizontal: 16,
-                  paddingVertical: 10,
-                  borderRadius: radii.pill,
-                  backgroundColor: colors.bgSurface,
-                  borderColor: colors.borderLight,
-                  borderWidth: 1,
-                }}
-              >
-                <Icon name="lock" size={16} color={colors.textSecondary} />
-                <Text style={{ fontWeight: '700', fontSize: 13, color: colors.textSecondary }}>
-                  Staff Admins ({adminProfiles.length})
-                </Text>
-              </TouchableOpacity>
-            </View>
-
-            {/* Customer Accounts Header & Live Sync Status */}
-            <View style={styles.moduleHeaderRow}>
-              <View>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                  <Text style={[styles.moduleTitle, { color: colors.textPrimary }]}>
-                    Customer Accounts ({users.filter((u) => u.role !== 'admin').length})
-                  </Text>
-                </View>
-                <Text style={[styles.moduleSubtitle, { color: colors.textSecondary }]}>
-                  Live accounts, Customer IDs, live wallet balances & credit allocations
-                </Text>
-              </View>
-              <Button title="Refresh Live" size="sm" variant="outline" onPress={reloadLiveUsers} />
-            </View>
-
-            {/* Search Customers Bar */}
-            <View style={{ marginBottom: 14 }}>
-              <TextInput
-                style={{
-                  backgroundColor: colors.bgSurface,
-                  borderColor: colors.borderLight,
-                  borderWidth: 1,
-                  borderRadius: radii.md,
-                  paddingHorizontal: 14,
-                  paddingVertical: 10,
-                  color: colors.textPrimary,
-                  fontSize: 14,
-                }}
-                placeholder="Search by Customer ID, Name, Phone, or Email..."
-                placeholderTextColor={colors.textMuted}
-                value={customerSearchQuery}
-                onChangeText={setCustomerSearchQuery}
-              />
-            </View>
-
-            {/* Filtered Customer List */}
-            {(() => {
-              const customerList = users.filter(
-                (u) =>
-                  u.role !== 'admin' &&
-                  (u.id.toLowerCase().includes(customerSearchQuery.toLowerCase()) ||
-                    u.name.toLowerCase().includes(customerSearchQuery.toLowerCase()) ||
-                    u.phone.includes(customerSearchQuery) ||
-                    u.email.toLowerCase().includes(customerSearchQuery.toLowerCase())),
-              );
-
-              if (customerList.length === 0) {
-                return (
-                  <View
-                    style={[
-                      styles.emptyStateCard,
-                      {
-                        backgroundColor: colors.bgSurface,
                         borderColor: colors.borderLight,
-                        borderRadius: radii.xl,
+                        ...shadows.card,
                       },
                     ]}
                   >
-                    <View style={{ marginBottom: 12 }}>
-                      <Icon name="people" size={38} color={colors.textMuted} />
+                    <View style={styles.stateDetailTop}>
+                      <View>
+                        <Text style={[styles.stateName, { color: colors.textPrimary }]}>
+                          {stateData.stateName} ({stateData.capitalCity})
+                        </Text>
+                        <Text style={[styles.stateHub, { color: colors.textSecondary }]}>
+                          Fulfillment: {stateData.hubName}
+                        </Text>
+                      </View>
+                      <Badge label={`+${stateData.growthRate}% MoM`} variant="success" />
                     </View>
-                    <Text style={[styles.emptyStateTitle, { color: colors.textPrimary }]}>
-                      No Customer Accounts Found
-                    </Text>
-                    <Text style={[styles.emptyStateSubtitle, { color: colors.textSecondary }]}>
-                      Registered customers will appear here automatically with their live Customer
-                      ID and wallet balance.
-                    </Text>
+
+                    <View style={styles.metricsGrid}>
+                      <View
+                        style={[
+                          styles.metricCard,
+                          { backgroundColor: colors.bgSubtle, borderRadius: radii.md },
+                        ]}
+                      >
+                        <Text style={[styles.metricVal, { color: colors.primary }]}>
+                          {stateData.totalOrders}
+                        </Text>
+                        <Text style={[styles.metricLabel, { color: colors.textMuted }]}>
+                          TOTAL ORDERS
+                        </Text>
+                      </View>
+                      <View
+                        style={[
+                          styles.metricCard,
+                          { backgroundColor: colors.bgSubtle, borderRadius: radii.md },
+                        ]}
+                      >
+                        <Text style={[styles.metricVal, { color: colors.textPrimary }]}>
+                          ₹{(stateData.totalRevenue / 100000).toFixed(1)}L
+                        </Text>
+                        <Text style={[styles.metricLabel, { color: colors.textMuted }]}>
+                          REVENUE
+                        </Text>
+                      </View>
+                      <View
+                        style={[
+                          styles.metricCard,
+                          { backgroundColor: colors.bgSubtle, borderRadius: radii.md },
+                        ]}
+                      >
+                        <Text style={[styles.metricVal, { color: colors.veg }]}>
+                          {stateData.vegOrderPercentage}%
+                        </Text>
+                        <Text style={[styles.metricLabel, { color: colors.textMuted }]}>
+                          VEG SHARE
+                        </Text>
+                      </View>
+                    </View>
+
+                    <View
+                      style={[
+                        styles.topSellingCallout,
+                        {
+                          backgroundColor: colors.primaryLight,
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          gap: 6,
+                        },
+                      ]}
+                    >
+                      <Icon name="star" size={14} color={colors.primaryDark} />
+                      <Text style={{ color: colors.primaryDark, fontWeight: '700', fontSize: 13 }}>
+                        Top Selling: {stateData.topMealKitName}
+                      </Text>
+                    </View>
                   </View>
                 );
-              }
+              })()}
 
-              return customerList.map((u) => (
-                <View
-                  key={u.id}
-                  style={[
-                    styles.userCard,
-                    {
-                      backgroundColor: colors.bgSurface,
-                      borderRadius: radii.xl,
-                      borderColor: colors.borderLight,
-                      marginBottom: 14,
-                      ...shadows.card,
-                    },
-                  ]}
-                >
-                  <View style={styles.userTopRow}>
-                    <View style={{ flex: 1, marginRight: 8 }}>
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                        <Text
-                          style={[styles.userNameText, { color: colors.textPrimary, fontSize: 16 }]}
-                        >
-                          {u.name}
-                        </Text>
-                        {u.role === 'chef' && <Badge label="CHEF" variant="warning" size="sm" />}
-                      </View>
-
-                      {/* Prominent Customer ID with 1-click Copy */}
-                      <View
-                        style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 }}
-                      >
-                        <TouchableOpacity
-                          onPress={() => handleCopyCustomerId(u.id)}
-                          style={{
-                            flexDirection: 'row',
-                            alignItems: 'center',
-                            gap: 5,
-                            backgroundColor: colors.bgSubtle,
-                            borderColor: colors.borderLight,
-                            borderWidth: 1,
-                            paddingHorizontal: 8,
-                            paddingVertical: 3,
-                            borderRadius: radii.sm,
-                          }}
-                          activeOpacity={0.7}
-                        >
-                          <Icon name="document" size={12} color={colors.primary} />
-                          <Text
-                            style={{
-                              fontSize: 12,
-                              fontFamily: 'monospace',
-                              fontWeight: '700',
-                              color: colors.primary,
-                            }}
-                          >
-                            Customer ID: {u.id}
-                          </Text>
-                          <Text
-                            style={{
-                              fontSize: 11,
-                              color: copiedCustomerId === u.id ? '#10B981' : colors.textMuted,
-                            }}
-                          >
-                            {copiedCustomerId === u.id ? '✓ Copied!' : 'Copy'}
-                          </Text>
-                        </TouchableOpacity>
-                      </View>
-                    </View>
-                    <Badge
-                      label={u.status === 'active' ? 'ACTIVE' : 'SUSPENDED'}
-                      variant={u.status === 'active' ? 'success' : 'danger'}
-                    />
-                  </View>
-
-                  <Text style={[styles.userStats, { color: colors.textSecondary, marginTop: 8 }]}>
-                    Phone: {u.phone} • Email: {u.email} • City: {u.city} • Joined {u.joinedDate}
-                  </Text>
-
-                  <Text style={[styles.userStats, { color: colors.textMuted, marginTop: 2 }]}>
-                    Orders: {u.ordersCount} • Total Spent: ₹
-                    {Math.round(u.totalSpend).toLocaleString('en-IN')}
-                  </Text>
-
-                  {/* Live Wallet Balance Banner & Quick Credit Issue */}
-                  <View
-                    style={{
-                      flexDirection: 'row',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      backgroundColor: colors.primaryLight + '35',
-                      borderColor: colors.primary + '30',
-                      borderWidth: 1,
-                      borderRadius: radii.md,
-                      paddingHorizontal: 12,
-                      paddingVertical: 8,
-                      marginVertical: 10,
-                    }}
-                  >
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                      <Icon name="wallet" size={16} color={colors.primary} />
-                      <Text style={{ fontSize: 13, fontWeight: '700', color: colors.primary }}>
-                        Wallet Balance: ₹{Math.round(u.walletBalance ?? 0).toLocaleString('en-IN')}
-                      </Text>
-                      {(u.walletReserved ?? 0) > 0 && (
-                        <Text style={{ fontSize: 11, color: colors.textMuted }}>
-                          (₹{u.walletReserved} reserved)
-                        </Text>
-                      )}
-                    </View>
-                    <Button
-                      title="+ Send Credits"
-                      size="sm"
-                      variant="primary"
-                      onPress={() => handleOpenSendCreditsModal(u)}
-                    />
-                  </View>
-
-                  <View style={styles.userActionRow}>
-                    <Button
-                      title="View Wallet"
-                      variant="outline"
-                      size="sm"
-                      style={{ marginRight: 8 }}
-                      onPress={() => setActiveTab('wallets')}
-                    />
-                    <Button
-                      title={u.status === 'active' ? 'Suspend Account' : 'Activate Account'}
-                      variant={u.status === 'active' ? 'outline' : 'primary'}
-                      size="sm"
-                      style={{ marginRight: 8 }}
-                      onPress={() => {
-                        toggleUserStatus(u.id);
-                        reloadLiveUsers();
-                      }}
-                    />
-                    <Button
-                      title={u.role === 'chef' ? 'Revoke Chef' : 'Promote to Chef'}
-                      variant="outline"
-                      size="sm"
-                      style={{ marginRight: 8 }}
-                      onPress={async () => {
-                        if (u.role === 'chef') {
-                          await revokeChefRole(u.id, u.email);
-                          showInAppAlert(
-                            'Chef Revoked',
-                            `${u.name} role reset to regular customer.`,
-                          );
-                        } else {
-                          await grantChefRole(u.id, u.email, u.name, user?.email || 'admin');
-                          showInAppAlert(
-                            'Promoted to Chef',
-                            `${u.name} has been promoted to Chef! They can now access Chef Studio to create and manage their meal kit recipes.`,
-                          );
-                        }
-                        reloadLiveUsers();
-                        reloadChefData();
-                      }}
-                    />
-
-                    {u.email &&
-                      u.email.trim().toLowerCase().endsWith('@mulyam.in') &&
-                      u.email.trim().toLowerCase() !== 'raphdesantos@gmail.com' && (
-                        <Button
-                          title={u.role === 'admin' ? 'Revoke Admin' : 'Grant Admin'}
-                          variant="outline"
-                          size="sm"
-                          style={{ marginRight: 8 }}
-                          onPress={() => {
-                            toggleUserAdminRole(u.id);
-                            reloadLiveUsers();
-                          }}
-                        />
-                      )}
-
-                    <Button
-                      title="Delete User"
-                      variant="outline"
-                      size="sm"
-                      style={{ borderColor: '#EF4444' }}
-                      textStyle={{ color: '#EF4444' }}
-                      onPress={() => {
-                        Alert.alert(
-                          'Delete Customer Account?',
-                          `Are you sure you want to permanently delete "${u.name}" (${u.id})?\n\nIf this user is an approved chef, their chef status and studio access will also be automatically removed.`,
-                          [
-                            { text: 'Cancel', style: 'cancel' },
-                            {
-                              text: 'Delete',
-                              style: 'destructive',
-                              onPress: async () => {
-                                const res = await deleteManagedUser(u.id);
-                                if (res.success) {
-                                  showInAppAlert(
-                                    'User Deleted',
-                                    `"${u.name}" has been permanently removed${u.role === 'chef' ? ' and removed from approved chefs' : ''}.`,
-                                  );
-                                  reloadLiveUsers();
-                                  reloadChefData();
-                                } else {
-                                  showInAppAlert('Error', res.error || 'Could not delete user.');
-                                }
-                              },
-                            },
-                          ],
-                        );
-                      }}
-                    />
-                  </View>
-                </View>
-              ));
-            })()}
-          </View>
-        )}
-
-        {/* MODULE 6: COUPONS & PROMOTIONS */}
-        {activeTab === 'coupons' && (
-          <View>
-            <View style={styles.moduleHeaderRow}>
-              <View>
-                <Text style={[styles.moduleTitle, { color: colors.textPrimary }]}>
-                  Discounts & Coupons ({coupons.length})
-                </Text>
-                <Text style={[styles.moduleSubtitle, { color: colors.textSecondary }]}>
-                  Manage promo codes and checkout discounts
-                </Text>
-              </View>
-              <Button title="+ New Coupon" size="sm" onPress={() => setCouponModalVisible(true)} />
-            </View>
-
-            {coupons.map((c) => (
+              {/* Cross-Tab View: E.g., Top Meals among Vegetarians in Maharashtra */}
               <View
-                key={c.code}
                 style={[
-                  styles.couponCard,
+                  styles.crossTabCard,
                   {
                     backgroundColor: colors.bgSurface,
                     borderRadius: radii.xl,
                     borderColor: colors.borderLight,
                     ...shadows.card,
                   },
-                ]}
-              >
-                <View style={styles.couponTop}>
-                  <Text style={[styles.couponCodeHeading, { color: colors.primary }]}>
-                    {c.code}
-                  </Text>
-                  <Badge
-                    label={c.isActive ? 'ACTIVE' : 'INACTIVE'}
-                    variant={c.isActive ? 'success' : 'neutral'}
-                  />
-                </View>
-
-                <Text style={[styles.couponDesc, { color: colors.textPrimary }]}>
-                  {c.type === 'percentage'
-                    ? `${c.discountValue}% OFF`
-                    : `Flat ₹${c.discountValue} OFF`}
-                  {c.minOrderValue ? ` • Min Order: ₹${c.minOrderValue}` : ''}
-                </Text>
-                <Text style={[styles.couponTerms, { color: colors.textMuted }]}>
-                  Max Discount: ₹{c.maxDiscount || 'Unlimited'} • Valid until {c.expiryDate}
-                </Text>
-
-                <View style={styles.couponActionRow}>
-                  <Button
-                    title={c.isActive ? 'Deactivate' : 'Activate'}
-                    variant="outline"
-                    size="sm"
-                    style={{ marginRight: 8 }}
-                    onPress={() => {
-                      toggleCouponActive(c.code);
-                      setCoupons(getCoupons());
-                    }}
-                  />
-                  <Button
-                    title="Delete"
-                    variant="danger"
-                    size="sm"
-                    onPress={() => {
-                      deleteCoupon(c.code);
-                      setCoupons(getCoupons());
-                    }}
-                  />
-                </View>
-              </View>
-            ))}
-          </View>
-        )}
-
-        {/* MODULE 7: REVENUE & FINANCIAL REPORT */}
-        {activeTab === 'revenue' && (
-          <View>
-            <View style={styles.moduleHeaderRow}>
-              <View>
-                <Text style={[styles.moduleTitle, { color: colors.textPrimary }]}>
-                  Financial Dashboard
-                </Text>
-                <Text style={[styles.moduleSubtitle, { color: colors.textSecondary }]}>
-                  Monthly sales, AOV & growth indicators
-                </Text>
-              </View>
-            </View>
-
-            <View style={styles.metricsGrid}>
-              <View
-                style={[
-                  styles.metricCard,
-                  { backgroundColor: colors.bgSubtle, borderRadius: radii.md },
-                ]}
-              >
-                <Text style={[styles.metricVal, { color: colors.primary }]}>₹4.8L</Text>
-                <Text style={[styles.metricLabel, { color: colors.textMuted }]}>
-                  OCTOBER REVENUE
-                </Text>
-              </View>
-              <View
-                style={[
-                  styles.metricCard,
-                  { backgroundColor: colors.bgSubtle, borderRadius: radii.md },
-                ]}
-              >
-                <Text style={[styles.metricVal, { color: colors.textPrimary }]}>₹612</Text>
-                <Text style={[styles.metricLabel, { color: colors.textMuted }]}>AVERAGE ORDER</Text>
-              </View>
-              <View
-                style={[
-                  styles.metricCard,
-                  { backgroundColor: colors.bgSubtle, borderRadius: radii.md },
-                ]}
-              >
-                <Text style={[styles.metricVal, { color: colors.success }]}>68%</Text>
-                <Text style={[styles.metricLabel, { color: colors.textMuted }]}>REPEAT RATE</Text>
-              </View>
-            </View>
-
-            <Text
-              style={[
-                styles.trendCardTitle,
-                { color: colors.textPrimary, marginTop: 14, marginBottom: 10 },
-              ]}
-            >
-              Quarterly Trajectory (2024)
-            </Text>
-
-            {MONTHLY_TRENDS.map((t) => (
-              <View
-                key={t.month}
-                style={[
-                  styles.trendRow,
                   {
-                    backgroundColor: colors.bgSurface,
-                    borderRadius: radii.lg,
-                    borderColor: colors.borderLight,
-                    borderWidth: 1,
-                    padding: 12,
+                    zIndex: showCrossTabDietDD ? 2000 : 1,
+                    elevation: showCrossTabDietDD ? 2000 : 1,
                   },
                 ]}
               >
-                <View style={{ flex: 1 }}>
-                  <Text style={[styles.trendMonth, { color: colors.textPrimary, width: 'auto' }]}>
-                    {t.month} 2024
-                  </Text>
-                  <Text style={{ fontSize: 12, color: colors.textMuted, marginTop: 2 }}>
-                    {t.orders} kits shipped
-                  </Text>
-                </View>
-                <Text style={[styles.trendRevenue, { color: colors.primary }]}>
-                  ₹{(t.revenue / 1000).toFixed(0)}k
+                <Text style={[styles.crossTabTitle, { color: colors.textPrimary }]}>
+                  Cross-Tab: Top Meals Among {crossTabDiet.toUpperCase()} in {selectedState}
                 </Text>
-              </View>
-            ))}
-          </View>
-        )}
-
-        {/* MODULE 7B: CHEF SUBMISSIONS */}
-        {activeTab === 'chefs' && (
-          <View>
-            {/* Header */}
-            <View style={styles.moduleHeaderRow}>
-              <View>
-                <Text style={[styles.moduleTitle, { color: colors.textPrimary }]}>
-                  Chef Submissions ({chefSubmissions.length})
-                </Text>
-                <Text style={[styles.moduleSubtitle, { color: colors.textSecondary }]}>
-                  Review recipes submitted by approved chefs. Set price and availability regions
-                  before publishing.
-                </Text>
-              </View>
-            </View>
-
-            {/* Approved Chefs panel */}
-            <View
-              style={[
-                {
-                  backgroundColor: colors.bgSurface,
-                  borderRadius: radii.xl,
-                  padding: 20,
-                  marginBottom: 20,
-                  borderColor: colors.borderLight,
-                  borderWidth: 1,
-                  ...shadows.card,
-                },
-              ]}
-            >
-              <View
-                style={{
-                  flexDirection: 'row',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  marginBottom: 12,
-                }}
-              >
-                <Text style={[styles.moduleTitle, { color: colors.textPrimary, fontSize: 16 }]}>
-                  Approved Chefs ({chefProfiles.length})
-                </Text>
-                <View style={{ flexDirection: 'row', gap: 8 }}>
+                <View
+                  style={{
+                    position: 'relative',
+                    zIndex: showCrossTabDietDD ? 3000 : 1,
+                    marginBottom: 12,
+                    maxWidth: 280,
+                  }}
+                >
+                  <Text style={analyticsLabelStyle}>Diet</Text>
                   <TouchableOpacity
-                    style={[
-                      {
-                        backgroundColor: colors.primaryLight,
-                        borderRadius: radii.md,
-                        paddingHorizontal: 14,
-                        paddingVertical: 8,
-                        flexDirection: 'row',
-                        alignItems: 'center',
-                        gap: 6,
-                      },
-                    ]}
-                    onPress={() => {
-                      setGrantChefTargetUser(null);
-                      setGrantChefModalVisible(true);
-                    }}
+                    activeOpacity={0.8}
+                    style={analyticsFieldStyle(showCrossTabDietDD)}
+                    onPress={() => setShowCrossTabDietDD((v) => !v)}
                   >
-                    <Icon name="add" size={14} color={colors.primary} />
-                    <Text style={{ fontSize: 13, fontWeight: '700', color: colors.primary }}>
-                      Grant Chef Role
+                    <Text
+                      numberOfLines={1}
+                      style={{
+                        flex: 1,
+                        fontSize: 14,
+                        color: colors.textPrimary,
+                        fontWeight: '600',
+                      }}
+                    >
+                      {crossTabDietOptions.find((d) => d.id === crossTabDiet)?.label || 'All Diets'}
                     </Text>
                   </TouchableOpacity>
+
+                  {showCrossTabDietDD && (
+                    <View style={analyticsMenuStyle}>
+                      <ThinScrollView maxHeight={200}>
+                        {crossTabDietOptions.map((d) => (
+                          <TouchableOpacity
+                            key={d.id}
+                            style={{
+                              paddingVertical: 12,
+                              paddingHorizontal: 14,
+                              backgroundColor:
+                                crossTabDiet === d.id ? colors.primaryLight : 'transparent',
+                            }}
+                            onPress={() => {
+                              setCrossTabDiet(d.id);
+                              setShowCrossTabDietDD(false);
+                            }}
+                          >
+                            <Text
+                              style={{
+                                fontSize: 14,
+                                color: crossTabDiet === d.id ? colors.primary : colors.textPrimary,
+                                fontWeight: crossTabDiet === d.id ? '700' : '400',
+                              }}
+                            >
+                              {d.label}
+                            </Text>
+                          </TouchableOpacity>
+                        ))}
+                      </ThinScrollView>
+                    </View>
+                  )}
+                </View>
+
+                <View style={{ gap: 8 }}>
+                  {crossTabResult.topItems.map((dish, idx) => (
+                    <View
+                      key={dish.mealKitId || idx}
+                      style={[
+                        styles.crossTabItem,
+                        {
+                          backgroundColor: colors.bgSubtle,
+                          borderRadius: radii.md,
+                          paddingHorizontal: 12,
+                        },
+                      ]}
+                    >
+                      <Text style={[styles.crossTabRank, { color: colors.primary }]}>
+                        #{idx + 1}
+                      </Text>
+                      <View style={{ flex: 1, marginLeft: 8 }}>
+                        <Text style={[styles.crossTabName, { color: colors.textPrimary }]}>
+                          {dish.name}
+                        </Text>
+                        <Text style={[styles.crossTabCuisine, { color: colors.textSecondary }]}>
+                          {dish.unitsSold} kits sold • {dish.shareInRegion}% region share
+                        </Text>
+                      </View>
+                      <Text style={[styles.crossTabUnits, { color: colors.primary }]}>
+                        ₹{dish.revenueGenerated.toLocaleString('en-IN')}
+                      </Text>
+                    </View>
+                  ))}
                 </View>
               </View>
-              {chefProfiles.length === 0 ? (
-                <Text style={{ color: colors.textMuted, fontSize: 13 }}>
-                  No chefs approved yet. Search for a registered customer in the Users tab and grant
-                  them the chef role.
-                </Text>
-              ) : (
-                chefProfiles.map((chef) => (
-                  <View
-                    key={chef.uid}
-                    style={[
-                      {
-                        flexDirection: 'row',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                        paddingVertical: 12,
-                        borderBottomWidth: 1,
-                        borderBottomColor: colors.borderLight,
-                      },
-                    ]}
-                  >
-                    <View>
-                      <Text style={{ fontSize: 14, fontWeight: '700', color: colors.textPrimary }}>
-                        {chef.displayName}
-                      </Text>
-                      <Text style={{ fontSize: 12, color: colors.textMuted }}>{chef.email}</Text>
-                      {chef.speciality && (
-                        <Text style={{ fontSize: 11, color: colors.primary, marginTop: 2 }}>
-                          {chef.speciality}
-                        </Text>
-                      )}
-                    </View>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                      <TouchableOpacity
-                        onPress={() => {
-                          Alert.alert(
-                            'Revoke Chef Role',
-                            `Remove chef role from ${chef.displayName}? They will revert to a regular customer.`,
-                            [
-                              { text: 'Cancel', style: 'cancel' },
-                              {
-                                text: 'Revoke',
-                                style: 'destructive',
-                                onPress: async () => {
-                                  await revokeChefRole(chef.uid, chef.email);
-                                  reloadChefData();
-                                  showInAppAlert(
-                                    'Chef Role Revoked',
-                                    `${chef.displayName} is now a regular customer.`,
-                                  );
-                                },
-                              },
-                            ],
-                          );
-                        }}
-                        style={[
-                          {
-                            borderWidth: 1,
-                            borderColor: colors.danger,
-                            borderRadius: radii.md,
-                            paddingHorizontal: 12,
-                            paddingVertical: 6,
-                          },
-                        ]}
-                      >
-                        <Text style={{ fontSize: 12, fontWeight: '700', color: colors.danger }}>
-                          Revoke
-                        </Text>
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-                ))
-              )}
             </View>
+          )}
 
-            {/* Filter tabs */}
-            <View style={{ flexDirection: 'row', gap: 8, marginBottom: 16 }}>
-              {(['all', 'pending_review', 'published', 'rejected'] as const).map((f) => (
+          {/* MODULE 5A: STAFF ADMIN MANAGEMENT */}
+          {activeTab === 'admins' && (
+            <View>
+              {/* Top Subtab Switcher */}
+              <View style={{ flexDirection: 'row', gap: 10, marginBottom: 16 }}>
                 <TouchableOpacity
-                  key={f}
-                  onPress={() => setChefSubmissionFilter(f)}
-                  style={[
-                    {
-                      paddingHorizontal: 14,
-                      paddingVertical: 7,
-                      borderRadius: radii.pill,
-                      backgroundColor:
-                        chefSubmissionFilter === f ? colors.primary : colors.bgSubtle,
-                      borderWidth: 1,
-                      borderColor: chefSubmissionFilter === f ? colors.primary : colors.border,
-                    },
-                  ]}
+                  onPress={() => setActiveTab('customers')}
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 6,
+                    paddingHorizontal: 16,
+                    paddingVertical: 10,
+                    borderRadius: radii.md,
+                    backgroundColor: colors.bgSurface,
+                    borderColor: colors.borderLight,
+                    borderWidth: 1,
+                  }}
                 >
-                  <Text
-                    style={{
-                      fontSize: 12,
-                      fontWeight: '700',
-                      color: chefSubmissionFilter === f ? '#fff' : colors.textSecondary,
-                    }}
-                  >
-                    {f === 'all'
-                      ? 'All'
-                      : f === 'pending_review'
-                        ? 'Pending Review'
-                        : f === 'published'
-                          ? 'Published'
-                          : 'Rejected'}
+                  <Icon name="people" size={16} color={colors.textSecondary} />
+                  <Text style={{ fontWeight: '700', fontSize: 13, color: colors.textSecondary }}>
+                    Customers ({users.filter((u) => u.role !== 'admin').length})
                   </Text>
                 </TouchableOpacity>
-              ))}
-            </View>
 
-            {/* Submission cards */}
-            {(chefSubmissionFilter === 'all'
-              ? chefSubmissions
-              : chefSubmissions.filter((s) => s.submissionStatus === chefSubmissionFilter)
-            ).length === 0 ? (
+                <TouchableOpacity
+                  onPress={() => setActiveTab('admins')}
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 6,
+                    paddingHorizontal: 16,
+                    paddingVertical: 10,
+                    borderRadius: radii.md,
+                    backgroundColor: colors.primary,
+                    borderColor: colors.primary,
+                    borderWidth: 1,
+                  }}
+                >
+                  <Icon name="lock" size={16} color="#FFF" />
+                  <Text style={{ fontWeight: '700', fontSize: 13, color: '#FFF' }}>
+                    Staff Admins ({adminProfiles.length})
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* Regional Admin Role & Many-to-Many Region Assignments */}
               <View
                 style={[
                   {
                     backgroundColor: colors.bgSurface,
                     borderRadius: radii.xl,
-                    padding: 40,
-                    alignItems: 'center',
-                    borderColor: colors.borderLight,
-                    borderWidth: 1,
+                    padding: 20,
+                    marginBottom: 20,
+                    borderColor: isSuperAdmin ? '#F59E0B' : colors.borderLight,
+                    borderWidth: isSuperAdmin ? 1.5 : 1,
+                    ...shadows.card,
                   },
                 ]}
               >
-                <Icon name="chef" size={36} color={colors.textMuted} />
-                <Text style={{ color: colors.textMuted, marginTop: 12, fontSize: 14 }}>
-                  {chefSubmissionFilter === 'all'
-                    ? 'No chef submissions yet.'
-                    : `No ${chefSubmissionFilter.replace('_', ' ')} submissions.`}
-                </Text>
-              </View>
-            ) : (
-              (chefSubmissionFilter === 'all'
-                ? chefSubmissions
-                : chefSubmissions.filter((s) => s.submissionStatus === chefSubmissionFilter)
-              ).map((sub) => (
-                <View
-                  key={sub.id}
-                  style={[
-                    {
-                      backgroundColor: colors.bgSurface,
-                      borderRadius: radii.xl,
-                      padding: 18,
-                      marginBottom: 14,
-                      borderColor:
-                        sub.submissionStatus === 'pending_review'
-                          ? '#F59E0B'
-                          : sub.submissionStatus === 'published'
-                            ? '#22C55E'
-                            : sub.submissionStatus === 'rejected'
-                              ? colors.danger
-                              : colors.borderLight,
-                      borderWidth: sub.submissionStatus === 'pending_review' ? 1.5 : 1,
-                      ...shadows.card,
-                    },
-                  ]}
-                >
-                  {/* Title row */}
-                  <View
-                    style={{
-                      flexDirection: 'row',
-                      justifyContent: 'space-between',
-                      alignItems: 'flex-start',
-                      marginBottom: 8,
-                    }}
-                  >
-                    <View style={{ flex: 1 }}>
-                      <Text
-                        style={{
-                          fontSize: 16,
-                          fontWeight: '800',
-                          color: colors.textPrimary,
-                          marginBottom: 2,
-                        }}
-                      >
-                        {sub.name}
-                      </Text>
-                      <Text style={{ fontSize: 12, color: colors.textSecondary }}>
-                        by {sub.chefName} • {sub.cuisine} • {sub.diet.toUpperCase()}
-                      </Text>
-                    </View>
-                    <View
-                      style={[
-                        {
-                          paddingHorizontal: 9,
-                          paddingVertical: 3,
-                          borderRadius: 20,
-                          backgroundColor:
-                            sub.submissionStatus === 'pending_review'
-                              ? '#FEF3C7'
-                              : sub.submissionStatus === 'published'
-                                ? '#DCFCE7'
-                                : sub.submissionStatus === 'rejected'
-                                  ? '#FEE2E2'
-                                  : colors.bgSubtle,
-                        },
-                      ]}
-                    >
-                      <Text
-                        style={{
-                          fontSize: 10,
-                          fontWeight: '800',
-                          color:
-                            sub.submissionStatus === 'pending_review'
-                              ? '#92400E'
-                              : sub.submissionStatus === 'published'
-                                ? '#15803D'
-                                : sub.submissionStatus === 'rejected'
-                                  ? '#B91C1C'
-                                  : colors.textSecondary,
-                        }}
-                      >
-                        {sub.submissionStatus === 'pending_review'
-                          ? 'Pending Review'
-                          : sub.submissionStatus === 'published'
-                            ? 'Published'
-                            : sub.submissionStatus === 'rejected'
-                              ? 'Rejected'
-                              : 'Draft'}
-                      </Text>
-                    </View>
-                  </View>
-
-                  {/* Description */}
-                  <Text
-                    style={{ fontSize: 13, color: colors.textSecondary, marginBottom: 10 }}
-                    numberOfLines={2}
-                  >
-                    {sub.description}
-                  </Text>
-
-                  {/* Stats */}
-                  <View style={{ flexDirection: 'row', gap: 16, marginBottom: 12 }}>
-                    {[
-                      { label: 'Servings', value: sub.servings },
-                      { label: 'Prep', value: `${sub.prepTimeMinutes}m` },
-                      { label: 'Cook', value: `${sub.cookTimeMinutes}m` },
-                      { label: 'Ingredients', value: sub.ingredients.length },
-                      { label: 'Steps', value: sub.recipeSteps.length },
-                    ].map(({ label, value }) => (
-                      <View key={label}>
-                        <Text style={{ fontSize: 11, color: colors.textMuted }}>{label}</Text>
-                        <Text
-                          style={{ fontSize: 13, fontWeight: '700', color: colors.textPrimary }}
-                        >
-                          {value}
-                        </Text>
-                      </View>
-                    ))}
-                  </View>
-
-                  {/* Admin actions */}
-                  {sub.submissionStatus === 'pending_review' ? (
-                    <TouchableOpacity
-                      testID={`admin-review-chef-btn-${sub.id}`}
-                      style={[
-                        {
-                          backgroundColor: colors.primary,
-                          borderRadius: radii.md,
-                          paddingVertical: 10,
-                          alignItems: 'center',
-                        },
-                      ]}
-                      onPress={() => {
-                        setSelectedChefSubmission(sub);
-                        setChefSubmissionModalVisible(true);
-                      }}
-                    >
-                      <Text style={{ color: '#fff', fontWeight: '700', fontSize: 14 }}>
-                        Review & Publish / Reject
-                      </Text>
-                    </TouchableOpacity>
-                  ) : (
-                    <TouchableOpacity
-                      testID={`admin-review-chef-btn-${sub.id}`}
-                      style={[
-                        {
-                          backgroundColor: colors.bgSubtle,
-                          borderColor: colors.borderLight,
-                          borderWidth: 1,
-                          borderRadius: radii.md,
-                          paddingVertical: 9,
-                          alignItems: 'center',
-                          marginTop: 6,
-                        },
-                      ]}
-                      onPress={() => {
-                        setSelectedChefSubmission(sub);
-                        setChefSubmissionModalVisible(true);
-                      }}
-                    >
-                      <Text style={{ color: colors.textPrimary, fontWeight: '700', fontSize: 13 }}>
-                        View Recipe Details & Quality Check →
-                      </Text>
-                    </TouchableOpacity>
-                  )}
-
-                  {/* Rejection notes */}
-                  {sub.submissionStatus === 'rejected' && sub.reviewNotes && (
-                    <View
-                      style={{
-                        backgroundColor: '#FEF2F2',
-                        borderRadius: radii.md,
-                        padding: 10,
-                        marginTop: 8,
-                      }}
-                    >
-                      <Text style={{ fontSize: 12, color: colors.danger }}>
-                        Rejected: {sub.reviewNotes}
-                      </Text>
-                    </View>
-                  )}
-
-                  {/* Published info */}
-                  {sub.submissionStatus === 'published' && (
-                    <View
-                      style={{
-                        backgroundColor: '#F0FDF4',
-                        borderRadius: radii.md,
-                        padding: 10,
-                        marginTop: 8,
-                      }}
-                    >
-                      <Text style={{ fontSize: 12, color: '#15803D' }}>
-                        Published at Rs. {sub.price ?? 'N/A'}
-                      </Text>
-                    </View>
-                  )}
-                </View>
-              ))
-            )}
-
-            {/* Review Submission Modal (Matches Chef Studio full authoring experience) */}
-            <Modal
-              visible={chefSubmissionModalVisible}
-              animationType="slide"
-              presentationStyle="fullScreen"
-              onRequestClose={() => {
-                setChefSubmissionModalVisible(false);
-                setSelectedChefSubmission(null);
-              }}
-            >
-              {selectedChefSubmission && (
-                <ChefSubmissionApprovalView
-                  submission={selectedChefSubmission}
-                  isProcessing={isProcessingChefSubmission}
-                  onClose={() => {
-                    setChefSubmissionModalVisible(false);
-                    setSelectedChefSubmission(null);
-                  }}
-                  onReject={async (notes) => {
-                    if (!selectedChefSubmission) return;
-                    setIsProcessingChefSubmission(true);
-                    await rejectChefSubmission(selectedChefSubmission.id, notes);
-                    await reloadChefData();
-                    setIsProcessingChefSubmission(false);
-                    const subName = selectedChefSubmission.name;
-                    const cName = selectedChefSubmission.chefName;
-                    setChefSubmissionModalVisible(false);
-                    setSelectedChefSubmission(null);
-                    showInAppAlert(
-                      'Recipe Rejected',
-                      `"${subName}" has been rejected with feedback sent to ${cName}.`,
-                    );
-                  }}
-                  onPublish={async (
-                    pubPrice,
-                    storageCentres,
-                    cities,
-                    customRegions,
-                    subRegions,
-                  ) => {
-                    if (!selectedChefSubmission) return;
-                    setIsProcessingChefSubmission(true);
-                    const regions =
-                      customRegions && customRegions.length > 0
-                        ? customRegions
-                        : storageCentres.length > 0
-                          ? [
-                              ...new Set(
-                                STORAGE_CENTRE_REGIONS.filter((r) =>
-                                  storageCentres.includes(r.id),
-                                ).map((r) => r.zone),
-                              ),
-                            ]
-                          : ['North', 'South', 'West', 'East'];
-                    const res = await publishChefSubmission(
-                      selectedChefSubmission.id,
-                      pubPrice,
-                      regions,
-                      storageCentres,
-                      cities,
-                      undefined,
-                      subRegions,
-                    );
-                    if (res.kit) {
-                      addMealKit(res.kit as MealKit);
-                    }
-                    setKits(getMealKits());
-                    await reloadChefData();
-                    setIsProcessingChefSubmission(false);
-                    const subName = selectedChefSubmission.name;
-                    const cName = selectedChefSubmission.chefName;
-                    setChefSubmissionModalVisible(false);
-                    setSelectedChefSubmission(null);
-                    showInAppAlert(
-                      'Recipe Published',
-                      `"${subName}" by ${cName} is now live at Rs. ${pubPrice} and added to the meal kit database.`,
-                    );
-                  }}
-                />
-              )}
-            </Modal>
-
-            {/* Grant Chef Role Modal */}
-            <Modal
-              visible={grantChefModalVisible}
-              animationType="slide"
-              presentationStyle="pageSheet"
-              onRequestClose={() => setGrantChefModalVisible(false)}
-            >
-              <View style={{ flex: 1, backgroundColor: colors.bgSurface, padding: 20 }}>
                 <View
                   style={{
                     flexDirection: 'row',
                     justifyContent: 'space-between',
                     alignItems: 'center',
-                    marginBottom: 20,
+                    marginBottom: 8,
                   }}
                 >
-                  <Text style={{ fontSize: 18, fontWeight: '800', color: colors.textPrimary }}>
-                    Grant Chef Role
-                  </Text>
-                  <TouchableOpacity onPress={() => setGrantChefModalVisible(false)}>
-                    <Icon name="close" size={22} color={colors.textMuted} />
-                  </TouchableOpacity>
+                  <View style={{ flex: 1, marginRight: 10 }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                      <Text
+                        style={[styles.moduleTitle, { color: colors.textPrimary, fontSize: 18 }]}
+                      >
+                        {isSuperAdmin
+                          ? `Staff Admin Management (${adminProfiles.length})`
+                          : 'Your Regional Admin Jurisdiction'}
+                      </Text>
+                    </View>
+                    <Text style={[styles.moduleSubtitle, { color: colors.textSecondary }]}>
+                      {isSuperAdmin
+                        ? 'Super Admin (raphael.dalmeida@mulyam.in) can assign staff admins to specific regions. Admins and regions have a many-to-many relationship.'
+                        : `You are authenticated with regional access to: ${assignedRegions && assignedRegions.length > 0 ? assignedRegions.map(formatRegionName).join(', ') : 'Pune City (Pune)'}. Only the Super Admin can reassign regional access.`}
+                    </Text>
+                  </View>
+
+                  {isSuperAdmin && (
+                    <Button
+                      title="+ Assign Regional Admin"
+                      size="sm"
+                      onPress={handleOpenAddAdminModal}
+                      style={{ backgroundColor: '#F59E0B' }}
+                    />
+                  )}
                 </View>
-                <Text
-                  style={{
-                    fontSize: 14,
-                    color: colors.textSecondary,
-                    marginBottom: 20,
-                    lineHeight: 22,
-                  }}
-                >
-                  To grant the chef role, go to the Users tab and select a registered customer.
-                  Their account will be upgraded to a Chef and they will see the Chef Studio tab
-                  after their next login.
-                </Text>
-                {/* Users list to pick from */}
-                {users.length === 0 ? (
-                  <Text style={{ color: colors.textMuted, fontSize: 13 }}>
-                    No registered customers found.
-                  </Text>
-                ) : (
-                  users.map((u) => (
+
+                {/* Admin Staff List */}
+                <View style={{ gap: 10, marginTop: 12 }}>
+                  {adminProfiles.map((adm) => (
                     <View
-                      key={u.id}
+                      key={adm.id}
                       style={{
+                        backgroundColor: colors.bgSubtle,
+                        borderColor: colors.borderLight,
+                        borderWidth: 1,
+                        borderRadius: radii.lg,
+                        padding: 14,
                         flexDirection: 'row',
                         justifyContent: 'space-between',
                         alignItems: 'center',
-                        paddingVertical: 14,
-                        borderBottomWidth: 1,
-                        borderBottomColor: colors.borderLight,
                       }}
+                    >
+                      <View style={{ flex: 1, marginRight: 10 }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                          <Text
+                            style={{ fontSize: 14, fontWeight: '700', color: colors.textPrimary }}
+                          >
+                            {adm.name}
+                          </Text>
+                          <Badge
+                            label={adm.role === 'super_admin' ? 'SUPER ADMIN' : 'REGIONAL ADMIN'}
+                            variant={adm.role === 'super_admin' ? 'warning' : 'info'}
+                            size="sm"
+                          />
+                        </View>
+                        <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 2 }}>
+                          {adm.email}
+                        </Text>
+
+                        {/* Many-to-Many Assigned Regions Tags */}
+                        <View
+                          style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 8 }}
+                        >
+                          {adm.role === 'super_admin' ? (
+                            <Badge
+                              label="All Operating Regions (Pan-India)"
+                              variant="neutral"
+                              size="sm"
+                            />
+                          ) : adm.regions && adm.regions.length > 0 ? (
+                            adm.regions.map((reg) => {
+                              const sc = STORAGE_CENTRE_REGIONS.find(
+                                (r) => r.id === reg || r.name.toLowerCase() === reg.toLowerCase(),
+                              );
+                              return (
+                                <Badge
+                                  key={reg}
+                                  label={sc ? `${sc.name} (${sc.city})` : `${reg} Region`}
+                                  variant="accent"
+                                  size="sm"
+                                />
+                              );
+                            })
+                          ) : (
+                            <Badge label="No Region Assigned" variant="danger" size="sm" />
+                          )}
+                        </View>
+                      </View>
+
+                      {isSuperAdmin && (
+                        <View style={{ flexDirection: 'row', gap: 6 }}>
+                          <Button
+                            title="Edit Access"
+                            size="sm"
+                            variant="outline"
+                            onPress={() => handleOpenEditAdminModal(adm)}
+                          />
+                          {adm.role !== 'super_admin' && adm.email !== SUPER_ADMIN_EMAIL && (
+                            <Button
+                              title="Revoke"
+                              size="sm"
+                              variant="danger"
+                              onPress={() => handleDeleteAdmin(adm.email)}
+                            />
+                          )}
+                        </View>
+                      )}
+                    </View>
+                  ))}
+                </View>
+              </View>
+            </View>
+          )}
+
+          {/* MODULE 5B: CUSTOMER ACCOUNTS (LIVE) */}
+          {(activeTab === 'customers' || activeTab === 'users') && (
+            <View>
+              {/* Top Subtab Switcher */}
+              <View style={{ flexDirection: 'row', gap: 10, marginBottom: 16 }}>
+                <TouchableOpacity
+                  onPress={() => setActiveTab('customers')}
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 6,
+                    paddingHorizontal: 16,
+                    paddingVertical: 10,
+                    borderRadius: radii.md,
+                    backgroundColor: colors.primary,
+                    borderColor: colors.primary,
+                    borderWidth: 1,
+                  }}
+                >
+                  <Icon name="people" size={16} color="#FFF" />
+                  <Text style={{ fontWeight: '700', fontSize: 13, color: '#FFF' }}>
+                    Customers ({users.filter((u) => u.role !== 'admin').length})
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  onPress={() => setActiveTab('admins')}
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 6,
+                    paddingHorizontal: 16,
+                    paddingVertical: 10,
+                    borderRadius: radii.md,
+                    backgroundColor: colors.bgSurface,
+                    borderColor: colors.borderLight,
+                    borderWidth: 1,
+                  }}
+                >
+                  <Icon name="lock" size={16} color={colors.textSecondary} />
+                  <Text style={{ fontWeight: '700', fontSize: 13, color: colors.textSecondary }}>
+                    Staff Admins ({adminProfiles.length})
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* Customer Accounts Header & Live Sync Status */}
+              <View style={styles.moduleHeaderRow}>
+                <View>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                    <Text style={[styles.moduleTitle, { color: colors.textPrimary }]}>
+                      Customer Accounts ({users.filter((u) => u.role !== 'admin').length})
+                    </Text>
+                  </View>
+                  <Text style={[styles.moduleSubtitle, { color: colors.textSecondary }]}>
+                    Live accounts, Customer IDs, live wallet balances & credit allocations
+                  </Text>
+                </View>
+                <Button
+                  title="Refresh Live"
+                  size="sm"
+                  variant="outline"
+                  onPress={reloadLiveUsers}
+                />
+              </View>
+
+              {/* Search Customers Bar */}
+              <View style={{ marginBottom: 14 }}>
+                <TextInput
+                  style={{
+                    backgroundColor: colors.bgSurface,
+                    borderColor: colors.borderLight,
+                    borderWidth: 1,
+                    borderRadius: radii.md,
+                    paddingHorizontal: 14,
+                    paddingVertical: 10,
+                    color: colors.textPrimary,
+                    fontSize: 14,
+                  }}
+                  placeholder="Search by Customer ID, Name, Phone, or Email..."
+                  placeholderTextColor={colors.textMuted}
+                  value={customerSearchQuery}
+                  onChangeText={setCustomerSearchQuery}
+                />
+              </View>
+
+              {/* Filtered Customer List */}
+              {(() => {
+                const customerList = users.filter(
+                  (u) =>
+                    u.role !== 'admin' &&
+                    (u.id.toLowerCase().includes(customerSearchQuery.toLowerCase()) ||
+                      u.name.toLowerCase().includes(customerSearchQuery.toLowerCase()) ||
+                      u.phone.includes(customerSearchQuery) ||
+                      u.email.toLowerCase().includes(customerSearchQuery.toLowerCase())),
+                );
+
+                if (customerList.length === 0) {
+                  return (
+                    <View
+                      style={[
+                        styles.emptyStateCard,
+                        {
+                          backgroundColor: colors.bgSurface,
+                          borderColor: colors.borderLight,
+                          borderRadius: radii.xl,
+                        },
+                      ]}
+                    >
+                      <View style={{ marginBottom: 12 }}>
+                        <Icon name="people" size={38} color={colors.textMuted} />
+                      </View>
+                      <Text style={[styles.emptyStateTitle, { color: colors.textPrimary }]}>
+                        No Customer Accounts Found
+                      </Text>
+                      <Text style={[styles.emptyStateSubtitle, { color: colors.textSecondary }]}>
+                        Registered customers will appear here automatically with their live Customer
+                        ID and wallet balance.
+                      </Text>
+                    </View>
+                  );
+                }
+
+                return customerList.map((u) => (
+                  <View
+                    key={u.id}
+                    style={[
+                      styles.userCard,
+                      {
+                        backgroundColor: colors.bgSurface,
+                        borderRadius: radii.xl,
+                        borderColor: colors.borderLight,
+                        marginBottom: 14,
+                        ...shadows.card,
+                      },
+                    ]}
+                  >
+                    <View style={styles.userTopRow}>
+                      <View style={{ flex: 1, marginRight: 8 }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                          <Text
+                            style={[
+                              styles.userNameText,
+                              { color: colors.textPrimary, fontSize: 16 },
+                            ]}
+                          >
+                            {u.name}
+                          </Text>
+                          {u.role === 'chef' && <Badge label="CHEF" variant="warning" size="sm" />}
+                        </View>
+
+                        {/* Prominent Customer ID with 1-click Copy */}
+                        <View
+                          style={{
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            gap: 6,
+                            marginTop: 4,
+                          }}
+                        >
+                          <TouchableOpacity
+                            onPress={() => handleCopyCustomerId(u.id)}
+                            style={{
+                              flexDirection: 'row',
+                              alignItems: 'center',
+                              gap: 5,
+                              backgroundColor: colors.bgSubtle,
+                              borderColor: colors.borderLight,
+                              borderWidth: 1,
+                              paddingHorizontal: 8,
+                              paddingVertical: 3,
+                              borderRadius: radii.sm,
+                            }}
+                            activeOpacity={0.7}
+                          >
+                            <Icon name="document" size={12} color={colors.primary} />
+                            <Text
+                              style={{
+                                fontSize: 12,
+                                fontFamily: 'monospace',
+                                fontWeight: '700',
+                                color: colors.primary,
+                              }}
+                            >
+                              Customer ID: {u.id}
+                            </Text>
+                            <Text
+                              style={{
+                                fontSize: 11,
+                                color: copiedCustomerId === u.id ? '#10B981' : colors.textMuted,
+                              }}
+                            >
+                              {copiedCustomerId === u.id ? '✓ Copied!' : 'Copy'}
+                            </Text>
+                          </TouchableOpacity>
+                        </View>
+                      </View>
+                      <Badge
+                        label={u.status === 'active' ? 'ACTIVE' : 'SUSPENDED'}
+                        variant={u.status === 'active' ? 'success' : 'danger'}
+                      />
+                    </View>
+
+                    <Text style={[styles.userStats, { color: colors.textSecondary, marginTop: 8 }]}>
+                      Phone: {u.phone} • Email: {u.email} • City: {u.city} • Joined {u.joinedDate}
+                    </Text>
+
+                    <Text style={[styles.userStats, { color: colors.textMuted, marginTop: 2 }]}>
+                      Orders: {u.ordersCount} • Total Spent: ₹
+                      {Math.round(u.totalSpend).toLocaleString('en-IN')}
+                    </Text>
+
+                    {/* Live Wallet Balance Banner & Quick Credit Issue */}
+                    <View
+                      style={{
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        backgroundColor: colors.primaryLight + '35',
+                        borderColor: colors.primary + '30',
+                        borderWidth: 1,
+                        borderRadius: radii.md,
+                        paddingHorizontal: 12,
+                        paddingVertical: 8,
+                        marginVertical: 10,
+                      }}
+                    >
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                        <Icon name="wallet" size={16} color={colors.primary} />
+                        <Text style={{ fontSize: 13, fontWeight: '700', color: colors.primary }}>
+                          Wallet Balance: ₹
+                          {Math.round(u.walletBalance ?? 0).toLocaleString('en-IN')}
+                        </Text>
+                        {(u.walletReserved ?? 0) > 0 && (
+                          <Text style={{ fontSize: 11, color: colors.textMuted }}>
+                            (₹{u.walletReserved} reserved)
+                          </Text>
+                        )}
+                      </View>
+                      <Button
+                        title="+ Send Credits"
+                        size="sm"
+                        variant="primary"
+                        onPress={() => handleOpenSendCreditsModal(u)}
+                      />
+                    </View>
+
+                    <View style={styles.userActionRow}>
+                      <Button
+                        title="View Wallet"
+                        variant="outline"
+                        size="sm"
+                        style={{ marginRight: 8 }}
+                        onPress={() => setActiveTab('wallets')}
+                      />
+                      <Button
+                        title={u.status === 'active' ? 'Suspend Account' : 'Activate Account'}
+                        variant={u.status === 'active' ? 'outline' : 'primary'}
+                        size="sm"
+                        style={{ marginRight: 8 }}
+                        onPress={() => {
+                          toggleUserStatus(u.id);
+                          reloadLiveUsers();
+                        }}
+                      />
+                      <Button
+                        title={u.role === 'chef' ? 'Revoke Chef' : 'Promote to Chef'}
+                        variant="outline"
+                        size="sm"
+                        style={{ marginRight: 8 }}
+                        onPress={async () => {
+                          if (u.role === 'chef') {
+                            await revokeChefRole(u.id, u.email);
+                            showInAppAlert(
+                              'Chef Revoked',
+                              `${u.name} role reset to regular customer.`,
+                            );
+                          } else {
+                            await grantChefRole(u.id, u.email, u.name, user?.email || 'admin');
+                            showInAppAlert(
+                              'Promoted to Chef',
+                              `${u.name} has been promoted to Chef! They can now access Chef Studio to create and manage their meal kit recipes.`,
+                            );
+                          }
+                          reloadLiveUsers();
+                          reloadChefData();
+                        }}
+                      />
+
+                      {u.email &&
+                        u.email.trim().toLowerCase().endsWith('@mulyam.in') &&
+                        u.email.trim().toLowerCase() !== 'raphdesantos@gmail.com' && (
+                          <Button
+                            title={u.role === 'admin' ? 'Revoke Admin' : 'Grant Admin'}
+                            variant="outline"
+                            size="sm"
+                            style={{ marginRight: 8 }}
+                            onPress={() => {
+                              toggleUserAdminRole(u.id);
+                              reloadLiveUsers();
+                            }}
+                          />
+                        )}
+
+                      <Button
+                        title="Delete User"
+                        variant="outline"
+                        size="sm"
+                        style={{ borderColor: '#EF4444' }}
+                        textStyle={{ color: '#EF4444' }}
+                        onPress={() => {
+                          Alert.alert(
+                            'Delete Customer Account?',
+                            `Are you sure you want to permanently delete "${u.name}" (${u.id})?\n\nIf this user is an approved chef, their chef status and studio access will also be automatically removed.`,
+                            [
+                              { text: 'Cancel', style: 'cancel' },
+                              {
+                                text: 'Delete',
+                                style: 'destructive',
+                                onPress: async () => {
+                                  const res = await deleteManagedUser(u.id);
+                                  if (res.success) {
+                                    showInAppAlert(
+                                      'User Deleted',
+                                      `"${u.name}" has been permanently removed${u.role === 'chef' ? ' and removed from approved chefs' : ''}.`,
+                                    );
+                                    reloadLiveUsers();
+                                    reloadChefData();
+                                  } else {
+                                    showInAppAlert('Error', res.error || 'Could not delete user.');
+                                  }
+                                },
+                              },
+                            ],
+                          );
+                        }}
+                      />
+                    </View>
+                  </View>
+                ));
+              })()}
+            </View>
+          )}
+
+          {/* MODULE 6: COUPONS & PROMOTIONS */}
+          {activeTab === 'coupons' && (
+            <View>
+              <View style={styles.moduleHeaderRow}>
+                <View>
+                  <Text style={[styles.moduleTitle, { color: colors.textPrimary }]}>
+                    Discounts & Coupons ({coupons.length})
+                  </Text>
+                  <Text style={[styles.moduleSubtitle, { color: colors.textSecondary }]}>
+                    Manage promo codes and checkout discounts
+                  </Text>
+                </View>
+                <Button
+                  title="+ New Coupon"
+                  size="sm"
+                  onPress={() => setCouponModalVisible(true)}
+                />
+              </View>
+
+              {coupons.map((c) => (
+                <View
+                  key={c.code}
+                  style={[
+                    styles.couponCard,
+                    {
+                      backgroundColor: colors.bgSurface,
+                      borderRadius: radii.xl,
+                      borderColor: colors.borderLight,
+                      ...shadows.card,
+                    },
+                  ]}
+                >
+                  <View style={styles.couponTop}>
+                    <Text style={[styles.couponCodeHeading, { color: colors.primary }]}>
+                      {c.code}
+                    </Text>
+                    <Badge
+                      label={c.isActive ? 'ACTIVE' : 'INACTIVE'}
+                      variant={c.isActive ? 'success' : 'neutral'}
+                    />
+                  </View>
+
+                  <Text style={[styles.couponDesc, { color: colors.textPrimary }]}>
+                    {c.type === 'percentage'
+                      ? `${c.discountValue}% OFF`
+                      : `Flat ₹${c.discountValue} OFF`}
+                    {c.minOrderValue ? ` • Min Order: ₹${c.minOrderValue}` : ''}
+                  </Text>
+                  <Text style={[styles.couponTerms, { color: colors.textMuted }]}>
+                    Max Discount: ₹{c.maxDiscount || 'Unlimited'} • Valid until {c.expiryDate}
+                  </Text>
+
+                  <View style={styles.couponActionRow}>
+                    <Button
+                      title={c.isActive ? 'Deactivate' : 'Activate'}
+                      variant="outline"
+                      size="sm"
+                      style={{ marginRight: 8 }}
+                      onPress={() => {
+                        toggleCouponActive(c.code);
+                        setCoupons(getCoupons());
+                      }}
+                    />
+                    <Button
+                      title="Delete"
+                      variant="danger"
+                      size="sm"
+                      onPress={() => {
+                        deleteCoupon(c.code);
+                        setCoupons(getCoupons());
+                      }}
+                    />
+                  </View>
+                </View>
+              ))}
+            </View>
+          )}
+
+          {/* MODULE 7: REVENUE & FINANCIAL REPORT */}
+          {activeTab === 'revenue' && (
+            <View>
+              <View style={styles.moduleHeaderRow}>
+                <View>
+                  <Text style={[styles.moduleTitle, { color: colors.textPrimary }]}>
+                    Financial Dashboard
+                  </Text>
+                  <Text style={[styles.moduleSubtitle, { color: colors.textSecondary }]}>
+                    Monthly sales, AOV & growth indicators
+                  </Text>
+                </View>
+              </View>
+
+              <View style={styles.metricsGrid}>
+                <View
+                  style={[
+                    styles.metricCard,
+                    { backgroundColor: colors.bgSubtle, borderRadius: radii.md },
+                  ]}
+                >
+                  <Text style={[styles.metricVal, { color: colors.primary }]}>₹4.8L</Text>
+                  <Text style={[styles.metricLabel, { color: colors.textMuted }]}>
+                    OCTOBER REVENUE
+                  </Text>
+                </View>
+                <View
+                  style={[
+                    styles.metricCard,
+                    { backgroundColor: colors.bgSubtle, borderRadius: radii.md },
+                  ]}
+                >
+                  <Text style={[styles.metricVal, { color: colors.textPrimary }]}>₹612</Text>
+                  <Text style={[styles.metricLabel, { color: colors.textMuted }]}>
+                    AVERAGE ORDER
+                  </Text>
+                </View>
+                <View
+                  style={[
+                    styles.metricCard,
+                    { backgroundColor: colors.bgSubtle, borderRadius: radii.md },
+                  ]}
+                >
+                  <Text style={[styles.metricVal, { color: colors.success }]}>68%</Text>
+                  <Text style={[styles.metricLabel, { color: colors.textMuted }]}>REPEAT RATE</Text>
+                </View>
+              </View>
+
+              <Text
+                style={[
+                  styles.trendCardTitle,
+                  { color: colors.textPrimary, marginTop: 14, marginBottom: 10 },
+                ]}
+              >
+                Quarterly Trajectory (2024)
+              </Text>
+
+              {MONTHLY_TRENDS.map((t) => (
+                <View
+                  key={t.month}
+                  style={[
+                    styles.trendRow,
+                    {
+                      backgroundColor: colors.bgSurface,
+                      borderRadius: radii.lg,
+                      borderColor: colors.borderLight,
+                      borderWidth: 1,
+                      padding: 12,
+                    },
+                  ]}
+                >
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.trendMonth, { color: colors.textPrimary, width: 'auto' }]}>
+                      {t.month} 2024
+                    </Text>
+                    <Text style={{ fontSize: 12, color: colors.textMuted, marginTop: 2 }}>
+                      {t.orders} kits shipped
+                    </Text>
+                  </View>
+                  <Text style={[styles.trendRevenue, { color: colors.primary }]}>
+                    ₹{(t.revenue / 1000).toFixed(0)}k
+                  </Text>
+                </View>
+              ))}
+            </View>
+          )}
+
+          {/* MODULE 7B: CHEF SUBMISSIONS */}
+          {activeTab === 'chefs' && (
+            <View>
+              {/* Header */}
+              <View style={styles.moduleHeaderRow}>
+                <View>
+                  <Text style={[styles.moduleTitle, { color: colors.textPrimary }]}>
+                    Chef Submissions ({chefSubmissions.length})
+                  </Text>
+                  <Text style={[styles.moduleSubtitle, { color: colors.textSecondary }]}>
+                    Review recipes submitted by approved chefs. Set price and availability regions
+                    before publishing.
+                  </Text>
+                </View>
+              </View>
+
+              {/* Approved Chefs panel */}
+              <View
+                style={[
+                  {
+                    backgroundColor: colors.bgSurface,
+                    borderRadius: radii.xl,
+                    padding: 20,
+                    marginBottom: 20,
+                    borderColor: colors.borderLight,
+                    borderWidth: 1,
+                    ...shadows.card,
+                  },
+                ]}
+              >
+                <View
+                  style={{
+                    flexDirection: 'row',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    marginBottom: 12,
+                  }}
+                >
+                  <Text style={[styles.moduleTitle, { color: colors.textPrimary, fontSize: 16 }]}>
+                    Approved Chefs ({chefProfiles.length})
+                  </Text>
+                  <View style={{ flexDirection: 'row', gap: 8 }}>
+                    <TouchableOpacity
+                      style={[
+                        {
+                          backgroundColor: colors.primaryLight,
+                          borderRadius: radii.md,
+                          paddingHorizontal: 14,
+                          paddingVertical: 8,
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          gap: 6,
+                        },
+                      ]}
+                      onPress={() => {
+                        setGrantChefTargetUser(null);
+                        setGrantChefModalVisible(true);
+                      }}
+                    >
+                      <Icon name="add" size={14} color={colors.primary} />
+                      <Text style={{ fontSize: 13, fontWeight: '700', color: colors.primary }}>
+                        Grant Chef Role
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+                {chefProfiles.length === 0 ? (
+                  <Text style={{ color: colors.textMuted, fontSize: 13 }}>
+                    No chefs approved yet. Search for a registered customer in the Users tab and
+                    grant them the chef role.
+                  </Text>
+                ) : (
+                  chefProfiles.map((chef) => (
+                    <View
+                      key={chef.uid}
+                      style={[
+                        {
+                          flexDirection: 'row',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          paddingVertical: 12,
+                          borderBottomWidth: 1,
+                          borderBottomColor: colors.borderLight,
+                        },
+                      ]}
                     >
                       <View>
                         <Text
                           style={{ fontSize: 14, fontWeight: '700', color: colors.textPrimary }}
                         >
-                          {u.name}
+                          {chef.displayName}
                         </Text>
-                        <Text style={{ fontSize: 12, color: colors.textMuted }}>{u.email}</Text>
+                        <Text style={{ fontSize: 12, color: colors.textMuted }}>{chef.email}</Text>
+                        {chef.speciality && (
+                          <Text style={{ fontSize: 11, color: colors.primary, marginTop: 2 }}>
+                            {chef.speciality}
+                          </Text>
+                        )}
                       </View>
-                      <TouchableOpacity
-                        style={{
-                          backgroundColor: colors.primaryLight,
-                          borderRadius: radii.md,
-                          paddingHorizontal: 14,
-                          paddingVertical: 8,
-                        }}
-                        onPress={async () => {
-                          const result = await grantChefRole(
-                            u.id,
-                            u.email || '',
-                            u.name,
-                            user?.email || 'admin',
-                          );
-                          if (result.success) {
-                            reloadChefData();
-                            setGrantChefModalVisible(false);
-                            showInAppAlert(
-                              'Chef Role Granted',
-                              `${u.name} is now an approved chef. They will see the Chef Studio tab after their next login.`,
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                        <TouchableOpacity
+                          onPress={() => {
+                            Alert.alert(
+                              'Revoke Chef Role',
+                              `Remove chef role from ${chef.displayName}? They will revert to a regular customer.`,
+                              [
+                                { text: 'Cancel', style: 'cancel' },
+                                {
+                                  text: 'Revoke',
+                                  style: 'destructive',
+                                  onPress: async () => {
+                                    await revokeChefRole(chef.uid, chef.email);
+                                    reloadChefData();
+                                    showInAppAlert(
+                                      'Chef Role Revoked',
+                                      `${chef.displayName} is now a regular customer.`,
+                                    );
+                                  },
+                                },
+                              ],
                             );
-                          } else {
-                            Alert.alert('Error', result.error || 'Could not grant chef role.');
-                          }
-                        }}
-                      >
-                        <Text style={{ fontSize: 13, fontWeight: '700', color: colors.primary }}>
-                          Make Chef
-                        </Text>
-                      </TouchableOpacity>
+                          }}
+                          style={[
+                            {
+                              borderWidth: 1,
+                              borderColor: colors.danger,
+                              borderRadius: radii.md,
+                              paddingHorizontal: 12,
+                              paddingVertical: 6,
+                            },
+                          ]}
+                        >
+                          <Text style={{ fontSize: 12, fontWeight: '700', color: colors.danger }}>
+                            Revoke
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
                     </View>
                   ))
                 )}
               </View>
-            </Modal>
-          </View>
-        )}
 
-        {/* MODULE 8: REVIEWS MODERATION */}
-        {activeTab === 'reviews' && (
-          <View>
-            <View style={styles.moduleHeaderRow}>
-              <View>
-                <Text style={[styles.moduleTitle, { color: colors.textPrimary }]}>
-                  Customer Reviews ({moderationReviews.length})
-                </Text>
-                <Text style={[styles.moduleSubtitle, { color: colors.textSecondary }]}>
-                  Moderation queue for meal kit ratings and feedback
-                </Text>
+              {/* Filter tabs */}
+              <View style={{ flexDirection: 'row', gap: 8, marginBottom: 16 }}>
+                {(['all', 'pending_review', 'published', 'rejected'] as const).map((f) => (
+                  <TouchableOpacity
+                    key={f}
+                    onPress={() => setChefSubmissionFilter(f)}
+                    style={[
+                      {
+                        paddingHorizontal: 14,
+                        paddingVertical: 7,
+                        borderRadius: radii.md,
+                        backgroundColor:
+                          chefSubmissionFilter === f ? colors.primary : colors.bgSubtle,
+                        borderWidth: 1,
+                        borderColor: chefSubmissionFilter === f ? colors.primary : colors.border,
+                      },
+                    ]}
+                  >
+                    <Text
+                      style={{
+                        fontSize: 12,
+                        fontWeight: '700',
+                        color: chefSubmissionFilter === f ? '#fff' : colors.textSecondary,
+                      }}
+                    >
+                      {f === 'all'
+                        ? 'All'
+                        : f === 'pending_review'
+                          ? 'Pending Review'
+                          : f === 'published'
+                            ? 'Published'
+                            : 'Rejected'}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
               </View>
-            </View>
 
-            {moderationReviews.length === 0 ? (
-              <View
-                style={[
-                  styles.emptyStateCard,
-                  {
-                    backgroundColor: colors.bgSurface,
-                    borderColor: colors.borderLight,
-                    borderRadius: radii.xl,
-                  },
-                ]}
-              >
-                <Text style={[styles.emptyStateTitle, { color: colors.textPrimary }]}>
-                  No Pending Reviews
-                </Text>
-                <Text style={[styles.emptyStateSubtitle, { color: colors.textSecondary }]}>
-                  All customer reviews have been reviewed.
-                </Text>
-              </View>
-            ) : (
-              moderationReviews.map((rev) => (
+              {/* Submission cards */}
+              {(chefSubmissionFilter === 'all'
+                ? chefSubmissions
+                : chefSubmissions.filter((s) => s.submissionStatus === chefSubmissionFilter)
+              ).length === 0 ? (
                 <View
-                  key={rev.id}
                   style={[
-                    styles.reviewModCard,
                     {
                       backgroundColor: colors.bgSurface,
-                      borderColor: rev.status === 'flagged' ? colors.danger : colors.borderLight,
                       borderRadius: radii.xl,
-                      borderWidth: rev.status === 'flagged' ? 2 : 1,
-                      ...shadows.card,
+                      padding: 40,
+                      alignItems: 'center',
+                      borderColor: colors.borderLight,
+                      borderWidth: 1,
                     },
                   ]}
                 >
-                  <View style={styles.reviewModTop}>
-                    <View>
-                      <Text style={[styles.reviewKitName, { color: colors.textPrimary }]}>
-                        {rev.mealKitName}
-                      </Text>
-                      <View
-                        style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 }}
-                      >
-                        <Text style={[styles.reviewAuthor, { color: colors.textSecondary }]}>
-                          {rev.userName} ({rev.userCity}) •
+                  <Icon name="chef" size={36} color={colors.textMuted} />
+                  <Text style={{ color: colors.textMuted, marginTop: 12, fontSize: 14 }}>
+                    {chefSubmissionFilter === 'all'
+                      ? 'No chef submissions yet.'
+                      : `No ${chefSubmissionFilter.replace('_', ' ')} submissions.`}
+                  </Text>
+                </View>
+              ) : (
+                (chefSubmissionFilter === 'all'
+                  ? chefSubmissions
+                  : chefSubmissions.filter((s) => s.submissionStatus === chefSubmissionFilter)
+                ).map((sub) => (
+                  <View
+                    key={sub.id}
+                    style={[
+                      {
+                        backgroundColor: colors.bgSurface,
+                        borderRadius: radii.xl,
+                        padding: 18,
+                        marginBottom: 14,
+                        borderColor:
+                          sub.submissionStatus === 'pending_review'
+                            ? '#F59E0B'
+                            : sub.submissionStatus === 'published'
+                              ? '#22C55E'
+                              : sub.submissionStatus === 'rejected'
+                                ? colors.danger
+                                : colors.borderLight,
+                        borderWidth: sub.submissionStatus === 'pending_review' ? 1.5 : 1,
+                        ...shadows.card,
+                      },
+                    ]}
+                  >
+                    {/* Title row */}
+                    <View
+                      style={{
+                        flexDirection: 'row',
+                        justifyContent: 'space-between',
+                        alignItems: 'flex-start',
+                        marginBottom: 8,
+                      }}
+                    >
+                      <View style={{ flex: 1 }}>
+                        <Text
+                          style={{
+                            fontSize: 16,
+                            fontWeight: '800',
+                            color: colors.textPrimary,
+                            marginBottom: 2,
+                          }}
+                        >
+                          {sub.name}
                         </Text>
-                        <Icon name="star" size={12} color="#EAB308" />
-                        <Text style={[styles.reviewAuthor, { color: colors.textSecondary }]}>
-                          {rev.rating}
+                        <Text style={{ fontSize: 12, color: colors.textSecondary }}>
+                          by {sub.chefName} • {sub.cuisine} • {sub.diet.toUpperCase()}
+                        </Text>
+                      </View>
+                      <View
+                        style={[
+                          {
+                            paddingHorizontal: 9,
+                            paddingVertical: 3,
+                            borderRadius: radii.sm,
+                            backgroundColor:
+                              sub.submissionStatus === 'pending_review'
+                                ? '#FEF3C7'
+                                : sub.submissionStatus === 'published'
+                                  ? '#DCFCE7'
+                                  : sub.submissionStatus === 'rejected'
+                                    ? '#FEE2E2'
+                                    : colors.bgSubtle,
+                          },
+                        ]}
+                      >
+                        <Text
+                          style={{
+                            fontSize: 10,
+                            fontWeight: '800',
+                            color:
+                              sub.submissionStatus === 'pending_review'
+                                ? '#92400E'
+                                : sub.submissionStatus === 'published'
+                                  ? '#15803D'
+                                  : sub.submissionStatus === 'rejected'
+                                    ? '#B91C1C'
+                                    : colors.textSecondary,
+                          }}
+                        >
+                          {sub.submissionStatus === 'pending_review'
+                            ? 'Pending Review'
+                            : sub.submissionStatus === 'published'
+                              ? 'Published'
+                              : sub.submissionStatus === 'rejected'
+                                ? 'Rejected'
+                                : 'Draft'}
                         </Text>
                       </View>
                     </View>
-                    <Badge
-                      label={rev.status.toUpperCase()}
-                      variant={
-                        rev.status === 'approved'
-                          ? 'success'
-                          : rev.status === 'flagged'
-                            ? 'warning'
-                            : 'danger'
-                      }
-                    />
-                  </View>
 
-                  <Text style={[styles.reviewCommentText, { color: colors.textPrimary }]}>
-                    "{rev.comment}"
-                  </Text>
-
-                  {rev.reportReason && (
-                    <Text style={[styles.flaggedReason, { color: colors.danger }]}>
-                      Flag reason: {rev.reportReason}
+                    {/* Description */}
+                    <Text
+                      style={{ fontSize: 13, color: colors.textSecondary, marginBottom: 10 }}
+                      numberOfLines={2}
+                    >
+                      {sub.description}
                     </Text>
-                  )}
 
-                  <View style={styles.reviewActionRow}>
-                    <Button
-                      title="Approve Review"
-                      variant="outline"
-                      size="sm"
-                      style={{ marginRight: 8 }}
-                      onPress={() => {
-                        moderateReview(rev.id, 'approved');
-                        setModerationReviews(getAllReviewsForModeration());
-                      }}
-                    />
-                    <Button
-                      title="Hide Review"
-                      variant="danger"
-                      size="sm"
-                      onPress={() => {
-                        moderateReview(rev.id, 'hidden');
-                        setModerationReviews(getAllReviewsForModeration());
-                      }}
-                    />
+                    {/* Stats */}
+                    <View style={{ flexDirection: 'row', gap: 16, marginBottom: 12 }}>
+                      {[
+                        { label: 'Servings', value: sub.servings },
+                        { label: 'Prep', value: `${sub.prepTimeMinutes}m` },
+                        { label: 'Cook', value: `${sub.cookTimeMinutes}m` },
+                        { label: 'Ingredients', value: sub.ingredients.length },
+                        { label: 'Steps', value: sub.recipeSteps.length },
+                      ].map(({ label, value }) => (
+                        <View key={label}>
+                          <Text style={{ fontSize: 11, color: colors.textMuted }}>{label}</Text>
+                          <Text
+                            style={{ fontSize: 13, fontWeight: '700', color: colors.textPrimary }}
+                          >
+                            {value}
+                          </Text>
+                        </View>
+                      ))}
+                    </View>
+
+                    {/* Admin actions */}
+                    {sub.submissionStatus === 'pending_review' ? (
+                      <TouchableOpacity
+                        testID={`admin-review-chef-btn-${sub.id}`}
+                        style={[
+                          {
+                            backgroundColor: colors.primary,
+                            borderRadius: radii.md,
+                            paddingVertical: 10,
+                            alignItems: 'center',
+                          },
+                        ]}
+                        onPress={() => {
+                          setSelectedChefSubmission(sub);
+                          setChefSubmissionModalVisible(true);
+                        }}
+                      >
+                        <Text style={{ color: '#fff', fontWeight: '700', fontSize: 14 }}>
+                          Review & Publish / Reject
+                        </Text>
+                      </TouchableOpacity>
+                    ) : (
+                      <TouchableOpacity
+                        testID={`admin-review-chef-btn-${sub.id}`}
+                        style={[
+                          {
+                            backgroundColor: colors.bgSubtle,
+                            borderColor: colors.borderLight,
+                            borderWidth: 1,
+                            borderRadius: radii.md,
+                            paddingVertical: 9,
+                            alignItems: 'center',
+                            marginTop: 6,
+                          },
+                        ]}
+                        onPress={() => {
+                          setSelectedChefSubmission(sub);
+                          setChefSubmissionModalVisible(true);
+                        }}
+                      >
+                        <Text
+                          style={{ color: colors.textPrimary, fontWeight: '700', fontSize: 13 }}
+                        >
+                          View Recipe Details & Quality Check →
+                        </Text>
+                      </TouchableOpacity>
+                    )}
+
+                    {/* Rejection notes */}
+                    {sub.submissionStatus === 'rejected' && sub.reviewNotes && (
+                      <View
+                        style={{
+                          backgroundColor: '#FEF2F2',
+                          borderRadius: radii.md,
+                          padding: 10,
+                          marginTop: 8,
+                        }}
+                      >
+                        <Text style={{ fontSize: 12, color: colors.danger }}>
+                          Rejected: {sub.reviewNotes}
+                        </Text>
+                      </View>
+                    )}
+
+                    {/* Published info */}
+                    {sub.submissionStatus === 'published' && (
+                      <View
+                        style={{
+                          backgroundColor: '#F0FDF4',
+                          borderRadius: radii.md,
+                          padding: 10,
+                          marginTop: 8,
+                        }}
+                      >
+                        <Text style={{ fontSize: 12, color: '#15803D' }}>
+                          Published at Rs. {sub.price ?? 'N/A'}
+                        </Text>
+                      </View>
+                    )}
                   </View>
+                ))
+              )}
+
+              {/* Review Submission Modal (Matches Chef Studio full authoring experience) */}
+              <Modal
+                visible={chefSubmissionModalVisible}
+                animationType="slide"
+                presentationStyle="fullScreen"
+                onRequestClose={() => {
+                  setChefSubmissionModalVisible(false);
+                  setSelectedChefSubmission(null);
+                }}
+              >
+                {selectedChefSubmission && (
+                  <ChefSubmissionApprovalView
+                    submission={selectedChefSubmission}
+                    isProcessing={isProcessingChefSubmission}
+                    onClose={() => {
+                      setChefSubmissionModalVisible(false);
+                      setSelectedChefSubmission(null);
+                    }}
+                    onReject={async (notes) => {
+                      if (!selectedChefSubmission) return;
+                      setIsProcessingChefSubmission(true);
+                      await rejectChefSubmission(selectedChefSubmission.id, notes);
+                      await reloadChefData();
+                      setIsProcessingChefSubmission(false);
+                      const subName = selectedChefSubmission.name;
+                      const cName = selectedChefSubmission.chefName;
+                      setChefSubmissionModalVisible(false);
+                      setSelectedChefSubmission(null);
+                      showInAppAlert(
+                        'Recipe Rejected',
+                        `"${subName}" has been rejected with feedback sent to ${cName}.`,
+                      );
+                    }}
+                    onPublish={async (
+                      pubPrice,
+                      storageCentres,
+                      cities,
+                      customRegions,
+                      subRegions,
+                    ) => {
+                      if (!selectedChefSubmission) return;
+                      setIsProcessingChefSubmission(true);
+                      const regions =
+                        customRegions && customRegions.length > 0
+                          ? customRegions
+                          : storageCentres.length > 0
+                            ? [
+                                ...new Set(
+                                  STORAGE_CENTRE_REGIONS.filter((r) =>
+                                    storageCentres.includes(r.id),
+                                  ).map((r) => r.zone),
+                                ),
+                              ]
+                            : ['North', 'South', 'West', 'East'];
+                      const res = await publishChefSubmission(
+                        selectedChefSubmission.id,
+                        pubPrice,
+                        regions,
+                        storageCentres,
+                        cities,
+                        undefined,
+                        subRegions,
+                      );
+                      if (res.kit) {
+                        addMealKit(res.kit as MealKit);
+                      }
+                      setKits(getMealKits());
+                      await reloadChefData();
+                      setIsProcessingChefSubmission(false);
+                      const subName = selectedChefSubmission.name;
+                      const cName = selectedChefSubmission.chefName;
+                      setChefSubmissionModalVisible(false);
+                      setSelectedChefSubmission(null);
+                      showInAppAlert(
+                        'Recipe Published',
+                        `"${subName}" by ${cName} is now live at Rs. ${pubPrice} and added to the meal kit database.`,
+                      );
+                    }}
+                  />
+                )}
+              </Modal>
+
+              {/* Grant Chef Role Modal */}
+              <Modal
+                visible={grantChefModalVisible}
+                animationType="slide"
+                presentationStyle="pageSheet"
+                onRequestClose={() => setGrantChefModalVisible(false)}
+              >
+                <View style={{ flex: 1, backgroundColor: colors.bgSurface, padding: 20 }}>
+                  <View
+                    style={{
+                      flexDirection: 'row',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      marginBottom: 20,
+                    }}
+                  >
+                    <Text style={{ fontSize: 18, fontWeight: '800', color: colors.textPrimary }}>
+                      Grant Chef Role
+                    </Text>
+                    <TouchableOpacity onPress={() => setGrantChefModalVisible(false)}>
+                      <Icon name="close" size={22} color={colors.textMuted} />
+                    </TouchableOpacity>
+                  </View>
+                  <Text
+                    style={{
+                      fontSize: 14,
+                      color: colors.textSecondary,
+                      marginBottom: 20,
+                      lineHeight: 22,
+                    }}
+                  >
+                    To grant the chef role, go to the Users tab and select a registered customer.
+                    Their account will be upgraded to a Chef and they will see the Chef Studio tab
+                    after their next login.
+                  </Text>
+                  {/* Users list to pick from */}
+                  {users.length === 0 ? (
+                    <Text style={{ color: colors.textMuted, fontSize: 13 }}>
+                      No registered customers found.
+                    </Text>
+                  ) : (
+                    users.map((u) => (
+                      <View
+                        key={u.id}
+                        style={{
+                          flexDirection: 'row',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          paddingVertical: 14,
+                          borderBottomWidth: 1,
+                          borderBottomColor: colors.borderLight,
+                        }}
+                      >
+                        <View>
+                          <Text
+                            style={{ fontSize: 14, fontWeight: '700', color: colors.textPrimary }}
+                          >
+                            {u.name}
+                          </Text>
+                          <Text style={{ fontSize: 12, color: colors.textMuted }}>{u.email}</Text>
+                        </View>
+                        <TouchableOpacity
+                          style={{
+                            backgroundColor: colors.primaryLight,
+                            borderRadius: radii.md,
+                            paddingHorizontal: 14,
+                            paddingVertical: 8,
+                          }}
+                          onPress={async () => {
+                            const result = await grantChefRole(
+                              u.id,
+                              u.email || '',
+                              u.name,
+                              user?.email || 'admin',
+                            );
+                            if (result.success) {
+                              reloadChefData();
+                              setGrantChefModalVisible(false);
+                              showInAppAlert(
+                                'Chef Role Granted',
+                                `${u.name} is now an approved chef. They will see the Chef Studio tab after their next login.`,
+                              );
+                            } else {
+                              Alert.alert('Error', result.error || 'Could not grant chef role.');
+                            }
+                          }}
+                        >
+                          <Text style={{ fontSize: 13, fontWeight: '700', color: colors.primary }}>
+                            Make Chef
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
+                    ))
+                  )}
                 </View>
-              ))
-            )}
-          </View>
-        )}
+              </Modal>
+            </View>
+          )}
 
-        {/* MODULE 9: WALLETS MANAGEMENT */}
-        {activeTab === 'wallets' && <AdminWalletsManagementView />}
+          {/* MODULE 8: REVIEWS MODERATION */}
+          {activeTab === 'reviews' && (
+            <View>
+              <View style={styles.moduleHeaderRow}>
+                <View>
+                  <Text style={[styles.moduleTitle, { color: colors.textPrimary }]}>
+                    Customer Reviews ({moderationReviews.length})
+                  </Text>
+                  <Text style={[styles.moduleSubtitle, { color: colors.textSecondary }]}>
+                    Moderation queue for meal kit ratings and feedback
+                  </Text>
+                </View>
+              </View>
 
-        {/* MODULE 10: REFERRALS ENGINE */}
-        {activeTab === 'referrals' && <AdminReferralsManagementView />}
-      </ScrollView>
+              {moderationReviews.length === 0 ? (
+                <View
+                  style={[
+                    styles.emptyStateCard,
+                    {
+                      backgroundColor: colors.bgSurface,
+                      borderColor: colors.borderLight,
+                      borderRadius: radii.xl,
+                    },
+                  ]}
+                >
+                  <Text style={[styles.emptyStateTitle, { color: colors.textPrimary }]}>
+                    No Pending Reviews
+                  </Text>
+                  <Text style={[styles.emptyStateSubtitle, { color: colors.textSecondary }]}>
+                    All customer reviews have been reviewed.
+                  </Text>
+                </View>
+              ) : (
+                moderationReviews.map((rev) => (
+                  <View
+                    key={rev.id}
+                    style={[
+                      styles.reviewModCard,
+                      {
+                        backgroundColor: colors.bgSurface,
+                        borderColor: rev.status === 'flagged' ? colors.danger : colors.borderLight,
+                        borderRadius: radii.xl,
+                        borderWidth: rev.status === 'flagged' ? 2 : 1,
+                        ...shadows.card,
+                      },
+                    ]}
+                  >
+                    <View style={styles.reviewModTop}>
+                      <View>
+                        <Text style={[styles.reviewKitName, { color: colors.textPrimary }]}>
+                          {rev.mealKitName}
+                        </Text>
+                        <View
+                          style={{
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            gap: 4,
+                            marginTop: 2,
+                          }}
+                        >
+                          <Text style={[styles.reviewAuthor, { color: colors.textSecondary }]}>
+                            {rev.userName} ({rev.userCity}) •
+                          </Text>
+                          <Icon name="star" size={12} color="#EAB308" />
+                          <Text style={[styles.reviewAuthor, { color: colors.textSecondary }]}>
+                            {rev.rating}
+                          </Text>
+                        </View>
+                      </View>
+                      <Badge
+                        label={rev.status.toUpperCase()}
+                        variant={
+                          rev.status === 'approved'
+                            ? 'success'
+                            : rev.status === 'flagged'
+                              ? 'warning'
+                              : 'danger'
+                        }
+                      />
+                    </View>
+
+                    <Text style={[styles.reviewCommentText, { color: colors.textPrimary }]}>
+                      "{rev.comment}"
+                    </Text>
+
+                    {rev.reportReason && (
+                      <Text style={[styles.flaggedReason, { color: colors.danger }]}>
+                        Flag reason: {rev.reportReason}
+                      </Text>
+                    )}
+
+                    <View style={styles.reviewActionRow}>
+                      <Button
+                        title="Approve Review"
+                        variant="outline"
+                        size="sm"
+                        style={{ marginRight: 8 }}
+                        onPress={() => {
+                          moderateReview(rev.id, 'approved');
+                          setModerationReviews(getAllReviewsForModeration());
+                        }}
+                      />
+                      <Button
+                        title="Hide Review"
+                        variant="danger"
+                        size="sm"
+                        onPress={() => {
+                          moderateReview(rev.id, 'hidden');
+                          setModerationReviews(getAllReviewsForModeration());
+                        }}
+                      />
+                    </View>
+                  </View>
+                ))
+              )}
+            </View>
+          )}
+
+          {/* MODULE 9: WALLETS MANAGEMENT */}
+          {activeTab === 'wallets' && <AdminWalletsManagementView />}
+
+          {/* MODULE 10: REFERRALS ENGINE */}
+          {activeTab === 'referrals' && <AdminReferralsManagementView />}
+        </ScrollView>
+      </View>
 
       {/* REFUND MODAL */}
       <Modal visible={refundModalVisible} transparent animationType="fade">
@@ -6143,7 +6379,7 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
                 onPress={() => setAdminFormRole('regional_admin')}
                 style={[
                   {
-                    borderRadius: radii.pill,
+                    borderRadius: radii.md,
                     borderWidth: 1,
                     backgroundColor:
                       adminFormRole === 'regional_admin' ? colors.primary : colors.bgSubtle,
@@ -6169,7 +6405,7 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
                 onPress={() => setAdminFormRole('super_admin')}
                 style={[
                   {
-                    borderRadius: radii.pill,
+                    borderRadius: radii.md,
                     borderWidth: 1,
                     backgroundColor: adminFormRole === 'super_admin' ? '#F59E0B' : colors.bgSubtle,
                     borderColor: adminFormRole === 'super_admin' ? '#F59E0B' : colors.borderLight,
@@ -6371,7 +6607,7 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
                               );
                             }}
                             style={{
-                              borderRadius: radii.pill,
+                              borderRadius: radii.md,
                               borderWidth: 1,
                               backgroundColor: isSelected ? colors.primary : colors.bgSubtle,
                               borderColor: isSelected ? colors.primary : colors.borderLight,
@@ -6679,6 +6915,80 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    height: '100%',
+  },
+  mainContentPane: {
+    flex: 1,
+    height: '100%',
+    minWidth: 0,
+    display: 'flex',
+    flexDirection: 'column',
+  },
+  desktopTopBar: {
+    minHeight: 64,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderBottomWidth: 1,
+    flexShrink: 0,
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  topBarTitleSection: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    flex: 1,
+    minWidth: 200,
+  },
+  mobileMenuToggleBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  topBarTitleCol: {
+    flex: 1,
+  },
+  desktopTopBarTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    letterSpacing: -0.2,
+  },
+  desktopTopBarSubtitle: {
+    fontSize: 12,
+    fontWeight: '500',
+    marginTop: 2,
+  },
+  topBarRightSection: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  resyncBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  resyncBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  mainScrollView: {
+    flex: 1,
+  },
+  desktopScrollContent: {
+    paddingHorizontal: 32,
+    paddingVertical: 24,
+    paddingBottom: 90,
   },
   header: {
     flexDirection: 'row',
@@ -6708,12 +7018,47 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
   },
+  adminBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 6,
+    borderWidth: 1,
+  },
+  adminBadgeText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  statusTabBar: {
+    flexDirection: 'row',
+    marginBottom: 14,
+    borderBottomWidth: 1,
+  },
+  statusTabsContent: {
+    flexDirection: 'row',
+    gap: 8,
+    paddingBottom: 4,
+  },
+  statusTabItem: {
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 6,
+    borderWidth: 1,
+  },
+  stateTab: {
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 6,
+    borderWidth: 1,
+    marginRight: 8,
+  },
   adminPill: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 10,
     paddingVertical: 5,
-    borderRadius: 16,
+    borderRadius: 6,
     borderWidth: 1,
   },
   adminPillText: {
@@ -6725,7 +7070,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 8,
     paddingVertical: 4,
-    borderRadius: 14,
+    borderRadius: 6,
     borderWidth: 1,
     gap: 5,
   },
