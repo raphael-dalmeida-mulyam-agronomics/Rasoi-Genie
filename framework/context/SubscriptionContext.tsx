@@ -293,6 +293,9 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
         createdBy: effectiveUserId,
       });
       if (res.success) {
+        if (res.subscription) {
+          setActiveSubscription(res.subscription);
+        }
         await refreshSubscription();
       }
       return res;

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   View,
   Text,
@@ -21,6 +21,7 @@ import {
   WEEKDAYS,
   DEFAULT_CUSTOM_PLAN_PRICE_PER_WEEK,
   calculateSubscriptionTotal,
+  calculateNextDeliveryInfo,
 } from '../../framework/services/subscriptionPlans';
 import { getMealKits, getMealKitById, MealKit } from '../../framework/services/mealKitsService';
 import { Badge } from '../../framework/ui/Badge';
@@ -192,11 +193,19 @@ export const SubscriptionPlanView: React.FC<{ onBack?: () => void }> = ({ onBack
     ]);
   };
 
+  // Intelligent Next Delivery Info with carry-over evaluation
+  const nextDeliveryInfo = useMemo(() => {
+    return calculateNextDeliveryInfo({
+      periodStart: activeSubscription?.period_start,
+      periodEnd: activeSubscription?.period_end,
+      nextRenewalAt: activeSubscription?.next_renewal_at,
+      pauses,
+    });
+  }, [activeSubscription, pauses]);
+
   // Next Monday date formatted
   const getNextMondayFormatted = () => {
-    const d = new Date();
-    d.setDate(d.getDate() + ((1 + 7 - d.getDay()) % 7 || 7));
-    return d.toLocaleDateString('en-IN', { month: 'short', day: 'numeric' });
+    return nextDeliveryInfo.formattedDate;
   };
 
   return (
@@ -275,11 +284,28 @@ export const SubscriptionPlanView: React.FC<{ onBack?: () => void }> = ({ onBack
               />
             </View>
 
-            <Text style={[styles.nextDeliveryText, { color: colors.textSecondary }]}>
+            <Text
+              style={[styles.nextDeliveryText, { color: colors.textPrimary, fontWeight: '700' }]}
+            >
               {activeSubscription.status === 'paused'
                 ? 'Weekly deliveries currently paused.'
-                : t.common.nextDeliveryNote(getNextMondayFormatted())}
+                : nextDeliveryInfo.deliveryNote}
             </Text>
+
+            {nextDeliveryInfo.resumesNote && (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 }}>
+                <Icon name="refresh" size={13} color={colors.primary} />
+                <Text style={{ fontSize: 12, fontWeight: '600', color: colors.primary }}>
+                  {nextDeliveryInfo.resumesNote}
+                </Text>
+              </View>
+            )}
+
+            {nextDeliveryInfo.periodSummaryNote && (
+              <Text style={{ fontSize: 11, color: colors.textSecondary, marginTop: 2 }}>
+                {nextDeliveryInfo.periodSummaryNote}
+              </Text>
+            )}
 
             <View style={[styles.subAutoRenewRow, { borderTopColor: colors.borderLight }]}>
               <View style={{ flex: 1, marginRight: 8 }}>

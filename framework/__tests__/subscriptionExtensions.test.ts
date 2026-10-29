@@ -8,6 +8,7 @@ import {
   STANDARD_SUBSCRIPTION_PLANS,
   groupDatesIntoRanges,
   validateHighlightedPauseDays,
+  calculateNextDeliveryInfo,
 } from '../services/subscriptionPlans';
 import {
   createAndActivateSubscription,
@@ -636,13 +637,109 @@ describe('Subscription Extensions Test Suite', () => {
         createdBy: 'user_carry_on',
       });
 
-      console.log('DEBUG pauseRes:', pauseRes);
       expect(pauseRes.success).toBe(true);
       expect(pauseRes.extendedPeriodEnd).toBeDefined();
 
       const newEnd = new Date(pauseRes.extendedPeriodEnd!).getTime();
       const diffDays = Math.round((newEnd - originalEnd) / (1000 * 60 * 60 * 24));
       expect(diffDays).toBe(2);
+    });
+  });
+
+  // ==========================================
+  // 8. Next Delivery Carry-Over Computation
+  // ==========================================
+  describe('calculateNextDeliveryInfo', () => {
+    it('returns the upcoming Monday when no pause exists', () => {
+      // Fixed Thursday 29 October 2026
+      const fixedNow = new Date(2026, 9, 29, 12, 0, 0); // 29 Oct 2026
+      const result = calculateNextDeliveryInfo({
+        periodStart: '2026-10-29',
+        periodEnd: '2026-11-05',
+        pauses: [],
+        now: fixedNow,
+      });
+
+      expect(result.dateStr).toBe('2026-11-02');
+      expect(result.formattedDate).toBe('2 Nov');
+      expect(result.dayOfWeek).toBe('Monday');
+      expect(result.isCarriedOver).toBe(false);
+      expect(result.carriedDaysCount).toBe(0);
+      expect(result.deliveryNote).toBe('Next Box: 2 Nov • Monday Morning Delivery');
+      expect(result.resumesNote).toBeUndefined();
+    });
+
+    it('carries over delivery to next Monday when upcoming Monday is paused (e.g. 31 Oct - 4 Nov paused)', () => {
+      // Thursday 29 October 2026
+      const fixedNow = new Date(2026, 9, 29, 12, 0, 0);
+      const result = calculateNextDeliveryInfo({
+        periodStart: '2026-10-29',
+        periodEnd: '2026-11-10',
+        pauses: [
+          {
+            startDate: '2026-10-31',
+            endDate: '2026-11-04',
+            daysCount: 5,
+          },
+        ],
+        now: fixedNow,
+      });
+
+      // Monday 2 Nov is inside the pause (31 Oct - 4 Nov), so carried over to 9 Nov
+      expect(result.dateStr).toBe('2026-11-09');
+      expect(result.formattedDate).toBe('9 Nov');
+      expect(result.isCarriedOver).toBe(true);
+      expect(result.carriedDaysCount).toBe(5);
+      expect(result.deliveryNote).toBe('Next Box: 9 Nov • Monday Morning Delivery (Carried Over)');
+      expect(result.resumesNote).toBe('Deliveries resume on 5 Nov • 5 skipped days carried over');
+      expect(result.periodSummaryNote).toBe(
+        'Current Period: 29 Oct – 10 Nov (5 skipped days carried over)',
+      );
+    });
+
+    it('keeps Monday delivery uncarried when pause is later in the week', () => {
+      const fixedNow = new Date(2026, 9, 29, 12, 0, 0); // 29 Oct 2026
+      const result = calculateNextDeliveryInfo({
+        periodStart: '2026-10-29',
+        periodEnd: '2026-11-07',
+        pauses: [
+          {
+            startDate: '2026-11-04',
+            endDate: '2026-11-05',
+            daysCount: 2,
+          },
+        ],
+        now: fixedNow,
+      });
+
+      // Monday 2 Nov is NOT paused
+      expect(result.dateStr).toBe('2026-11-02');
+      expect(result.formattedDate).toBe('2 Nov');
+      expect(result.isCarriedOver).toBe(true); // Total paused days > 0 marks carry-over active
+      expect(result.carriedDaysCount).toBe(2);
+      expect(result.deliveryNote).toBe('Next Box: 2 Nov • Monday Morning Delivery (Carried Over)');
+      expect(result.resumesNote).toBe('Deliveries resume on 6 Nov • 2 skipped days carried over');
+    });
+
+    it('handles multi-week pause spanning consecutive Mondays', () => {
+      const fixedNow = new Date(2026, 9, 29, 12, 0, 0); // 29 Oct
+      const result = calculateNextDeliveryInfo({
+        periodStart: '2026-10-29',
+        periodEnd: '2026-11-20',
+        pauses: [
+          {
+            startDate: '2026-11-01',
+            endDate: '2026-11-12', // covers 2 Nov and 9 Nov
+            daysCount: 12,
+          },
+        ],
+        now: fixedNow,
+      });
+
+      // 2 Nov and 9 Nov are paused, next unpaused is 16 Nov
+      expect(result.dateStr).toBe('2026-11-16');
+      expect(result.formattedDate).toBe('16 Nov');
+      expect(result.resumesNote).toBe('Deliveries resume on 13 Nov • 12 skipped days carried over');
     });
   });
 });

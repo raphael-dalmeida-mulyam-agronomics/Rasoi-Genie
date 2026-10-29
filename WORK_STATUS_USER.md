@@ -1,9 +1,9 @@
 # Daily Work Status Report — October 29, 2026
 
 **Project:** RasoiGenie  
-**Branch:** `feature/non-contiguous-pause-days-and-carry-on` (Merged to `main`)  
+**Branch:** `feature/subscription-delivery-carry-over-and-pause-fix` (Merged to `main`)  
 **Status:** Completed, Verified with Automated Test Suites & Merged to `main`  
-**Quality Gates:** 51/51 test suites passed (413/413 tests passed), TypeScript clean (`tsc --noEmit` 0 errors), ESLint clean (0 errors)
+**Quality Gates:** 51/51 test suites passed (417/417 tests passed), TypeScript clean (`tsc --noEmit` 0 errors), ESLint clean (0 errors)
 
 ---
 
@@ -167,10 +167,32 @@ Today's work centered on significantly expanding the RasoiGenie Weekly Meal Subs
   - `framework/__tests__/familyPermissions.test.ts`: **16/16 passed** (`manage_family_subscription` vs `view_own_subscription_plan`).
   - `framework/__tests__/subscriptionPlans.test.ts`: **5/5 passed**.
   - `framework/__tests__/subscriptionContext.test.tsx`: **7/7 passed**.
-  - Whole repository test suite: **51/51 test suites passed, 413/413 tests passed**.
+  - Whole repository test suite: **51/51 test suites passed, 417/417 tests passed**.
 - **Static Analysis & Linting**:
   - TypeScript compilation (`npx tsc --noEmit`): **0 errors, clean build**.
   - ESLint (`npm run lint`): **0 errors**.
 - **Documentation**:
   - Updated `docs/subscription.md` with Sections 8, 9, 10, and 11 detailing per-member plans, pause rules, the renewal state machine, and the admin view.
   - Documented today's work in `docs/work_status_report_2026-10-29.md` and `WORK_STATUS_USER.md`.
+
+---
+
+### 8. Intelligent Delivery Carry-Over Engine & Paused Calendar Cell Fix
+
+- **Dynamic Next Box Delivery Carry-Over (`calculateNextDeliveryInfo`)**:
+  - Addressed customer feedback where setting **31st October to 4th November** as paused still displayed `"Next Box: 2 Nov • Monday Morning Delivery"`.
+  - Replaced hardcoded upcoming calendar Monday calculations with pure function `calculateNextDeliveryInfo`:
+    - Checks whether the upcoming Monday falls inside any active pause period.
+    - If paused (such as Nov 2 falling between Oct 31 and Nov 4), advances delivery by 7 days to the first unpaused Monday (**9 Nov**), appending `(Carried Over)`.
+    - Computes resumed delivery date (`latestPauseEnd + 1 day`), rendering a clear note: `"Deliveries resume on 5 Nov • 5 skipped days carried over"`.
+    - Formats extended billing period bounds: `"Current Period: 29 Oct – 10 Nov (5 skipped days carried over)"`.
+  - Synchronized across both individual (`SubscriptionPlanView.tsx`) and family (`FamilySubscriptionView.tsx`) views.
+- **Family Calendar Paused Cell Feedback**:
+  - In `FamilySubscriptionView.tsx`, calendar cells on paused days now cleanly display `<Badge label="Paused" variant="warning" size="sm" />` instead of food thumbnails, preventing confusion about whether meals will be delivered on paused days.
+  - `mapMealsForDay` receives active pauses and the cell date, ensuring member meals are properly contextualized with their pause state.
+- **Immediate State Synchronization in `SubscriptionContext`**:
+  - `createSubscriptionPause` now returns the updated `subscription` entity containing the extended `period_end` and `next_renewal_at`.
+  - `SubscriptionContext.addPause` immediately invokes `setActiveSubscription(res.subscription)`, ensuring instantaneous UI updates.
+- **Automated Verification**:
+  - Added test suite for `calculateNextDeliveryInfo` to `framework/__tests__/subscriptionExtensions.test.ts` (33/33 tests passed).
+  - Validated edge cases: non-paused periods, Monday-paused periods with 7-day jumps, multi-week pauses spanning multiple Mondays, and mid-week pauses.

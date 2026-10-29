@@ -28,6 +28,7 @@ import {
   resolvePlanMealKits,
   isDateLockedForPause,
   isDatePaused,
+  calculateNextDeliveryInfo,
 } from '../../framework/services/subscriptionPlans';
 import { getMealKits, getMealKitById, MealKit } from '../../framework/services/mealKitsService';
 import { checkDietaryConflict } from '../../framework/family/dietaryConflicts';
@@ -234,6 +235,17 @@ export const FamilySubscriptionView: React.FC<{ onBack?: () => void }> = ({ onBa
   const coveredMembersList = useMemo(() => {
     return members.filter((m) => selectedMemberIds.includes(m.user_id));
   }, [members, selectedMemberIds]);
+
+  // Intelligent Next Delivery Info with carry-over evaluation
+  const nextDeliveryInfo = useMemo(() => {
+    return calculateNextDeliveryInfo({
+      periodStart: activeSubscription?.period_start,
+      periodEnd: activeSubscription?.period_end,
+      nextRenewalAt: activeSubscription?.next_renewal_at,
+      pauses,
+      now: todayDate,
+    });
+  }, [activeSubscription, pauses, todayDate]);
 
   // Month grid computation
   const monthGrid = useMemo(() => {
@@ -608,9 +620,7 @@ export const FamilySubscriptionView: React.FC<{ onBack?: () => void }> = ({ onBa
   };
 
   const getNextMondayFormatted = () => {
-    const d = new Date();
-    d.setDate(d.getDate() + ((1 + 7 - d.getDay()) % 7 || 7));
-    return d.toLocaleDateString('en-IN', { month: 'short', day: 'numeric' });
+    return nextDeliveryInfo.formattedDate;
   };
 
   if (!canView) {
@@ -1032,11 +1042,28 @@ export const FamilySubscriptionView: React.FC<{ onBack?: () => void }> = ({ onBa
               />
             </View>
 
-            <Text style={[styles.nextDeliveryText, { color: colors.textSecondary }]}>
+            <Text
+              style={[styles.nextDeliveryText, { color: colors.textPrimary, fontWeight: '700' }]}
+            >
               {activeSubscription.status === 'paused'
                 ? 'Deliveries paused. Resume anytime.'
-                : t.common.nextDeliveryNote(getNextMondayFormatted())}
+                : nextDeliveryInfo.deliveryNote}
             </Text>
+
+            {nextDeliveryInfo.resumesNote && (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 }}>
+                <Icon name="refresh" size={13} color={colors.primary} />
+                <Text style={{ fontSize: 12, fontWeight: '600', color: colors.primary }}>
+                  {nextDeliveryInfo.resumesNote}
+                </Text>
+              </View>
+            )}
+
+            {nextDeliveryInfo.periodSummaryNote && (
+              <Text style={{ fontSize: 11, color: colors.textSecondary, marginTop: 2 }}>
+                {nextDeliveryInfo.periodSummaryNote}
+              </Text>
+            )}
 
             {/* Auto-renew Section */}
             <View style={[styles.subAutoRenewRow, { borderTopColor: colors.borderLight }]}>
@@ -1466,6 +1493,13 @@ export const FamilySubscriptionView: React.FC<{ onBack?: () => void }> = ({ onBa
                         weekdayIndex: day.weekdayIndex,
                         getMealKitById,
                         filterToMemberId: isOwner ? null : user?.uid,
+                        pauses: pauses.map((p) => ({
+                          id: p.id,
+                          startDate: p.start_date.split('T')[0] ?? p.start_date,
+                          endDate: p.end_date.split('T')[0] ?? p.end_date,
+                          memberId: p.member_id,
+                        })),
+                        currentDate: day.date,
                       })
                     : {
                         allMemberMeals: [],
@@ -1536,46 +1570,52 @@ export const FamilySubscriptionView: React.FC<{ onBack?: () => void }> = ({ onBa
                         )}
                       </View>
 
-                      {/* Member Meal Thumbnails (Up to 3, +N chip) */}
-                      <View style={styles.cellThumbnailsRow}>
-                        {dayMeals.visibleMeals.map((item) => (
-                          <View
-                            key={`thumb-${item.member.user_id}-${day.dateStr}`}
-                            style={[styles.mealThumbWrap, { borderColor: colors.borderLight }]}
-                          >
-                            {item.kit?.heroImage ? (
-                              <Image
-                                source={{ uri: item.kit.heroImage }}
-                                style={styles.mealThumbImg}
-                              />
-                            ) : (
-                              <View
-                                style={[
-                                  styles.mealThumbPlaceholder,
-                                  { backgroundColor: colors.bgSubtle },
-                                ]}
-                              />
-                            )}
-                          </View>
-                        ))}
-                        {dayMeals.overflowCount > 0 && (
-                          <View
-                            style={[
-                              styles.overflowChip,
-                              {
-                                backgroundColor: colors.bgSubtle,
-                                borderColor: colors.borderLight,
-                              },
-                            ]}
-                          >
-                            <Text
-                              style={[styles.overflowChipText, { color: colors.textSecondary }]}
+                      {/* Paused state or Member Meal Thumbnails */}
+                      {day.isPaused ? (
+                        <View style={styles.cellPausedBadgeWrap}>
+                          <Badge label="Paused" variant="warning" size="sm" />
+                        </View>
+                      ) : (
+                        <View style={styles.cellThumbnailsRow}>
+                          {dayMeals.visibleMeals.map((item) => (
+                            <View
+                              key={`thumb-${item.member.user_id}-${day.dateStr}`}
+                              style={[styles.mealThumbWrap, { borderColor: colors.borderLight }]}
                             >
-                              +{dayMeals.overflowCount}
-                            </Text>
-                          </View>
-                        )}
-                      </View>
+                              {item.kit?.heroImage ? (
+                                <Image
+                                  source={{ uri: item.kit.heroImage }}
+                                  style={styles.mealThumbImg}
+                                />
+                              ) : (
+                                <View
+                                  style={[
+                                    styles.mealThumbPlaceholder,
+                                    { backgroundColor: colors.bgSubtle },
+                                  ]}
+                                />
+                              )}
+                            </View>
+                          ))}
+                          {dayMeals.overflowCount > 0 && (
+                            <View
+                              style={[
+                                styles.overflowChip,
+                                {
+                                  backgroundColor: colors.bgSubtle,
+                                  borderColor: colors.borderLight,
+                                },
+                              ]}
+                            >
+                              <Text
+                                style={[styles.overflowChipText, { color: colors.textSecondary }]}
+                              >
+                                +{dayMeals.overflowCount}
+                              </Text>
+                            </View>
+                          )}
+                        </View>
+                      )}
                     </TouchableOpacity>
                   );
                 })}
@@ -2158,6 +2198,11 @@ const styles = StyleSheet.create({
   cellClashIcon: {
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  cellPausedBadgeWrap: {
+    marginTop: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   cellThumbnailsRow: {
     flexDirection: 'row',

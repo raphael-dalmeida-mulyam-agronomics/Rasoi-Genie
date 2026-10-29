@@ -850,6 +850,7 @@ export interface CreateSubscriptionPauseInput {
 export async function createSubscriptionPause(input: CreateSubscriptionPauseInput): Promise<{
   success: boolean;
   pause?: SubscriptionPause;
+  subscription?: Subscription;
   extendedPeriodEnd?: string;
   error?: string;
 }> {
@@ -938,6 +939,7 @@ export async function createSubscriptionPause(input: CreateSubscriptionPauseInpu
     return {
       success: true,
       pause: createdPauses[0],
+      subscription: updatedSub,
       extendedPeriodEnd: newPeriodEnd,
     };
   }
@@ -1019,6 +1021,7 @@ export async function createSubscriptionPause(input: CreateSubscriptionPauseInpu
   return {
     success: true,
     pause: newPause,
+    subscription: updatedSub,
     extendedPeriodEnd: newPeriodEnd,
   };
 }

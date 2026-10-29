@@ -715,3 +715,155 @@ export function validateHighlightedPauseDays(
     ranges,
   };
 }
+
+export interface CalculateNextDeliveryParams {
+  periodStart?: string | null;
+  periodEnd?: string | null;
+  nextRenewalAt?: string | null;
+  pauses?: Array<{
+    startDate?: string;
+    endDate?: string;
+    start_date?: string;
+    end_date?: string;
+    memberId?: string | null;
+    member_id?: string | null;
+    daysCount?: number;
+    days_count?: number;
+  }>;
+  now?: Date | string;
+}
+
+export interface NextDeliveryInfo {
+  date: Date;
+  dateStr: string; // YYYY-MM-DD
+  formattedDate: string; // e.g. "9 Nov"
+  dayOfWeek: string; // e.g. "Monday"
+  isCarriedOver: boolean;
+  carriedDaysCount: number;
+  deliveryNote: string; // e.g. "Next Box: 9 Nov • Monday Morning Delivery (Carried Over)"
+  resumesNote?: string; // e.g. "Deliveries resume on 5 Nov • 5 skipped days carried over"
+  periodSummaryNote?: string; // e.g. "Current Period: 29 Oct – 10 Nov (5 skipped days carried over)"
+}
+
+/**
+ * Pure helper: Calculates the next active delivery date and carry-over details for a subscription.
+ * When scheduled delivery days (e.g. Monday box) are paused, automatically carries over to the next
+ * available delivery date (next week) and computes resumed delivery timing and extended period bounds.
+ */
+export function calculateNextDeliveryInfo(params: CalculateNextDeliveryParams): NextDeliveryInfo {
+  const nowObj = params.now ? new Date(params.now) : new Date();
+  const pauses = params.pauses || [];
+
+  // Helper to format Date to local YYYY-MM-DD without UTC day shifts
+  const toDateKey = (d: Date): string => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  };
+
+  // Helper: check if a given Date is covered by any pause
+  const isDateInPause = (d: Date): boolean => {
+    const dStr = toDateKey(d);
+    return pauses.some((p) => {
+      const rawS = p.startDate || p.start_date || '';
+      const rawE = p.endDate || p.end_date || '';
+      const s = rawS.split('T')[0] ?? rawS;
+      const e = rawE.split('T')[0] ?? rawE;
+      return dStr >= s && dStr <= e;
+    });
+  };
+
+  // 1. Calculate total paused days
+  const totalPausedDays = pauses.reduce((sum, p) => {
+    const count = p.daysCount ?? p.days_count;
+    if (typeof count === 'number' && count > 0) return sum + count;
+    const rawS = p.startDate || p.start_date;
+    const rawE = p.endDate || p.end_date;
+    if (!rawS || !rawE) return sum;
+    const s = new Date(rawS).getTime();
+    const e = new Date(rawE).getTime();
+    const days = Math.round((e - s) / (24 * 60 * 60 * 1000)) + 1;
+    return sum + Math.max(1, days);
+  }, 0);
+
+  // 2. Find the next calendar Monday
+  const nextMonday = new Date(nowObj);
+  nextMonday.setHours(0, 0, 0, 0);
+  const daysUntilMonday = (1 + 7 - nextMonday.getDay()) % 7 || 7;
+  nextMonday.setDate(nextMonday.getDate() + daysUntilMonday);
+
+  // 3. Check if upcoming Monday is paused; if so, advance to next unpaused Monday
+  let candidateDelivery = new Date(nextMonday);
+  let isCarriedOver = false;
+
+  while (isDateInPause(candidateDelivery)) {
+    isCarriedOver = true;
+    candidateDelivery.setDate(candidateDelivery.getDate() + 7);
+  }
+
+  if (totalPausedDays > 0) {
+    isCarriedOver = true;
+  }
+
+  const dateStr = toDateKey(candidateDelivery);
+  const formattedDate = candidateDelivery.toLocaleDateString('en-IN', {
+    month: 'short',
+    day: 'numeric',
+  });
+  const dayOfWeek = candidateDelivery.toLocaleDateString('en-IN', { weekday: 'long' });
+
+  // 4. Find when deliveries resume after the latest pause
+  let latestPauseEnd: string | null = null;
+  for (const p of pauses) {
+    const rawE = p.endDate || p.end_date;
+    if (!rawE) continue;
+    const eStr = rawE.split('T')[0] ?? rawE;
+    if (!latestPauseEnd || eStr > latestPauseEnd) {
+      latestPauseEnd = eStr;
+    }
+  }
+
+  let resumesNote: string | undefined = undefined;
+  if (latestPauseEnd) {
+    const resumeDate = new Date(latestPauseEnd);
+    resumeDate.setDate(resumeDate.getDate() + 1);
+    const resumeFormatted = resumeDate.toLocaleDateString('en-IN', {
+      month: 'short',
+      day: 'numeric',
+    });
+    resumesNote = `Deliveries resume on ${resumeFormatted} • ${totalPausedDays} skipped day${totalPausedDays > 1 ? 's' : ''} carried over`;
+  }
+
+  const deliveryNote = isCarriedOver
+    ? `Next Box: ${formattedDate} • ${dayOfWeek} Morning Delivery (Carried Over)`
+    : `Next Box: ${formattedDate} • ${dayOfWeek} Morning Delivery`;
+
+  let periodSummaryNote: string | undefined = undefined;
+  if (params.periodStart && params.periodEnd) {
+    const sDate = new Date(params.periodStart).toLocaleDateString('en-IN', {
+      month: 'short',
+      day: 'numeric',
+    });
+    const eDate = new Date(params.periodEnd).toLocaleDateString('en-IN', {
+      month: 'short',
+      day: 'numeric',
+    });
+    periodSummaryNote =
+      totalPausedDays > 0
+        ? `Current Period: ${sDate} – ${eDate} (${totalPausedDays} skipped day${totalPausedDays > 1 ? 's' : ''} carried over)`
+        : `Current Period: ${sDate} – ${eDate}`;
+  }
+
+  return {
+    date: candidateDelivery,
+    dateStr,
+    formattedDate,
+    dayOfWeek,
+    isCarriedOver,
+    carriedDaysCount: totalPausedDays,
+    deliveryNote,
+    resumesNote,
+    periodSummaryNote,
+  };
+}
