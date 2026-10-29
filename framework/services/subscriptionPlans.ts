@@ -354,6 +354,22 @@ export interface PauseDateRange {
   daysCount?: number;
 }
 
+export interface ValidateHighlightedPauseDaysParams {
+  dates: string[];
+  existingPauses?: PauseDateRange[];
+  periodStart: string | Date;
+  periodEnd: string | Date;
+  now?: string | Date;
+  memberId?: string | null;
+}
+
+export interface ValidateHighlightedPauseDaysResult {
+  valid: boolean;
+  daysCount: number;
+  ranges: { startDate: string; endDate: string; daysCount: number }[];
+  error?: string;
+}
+
 export interface ValidatePauseSelectionParams {
   startDate: string | Date;
   endDate: string | Date;
@@ -571,4 +587,131 @@ export function calculateExtendedPeriodEnd(
 ): Date {
   const d = new Date(currentPeriodEnd);
   return new Date(d.getTime() + pausedDays * 24 * 60 * 60 * 1000);
+}
+
+/**
+ * Pure function: Groups a list of date strings (YYYY-MM-DD) into contiguous ranges.
+ * Non-contiguous dates become separate ranges.
+ */
+export function groupDatesIntoRanges(
+  dates: string[],
+): { startDate: string; endDate: string; daysCount: number }[] {
+  if (!dates || dates.length === 0) return [];
+
+  // Sort unique dates chronologically
+  const uniqueDates: string[] = Array.from(new Set(dates.map((d) => d.split('T')[0] ?? d))).sort();
+  const ranges: { startDate: string; endDate: string; daysCount: number }[] = [];
+
+  let rangeStart = uniqueDates[0]!;
+  let rangeEnd = uniqueDates[0]!;
+  let count = 1;
+
+  for (let i = 1; i < uniqueDates.length; i++) {
+    const prevDate = new Date(rangeEnd);
+    const currDate = new Date(uniqueDates[i]!);
+    const diffDays = Math.round((currDate.getTime() - prevDate.getTime()) / (1000 * 60 * 60 * 24));
+
+    if (diffDays === 1) {
+      rangeEnd = uniqueDates[i]!;
+      count++;
+    } else {
+      ranges.push({ startDate: rangeStart, endDate: rangeEnd, daysCount: count });
+      rangeStart = uniqueDates[i]!;
+      rangeEnd = uniqueDates[i]!;
+      count = 1;
+    }
+  }
+
+  ranges.push({ startDate: rangeStart, endDate: rangeEnd, daysCount: count });
+  return ranges;
+}
+
+/**
+ * Pure function: validates an arbitrary set of highlighted delivery dates to skip
+ * (supporting non-contiguous dates) and computes the resulting pause ranges and period extension.
+ */
+export function validateHighlightedPauseDays(
+  params: ValidateHighlightedPauseDaysParams,
+): ValidateHighlightedPauseDaysResult {
+  if (!params.dates || params.dates.length === 0) {
+    return {
+      valid: false,
+      daysCount: 0,
+      ranges: [],
+      error: 'Please highlight at least one delivery day to skip',
+    };
+  }
+
+  const uniqueDates: string[] = Array.from(
+    new Set(params.dates.map((d) => d.split('T')[0] ?? d)),
+  ).sort();
+  const periodStart = normalizeToDate(params.periodStart);
+  const periodEnd = normalizeToDate(params.periodEnd);
+  const now = params.now ? new Date(params.now) : new Date();
+
+  // Validate each highlighted date
+  for (const dateStr of uniqueDates) {
+    const d = normalizeToDate(dateStr);
+
+    // 1. Cutoff window check (48h) & past days
+    if (isDateLockedForPause(d, now)) {
+      return {
+        valid: false,
+        daysCount: uniqueDates.length,
+        ranges: [],
+        error: `Cannot skip ${dateStr} as it is within the 48-hour delivery packing cutoff window or in the past`,
+      };
+    }
+
+    // 2. Must fall inside current period
+    if (d < periodStart || d > periodEnd) {
+      return {
+        valid: false,
+        daysCount: uniqueDates.length,
+        ranges: [],
+        error: `Skipped day ${dateStr} must fall inside the current billing period`,
+      };
+    }
+
+    // 3. Overlap check with existing pauses
+    if (isDatePaused(d, params.existingPauses, params.memberId)) {
+      return {
+        valid: false,
+        daysCount: uniqueDates.length,
+        ranges: [],
+        error: `Date ${dateStr} is already covered by an existing pause`,
+      };
+    }
+  }
+
+  // 4. Max total days check (14 days)
+  const existingDaysTotal = (params.existingPauses || []).reduce((sum, p) => {
+    const pStart = normalizeToDate(p.startDate);
+    const pEnd = normalizeToDate(p.endDate);
+    return sum + (Math.round((pEnd.getTime() - pStart.getTime()) / (1000 * 60 * 60 * 24)) + 1);
+  }, 0);
+
+  if (
+    existingDaysTotal + uniqueDates.length >
+    SUBSCRIPTION_PAUSE_CONFIG.MAX_PAUSED_DAYS_PER_PERIOD
+  ) {
+    const remaining = Math.max(
+      0,
+      SUBSCRIPTION_PAUSE_CONFIG.MAX_PAUSED_DAYS_PER_PERIOD - existingDaysTotal,
+    );
+    return {
+      valid: false,
+      daysCount: uniqueDates.length,
+      ranges: [],
+      error: `Skipping ${uniqueDates.length} days exceeds remaining allowance. You have ${remaining} of ${SUBSCRIPTION_PAUSE_CONFIG.MAX_PAUSED_DAYS_PER_PERIOD} paused days left`,
+    };
+  }
+
+  const ranges = groupDatesIntoRanges(uniqueDates);
+
+  return {
+    valid: true,
+    daysCount: uniqueDates.length,
+    ranges,
+  };
 }

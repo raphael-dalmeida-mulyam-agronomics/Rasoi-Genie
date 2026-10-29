@@ -742,8 +742,8 @@ export const SubscriptionPlanView: React.FC<{ onBack?: () => void }> = ({ onBack
           ]}
           pauses={pauses}
           isOwner={true}
-          onSavePause={async ({ startDate, endDate, memberId }) => {
-            return await addPause({ startDate, endDate, memberId });
+          onSavePause={async (input) => {
+            return await addPause(input);
           }}
         />
       )}

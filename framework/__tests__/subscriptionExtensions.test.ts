@@ -6,6 +6,8 @@ import {
   calculateRemainingPauseAllowance,
   isDateLockedForPause,
   STANDARD_SUBSCRIPTION_PLANS,
+  groupDatesIntoRanges,
+  validateHighlightedPauseDays,
 } from '../services/subscriptionPlans';
 import {
   createAndActivateSubscription,
@@ -447,6 +449,7 @@ describe('Subscription Extensions Test Suite', () => {
         standardPlanKey: 'high-protein',
         amountPaid: 1299,
         autoRenew: true,
+        weeks: 4,
         members: [{ id: 'me', name: 'Me', isDependent: false }],
       });
 
@@ -535,6 +538,111 @@ describe('Subscription Extensions Test Suite', () => {
       expect(can('member', 'view_own_subscription_plan')).toBe(true);
       expect(can('dependent', 'view_own_subscription_plan')).toBe(true);
       expect(can(null, 'view_own_subscription_plan')).toBe(false);
+    });
+  });
+
+  // ==========================================
+  // 7. Non-Contiguous Highlighted Day Pauses & Period Carry-On
+  // ==========================================
+  describe('Non-contiguous highlighted pause days & carry-on', () => {
+    it('groups non-contiguous, contiguous, and mixed dates into correct ranges', () => {
+      // Contiguous
+      const r1 = groupDatesIntoRanges(['2026-11-05', '2026-11-06', '2026-11-07']);
+      expect(r1).toEqual([{ startDate: '2026-11-05', endDate: '2026-11-07', daysCount: 3 }]);
+
+      // Non-contiguous
+      const r2 = groupDatesIntoRanges(['2026-11-05', '2026-11-08', '2026-11-12']);
+      expect(r2).toEqual([
+        { startDate: '2026-11-05', endDate: '2026-11-05', daysCount: 1 },
+        { startDate: '2026-11-08', endDate: '2026-11-08', daysCount: 1 },
+        { startDate: '2026-11-12', endDate: '2026-11-12', daysCount: 1 },
+      ]);
+
+      // Mixed
+      const r3 = groupDatesIntoRanges([
+        '2026-11-05',
+        '2026-11-06',
+        '2026-11-09',
+        '2026-11-10',
+        '2026-11-14',
+      ]);
+      expect(r3).toEqual([
+        { startDate: '2026-11-05', endDate: '2026-11-06', daysCount: 2 },
+        { startDate: '2026-11-09', endDate: '2026-11-10', daysCount: 2 },
+        { startDate: '2026-11-14', endDate: '2026-11-14', daysCount: 1 },
+      ]);
+    });
+
+    it('validates arbitrary non-contiguous days within allowance and inside period', () => {
+      const res = validateHighlightedPauseDays({
+        dates: ['2026-11-05', '2026-11-08', '2026-11-11'],
+        periodStart: '2026-11-01',
+        periodEnd: '2026-11-30',
+        now: '2026-11-01T00:00:00Z',
+      });
+
+      expect(res.valid).toBe(true);
+      expect(res.daysCount).toBe(3);
+      expect(res.ranges).toHaveLength(3);
+    });
+
+    it('rejects dates in the past or within 48h cutoff window', () => {
+      const now = '2026-11-05T00:00:00Z'; // 48h cutoff -> 2026-11-07
+      const res = validateHighlightedPauseDays({
+        dates: ['2026-11-06', '2026-11-10'],
+        periodStart: '2026-11-01',
+        periodEnd: '2026-11-30',
+        now,
+      });
+
+      expect(res.valid).toBe(false);
+      expect(res.error).toContain('within the 48-hour delivery packing cutoff window');
+    });
+
+    it('rejects dates outside current billing period', () => {
+      const res = validateHighlightedPauseDays({
+        dates: ['2026-11-05', '2026-12-05'],
+        periodStart: '2026-11-01',
+        periodEnd: '2026-11-30',
+        now: '2026-11-01T00:00:00Z',
+      });
+
+      expect(res.valid).toBe(false);
+      expect(res.error).toContain('must fall inside the current billing period');
+    });
+
+    it('creates pause records and extends subscription period to carry on skipped kits', async () => {
+      const subRes = await createAndActivateSubscription({
+        ownerUserId: 'user_carry_on',
+        scope: 'individual',
+        planType: 'standard',
+        standardPlanKey: 'high-protein',
+        amountPaid: 1299,
+        autoRenew: true,
+        members: [{ id: 'me', name: 'Me', isDependent: false }],
+      });
+      const sub = subRes.subscription!;
+      const originalEnd = new Date(sub.period_end).getTime();
+
+      // Select 2 non-contiguous days inside the 7-day period (e.g. day 3 and day 5 after cutoff)
+      const baseTime = new Date(sub.period_start).getTime();
+      const d1 = new Date(baseTime + 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]!;
+      const d2 = new Date(baseTime + 5 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]!;
+
+      const datesToSkip = [d1, d2];
+      const pauseRes = await createSubscriptionPause({
+        subscriptionId: sub.id,
+        dates: datesToSkip,
+        createdBy: 'user_carry_on',
+      });
+
+      console.log('DEBUG pauseRes:', pauseRes);
+      expect(pauseRes.success).toBe(true);
+      expect(pauseRes.extendedPeriodEnd).toBeDefined();
+
+      const newEnd = new Date(pauseRes.extendedPeriodEnd!).getTime();
+      const diffDays = Math.round((newEnd - originalEnd) / (1000 * 60 * 60 * 24));
+      expect(diffDays).toBe(2);
     });
   });
 });

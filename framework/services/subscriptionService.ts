@@ -22,6 +22,7 @@ import {
   SubscriptionScope,
   SubscriptionStatus,
   validatePauseSelection,
+  validateHighlightedPauseDays,
 } from './subscriptionPlans';
 
 export interface Subscription {
@@ -281,6 +282,7 @@ export interface CreateSubscriptionInput {
   paymentReference?: string;
   autoRenew?: boolean;
   region?: string;
+  weeks?: number;
 }
 
 /**
@@ -324,7 +326,8 @@ export async function createAndActivateSubscription(input: CreateSubscriptionInp
 
   const subId = `sub_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
   const now = new Date();
-  const periodEnd = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+  const numWeeks = input.weeks && input.weeks > 0 ? input.weeks : 1;
+  const periodEnd = new Date(now.getTime() + numWeeks * 7 * 24 * 60 * 60 * 1000);
 
   const newSubscription: Subscription = {
     id: subId,
@@ -831,8 +834,9 @@ export async function fetchSubscriptionPauses(
 
 export interface CreateSubscriptionPauseInput {
   subscriptionId: string;
-  startDate: string; // YYYY-MM-DD
-  endDate: string; // YYYY-MM-DD
+  startDate?: string; // YYYY-MM-DD
+  endDate?: string; // YYYY-MM-DD
+  dates?: string[]; // Array of highlighted dates YYYY-MM-DD (can be non-contiguous)
   memberId?: string | null;
   createdBy: string;
   now?: Date;
@@ -857,6 +861,93 @@ export async function createSubscriptionPause(input: CreateSubscriptionPauseInpu
 
   // Fetch existing pauses for this subscription
   const existingPauses = inMemoryPauses.filter((p) => p.subscription_id === input.subscriptionId);
+
+  // 1. If explicit list of highlighted dates provided (supporting non-contiguous dates)
+  if (input.dates && input.dates.length > 0) {
+    const validation = validateHighlightedPauseDays({
+      dates: input.dates,
+      existingPauses: existingPauses.map((p) => ({
+        startDate: p.start_date,
+        endDate: p.end_date,
+        daysCount: p.days_count,
+        memberId: p.member_id,
+      })),
+      periodStart: sub.period_start,
+      periodEnd: sub.period_end,
+      now: input.now,
+      memberId: input.memberId,
+    });
+
+    if (!validation.valid) {
+      return { success: false, error: validation.error };
+    }
+
+    const createdPauses: SubscriptionPause[] = [];
+    for (const range of validation.ranges) {
+      const pauseId = `spause_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+      const newPause: SubscriptionPause = {
+        id: pauseId,
+        subscription_id: input.subscriptionId,
+        member_id: input.memberId || null,
+        start_date: range.startDate,
+        end_date: range.endDate,
+        days_count: range.daysCount,
+        created_by: input.createdBy,
+        created_at: new Date().toISOString(),
+      };
+      createdPauses.push(newPause);
+    }
+
+    // Upfront-payment policy: extend the period end date so skipped days carry on
+    const newPeriodEnd = calculateExtendedPeriodEnd(
+      sub.period_end,
+      validation.daysCount,
+    ).toISOString();
+    const nextRenewal = sub.next_renewal_at
+      ? calculateExtendedPeriodEnd(sub.next_renewal_at, validation.daysCount).toISOString()
+      : newPeriodEnd;
+
+    const updatedSub: Subscription = {
+      ...sub,
+      period_end: newPeriodEnd,
+      next_renewal_at: nextRenewal,
+      updated_at: new Date().toISOString(),
+    };
+
+    if (isSupabaseLive()) {
+      try {
+        const supabase = getSupabaseClient();
+        await supabase.from('subscription_pauses').insert(createdPauses);
+        await supabase
+          .from('subscriptions')
+          .update({
+            period_end: newPeriodEnd,
+            next_renewal_at: nextRenewal,
+            updated_at: updatedSub.updated_at,
+          })
+          .eq('id', sub.id);
+      } catch {
+        // Fallback
+      }
+    }
+
+    inMemorySubs = inMemorySubs.map((s) => (s.id === sub.id ? updatedSub : s));
+    inMemoryPauses.push(...createdPauses);
+    await saveLocalStores();
+
+    return {
+      success: true,
+      pause: createdPauses[0],
+      extendedPeriodEnd: newPeriodEnd,
+    };
+  }
+
+  if (!input.startDate || !input.endDate) {
+    return {
+      success: false,
+      error: 'Start and end dates or a list of highlighted dates are required',
+    };
+  }
 
   // Validate limits using pure evaluator
   const validation = validatePauseSelection({

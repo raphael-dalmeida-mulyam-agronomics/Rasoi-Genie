@@ -1,9 +1,9 @@
 # Daily Work Status Report — October 29, 2026
 
 **Project:** RasoiGenie  
-**Branch:** `feature/family-weekly-meal-plan-calendar-redesign` (Merged to `main`)  
+**Branch:** `feature/non-contiguous-pause-days-and-carry-on` (Merged to `main`)  
 **Status:** Completed, Verified with Automated Test Suites & Merged to `main`  
-**Quality Gates:** 50/50 test suites passed (407/407 tests passed), TypeScript clean (`tsc --noEmit` 0 errors), ESLint clean (0 errors)
+**Quality Gates:** 50/50 test suites passed (412/412 tests passed), TypeScript clean (`tsc --noEmit` 0 errors), ESLint clean (0 errors)
 
 ---
 
@@ -37,27 +37,30 @@ Today's work centered on significantly expanding the RasoiGenie Weekly Meal Subs
 
 ---
 
-### 2. Full-Month Interactive Pause Calendar Popup
+### 2. Full-Month Interactive Pause Calendar Popup & Carry-On Delivery System
 
 - **Entire Month Calendar View**:
   - Upgraded `features/subscription/SubscriptionPauseCalendarModal.tsx` (`Modal` on web, `BottomSheet` on mobile) from a 7-day strip to a full-month interactive calendar.
   - Added month navigation controls (`<` previous month, `>` next month, and month/year label).
+- **Non-Contiguous Day Highlighting (Replaced Start/End Selection)**:
+  - Replaced rigid range start/end date pickers with arbitrary day highlighting: customers can simply tap to highlight any days they do not want meal kits delivered, even if those days are scattered and non-contiguous.
+  - Tapping an active, non-locked day toggles its highlighted state (`selectedDates`), rendered in high-contrast primary tokens with a `"Skip"` tag.
+  - Visual legend updated to include _"Highlighted to Skip"_ alongside _Active Box_, _Paused_, and _Locked_.
+- **Automatic Period Carry-On (Make-Up Deliveries)**:
+  - Any days where meal kits are skipped carry on so no meals are lost: the subscription period end date (`period_end`) and next renewal timestamp (`next_renewal_at`) are automatically extended by the exact number of skipped days via `calculateExtendedPeriodEnd`.
+  - Added a dedicated Carry-On Summary Card inside the popup detailing the exact number of skipped kits and confirming: _"Your subscription carries on! We extend your period by +N days to make up for skipped kits."_
+  - Primary button dynamically displays `"Skip N Days & Carry On"` and dispatches all highlighted dates.
+- **Pure Clustering & Dual-Enforced Validation**:
+  - Implemented `groupDatesIntoRanges(dates: string[])` to cluster arbitrary non-contiguous dates into contiguous ranges `{ startDate, endDate, daysCount }`, preserving schema compatibility with the `subscription_pauses` table.
+  - Implemented `validateHighlightedPauseDays`:
+    1. Rejects dates in the past or within the 48-hour delivery cutoff window (`CUTOFF_WINDOW_HOURS = 48`).
+    2. Ensures all skipped dates fall strictly inside active billing period boundaries (`period_start` to `period_end`).
+    3. Prevents collisions with already paused days.
+    4. Enforces the 14-day cumulative pause allowance (`MAX_PAUSED_DAYS_PER_PERIOD = 14`).
 - **Active Subscription Day Highlighting**:
   - Days covered by the user's active billing period (`period_start` to `period_end`) are highlighted with a distinct background (`colors.bgSuccessSubtle`), border (`colors.success`), text (`colors.textSuccess`), and active indicator badge.
-  - Paused days feature warning badges (`colors.bgWarningSubtle`, border `colors.warning`, `"Paused"` label).
+  - Paused days feature warning badges (`colors.bgWarningSubtle`, border (`colors.warning`), `"Paused"` label).
   - Days in the past or within the 48-hour delivery cutoff window are locked and disabled with a lock icon.
-  - Included a clean visual legend (_Active Box_, _Paused_, _Selected_, _Locked_).
-- **Dual-Enforced Pause Limits**:
-  - Centralized all business rules in `framework/subscription/subscriptionConfig.ts` (`SUBSCRIPTION_PAUSE_CONFIG`):
-    1. Maximum 14 paused days per billing period (`MAX_PAUSED_DAYS_PER_PERIOD = 14`).
-    2. Maximum 2 separate pause ranges per period (`MAX_PAUSE_RANGES_PER_PERIOD = 2`).
-    3. Maximum 7 consecutive days per single pause (`MAX_CONSECUTIVE_PAUSE_DAYS = 7`).
-    4. 48-hour delivery cutoff window (`CUTOFF_WINDOW_HOURS = 48`) and past-day lock.
-    5. Paused days must fall within the current billing period boundaries.
-  - Validated client-side via `validatePauseSelection` and enforced in PostgreSQL via the database trigger `fn_validate_and_apply_subscription_pause`.
-  - Added dynamic allowance badges (_"10 of 14 paused days left"_, _"1 of 2 pause windows left"_) that block over-limit selections.
-- **Upfront-Payment Period Extension Policy**:
-  - When a pause is confirmed, the period end date is extended by the paused days (`calculateExtendedPeriodEnd`), ensuring full value for upfront payments without micro-refund friction. Documented in `docs/subscription.md`.
   - Created `subscription_pauses` table with RLS, Data API grants, and pgTAP regression tests.
 
 ---
@@ -158,11 +161,11 @@ Today's work centered on significantly expanding the RasoiGenie Weekly Meal Subs
 - **Automated Test Results**:
   - `framework/__tests__/familyMealPlanCalendarHelpers.test.ts`: **14/14 passed** (pure calendar helpers, leap years, overflow, clash detection, member-specific pause evaluations).
   - `framework/__tests__/familySubscriptionDietaryConflictModal.test.tsx`: **1/1 passed** (month grid day popup & swap dismissal).
-  - `framework/__tests__/subscriptionExtensions.test.ts`: **24/24 passed** (per-member pricing, same-plan copy, 5 pause limits, period extension, renewal state machine, idempotency, family permissions).
+  - ramework/**tests**/subscriptionExtensions.test.ts: **29/29 passed** (per-member pricing, same-plan copy, 5 pause limits, period extension, renewal state machine, idempotency, family permissions, and non-contiguous pause highlighting & period carry-on).
   - `framework/__tests__/familyPermissions.test.ts`: **16/16 passed** (`manage_family_subscription` vs `view_own_subscription_plan`).
   - `framework/__tests__/subscriptionPlans.test.ts`: **5/5 passed**.
   - `framework/__tests__/subscriptionContext.test.tsx`: **7/7 passed**.
-  - Whole repository test suite: **50/50 test suites passed, 407/407 tests passed**.
+  - Whole repository test suite: **50/50 test suites passed, 412/412 tests passed**.
 - **Static Analysis & Linting**:
   - TypeScript compilation (`npx tsc --noEmit`): **0 errors, clean build**.
   - ESLint (`npm run lint`): **0 errors**.

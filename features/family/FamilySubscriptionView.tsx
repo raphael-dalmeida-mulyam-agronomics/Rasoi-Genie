@@ -1894,8 +1894,8 @@ export const FamilySubscriptionView: React.FC<{ onBack?: () => void }> = ({ onBa
           isFamily={true}
           isOwner={isOwner}
           pauses={pauses}
-          onSavePause={async ({ startDate, endDate, memberId }) => {
-            return await addPause({ startDate, endDate, memberId });
+          onSavePause={async (input) => {
+            return await addPause(input);
           }}
         />
       )}

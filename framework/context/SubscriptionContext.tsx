@@ -55,8 +55,9 @@ export interface SubscriptionContextValue {
     standardPlanKey?: StandardPlanKey | null,
   ) => Promise<{ success: boolean; error?: string }>;
   addPause: (input: {
-    startDate: string;
-    endDate: string;
+    startDate?: string;
+    endDate?: string;
+    dates?: string[];
     memberId?: string | null;
   }) => Promise<{ success: boolean; pause?: SubscriptionPause; error?: string }>;
   removePause: (pauseId: string) => Promise<{ success: boolean; error?: string }>;
@@ -274,7 +275,12 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
   );
 
   const addPause = useCallback(
-    async (input: { startDate: string; endDate: string; memberId?: string | null }) => {
+    async (input: {
+      startDate?: string;
+      endDate?: string;
+      dates?: string[];
+      memberId?: string | null;
+    }) => {
       if (!activeSubscription || !effectiveUserId) {
         return { success: false, error: 'No active subscription' };
       }
@@ -282,6 +288,7 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
         subscriptionId: activeSubscription.id,
         startDate: input.startDate,
         endDate: input.endDate,
+        dates: input.dates,
         memberId: input.memberId || null,
         createdBy: effectiveUserId,
       });

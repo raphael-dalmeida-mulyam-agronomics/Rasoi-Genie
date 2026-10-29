@@ -21,6 +21,7 @@ import {
   isDateLockedForPause,
   isDatePaused,
   validatePauseSelection,
+  validateHighlightedPauseDays,
 } from '../../framework/services/subscriptionPlans';
 import { Subscription, SubscriptionPause } from '../../framework/services/subscriptionService';
 
@@ -33,8 +34,9 @@ export interface SubscriptionPauseCalendarModalProps {
   isOwner?: boolean;
   pauses: SubscriptionPause[];
   onSavePause: (input: {
-    startDate: string;
-    endDate: string;
+    startDate?: string;
+    endDate?: string;
+    dates?: string[];
     memberId?: string | null;
   }) => Promise<{ success: boolean; error?: string }>;
 }
@@ -55,8 +57,7 @@ export const SubscriptionPauseCalendarModal: React.FC<SubscriptionPauseCalendarM
   const t = subscriptionStrings.pauseCalendar;
 
   const [selectedMemberId, setSelectedMemberId] = useState<string | null>(null);
-  const [selectedStartDate, setSelectedStartDate] = useState<string | null>(null);
-  const [selectedEndDate, setSelectedEndDate] = useState<string | null>(null);
+  const [selectedDates, setSelectedDates] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -190,44 +191,50 @@ export const SubscriptionPauseCalendarModal: React.FC<SubscriptionPauseCalendarM
     if (
       isDatePaused(
         day,
-        pauses.map((p) => ({ startDate: p.start_date, endDate: p.end_date })),
+        pauses.map((p) => ({
+          startDate: p.start_date,
+          endDate: p.end_date,
+          memberId: p.member_id,
+        })),
+        selectedMemberId,
       )
     ) {
-      setErrorMessage('This date is already covered by an existing pause window.');
+      setErrorMessage('This date is already covered by an existing pause.');
       return;
     }
 
-    if (!selectedStartDate || (selectedStartDate && selectedEndDate)) {
-      setSelectedStartDate(dateStr);
-      setSelectedEndDate(null);
-    } else {
-      if (dateStr < selectedStartDate) {
-        setSelectedStartDate(dateStr);
-        setSelectedEndDate(null);
+    setSelectedDates((prev) => {
+      if (prev.includes(dateStr)) {
+        return prev.filter((d) => d !== dateStr);
       } else {
-        setSelectedEndDate(dateStr);
+        if (prev.length >= allowance.daysRemaining) {
+          setErrorMessage(
+            `Pause allowance reached. You have ${allowance.daysRemaining} days left in your allowance.`,
+          );
+          return prev;
+        }
+        return [...prev, dateStr].sort();
       }
-    }
+    });
   };
 
   const handleSave = async () => {
-    if (!selectedStartDate) {
-      setErrorMessage('Please select a start date for the pause window.');
+    if (selectedDates.length === 0) {
+      setErrorMessage('Please highlight at least one day to skip.');
       return;
     }
 
-    const endDate = selectedEndDate || selectedStartDate;
-
-    const validation = validatePauseSelection({
-      startDate: selectedStartDate,
-      endDate,
+    const validation = validateHighlightedPauseDays({
+      dates: selectedDates,
       existingPauses: pauses.map((p) => ({
         startDate: p.start_date,
         endDate: p.end_date,
         daysCount: p.days_count,
+        memberId: p.member_id,
       })),
       periodStart: subscription.period_start,
       periodEnd: subscription.period_end,
+      memberId: selectedMemberId,
     });
 
     if (!validation.valid) {
@@ -239,19 +246,19 @@ export const SubscriptionPauseCalendarModal: React.FC<SubscriptionPauseCalendarM
     setErrorMessage(null);
 
     const res = await onSavePause({
-      startDate: selectedStartDate,
-      endDate,
+      dates: selectedDates,
+      startDate: selectedDates[0],
+      endDate: selectedDates[selectedDates.length - 1],
       memberId: selectedMemberId,
     });
 
     setIsSubmitting(false);
 
     if (res.success) {
-      setSelectedStartDate(null);
-      setSelectedEndDate(null);
+      setSelectedDates([]);
       onClose();
     } else {
-      setErrorMessage(res.error || 'Failed to save pause window.');
+      setErrorMessage(res.error || 'Failed to save skipped days.');
     }
   };
 
@@ -374,9 +381,16 @@ export const SubscriptionPauseCalendarModal: React.FC<SubscriptionPauseCalendarM
 
           <View style={{ alignItems: 'center' }}>
             <Text style={[styles.monthLabelText, { color: colors.textPrimary }]}>{monthLabel}</Text>
-            <Text style={{ fontSize: 11, color: colors.textSecondary, marginTop: 1 }}>
-              Tap active days to pause (up to {SUBSCRIPTION_PAUSE_CONFIG.MAX_CONSECUTIVE_PAUSE_DAYS}{' '}
-              consecutive)
+            <Text
+              style={{
+                fontSize: 11,
+                color: colors.textSecondary,
+                marginTop: 1,
+                textAlign: 'center',
+              }}
+            >
+              Highlight days you want to skip deliveries (even non-contiguous). Subscription carries
+              on & extends for each skipped day.
             </Text>
           </View>
 
@@ -413,27 +427,16 @@ export const SubscriptionPauseCalendarModal: React.FC<SubscriptionPauseCalendarM
                 }
 
                 const dateStr = item.dateStr;
-                const isStart = selectedStartDate === dateStr;
-                const isEnd = selectedEndDate === dateStr;
-                const isInSelectedRange = Boolean(
-                  selectedStartDate &&
-                  selectedEndDate &&
-                  dateStr >= selectedStartDate &&
-                  dateStr <= selectedEndDate,
-                );
+                const isHighlighted = selectedDates.includes(dateStr);
 
                 let cellBg = colors.bgSurface;
                 let cellBorder = colors.borderLight;
                 let cellText = colors.textPrimary;
 
-                if (isStart || isEnd) {
+                if (isHighlighted) {
                   cellBg = colors.primary;
                   cellBorder = colors.primary;
                   cellText = colors.textInverse;
-                } else if (isInSelectedRange) {
-                  cellBg = colors.primaryLight;
-                  cellBorder = colors.primary;
-                  cellText = colors.primaryDark;
                 } else if (item.isPaused) {
                   cellBg = colors.bgWarningSubtle;
                   cellBorder = colors.warning;
@@ -474,9 +477,14 @@ export const SubscriptionPauseCalendarModal: React.FC<SubscriptionPauseCalendarM
                       <Text style={[styles.miniStatusTag, { color: colors.textWarning }]}>
                         Paused
                       </Text>
-                    ) : isStart || isEnd ? (
-                      <Text style={[styles.miniStatusTag, { color: colors.textInverse }]}>
-                        {isStart && isEnd ? 'Selected' : isStart ? 'Start' : 'End'}
+                    ) : isHighlighted ? (
+                      <Text
+                        style={[
+                          styles.miniStatusTag,
+                          { color: colors.textInverse, fontWeight: '800' },
+                        ]}
+                      >
+                        Skip
                       </Text>
                     ) : item.isActiveSubscription ? (
                       <View style={[styles.activeDot, { backgroundColor: colors.success }]} />
@@ -522,7 +530,9 @@ export const SubscriptionPauseCalendarModal: React.FC<SubscriptionPauseCalendarM
                 { backgroundColor: colors.primary, borderColor: colors.primary },
               ]}
             />
-            <Text style={[styles.legendText, { color: colors.textPrimary }]}>Selected</Text>
+            <Text style={[styles.legendText, { color: colors.textPrimary }]}>
+              Highlighted to Skip
+            </Text>
           </View>
           <View style={styles.legendItem}>
             <View
@@ -536,8 +546,8 @@ export const SubscriptionPauseCalendarModal: React.FC<SubscriptionPauseCalendarM
         </View>
       </View>
 
-      {/* Selected Range Display */}
-      {selectedStartDate && (
+      {/* Highlighted Days to Skip Summary */}
+      {selectedDates.length > 0 && (
         <View
           style={[
             styles.selectedRangeBox,
@@ -548,13 +558,36 @@ export const SubscriptionPauseCalendarModal: React.FC<SubscriptionPauseCalendarM
             },
           ]}
         >
-          <Icon name="time" size={18} color={colors.info} />
-          <Text style={[styles.selectedRangeText, { color: colors.textInfo }]}>
-            Selected: {selectedStartDate}
-            {selectedEndDate && selectedEndDate !== selectedStartDate
-              ? ` to ${selectedEndDate}`
-              : ''}
-          </Text>
+          <View
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              width: '100%',
+            }}
+          >
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 }}>
+              <Icon name="time" size={18} color={colors.info} />
+              <View style={{ flex: 1 }}>
+                <Text
+                  style={[styles.selectedRangeText, { color: colors.textInfo, fontWeight: '700' }]}
+                >
+                  {selectedDates.length} delivery day{selectedDates.length === 1 ? '' : 's'}{' '}
+                  highlighted to skip
+                </Text>
+                <Text style={{ fontSize: 11, color: colors.textSecondary, marginTop: 2 }}>
+                  Subscription carries on: period extended by +{selectedDates.length} day
+                  {selectedDates.length === 1 ? '' : 's'} to make up for skipped kits.
+                </Text>
+              </View>
+            </View>
+            <TouchableOpacity
+              onPress={() => setSelectedDates([])}
+              style={{ paddingHorizontal: 8, paddingVertical: 4 }}
+            >
+              <Text style={{ fontSize: 12, color: colors.primary, fontWeight: '700' }}>Clear</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       )}
 
@@ -620,13 +653,15 @@ export const SubscriptionPauseCalendarModal: React.FC<SubscriptionPauseCalendarM
           style={{ flex: 1, marginRight: 8 }}
         />
         <Button
-          title={t.confirmPauseBtn}
+          title={
+            selectedDates.length > 0
+              ? `Skip ${selectedDates.length} Day${selectedDates.length === 1 ? '' : 's'} & Carry On`
+              : 'Highlight Days to Skip'
+          }
           variant="primary"
           size="md"
           loading={isSubmitting}
-          disabled={
-            !selectedStartDate || allowance.daysRemaining <= 0 || allowance.rangesRemaining <= 0
-          }
+          disabled={selectedDates.length === 0}
           onPress={handleSave}
           style={{ flex: 2 }}
           testID="confirm-save-pause-btn"
