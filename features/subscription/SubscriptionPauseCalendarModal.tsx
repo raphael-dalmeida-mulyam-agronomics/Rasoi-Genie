@@ -372,31 +372,32 @@ export const SubscriptionPauseCalendarModal: React.FC<SubscriptionPauseCalendarM
       <View style={styles.sectionWrap}>
         <View style={styles.monthHeaderRow}>
           <TouchableOpacity
-            style={[styles.monthNavBtn, { borderColor: colors.borderLight }]}
+            style={[
+              styles.monthNavBtn,
+              { backgroundColor: colors.bgSubtle, borderColor: colors.borderLight },
+            ]}
             onPress={handlePrevMonth}
+            accessibilityLabel="Previous month"
+            accessibilityRole="button"
+            testID="pause-calendar-prev-month-btn"
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
             <Icon name="chevron-back" size={18} color={colors.textPrimary} />
           </TouchableOpacity>
 
-          <View style={{ alignItems: 'center' }}>
+          <View style={styles.monthLabelContainer}>
             <Text style={[styles.monthLabelText, { color: colors.textPrimary }]}>{monthLabel}</Text>
-            <Text
-              style={{
-                fontSize: 11,
-                color: colors.textSecondary,
-                marginTop: 1,
-                textAlign: 'center',
-              }}
-            >
-              Highlight days you want to skip deliveries (even non-contiguous). Subscription carries
-              on & extends for each skipped day.
-            </Text>
           </View>
 
           <TouchableOpacity
-            style={[styles.monthNavBtn, { borderColor: colors.borderLight }]}
+            style={[
+              styles.monthNavBtn,
+              { backgroundColor: colors.bgSubtle, borderColor: colors.borderLight },
+            ]}
             onPress={handleNextMonth}
+            accessibilityLabel="Next month"
+            accessibilityRole="button"
+            testID="pause-calendar-next-month-btn"
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
             <Icon name="chevron-forward" size={18} color={colors.textPrimary} />
@@ -730,15 +731,25 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     marginBottom: 12,
+    width: '100%',
   },
   monthNavBtn: {
-    padding: 6,
+    width: 38,
+    height: 38,
     borderRadius: 8,
     borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  monthLabelContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   monthLabelText: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: '800',
+    textAlign: 'center',
   },
   weekdayHeaderRow: {
     flexDirection: 'row',

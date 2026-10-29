@@ -3,7 +3,7 @@
 **Project:** RasoiGenie  
 **Branch:** `feature/non-contiguous-pause-days-and-carry-on` (Merged to `main`)  
 **Status:** Completed, Verified with Automated Test Suites & Merged to `main`  
-**Quality Gates:** 50/50 test suites passed (412/412 tests passed), TypeScript clean (`tsc --noEmit` 0 errors), ESLint clean (0 errors)
+**Quality Gates:** 51/51 test suites passed (413/413 tests passed), TypeScript clean (`tsc --noEmit` 0 errors), ESLint clean (0 errors)
 
 ---
 
@@ -41,7 +41,8 @@ Today's work centered on significantly expanding the RasoiGenie Weekly Meal Subs
 
 - **Entire Month Calendar View**:
   - Upgraded `features/subscription/SubscriptionPauseCalendarModal.tsx` (`Modal` on web, `BottomSheet` on mobile) from a 7-day strip to a full-month interactive calendar.
-  - Added month navigation controls (`<` previous month, `>` next month, and month/year label).
+  - Symmetrically anchored month navigation controls: added explicit Next Month button (`pause-calendar-next-month-btn`) and Previous Month button (`pause-calendar-prev-month-btn`) with fixed 38x38 button bounds and theme tokens.
+  - Cleaned calendar header: removed the long subtitle text ("Highlight days you want to skip deliveries...") that crowded the header and pushed the next month button off-screen.
 - **Non-Contiguous Day Highlighting (Replaced Start/End Selection)**:
   - Replaced rigid range start/end date pickers with arbitrary day highlighting: customers can simply tap to highlight any days they do not want meal kits delivered, even if those days are scattered and non-contiguous.
   - Tapping an active, non-locked day toggles its highlighted state (`selectedDates`), rendered in high-contrast primary tokens with a `"Skip"` tag.
@@ -161,11 +162,12 @@ Today's work centered on significantly expanding the RasoiGenie Weekly Meal Subs
 - **Automated Test Results**:
   - `framework/__tests__/familyMealPlanCalendarHelpers.test.ts`: **14/14 passed** (pure calendar helpers, leap years, overflow, clash detection, member-specific pause evaluations).
   - `framework/__tests__/familySubscriptionDietaryConflictModal.test.tsx`: **1/1 passed** (month grid day popup & swap dismissal).
-  - ramework/**tests**/subscriptionExtensions.test.ts: **29/29 passed** (per-member pricing, same-plan copy, 5 pause limits, period extension, renewal state machine, idempotency, family permissions, and non-contiguous pause highlighting & period carry-on).
+  - `framework/__tests__/subscriptionExtensions.test.ts`: **29/29 passed** (per-member pricing, same-plan copy, 5 pause limits, period extension, renewal state machine, idempotency, family permissions, and non-contiguous pause highlighting & period carry-on).
+  - `framework/__tests__/subscriptionPauseCalendarModal.test.tsx`: **1/1 passed** (verified removal of crowded subtitle text and verified bidirectional month navigation via next/prev buttons).
   - `framework/__tests__/familyPermissions.test.ts`: **16/16 passed** (`manage_family_subscription` vs `view_own_subscription_plan`).
   - `framework/__tests__/subscriptionPlans.test.ts`: **5/5 passed**.
   - `framework/__tests__/subscriptionContext.test.tsx`: **7/7 passed**.
-  - Whole repository test suite: **50/50 test suites passed, 412/412 tests passed**.
+  - Whole repository test suite: **51/51 test suites passed, 413/413 tests passed**.
 - **Static Analysis & Linting**:
   - TypeScript compilation (`npx tsc --noEmit`): **0 errors, clean build**.
   - ESLint (`npm run lint`): **0 errors**.
