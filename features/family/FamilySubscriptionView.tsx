@@ -7,9 +7,9 @@ import {
   TouchableOpacity,
   Alert,
   Image,
-  Modal,
   Dimensions,
   Platform,
+  useWindowDimensions,
 } from 'react-native';
 import { useTheme } from '../../framework/theme/ThemeContext';
 import { useAuth } from '../../framework/context/AuthContext';
@@ -20,12 +20,14 @@ import { can } from '../../framework/family/permissions';
 import {
   WEEKDAYS,
   STANDARD_SUBSCRIPTION_PLANS,
-  STANDARD_PLANS_LIST,
   StandardPlanKey,
   PlanType,
   DEFAULT_CUSTOM_PLAN_PRICE_PER_WEEK,
-  calculateSubscriptionTotal,
+  calculatePerMemberSubscriptionTotal,
+  copyPlanToAllMembers,
   resolvePlanMealKits,
+  isDateLockedForPause,
+  isDatePaused,
 } from '../../framework/services/subscriptionPlans';
 import { getMealKits, getMealKitById, MealKit } from '../../framework/services/mealKitsService';
 import { checkDietaryConflict } from '../../framework/family/dietaryConflicts';
@@ -33,20 +35,38 @@ import { FamilyMember } from '../../framework/services/familyService';
 import { Badge } from '../../framework/ui/Badge';
 import { Button } from '../../framework/ui/Button';
 import { Icon } from '../../framework/ui/Icon';
+import { Modal } from '../../framework/ui/Modal';
+import { BottomSheet } from '../../framework/ui/BottomSheet';
+import { Card } from '../../framework/ui/Card';
+import { Avatar } from '../../framework/ui/Avatar';
+import { SegmentedControl } from '../../framework/ui/SegmentedControl';
 import { subscriptionStrings } from '../../framework/subscription/subscriptionStrings';
 import { MockPaymentGatewayModal } from '../checkout/MockPaymentGatewayModal';
 import { SubscriptionPauseCalendarModal } from '../subscription/SubscriptionPauseCalendarModal';
-import {
-  calculatePerMemberSubscriptionTotal,
-  copyPlanToAllMembers,
-} from '../../framework/services/subscriptionPlans';
 import { SUBSCRIPTION_RENEWAL_CONFIG } from '../../framework/subscription/subscriptionConfig';
+import {
+  buildMonthCalendarGrid,
+  mapMealsForDay,
+  formatDayAccessibilityLabel,
+  CalendarDayItem,
+  formatDateKey,
+} from '../../framework/services/familyMealPlanCalendarHelpers';
+
+const PLAN_SEGMENTS = [
+  { value: 'high-protein', label: 'High Protein' },
+  { value: 'keto', label: 'Keto' },
+  { value: 'vegan', label: 'Vegan' },
+  { value: 'custom', label: 'Custom' },
+];
 
 export const FamilySubscriptionView: React.FC<{ onBack?: () => void }> = ({ onBack }) => {
-  const { colors, radii, shadows, isDark } = useTheme();
+  const { colors, radii, shadows } = useTheme();
   const { user } = useAuth();
   const { family, members, role } = useFamily();
   const { availableBalance, debitCredits } = useWallet();
+  const { width } = useWindowDimensions();
+  const isWebOrDesktop = Platform.OS === 'web' || width > 768;
+
   const {
     isSubscribed,
     activeSubscription,
@@ -72,10 +92,15 @@ export const FamilySubscriptionView: React.FC<{ onBack?: () => void }> = ({ onBa
   const t = subscriptionStrings;
   const isOwner = can(role, 'manage_family_subscription');
   const canView = isOwner || can(role, 'view_own_subscription_plan');
+
   const [autoRenew, setAutoRenew] = useState<boolean>(
     SUBSCRIPTION_RENEWAL_CONFIG.DEFAULT_AUTO_RENEW,
   );
   const [pauseModalVisible, setPauseModalVisible] = useState(false);
+
+  // Month navigation state
+  const todayDate = useMemo(() => new Date(), []);
+  const [currentMonthDate, setCurrentMonthDate] = useState<Date>(() => new Date());
 
   // Covered member IDs (default: all members in family)
   const [selectedMemberIds, setSelectedMemberIds] = useState<string[]>(() =>
@@ -94,7 +119,6 @@ export const FamilySubscriptionView: React.FC<{ onBack?: () => void }> = ({ onBa
       { planType: PlanType; standardPlanKey?: StandardPlanKey | null; planGroup?: string | null }
     > = {};
     members.forEach((m) => {
-      // Default child / veg to vegan or high-protein
       const defaultKey: StandardPlanKey = m.preferences?.dietTypes?.includes('vegan')
         ? 'vegan'
         : m.preferences?.dietTypes?.includes('keto')
@@ -119,16 +143,17 @@ export const FamilySubscriptionView: React.FC<{ onBack?: () => void }> = ({ onBa
     return map;
   });
 
-  // Cell modal state for tapping a recipe on the calendar
-  const [cellModalVisible, setCellModalVisible] = useState(false);
+  // Day detail popup state
+  const [selectedDayItem, setSelectedDayItem] = useState<CalendarDayItem | null>(null);
+  const [dayDetailVisible, setDayDetailVisible] = useState(false);
+
+  // Meal kit picker modal state
+  const [pickerModalVisible, setPickerModalVisible] = useState(false);
   const [selectedCell, setSelectedCell] = useState<{
     member: FamilyMember;
     weekday: number;
     currentKit?: MealKit;
   } | null>(null);
-
-  // Meal kit picker modal state
-  const [pickerModalVisible, setPickerModalVisible] = useState(false);
   const [catalogFilterDiet, setCatalogFilterDiet] = useState<string>('all');
 
   // Payment state
@@ -193,6 +218,7 @@ export const FamilySubscriptionView: React.FC<{ onBack?: () => void }> = ({ onBa
       weeks: 1,
     });
   }, [memberPlansList]);
+
   const coveredMembersCount = selectedMemberIds.length;
   const pricePerMember =
     memberPlansList.length > 0 ? Math.round(pricing.subtotal / memberPlansList.length) : 1299;
@@ -200,11 +226,40 @@ export const FamilySubscriptionView: React.FC<{ onBack?: () => void }> = ({ onBa
   const walletCreditsToApply = useWalletCredits ? Math.min(availableBalance, pricing.total) : 0;
   const remainingPayable = Math.max(0, pricing.total - walletCreditsToApply);
 
-  // Check if cell has dietary conflict
-  const getCellConflict = (member: FamilyMember, kitId?: string) => {
-    if (!kitId) return { hasConflict: false, reasons: [] };
-    const kit = getMealKitById(kitId);
-    return checkDietaryConflict(member, kit);
+  const coveredMembersList = useMemo(() => {
+    return members.filter((m) => selectedMemberIds.includes(m.user_id));
+  }, [members, selectedMemberIds]);
+
+  // Month grid computation
+  const monthGrid = useMemo(() => {
+    const periodStart =
+      activeSubscription?.period_start ||
+      formatDateKey(new Date(currentMonthDate.getFullYear(), currentMonthDate.getMonth(), 1));
+    const periodEnd =
+      activeSubscription?.period_end ||
+      formatDateKey(new Date(currentMonthDate.getFullYear(), currentMonthDate.getMonth() + 2, 0));
+
+    return buildMonthCalendarGrid({
+      year: currentMonthDate.getFullYear(),
+      month: currentMonthDate.getMonth(),
+      periodStart,
+      periodEnd,
+      today: todayDate,
+      pauses: (pauses || []).map((p) => ({ startDate: p.start_date, endDate: p.end_date })),
+    });
+  }, [currentMonthDate, activeSubscription, todayDate, pauses]);
+
+  // Month navigation handlers
+  const handlePrevMonth = () => {
+    setCurrentMonthDate((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1));
+  };
+
+  const handleNextMonth = () => {
+    setCurrentMonthDate((prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1));
+  };
+
+  const handleGoToToday = () => {
+    setCurrentMonthDate(new Date(todayDate.getFullYear(), todayDate.getMonth(), 1));
   };
 
   // Toggle member coverage
@@ -224,7 +279,6 @@ export const FamilySubscriptionView: React.FC<{ onBack?: () => void }> = ({ onBa
     }
     setSelectedMemberIds(next);
 
-    // If already active, recalculate and update covered members
     if (isSubscribed && activeSubscription) {
       const coveredMems = members
         .filter((m) => next.includes(m.user_id))
@@ -276,41 +330,41 @@ export const FamilySubscriptionView: React.FC<{ onBack?: () => void }> = ({ onBa
     }
   };
 
-  // Allow a member to share the owner's plan
-  const handleShareOwnerPlan = async (memberId: string) => {
-    const ownerMember = members.find((m) => m.role === 'owner') || members[0];
-    const ownerUserId = ownerMember ? ownerMember.user_id : members[0]?.user_id || '';
-    const ownerCfg = (ownerUserId && memberPlanConfigs[ownerUserId]) || {
-      planType: 'standard' as PlanType,
-      standardPlanKey: 'high-protein' as StandardPlanKey,
-      planGroup: null,
-    };
+  const confirmApplySamePlan = (planType: PlanType, standardPlanKey?: StandardPlanKey) => {
+    const planName =
+      planType === 'standard' && standardPlanKey
+        ? STANDARD_SUBSCRIPTION_PLANS[standardPlanKey]?.name
+        : 'Custom Plan';
 
-    setMemberPlanConfigs((prev) => ({
-      ...prev,
-      [memberId]: {
-        planType: ownerCfg.planType,
-        standardPlanKey: ownerCfg.standardPlanKey,
-        planGroup: 'shared_with_owner',
-      },
-    }));
+    Alert.alert(
+      t.familyCalendar.applyPlanToAllConfirmTitle(planName),
+      t.familyCalendar.applyPlanToAllConfirmMsg,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Apply to Everyone',
+          onPress: () => handleApplySamePlan(planType, standardPlanKey),
+        },
+      ],
+    );
+  };
 
-    if (ownerCfg.planType === 'standard' && ownerCfg.standardPlanKey) {
-      const template = resolvePlanMealKits(ownerCfg.standardPlanKey);
-      setLocalMeals((prev) => {
-        const next = { ...prev };
-        template.forEach((item) => {
-          if (item.mealKit) {
-            next[`${memberId}_${item.weekday}`] = item.mealKit.id;
-          }
-        });
-        return next;
-      });
+  // Check if member already has custom picks that differ from standard template
+  const memberHasCustomPicks = (
+    memberId: string,
+    currentPlanType: PlanType,
+    currentStandardKey?: StandardPlanKey | null,
+  ): boolean => {
+    if (currentPlanType === 'custom') return true;
+    if (!currentStandardKey) return false;
+    const template = resolvePlanMealKits(currentStandardKey);
+    for (const item of template) {
+      const currentKitId = localMeals[`${memberId}_${item.weekday}`];
+      if (currentKitId && item.mealKit && currentKitId !== item.mealKit.id) {
+        return true;
+      }
     }
-
-    if (isSubscribed && activeSubscription) {
-      await shareOwnerPlan(memberId);
-    }
+    return false;
   };
 
   // Switch a member's plan
@@ -321,10 +375,9 @@ export const FamilySubscriptionView: React.FC<{ onBack?: () => void }> = ({ onBa
   ) => {
     setMemberPlanConfigs((prev) => ({
       ...prev,
-      [memberId]: { planType, standardPlanKey: planKey },
+      [memberId]: { planType, standardPlanKey: planKey, planGroup: null },
     }));
 
-    // If standard plan selected, auto-fill member's 7 days with the template
     if (planType === 'standard' && planKey) {
       const template = resolvePlanMealKits(planKey);
       setLocalMeals((prev) => {
@@ -343,43 +396,78 @@ export const FamilySubscriptionView: React.FC<{ onBack?: () => void }> = ({ onBa
     }
   };
 
-  // Cell tap: open cell detail sheet
-  const handleTapCell = (member: FamilyMember, weekday: number) => {
-    const key = `${member.user_id}_${weekday}`;
-    const kitId = localMeals[key];
-    const kit = kitId ? getMealKitById(kitId) : undefined;
-    setSelectedCell({ member, weekday, currentKit: kit });
-    setCellModalVisible(true);
+  const handleSelectMemberPlanSegment = (member: FamilyMember, value: string) => {
+    const memberId = member.user_id;
+    const currentCfg = memberPlanConfigs[memberId] || {
+      planType: 'standard',
+      standardPlanKey: 'high-protein',
+    };
+    const nextPlanType: PlanType = value === 'custom' ? 'custom' : 'standard';
+    const nextStandardKey: StandardPlanKey | undefined =
+      value === 'custom' ? undefined : (value as StandardPlanKey);
+
+    const executeSwitch = () => {
+      handleSwitchMemberPlan(memberId, nextPlanType, nextStandardKey);
+    };
+
+    if (memberHasCustomPicks(memberId, currentCfg.planType, currentCfg.standardPlanKey)) {
+      Alert.alert(
+        t.familyCalendar.overwriteCustomPicksTitle,
+        t.familyCalendar.overwriteCustomPicksMsg(member.display_name),
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Change Plan', onPress: executeSwitch },
+        ],
+      );
+    } else {
+      executeSwitch();
+    }
   };
 
-  // Clear meal from cell
-  const handleClearCell = async () => {
-    if (!selectedCell) return;
-    const { member, weekday } = selectedCell;
-    const key = `${member.user_id}_${weekday}`;
+  // Day cell tap
+  const handleTapDayCell = (dayItem: CalendarDayItem) => {
+    if (!dayItem.date || !dayItem.isInsidePeriod) return;
+    setSelectedDayItem(dayItem);
+    setDayDetailVisible(true);
+  };
+
+  // Clear meal for a member on a weekday
+  const handleClearMealForMemberDay = async (memberId: string, weekday: number) => {
+    const key = `${memberId}_${weekday}`;
     setLocalMeals((prev) => {
       const next = { ...prev };
       delete next[key];
       return next;
     });
-    setCellModalVisible(false);
 
     if (isSubscribed && activeSubscription) {
-      await clearMeal(member.user_id, weekday);
+      await clearMeal(memberId, weekday);
     }
   };
 
-  // Select kit for cell
+  // Select kit for cell from catalog modal
   const handleSelectKitForCell = async (kitId: string) => {
     if (!selectedCell) return;
     const { member, weekday } = selectedCell;
     const key = `${member.user_id}_${weekday}`;
     setLocalMeals((prev) => ({ ...prev, [key]: kitId }));
     setPickerModalVisible(false);
-    setCellModalVisible(false);
 
     if (isSubscribed && activeSubscription) {
       await assignMeal(member.user_id, weekday, kitId);
+    }
+  };
+
+  // Pause single day
+  const handlePauseSingleDay = async (dateStr: string) => {
+    if (!activeSubscription) return;
+    const res = await addPause({ startDate: dateStr, endDate: dateStr });
+    if (res.success) {
+      Alert.alert('Day Paused', `Deliveries on ${dateStr} have been paused.`);
+      setDayDetailVisible(false);
+      fetchPauses();
+    } else {
+      Alert.alert('Pause Limit', res.error || 'Could not pause deliveries for this day.');
     }
   };
 
@@ -393,8 +481,9 @@ export const FamilySubscriptionView: React.FC<{ onBack?: () => void }> = ({ onBa
   };
 
   const executeFamilySubscriptionPayment = async (paymentRef: string) => {
-    setIsSubmitting(true);
     try {
+      setIsSubmitting(true);
+
       if (walletCreditsToApply > 0) {
         await debitCredits({
           amount: walletCreditsToApply,
@@ -435,7 +524,7 @@ export const FamilySubscriptionView: React.FC<{ onBack?: () => void }> = ({ onBa
 
       const res = await subscribe({
         scope: 'family',
-        planType: 'custom', // Family uses per-member custom/standard matrix
+        planType: 'custom',
         pricePerMemberPerWeek: pricePerMember,
         amountPaid: remainingPayable,
         walletCreditsApplied: walletCreditsToApply,
@@ -480,14 +569,12 @@ export const FamilySubscriptionView: React.FC<{ onBack?: () => void }> = ({ onBa
     ]);
   };
 
-  // Next Monday helper
   const getNextMondayFormatted = () => {
     const d = new Date();
     d.setDate(d.getDate() + ((1 + 7 - d.getDay()) % 7 || 7));
     return d.toLocaleDateString('en-IN', { month: 'short', day: 'numeric' });
   };
 
-  // Non-owner restriction screen (allows view if user has view_own_subscription_plan)
   if (!canView) {
     return (
       <View style={[styles.container, { backgroundColor: colors.bgPrimary }]}>
@@ -519,12 +606,218 @@ export const FamilySubscriptionView: React.FC<{ onBack?: () => void }> = ({ onBa
     );
   }
 
-  const { width } = Dimensions.get('window');
-  const isWeb = Platform.OS === 'web' && width > 768;
+  // Day detail popup content renderer
+  const renderDayDetailContent = () => {
+    if (!selectedDayItem) return null;
+    const targetMembers = isOwner
+      ? coveredMembersList
+      : coveredMembersList.filter((m) => m.user_id === user?.uid);
+
+    return (
+      <View style={styles.dayDetailContent}>
+        {targetMembers.map((member) => {
+          const key = `${member.user_id}_${selectedDayItem.weekdayIndex}`;
+          const kitId = localMeals[key];
+          const kit = kitId ? getMealKitById(kitId) : undefined;
+          const conflict = kit
+            ? checkDietaryConflict(member, kit)
+            : { hasConflict: false, reasons: [] };
+          const memCfg = memberPlanConfigs[member.user_id] || {
+            planType: 'standard',
+            standardPlanKey: 'high-protein',
+          };
+          const planLabel =
+            memCfg.planType === 'custom'
+              ? 'Custom Plan'
+              : STANDARD_SUBSCRIPTION_PLANS[memCfg.standardPlanKey || 'high-protein']?.name ||
+                'Standard Plan';
+
+          return (
+            <View
+              key={`day-detail-member-${member.user_id}`}
+              style={[
+                styles.memberSectionBox,
+                { backgroundColor: colors.bgSurface, borderColor: colors.borderLight },
+              ]}
+            >
+              {/* Member Section Header */}
+              <View style={styles.memberSectionHeader}>
+                <Avatar name={member.display_name} id={member.user_id} size="sm" />
+                <View style={{ flex: 1, marginLeft: 10 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    <Text style={[styles.memberSectionName, { color: colors.textPrimary }]}>
+                      {member.display_name}
+                    </Text>
+                    <Badge
+                      label={
+                        member.dependent_type
+                          ? `Dependent (${member.dependent_type})`
+                          : member.role === 'owner'
+                            ? 'Owner'
+                            : member.role
+                      }
+                      variant="neutral"
+                      size="sm"
+                    />
+                  </View>
+                  <Text style={[styles.memberSectionPlan, { color: colors.textSecondary }]}>
+                    {planLabel}
+                  </Text>
+                </View>
+              </View>
+
+              {/* Dietary Clash Warning Banner (Inside member section only) */}
+              {conflict.hasConflict && (
+                <View
+                  style={[
+                    styles.conflictAlertBox,
+                    { backgroundColor: colors.bgWarningSubtle, borderColor: colors.warning },
+                  ]}
+                  testID={`conflict-warning-${member.user_id}`}
+                >
+                  <Text style={[styles.conflictAlertTitle, { color: colors.warning }]}>
+                    ⚠️ Dietary Preference Conflict
+                  </Text>
+                  {conflict.reasons.map((r, i) => (
+                    <Text key={i} style={[styles.conflictAlertReason, { color: colors.warning }]}>
+                      • {r}
+                    </Text>
+                  ))}
+                </View>
+              )}
+
+              {/* Assigned Kit or Empty State */}
+              {kit ? (
+                <View
+                  style={[
+                    styles.dayKitCard,
+                    { backgroundColor: colors.bgSubtle, borderColor: colors.borderLight },
+                  ]}
+                >
+                  {kit.heroImage ? (
+                    <Image source={{ uri: kit.heroImage }} style={styles.dayKitImg} />
+                  ) : null}
+                  <View style={{ flex: 1, marginLeft: 10 }}>
+                    <Text style={[styles.dayKitName, { color: colors.textPrimary }]}>
+                      {kit.name}
+                    </Text>
+                    <Text style={[styles.dayKitMeta, { color: colors.textSecondary }]}>
+                      {kit.cuisine} • {kit.diet.toUpperCase()} • {kit.nutrition?.protein || 20}g
+                      Protein
+                    </Text>
+                  </View>
+                </View>
+              ) : (
+                <View
+                  style={[
+                    styles.dayKitEmpty,
+                    { backgroundColor: colors.bgSubtle, borderColor: colors.borderLight },
+                  ]}
+                >
+                  <Icon name="restaurant-outline" size={20} color={colors.textMuted} />
+                  <Text style={[styles.dayKitEmptyText, { color: colors.textSecondary }]}>
+                    No meal kit assigned for this day
+                  </Text>
+                </View>
+              )}
+
+              {/* Actions (Owner only) */}
+              {isOwner && (
+                <View style={styles.memberActionButtonsRow}>
+                  <Button
+                    title="Change Recipe"
+                    variant="primary"
+                    size="sm"
+                    onPress={() => {
+                      setSelectedCell({
+                        member,
+                        weekday: selectedDayItem.weekdayIndex,
+                        currentKit: kit,
+                      });
+                      setDayDetailVisible(false);
+                      setPickerModalVisible(true);
+                    }}
+                    style={{ flex: 1, marginRight: 8 }}
+                    testID="cell-change-recipe-btn"
+                  />
+                  {kit ? (
+                    <Button
+                      title="Clear"
+                      variant="outline"
+                      size="sm"
+                      onPress={() =>
+                        handleClearMealForMemberDay(member.user_id, selectedDayItem.weekdayIndex)
+                      }
+                      testID="cell-clear-recipe-btn"
+                    />
+                  ) : (
+                    <Button
+                      title="Add a meal"
+                      variant="secondary"
+                      size="sm"
+                      onPress={() => {
+                        setSelectedCell({
+                          member,
+                          weekday: selectedDayItem.weekdayIndex,
+                        });
+                        setDayDetailVisible(false);
+                        setPickerModalVisible(true);
+                      }}
+                      testID="cell-add-meal-btn"
+                    />
+                  )}
+                </View>
+              )}
+            </View>
+          );
+        })}
+
+        {/* Day Pause Toggle (Owner only) */}
+        {isOwner && activeSubscription && (
+          <View style={[styles.dayPauseBox, { borderTopColor: colors.borderLight }]}>
+            <Text style={[styles.dayPauseTitle, { color: colors.textPrimary }]}>
+              Pause Deliveries for This Date
+            </Text>
+            {selectedDayItem.isLocked ? (
+              <Text style={{ fontSize: 12, color: colors.textMuted, marginTop: 4 }}>
+                Locked (within 48 hours cutoff window or in the past).
+              </Text>
+            ) : selectedDayItem.isPaused ? (
+              <View style={styles.dayPausedNotice}>
+                <Icon name="pause-circle" size={16} color={colors.warning} />
+                <Text
+                  style={{ fontSize: 13, color: colors.warning, fontWeight: '700', marginLeft: 6 }}
+                >
+                  Deliveries are paused on this day.
+                </Text>
+              </View>
+            ) : (
+              <Button
+                title="Pause Deliveries on This Day"
+                variant="outline"
+                size="sm"
+                onPress={() => handlePauseSingleDay(selectedDayItem.dateStr)}
+                style={{ marginTop: 8 }}
+                testID="day-detail-pause-btn"
+              />
+            )}
+          </View>
+        )}
+      </View>
+    );
+  };
+
+  const dayDetailTitle = selectedDayItem?.date
+    ? selectedDayItem.date.toLocaleDateString('en-IN', {
+        weekday: 'long',
+        day: 'numeric',
+        month: 'long',
+      })
+    : '';
 
   return (
     <View style={[styles.container, { backgroundColor: colors.bgPrimary }]}>
-      {/* Header */}
+      {/* Top Header */}
       <View
         style={[
           styles.header,
@@ -719,7 +1012,7 @@ export const FamilySubscriptionView: React.FC<{ onBack?: () => void }> = ({ onBa
           </View>
         )}
 
-        {/* Covered Members Selector */}
+        {/* 1. Covered Members Selector */}
         <View style={styles.sectionHeaderWrap}>
           <Text style={[styles.sectionHeading, { color: colors.textPrimary }]}>
             1. Covered Family Members ({selectedMemberIds.length} of {members.length})
@@ -763,295 +1056,382 @@ export const FamilySubscriptionView: React.FC<{ onBack?: () => void }> = ({ onBa
           })}
         </View>
 
-        {/* Apply the same plan to everyone (Owner only) */}
-        {isOwner && (
-          <View
-            style={[
-              styles.applySameCard,
-              { backgroundColor: colors.bgSurface, borderColor: colors.borderLight },
-            ]}
-          >
-            <View style={{ marginBottom: 10 }}>
-              <Text style={[styles.applySameTitle, { color: colors.textPrimary }]}>
-                {t.perMember.applySamePlanToAll}
-              </Text>
-              <Text style={[styles.applySameSub, { color: colors.textSecondary }]}>
-                {t.perMember.applySamePlanDesc}
-              </Text>
-            </View>
-            <View style={styles.applySameButtonsRow}>
-              <TouchableOpacity
-                style={[
-                  styles.applySameBtn,
-                  { backgroundColor: colors.bgPrimary, borderColor: colors.borderLight },
-                ]}
-                onPress={() => handleApplySamePlan('standard', 'high-protein')}
-                testID="apply-all-protein-btn"
-              >
-                <Text style={[styles.applySameBtnText, { color: colors.textPrimary }]}>
-                  High Protein (₹1,299)
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[
-                  styles.applySameBtn,
-                  { backgroundColor: colors.bgPrimary, borderColor: colors.borderLight },
-                ]}
-                onPress={() => handleApplySamePlan('standard', 'keto')}
-                testID="apply-all-keto-btn"
-              >
-                <Text style={[styles.applySameBtnText, { color: colors.textPrimary }]}>
-                  Keto (₹1,499)
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[
-                  styles.applySameBtn,
-                  { backgroundColor: colors.bgPrimary, borderColor: colors.borderLight },
-                ]}
-                onPress={() => handleApplySamePlan('standard', 'vegan')}
-                testID="apply-all-vegan-btn"
-              >
-                <Text style={[styles.applySameBtnText, { color: colors.textPrimary }]}>
-                  Vegan (₹1,199)
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[
-                  styles.applySameBtn,
-                  { backgroundColor: colors.bgPrimary, borderColor: colors.borderLight },
-                ]}
-                onPress={() => handleApplySamePlan('custom')}
-                testID="apply-all-custom-btn"
-              >
-                <Text style={[styles.applySameBtnText, { color: colors.textPrimary }]}>
-                  Custom (₹1,399)
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        )}
-
-        {/* Calendar Weekly Matrix */}
+        {/* 2. Member plans Section (Above the Calendar) */}
         <View style={{ marginTop: 24 }}>
-          <View style={styles.sectionHeaderWrap}>
-            <Text style={[styles.sectionHeading, { color: colors.textPrimary }]}>
-              2. Weekly Meal Matrix (Google Calendar View)
-            </Text>
-            <Text style={[styles.sectionSubtitle, { color: colors.textSecondary }]}>
-              Assign recipes per member for Monday through Sunday. Tap any cell to view, swap or
-              clear.
-            </Text>
+          <View style={styles.sectionHeaderRowBetween}>
+            <View>
+              <Text style={[styles.sectionHeading, { color: colors.textPrimary }]}>
+                {t.familyCalendar.memberPlansHeading}
+              </Text>
+              <Text style={[styles.runningTotalText, { color: colors.primary }]}>
+                {t.familyCalendar.totalPerWeekSummary(pricing.total, selectedMemberIds.length)}
+              </Text>
+            </View>
           </View>
 
-          {/* Responsive Calendar View */}
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={true}
-            contentContainerStyle={styles.calendarContainer}
-          >
-            <View>
-              {/* Day Headers Row */}
-              <View style={styles.calendarHeaderRow}>
-                <View style={[styles.memberColHeader, { backgroundColor: colors.bgSurface }]}>
-                  <Text style={[styles.colHeaderText, { color: colors.textSecondary }]}>
-                    Family Member
-                  </Text>
-                </View>
-                {WEEKDAYS.map((day) => (
-                  <View
-                    key={`header-day-${day.index}`}
-                    style={[styles.dayColHeader, { backgroundColor: colors.bgSurface }]}
-                  >
-                    <Text style={[styles.dayHeaderShort, { color: colors.primary }]}>
-                      {day.short}
-                    </Text>
-                    <Text style={[styles.dayHeaderFull, { color: colors.textSecondary }]}>
-                      {day.full.slice(0, 3)}
-                    </Text>
-                  </View>
-                ))}
+          {/* Apply the same plan to everyone (Owner only) */}
+          {isOwner && (
+            <View
+              style={[
+                styles.applySameCard,
+                { backgroundColor: colors.bgSurface, borderColor: colors.borderLight },
+              ]}
+            >
+              <View style={{ marginBottom: 8 }}>
+                <Text style={[styles.applySameTitle, { color: colors.textPrimary }]}>
+                  {t.perMember.applySamePlanToAll}
+                </Text>
+                <Text style={[styles.applySameSub, { color: colors.textSecondary }]}>
+                  {t.perMember.applySamePlanDesc}
+                </Text>
               </View>
+              <View style={styles.applySameButtonsRow}>
+                <TouchableOpacity
+                  style={[
+                    styles.applySameBtn,
+                    { backgroundColor: colors.bgPrimary, borderColor: colors.borderLight },
+                  ]}
+                  onPress={() => confirmApplySamePlan('standard', 'high-protein')}
+                  testID="apply-all-protein-btn"
+                >
+                  <Text style={[styles.applySameBtnText, { color: colors.textPrimary }]}>
+                    High Protein (₹1,299)
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.applySameBtn,
+                    { backgroundColor: colors.bgPrimary, borderColor: colors.borderLight },
+                  ]}
+                  onPress={() => confirmApplySamePlan('standard', 'keto')}
+                  testID="apply-all-keto-btn"
+                >
+                  <Text style={[styles.applySameBtnText, { color: colors.textPrimary }]}>
+                    Keto (₹1,499)
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.applySameBtn,
+                    { backgroundColor: colors.bgPrimary, borderColor: colors.borderLight },
+                  ]}
+                  onPress={() => confirmApplySamePlan('standard', 'vegan')}
+                  testID="apply-all-vegan-btn"
+                >
+                  <Text style={[styles.applySameBtnText, { color: colors.textPrimary }]}>
+                    Vegan (₹1,199)
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.applySameBtn,
+                    { backgroundColor: colors.bgPrimary, borderColor: colors.borderLight },
+                  ]}
+                  onPress={() => confirmApplySamePlan('custom')}
+                  testID="apply-all-custom-btn"
+                >
+                  <Text style={[styles.applySameBtnText, { color: colors.textPrimary }]}>
+                    Custom (₹1,399)
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
 
-              {/* Members Rows */}
-              {members
-                .filter((m) => selectedMemberIds.includes(m.user_id))
-                .map((member) => {
-                  const memberCfg = memberPlanConfigs[member.user_id] || {
-                    planType: 'standard',
-                    standardPlanKey: 'high-protein',
-                  };
+          {/* Member Plan Cards (1 col mobile, 2-3 col web) */}
+          <View style={styles.memberCardsContainer}>
+            {coveredMembersList.map((member) => {
+              const cfg = memberPlanConfigs[member.user_id] || {
+                planType: 'standard',
+                standardPlanKey: 'high-protein',
+              };
+              const activeSegmentVal =
+                cfg.planType === 'custom' ? 'custom' : cfg.standardPlanKey || 'high-protein';
+              const weeklyPrice =
+                cfg.planType === 'standard' && cfg.standardPlanKey
+                  ? STANDARD_SUBSCRIPTION_PLANS[cfg.standardPlanKey]?.pricePerMemberPerWeek ||
+                    DEFAULT_CUSTOM_PLAN_PRICE_PER_WEEK
+                  : DEFAULT_CUSTOM_PLAN_PRICE_PER_WEEK;
 
-                  return (
-                    <View
-                      key={`matrix-row-${member.user_id}`}
-                      style={[
-                        styles.calendarMemberRow,
-                        { borderColor: colors.borderLight, backgroundColor: colors.bgSurface },
-                      ]}
-                      testID={`calendar-row-${member.user_id}`}
-                    >
-                      {/* Member Info & Plan Selector Column */}
-                      <View style={styles.memberColCell}>
-                        <Text style={[styles.memberNameText, { color: colors.textPrimary }]}>
-                          {member.display_name}
-                        </Text>
+              const cardWidth = isWebOrDesktop ? (width > 1100 ? '31.5%' : '48.5%') : '100%';
+
+              return (
+                <View
+                  key={`plan-card-${member.user_id}`}
+                  style={[
+                    styles.memberPlanCard,
+                    {
+                      width: cardWidth,
+                      backgroundColor: colors.bgSurface,
+                      borderColor: colors.borderLight,
+                      borderRadius: radii.lg,
+                      ...shadows.card,
+                    },
+                  ]}
+                  testID={`calendar-row-${member.user_id}`}
+                >
+                  <View style={styles.memberPlanCardHeader}>
+                    <Avatar name={member.display_name} id={member.user_id} size="md" />
+                    <View style={{ flex: 1, marginLeft: 10 }}>
+                      <Text style={[styles.memberPlanName, { color: colors.textPrimary }]}>
+                        {member.display_name}
+                      </Text>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2 }}>
                         <Badge
                           label={
                             member.dependent_type
                               ? `Dependent (${member.dependent_type})`
-                              : member.role
+                              : member.role === 'owner'
+                                ? 'Owner'
+                                : member.role
                           }
                           variant="neutral"
                           size="sm"
                         />
-
-                        {/* Plan Quick Selector */}
-                        <View style={styles.memberPlanPicker}>
-                          <TouchableOpacity
-                            style={[
-                              styles.miniPlanBtn,
-                              memberCfg.planType === 'standard' &&
-                              memberCfg.standardPlanKey === 'high-protein'
-                                ? { backgroundColor: colors.primary }
-                                : { backgroundColor: colors.bgPrimary },
-                            ]}
-                            onPress={() =>
-                              handleSwitchMemberPlan(member.user_id, 'standard', 'high-protein')
-                            }
-                          >
-                            <Text
-                              style={{
-                                fontSize: 10,
-                                fontWeight: '700',
-                                color:
-                                  memberCfg.planType === 'standard' &&
-                                  memberCfg.standardPlanKey === 'high-protein'
-                                    ? '#FFFFFF'
-                                    : colors.textSecondary,
-                              }}
-                            >
-                              Protein
-                            </Text>
-                          </TouchableOpacity>
-
-                          <TouchableOpacity
-                            style={[
-                              styles.miniPlanBtn,
-                              memberCfg.planType === 'standard' &&
-                              memberCfg.standardPlanKey === 'keto'
-                                ? { backgroundColor: colors.primary }
-                                : { backgroundColor: colors.bgPrimary },
-                            ]}
-                            onPress={() =>
-                              handleSwitchMemberPlan(member.user_id, 'standard', 'keto')
-                            }
-                          >
-                            <Text
-                              style={{
-                                fontSize: 10,
-                                fontWeight: '700',
-                                color:
-                                  memberCfg.planType === 'standard' &&
-                                  memberCfg.standardPlanKey === 'keto'
-                                    ? '#FFFFFF'
-                                    : colors.textSecondary,
-                              }}
-                            >
-                              Keto
-                            </Text>
-                          </TouchableOpacity>
-
-                          <TouchableOpacity
-                            style={[
-                              styles.miniPlanBtn,
-                              memberCfg.planType === 'standard' &&
-                              memberCfg.standardPlanKey === 'vegan'
-                                ? { backgroundColor: colors.primary }
-                                : { backgroundColor: colors.bgPrimary },
-                            ]}
-                            onPress={() =>
-                              handleSwitchMemberPlan(member.user_id, 'standard', 'vegan')
-                            }
-                          >
-                            <Text
-                              style={{
-                                fontSize: 10,
-                                fontWeight: '700',
-                                color:
-                                  memberCfg.planType === 'standard' &&
-                                  memberCfg.standardPlanKey === 'vegan'
-                                    ? '#FFFFFF'
-                                    : colors.textSecondary,
-                              }}
-                            >
-                              Vegan
-                            </Text>
-                          </TouchableOpacity>
-                        </View>
                       </View>
-
-                      {/* 7 Weekday Cells */}
-                      {WEEKDAYS.map((day) => {
-                        const cellKey = `${member.user_id}_${day.index}`;
-                        const kitId = localMeals[cellKey];
-                        const kit = kitId ? getMealKitById(kitId) : undefined;
-                        const conflict = getCellConflict(member, kitId);
-
-                        return (
-                          <TouchableOpacity
-                            key={`cell-${cellKey}`}
-                            style={[
-                              styles.calendarCell,
-                              {
-                                borderColor: conflict.hasConflict
-                                  ? colors.warning
-                                  : colors.borderLight,
-                                backgroundColor: conflict.hasConflict
-                                  ? colors.bgWarningSubtle
-                                  : kit
-                                    ? colors.bgSurface
-                                    : colors.bgPrimary,
-                              },
-                            ]}
-                            onPress={() => handleTapCell(member, day.index)}
-                            activeOpacity={0.8}
-                            testID={`matrix-cell-${member.user_id}-${day.index}`}
-                          >
-                            {kit ? (
-                              <View style={styles.cellContent}>
-                                {kit.heroImage ? (
-                                  <Image source={{ uri: kit.heroImage }} style={styles.cellThumb} />
-                                ) : null}
-                                <Text
-                                  style={[styles.cellKitName, { color: colors.textPrimary }]}
-                                  numberOfLines={2}
-                                >
-                                  {kit.name}
-                                </Text>
-                                {conflict.hasConflict && (
-                                  <View style={styles.conflictBadgeWrap}>
-                                    <Badge label="⚠️ Conflict" variant="warning" size="sm" />
-                                  </View>
-                                )}
-                              </View>
-                            ) : (
-                              <View style={styles.cellEmpty}>
-                                <Icon name="add" size={16} color={colors.textMuted} />
-                                <Text style={styles.cellEmptyText}>Assign</Text>
-                              </View>
-                            )}
-                          </TouchableOpacity>
-                        );
-                      })}
                     </View>
-                  );
-                })}
-            </View>
-          </ScrollView>
+                  </View>
+
+                  <Text style={[styles.memberPlanSummary, { color: colors.textSecondary }]}>
+                    ₹{weeklyPrice.toLocaleString('en-IN')} / week • 7 dinners
+                  </Text>
+
+                  {isOwner ? (
+                    <SegmentedControl
+                      options={PLAN_SEGMENTS}
+                      selectedValue={activeSegmentVal}
+                      onSelect={(val) => handleSelectMemberPlanSegment(member, val)}
+                      style={{ marginTop: 8 }}
+                      testID={`plan-picker-${member.user_id}`}
+                    />
+                  ) : (
+                    <Badge
+                      label={
+                        activeSegmentVal === 'custom'
+                          ? 'Custom Plan'
+                          : STANDARD_SUBSCRIPTION_PLANS[activeSegmentVal as StandardPlanKey]
+                              ?.name || 'Standard'
+                      }
+                      variant="primary"
+                    />
+                  )}
+                </View>
+              );
+            })}
+          </View>
         </View>
 
-        {/* Pricing & Upfront Checkout Card */}
+        {/* 3. Weekly Meal Plan (Google Calendar Style Month Grid) */}
+        <View style={{ marginTop: 28 }}>
+          <View style={styles.sectionHeaderWrap}>
+            <Text style={[styles.sectionHeading, { color: colors.textPrimary }]}>
+              {t.familyCalendar.planHeading}
+            </Text>
+            <Text style={[styles.sectionSubtitle, { color: colors.textSecondary }]}>
+              {t.familyCalendar.planSubtitle}
+            </Text>
+          </View>
+
+          {/* Month Navigation Row */}
+          <View
+            style={[
+              styles.monthNavRow,
+              { backgroundColor: colors.bgSurface, borderColor: colors.borderLight },
+            ]}
+          >
+            <Text style={[styles.monthLabel, { color: colors.textPrimary }]}>
+              {monthGrid.monthLabel}
+            </Text>
+            <View style={styles.monthNavActions}>
+              <Button
+                title="Today"
+                size="sm"
+                variant="outline"
+                onPress={handleGoToToday}
+                testID="calendar-today-btn"
+              />
+              <TouchableOpacity
+                onPress={handlePrevMonth}
+                style={[
+                  styles.navArrowBtn,
+                  { backgroundColor: colors.bgSubtle, borderColor: colors.borderLight },
+                ]}
+                accessibilityLabel="Previous month"
+                testID="calendar-prev-month-btn"
+              >
+                <Icon name="chevron-back" size={16} color={colors.textPrimary} />
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={handleNextMonth}
+                style={[
+                  styles.navArrowBtn,
+                  { backgroundColor: colors.bgSubtle, borderColor: colors.borderLight },
+                ]}
+                accessibilityLabel="Next month"
+                testID="calendar-next-month-btn"
+              >
+                <Icon name="chevron-forward" size={16} color={colors.textPrimary} />
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          {/* Calendar Month Grid */}
+          <View
+            style={[
+              styles.calendarGridWrap,
+              { backgroundColor: colors.bgSurface, borderColor: colors.borderLight },
+            ]}
+          >
+            {/* Weekday Header Row - Mon through Sun ONCE only */}
+            <View style={styles.weekdayHeaderRow}>
+              {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((dayName) => (
+                <View key={`weekday-head-${dayName}`} style={styles.weekdayHeaderCell}>
+                  <Text style={[styles.weekdayHeaderText, { color: colors.textSecondary }]}>
+                    {dayName}
+                  </Text>
+                </View>
+              ))}
+            </View>
+
+            {/* Weeks and Days Grid */}
+            {monthGrid.weeks.map((week, wIdx) => (
+              <View key={`grid-week-${wIdx}`} style={styles.weekRow}>
+                {week.map((day, dIdx) => {
+                  if (!day.date || !day.isCurrentMonth) {
+                    return (
+                      <View
+                        key={`pad-cell-${wIdx}-${dIdx}`}
+                        style={[styles.calendarDayCell, styles.dayCellPadding]}
+                      />
+                    );
+                  }
+
+                  const dayMeals = day.isInsidePeriod
+                    ? mapMealsForDay({
+                        members: coveredMembersList,
+                        localMeals,
+                        weekdayIndex: day.weekdayIndex,
+                        getMealKitById,
+                        filterToMemberId: isOwner ? null : user?.uid,
+                      })
+                    : {
+                        allMemberMeals: [],
+                        assignedMeals: [],
+                        visibleMeals: [],
+                        overflowCount: 0,
+                        hasAnyConflict: false,
+                      };
+
+                  const isTappable = day.isInsidePeriod;
+                  const firstMemId = coveredMembersList[0]?.user_id || user?.uid || 'user_owner';
+
+                  return (
+                    <TouchableOpacity
+                      key={`day-cell-${day.dateStr}`}
+                      style={[
+                        styles.calendarDayCell,
+                        {
+                          backgroundColor: !day.isInsidePeriod
+                            ? colors.bgSubtle
+                            : day.isPaused
+                              ? colors.bgWarningSubtle
+                              : colors.bgSurface,
+                          borderColor: day.isPaused
+                            ? colors.warning
+                            : day.isToday
+                              ? colors.primary
+                              : colors.borderLight,
+                          borderWidth: day.isToday ? 2 : 1,
+                          opacity: !day.isInsidePeriod ? 0.35 : 1,
+                        },
+                      ]}
+                      onPress={() => handleTapDayCell(day)}
+                      disabled={!isTappable}
+                      activeOpacity={0.7}
+                      accessibilityRole="button"
+                      accessibilityLabel={formatDayAccessibilityLabel(
+                        day.date,
+                        dayMeals.assignedMeals.length,
+                        day.isPaused,
+                        dayMeals.hasAnyConflict,
+                      )}
+                      testID={
+                        dayMeals.hasAnyConflict
+                          ? 'calendar-clash-cell'
+                          : `calendar-cell-${day.dateStr}`
+                      }
+                    >
+                      {/* Day Header Inside Cell */}
+                      <View style={styles.cellDayHeader}>
+                        <Text
+                          style={[
+                            styles.cellDayNum,
+                            {
+                              color: day.isToday ? colors.primary : colors.textPrimary,
+                            },
+                          ]}
+                        >
+                          {day.dayNum}
+                        </Text>
+                        <Text style={[styles.cellWeekdayShort, { color: colors.textSecondary }]}>
+                          {day.weekdayShort}
+                        </Text>
+                        {dayMeals.hasAnyConflict && (
+                          <Text style={styles.cellClashIcon} testID="cell-clash-icon">
+                            ⚠️
+                          </Text>
+                        )}
+                      </View>
+
+                      {/* Member Meal Thumbnails (Up to 3, +N chip) */}
+                      <View style={styles.cellThumbnailsRow}>
+                        {dayMeals.visibleMeals.map((item) => (
+                          <View
+                            key={`thumb-${item.member.user_id}-${day.dateStr}`}
+                            style={[styles.mealThumbWrap, { borderColor: colors.borderLight }]}
+                          >
+                            {item.kit?.heroImage ? (
+                              <Image
+                                source={{ uri: item.kit.heroImage }}
+                                style={styles.mealThumbImg}
+                              />
+                            ) : (
+                              <View
+                                style={[
+                                  styles.mealThumbPlaceholder,
+                                  { backgroundColor: colors.bgSubtle },
+                                ]}
+                              />
+                            )}
+                          </View>
+                        ))}
+                        {dayMeals.overflowCount > 0 && (
+                          <View
+                            style={[
+                              styles.overflowChip,
+                              {
+                                backgroundColor: colors.bgSubtle,
+                                borderColor: colors.borderLight,
+                              },
+                            ]}
+                          >
+                            <Text
+                              style={[styles.overflowChipText, { color: colors.textSecondary }]}
+                            >
+                              +{dayMeals.overflowCount}
+                            </Text>
+                          </View>
+                        )}
+                      </View>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            ))}
+          </View>
+        </View>
+
+        {/* 4. Pricing & Upfront Checkout Card */}
         {!isSubscribed && (
           <View
             style={[
@@ -1178,120 +1558,38 @@ export const FamilySubscriptionView: React.FC<{ onBack?: () => void }> = ({ onBa
         )}
       </ScrollView>
 
-      {/* Cell Detail / Action Modal */}
-      {selectedCell && (
-        <Modal
-          visible={cellModalVisible}
-          transparent={true}
-          animationType="fade"
-          onRequestClose={() => setCellModalVisible(false)}
-          testID="cell-detail-modal"
-        >
-          <View style={styles.backdrop}>
-            <View
-              style={[
-                styles.cellModalCard,
-                {
-                  backgroundColor: colors.bgSurface,
-                  borderColor: colors.borderLight,
-                  borderRadius: radii.xl,
-                  ...shadows.card,
-                },
-              ]}
-            >
-              <View style={styles.cellModalHeader}>
-                <Text style={[styles.cellModalTitle, { color: colors.textPrimary }]}>
-                  {WEEKDAYS[selectedCell.weekday]?.full} Meal for {selectedCell.member.display_name}
-                </Text>
-                <TouchableOpacity onPress={() => setCellModalVisible(false)}>
-                  <Icon name="close" size={20} color={colors.textSecondary} />
-                </TouchableOpacity>
-              </View>
-
-              {/* Dietary Conflict Notice */}
-              {selectedCell.currentKit &&
-                (() => {
-                  const conflict = checkDietaryConflict(
-                    selectedCell.member,
-                    selectedCell.currentKit,
-                  );
-                  if (!conflict.hasConflict) return null;
-                  return (
-                    <View
-                      style={[
-                        styles.conflictAlertBox,
-                        { backgroundColor: colors.bgWarningSubtle, borderColor: colors.warning },
-                      ]}
-                    >
-                      <Text style={[styles.conflictAlertTitle, { color: colors.textWarning }]}>
-                        ⚠️ Dietary Preference Conflict
-                      </Text>
-                      {conflict.reasons.map((r, i) => (
-                        <Text
-                          key={i}
-                          style={[styles.conflictAlertReason, { color: colors.textWarning }]}
-                        >
-                          • {r}
-                        </Text>
-                      ))}
-                    </View>
-                  );
-                })()}
-
-              {selectedCell.currentKit ? (
-                <View style={styles.assignedKitDetail}>
-                  {selectedCell.currentKit.heroImage ? (
-                    <Image
-                      source={{ uri: selectedCell.currentKit.heroImage }}
-                      style={styles.modalKitImg}
-                    />
-                  ) : null}
-                  <Text style={[styles.modalKitName, { color: colors.textPrimary }]}>
-                    {selectedCell.currentKit.name}
-                  </Text>
-                  <Text style={[styles.modalKitSub, { color: colors.textSecondary }]}>
-                    {selectedCell.currentKit.cuisine} • {selectedCell.currentKit.diet.toUpperCase()}{' '}
-                    • {selectedCell.currentKit.nutrition?.protein || 20}g Protein
-                  </Text>
-                </View>
-              ) : (
-                <Text style={{ color: colors.textSecondary, marginVertical: 16 }}>
-                  No meal kit assigned for this day yet.
-                </Text>
-              )}
-
-              <View style={styles.modalActionsRow}>
-                <Button
-                  title="Change Recipe"
-                  variant="primary"
-                  size="md"
-                  onPress={() => {
-                    setCellModalVisible(false);
-                    setPickerModalVisible(true);
-                  }}
-                  style={{ flex: 1, marginRight: 8 }}
-                  testID="cell-change-recipe-btn"
-                />
-                {selectedCell.currentKit && (
-                  <Button
-                    title="Clear"
-                    variant="outline"
-                    size="md"
-                    onPress={handleClearCell}
-                    testID="cell-clear-recipe-btn"
-                  />
-                )}
-              </View>
-            </View>
-          </View>
-        </Modal>
-      )}
+      {/* Day Detail Popup: Modal on Web/Desktop, BottomSheet on Mobile Phones */}
+      {selectedDayItem &&
+        (isWebOrDesktop ? (
+          <Modal
+            visible={dayDetailVisible}
+            onClose={() => setDayDetailVisible(false)}
+            title={dayDetailTitle}
+            subtitle="Daily Member Meals"
+            containerStyle={{ maxWidth: 520 }}
+            testID="cell-detail-modal"
+          >
+            <ScrollView style={{ maxHeight: 480 }} showsVerticalScrollIndicator={false}>
+              {renderDayDetailContent()}
+            </ScrollView>
+          </Modal>
+        ) : (
+          <BottomSheet
+            visible={dayDetailVisible}
+            onClose={() => setDayDetailVisible(false)}
+            title={dayDetailTitle}
+            subtitle="Daily Member Meals"
+            testID="cell-detail-modal"
+          >
+            {renderDayDetailContent()}
+          </BottomSheet>
+        ))}
 
       {/* Recipe Catalog Picker Modal */}
       <Modal
         visible={pickerModalVisible}
+        onClose={() => setPickerModalVisible(false)}
         animationType="slide"
-        onRequestClose={() => setPickerModalVisible(false)}
         testID="recipe-picker-modal"
       >
         <View style={[styles.pickerContainer, { backgroundColor: colors.bgPrimary }]}>
@@ -1332,7 +1630,7 @@ export const FamilySubscriptionView: React.FC<{ onBack?: () => void }> = ({ onBa
                   style={{
                     fontSize: 12,
                     fontWeight: '700',
-                    color: catalogFilterDiet === diet ? '#FFFFFF' : colors.textPrimary,
+                    color: catalogFilterDiet === diet ? colors.textInverse : colors.textPrimary,
                   }}
                 >
                   {diet.toUpperCase()}
@@ -1383,7 +1681,7 @@ export const FamilySubscriptionView: React.FC<{ onBack?: () => void }> = ({ onBa
                         <Text
                           style={{
                             fontSize: 11,
-                            color: colors.textWarning,
+                            color: colors.warning,
                             fontWeight: '700',
                             marginTop: 2,
                           }}
@@ -1428,6 +1726,7 @@ export const FamilySubscriptionView: React.FC<{ onBack?: () => void }> = ({ onBa
           onClose={() => setPaymentModalVisible(false)}
         />
       )}
+
       {/* Pause Calendar Modal */}
       {activeSubscription && (
         <SubscriptionPauseCalendarModal
@@ -1489,20 +1788,20 @@ const styles = StyleSheet.create({
     padding: 16,
     paddingBottom: 90,
   },
-  banner: {
-    padding: 16,
-    borderRadius: 14,
+  viewOnlyBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    borderRadius: 8,
     borderWidth: 1,
     marginBottom: 16,
+    gap: 8,
   },
-  bannerTitle: {
-    fontSize: 15,
-    fontWeight: '800',
-    marginBottom: 4,
-  },
-  bannerSub: {
-    fontSize: 13,
+  viewOnlyText: {
+    flex: 1,
+    fontSize: 12,
     lineHeight: 18,
+    fontWeight: '600',
   },
   activeSubCard: {
     padding: 16,
@@ -1529,6 +1828,12 @@ const styles = StyleSheet.create({
   sectionHeaderWrap: {
     marginBottom: 8,
   },
+  sectionHeaderRowBetween: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-end',
+    marginBottom: 10,
+  },
   sectionHeading: {
     fontSize: 16,
     fontWeight: '800',
@@ -1536,6 +1841,11 @@ const styles = StyleSheet.create({
   sectionSubtitle: {
     fontSize: 12,
     marginTop: 2,
+  },
+  runningTotalText: {
+    fontSize: 14,
+    fontWeight: '800',
+    marginTop: 4,
   },
   membersChipRow: {
     flexDirection: 'row',
@@ -1556,102 +1866,262 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '700',
   },
-  calendarContainer: {
-    paddingVertical: 10,
+  applySameCard: {
+    padding: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    marginTop: 8,
+    marginBottom: 12,
   },
-  calendarHeaderRow: {
+  applySameTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    marginBottom: 2,
+  },
+  applySameSub: {
+    fontSize: 12,
+  },
+  applySameButtonsRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 8,
+  },
+  applySameBtn: {
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 6,
+    borderWidth: 1,
+  },
+  applySameBtnText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  memberCardsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+    marginTop: 4,
+  },
+  memberPlanCard: {
+    padding: 14,
+    borderWidth: 1,
+  },
+  memberPlanCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  memberPlanName: {
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  memberPlanSummary: {
+    fontSize: 12,
+    fontWeight: '600',
     marginBottom: 6,
   },
-  memberColHeader: {
-    width: 130,
-    paddingVertical: 8,
-    paddingHorizontal: 10,
+  monthNavRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    marginBottom: 10,
+  },
+  monthLabel: {
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  monthNavActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  navArrowBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    borderWidth: 1,
+    alignItems: 'center',
     justifyContent: 'center',
   },
-  colHeaderText: {
+  calendarGridWrap: {
+    borderRadius: 12,
+    borderWidth: 1,
+    padding: 6,
+  },
+  weekdayHeaderRow: {
+    flexDirection: 'row',
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0,0,0,0.06)',
+    paddingBottom: 6,
+    marginBottom: 4,
+  },
+  weekdayHeaderCell: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  weekdayHeaderText: {
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  weekRow: {
+    flexDirection: 'row',
+    marginBottom: 4,
+  },
+  calendarDayCell: {
+    flex: 1,
+    aspectRatio: 1,
+    borderRadius: 8,
+    padding: 3,
+    marginHorizontal: 1,
+    minHeight: 44,
+    minWidth: 44,
+    justifyContent: 'space-between',
+  },
+  dayCellPadding: {
+    borderWidth: 0,
+    opacity: 0,
+  },
+  cellDayHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  cellDayNum: {
     fontSize: 12,
     fontWeight: '800',
   },
-  dayColHeader: {
-    width: 105,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 8,
-    borderBottomWidth: 2,
-    borderBottomColor: '#F97316',
-    marginRight: 6,
+  cellWeekdayShort: {
+    fontSize: 9,
   },
-  dayHeaderShort: {
-    fontSize: 14,
-    fontWeight: '900',
+  cellClashIcon: {
+    fontSize: 9,
   },
-  dayHeaderFull: {
-    fontSize: 11,
-  },
-  calendarMemberRow: {
+  cellThumbnailsRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    marginBottom: 8,
+    gap: 2,
+    justifyContent: 'flex-start',
   },
-  memberColCell: {
-    width: 130,
-    paddingRight: 8,
+  mealThumbWrap: {
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    borderWidth: 1,
+    overflow: 'hidden',
   },
-  memberNameText: {
+  mealThumbImg: {
+    width: '100%',
+    height: '100%',
+  },
+  mealThumbPlaceholder: {
+    width: '100%',
+    height: '100%',
+  },
+  overflowChip: {
+    paddingHorizontal: 2,
+    height: 14,
+    borderRadius: 4,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  overflowChipText: {
+    fontSize: 8,
+    fontWeight: '800',
+  },
+  dayDetailContent: {
+    paddingTop: 8,
+  },
+  memberSectionBox: {
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    marginBottom: 12,
+  },
+  memberSectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  memberSectionName: {
     fontSize: 14,
     fontWeight: '800',
-    marginBottom: 4,
   },
-  memberPlanPicker: {
-    flexDirection: 'row',
-    gap: 2,
-    marginTop: 6,
-  },
-  miniPlanBtn: {
-    paddingHorizontal: 4,
-    paddingVertical: 3,
-    borderRadius: 4,
-  },
-  calendarCell: {
-    width: 105,
-    height: 100,
-    padding: 6,
-    borderWidth: 1,
-    borderRadius: 8,
-    marginRight: 6,
-    justifyContent: 'center',
-  },
-  cellContent: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  cellThumb: {
-    width: 42,
-    height: 42,
-    borderRadius: 6,
-    marginBottom: 4,
-  },
-  cellKitName: {
-    fontSize: 10,
-    fontWeight: '700',
-    textAlign: 'center',
-  },
-  conflictBadgeWrap: {
+  memberSectionPlan: {
+    fontSize: 11,
     marginTop: 2,
   },
-  cellEmpty: {
-    flex: 1,
+  conflictAlertBox: {
+    padding: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    marginBottom: 10,
+  },
+  conflictAlertTitle: {
+    fontSize: 12,
+    fontWeight: '800',
+    marginBottom: 2,
+  },
+  conflictAlertReason: {
+    fontSize: 11,
+  },
+  dayKitCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  dayKitImg: {
+    width: 44,
+    height: 44,
+    borderRadius: 6,
+  },
+  dayKitName: {
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  dayKitMeta: {
+    fontSize: 11,
+    marginTop: 2,
+  },
+  dayKitEmpty: {
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    gap: 6,
   },
-  cellEmptyText: {
-    fontSize: 10,
-    /* color set in component */
+  dayKitEmptyText: {
+    fontSize: 12,
+  },
+  memberActionButtonsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 10,
+  },
+  dayPauseBox: {
+    paddingTop: 12,
+    borderTopWidth: 1,
     marginTop: 4,
+    marginBottom: 8,
+  },
+  dayPauseTitle: {
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  dayPausedNotice: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 6,
   },
   checkoutCard: {
     padding: 16,
@@ -1695,67 +2165,6 @@ const styles = StyleSheet.create({
     fontSize: 11,
     marginTop: 8,
     lineHeight: 16,
-  },
-  backdrop: {
-    flex: 1,
-    /* bg set in component */
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-  },
-  cellModalCard: {
-    width: '100%',
-    maxWidth: 400,
-    padding: 20,
-    borderWidth: 1,
-  },
-  cellModalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  cellModalTitle: {
-    fontSize: 15,
-    fontWeight: '800',
-  },
-  conflictAlertBox: {
-    padding: 10,
-    borderRadius: 8,
-    borderWidth: 1,
-    marginBottom: 12,
-  },
-  conflictAlertTitle: {
-    fontSize: 13,
-    fontWeight: '800',
-    marginBottom: 4,
-  },
-  conflictAlertReason: {
-    fontSize: 12,
-  },
-  assignedKitDetail: {
-    alignItems: 'center',
-    paddingVertical: 10,
-  },
-  modalKitImg: {
-    width: 120,
-    height: 120,
-    borderRadius: 12,
-    marginBottom: 8,
-  },
-  modalKitName: {
-    fontSize: 16,
-    fontWeight: '800',
-    textAlign: 'center',
-  },
-  modalKitSub: {
-    fontSize: 13,
-    marginTop: 2,
-    textAlign: 'center',
-  },
-  modalActionsRow: {
-    flexDirection: 'row',
-    marginTop: 16,
   },
   pickerContainer: {
     flex: 1,
@@ -1807,59 +2216,6 @@ const styles = StyleSheet.create({
   catalogKitMeta: {
     fontSize: 12,
     marginTop: 2,
-  },
-  viewOnlyBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 12,
-    borderRadius: 8,
-    borderWidth: 1,
-    marginBottom: 16,
-    gap: 8,
-  },
-  viewOnlyText: {
-    flex: 1,
-    fontSize: 12,
-    lineHeight: 18,
-    fontWeight: '600',
-  },
-  applySameCard: {
-    padding: 14,
-    borderRadius: 12,
-    borderWidth: 1,
-    marginBottom: 16,
-  },
-  applySameTitle: {
-    fontSize: 14,
-    fontWeight: '800',
-    marginBottom: 2,
-  },
-  applySameSub: {
-    fontSize: 12,
-  },
-  applySameButtonsRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginTop: 8,
-  },
-  applySameBtn: {
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    borderRadius: 6,
-    borderWidth: 1,
-  },
-  applySameBtnText: {
-    fontSize: 11,
-    fontWeight: '700',
-  },
-  shareOwnerBtn: {
-    borderWidth: 1,
-    borderRadius: 4,
-    paddingVertical: 3,
-    paddingHorizontal: 6,
-    marginTop: 6,
-    alignItems: 'center',
   },
   subAutoRenewRow: {
     flexDirection: 'row',
