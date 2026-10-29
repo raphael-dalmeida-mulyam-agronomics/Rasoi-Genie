@@ -981,7 +981,7 @@ export const MealDetailModal: React.FC<MealDetailModalProps> = ({
                         { color: colors.primary, fontWeight: '700', marginBottom: 8 },
                       ]}
                     >
-                      📹 Chef Video Tutorial
+                      Chef Video Tutorial
                     </Text>
                     <YouTubeEmbed
                       videoUrl={kit.videoUrl}

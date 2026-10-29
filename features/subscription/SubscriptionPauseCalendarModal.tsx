@@ -289,7 +289,10 @@ export const SubscriptionPauseCalendarModal: React.FC<SubscriptionPauseCalendarM
             variant={allowance.rangesRemaining > 0 ? 'neutral' : 'danger'}
           />
         </View>
-        <Text style={[styles.cutoffText, { color: colors.textSecondary }]}>🔒 {t.cutoffNote}</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+          <Icon name="lock" size={12} color={colors.textSecondary} />
+          <Text style={[styles.cutoffText, { color: colors.textSecondary }]}>{t.cutoffNote}</Text>
+        </View>
       </View>
 
       {/* Family Member Targeting (Owner only) */}
@@ -568,7 +571,10 @@ export const SubscriptionPauseCalendarModal: React.FC<SubscriptionPauseCalendarM
           ]}
           testID="pause-error-banner"
         >
-          <Text style={[styles.errorText, { color: colors.textDanger }]}>⚠️ {errorMessage}</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            <Icon name="alert" size={14} color={colors.textDanger} />
+            <Text style={[styles.errorText, { color: colors.textDanger }]}>{errorMessage}</Text>
+          </View>
         </View>
       )}
 

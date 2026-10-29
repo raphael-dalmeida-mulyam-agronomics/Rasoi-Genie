@@ -1,6 +1,6 @@
 import { getMealKitById, MealKit } from './mealKitsService';
 
-export type StandardPlanKey = 'high-protein' | 'keto' | 'vegan';
+export type StandardPlanKey = 'high-protein' | 'keto' | 'vegan' | 'kids';
 export type PlanType = 'standard' | 'custom';
 export type SubscriptionScope = 'individual' | 'family';
 export type SubscriptionStatus = 'pending' | 'active' | 'paused' | 'cancelled' | 'expired';
@@ -94,6 +94,26 @@ export const STANDARD_SUBSCRIPTION_PLANS: Record<StandardPlanKey, StandardSubscr
       { weekday: 4, weekdayName: 'Friday', mealKitId: 'kit-303' }, // Spiced Tomato & Red Lentil Shorba Kit (100% vegan)
       { weekday: 5, weekdayName: 'Saturday', mealKitId: 'kit-305' }, // Crispy Veg Manchurian & Hakka Noodles Kit (100% vegan)
       { weekday: 6, weekdayName: 'Sunday', mealKitId: 'kit-310' }, // Puneri Pithla Bhakri & Thecha Kit (100% vegan)
+    ],
+  },
+  kids: {
+    key: 'kids',
+    name: 'Kids Healthy Box',
+    tagline: 'Mild, fun & nutritious dinners that kids love',
+    description:
+      'Mild pastas, artisanal sourdough pizzas, wholesome smash burgers, and creamy comfort soups crafted for young tastebuds without fiery spices.',
+    badge: 'KIDS & FAMILY',
+    pricePerMemberPerWeek: 999,
+    originalPricePerMemberPerWeek: 1299,
+    highlightNutrition: 'Mild spice, wholesome carbs & balanced nutrients',
+    weeklyMeals: [
+      { weekday: 0, weekdayName: 'Monday', mealKitId: 'kit-202' }, // Artisanal Sourdough Burrata Pizza Kit
+      { weekday: 1, weekdayName: 'Tuesday', mealKitId: 'kit-205' }, // Sun-Dried Tomato & Basil Fettuccine Kit
+      { weekday: 2, weekdayName: 'Wednesday', mealKitId: 'kit-201' }, // Truffle Mushroom Smash Burger Kit
+      { weekday: 3, weekdayName: 'Thursday', mealKitId: 'kit-103' }, // Slow-Brew Dal Makhani Kit
+      { weekday: 4, weekdayName: 'Friday', mealKitId: 'kit-210' }, // Creamy Truffle & Wild Mushroom Pappardelle Kit
+      { weekday: 5, weekdayName: 'Saturday', mealKitId: 'kit-308' }, // Creamy Wild Mushroom & Corn Chowder Kit
+      { weekday: 6, weekdayName: 'Sunday', mealKitId: 'kit-206' }, // Texas Double Smash Cheeseburger Kit
     ],
   },
 };

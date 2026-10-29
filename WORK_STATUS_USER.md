@@ -20,8 +20,9 @@ Today's work centered on significantly expanding the RasoiGenie Weekly Meal Subs
     - **High Protein Power** (₹1,299 / member / week)
     - **Keto Low-Carb Gourmet** (₹1,499 / member / week)
     - **100% Plant-Based Vegan** (₹1,199 / member / week)
+    - **Kids Healthy Box** (₹999 / member / week — mild pastas, sourdough pizzas, smash burgers, and comfort soups)
     - **Custom 7-Day Plan** (₹1,399 / member / week)
-  - Selecting a standard plan immediately auto-populates the member's 7-day schedule with curated recipes, while allowing individual meal customization.
+  - Selecting a standard plan immediately auto-populates the member's 7-day schedule with curated recipes, while allowing individual meal customization. Children and child dependents automatically default to the Kids plan.
 - **"Apply the Same Plan to Everyone" Quick Action**:
   - Implemented an owner action bar with one-tap buttons to broadcast any standard or custom plan to all covered members via the pure function `copyPlanToAllMembers`.
   - Sets `plan_group = 'shared_all'` while retaining full individual adjustability for subsequent modifications.
@@ -113,11 +114,19 @@ Today's work centered on significantly expanding the RasoiGenie Weekly Meal Subs
   - Replaced the heading `"2. Weekly Meal Matrix (Google Calendar View)"` with **"Weekly Meal Plan"** via `t.familyCalendar.planHeading`.
   - Updated the subtitle to **"Tap any day to see or change what each member is eating."** (`t.familyCalendar.planSubtitle`).
 - **"Member plans" Section (Above the Calendar)**:
-  - Added a dedicated configuration section featuring responsive cards (1 column on mobile phones, 2–3 columns on wide desktop screens).
-  - Each card displays member `<Avatar>`, full name, role badge (`Owner`, `Co-owner`, `Member`, `Dependent`), weekly summary line (`₹X / week • 7 dinners`), and `<SegmentedControl>` for **High Protein**, **Keto**, **Vegan**, and **Custom**.
+  - Wrapped the entire configuration section in a dedicated `<Card variant="flat">` with a light separate background color (`colors.bgSubtle`, `borderColor: colors.borderLight`, `borderRadius: radii.xl`).
+  - Positioned each covered member card **one below the other** in a full-width vertical stack (`styles.memberCardsContainer` with `flexDirection: 'column'`, `gap: 12`, `width: '100%'`).
+  - Each member card displays member `<Avatar>`, full name, role badge (`Owner`, `Co-owner`, `Member`, `Dependent`), weekly summary line (`₹X / week • 7 dinners`), and `<SegmentedControl>` for **High Protein**, **Keto**, **Vegan**, **Kids**, and **Custom**.
   - Includes a running total (`"Total per week: ₹X for N members"`) recalculating dynamically via `calculatePerMemberSubscriptionTotal`.
-  - Added `"Apply to everyone"` quick action buttons with confirmation alert (`applyPlanToAllConfirmTitle`) to broadcast a plan to all covered members.
+  - Added `"Apply to everyone"` quick action buttons (High Protein, Keto, Vegan, Kids, Custom) with confirmation alert (`applyPlanToAllConfirmTitle`) to broadcast a plan to all covered members.
   - Implemented an overwrite confirmation prompt (`overwriteCustomPicksTitle`) if a member already has custom recipe selections before replacing them.
+- **Dedicated Kids Subscription Plan**:
+  - Created `'kids'` plan key in `StandardPlanKey` with price ₹999 / member / week (original ₹1,299).
+  - Curated 7 mild, kid-approved recipes (`kit-202` Artisanal Sourdough Burrata Pizza, `kit-205` Sun-Dried Tomato & Basil Fettuccine, `kit-201` Truffle Mushroom Smash Burger, `kit-103` Slow-Brew Dal Makhani, `kit-210` Creamy Truffle Pappardelle, `kit-308` Wild Mushroom Chowder, and `kit-206` Texas Double Smash Cheeseburger).
+  - Child dependents (`dependent_type === 'child'`) automatically default to the Kids plan.
+- **Complete Emoji Removal & Vector Icon Standardization**:
+  - Removed all raw emojis (`⚠️`, `🔒`, `📹`) across subscription and family views, replacing them with semantic vector `<Icon>` components (`Icon name="alert"`, `Icon name="lock"`, clean typography).
+  - Replaced conflict indicator with vector alert badge inside calendar cells and day detail popup.
 - **Granular Custom Plan Switching on Recipe Edit**:
   - If the owner customizes a recipe for themselves, only the owner's plan updates to **Custom Plan**, while all other members' plans remain intact.
   - If the owner customizes a recipe for another family member, only that family member's plan updates to **Custom Plan**, while the owner's and other members' plans remain intact.

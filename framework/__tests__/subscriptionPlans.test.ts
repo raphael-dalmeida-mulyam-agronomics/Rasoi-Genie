@@ -7,11 +7,12 @@ import {
 } from '../services/subscriptionPlans';
 
 describe('Subscription Plan Catalog Validity Tests', () => {
-  it('contains the 3 standard weekly plans: High Protein, Keto, and Vegan', () => {
+  it('contains the 4 standard weekly plans: High Protein, Keto, Vegan, and Kids', () => {
     expect(STANDARD_SUBSCRIPTION_PLANS['high-protein']).toBeDefined();
     expect(STANDARD_SUBSCRIPTION_PLANS['keto']).toBeDefined();
     expect(STANDARD_SUBSCRIPTION_PLANS['vegan']).toBeDefined();
-    expect(STANDARD_PLANS_LIST.length).toBe(3);
+    expect(STANDARD_SUBSCRIPTION_PLANS['kids']).toBeDefined();
+    expect(STANDARD_PLANS_LIST.length).toBe(4);
   });
 
   it('each standard plan has a 7-day schedule covering Monday through Sunday', () => {
@@ -53,6 +54,12 @@ describe('Subscription Plan Catalog Validity Tests', () => {
     const resolvedVegan = resolvePlanMealKits('vegan');
     expect(resolvedVegan).toHaveLength(7);
     resolvedVegan.forEach((dayMeal) => {
+      expect(dayMeal.mealKit).toBeDefined();
+    });
+
+    const resolvedKids = resolvePlanMealKits('kids');
+    expect(resolvedKids).toHaveLength(7);
+    resolvedKids.forEach((dayMeal) => {
       expect(dayMeal.mealKit).toBeDefined();
     });
   });

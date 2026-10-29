@@ -56,6 +56,7 @@ const PLAN_SEGMENTS = [
   { value: 'high-protein', label: 'High Protein' },
   { value: 'keto', label: 'Keto' },
   { value: 'vegan', label: 'Vegan' },
+  { value: 'kids', label: 'Kids' },
   { value: 'custom', label: 'Custom' },
 ];
 
@@ -120,11 +121,14 @@ export const FamilySubscriptionView: React.FC<{ onBack?: () => void }> = ({ onBa
       { planType: PlanType; standardPlanKey?: StandardPlanKey | null; planGroup?: string | null }
     > = {};
     members.forEach((m) => {
-      const defaultKey: StandardPlanKey = m.preferences?.dietTypes?.includes('vegan')
-        ? 'vegan'
-        : m.preferences?.dietTypes?.includes('keto')
-          ? 'keto'
-          : 'high-protein';
+      const defaultKey: StandardPlanKey =
+        m.dependent_type === 'child'
+          ? 'kids'
+          : m.preferences?.dietTypes?.includes('vegan')
+            ? 'vegan'
+            : m.preferences?.dietTypes?.includes('keto')
+              ? 'keto'
+              : 'high-protein';
       initial[m.user_id] = { planType: 'standard', standardPlanKey: defaultKey, planGroup: null };
     });
     return initial;
@@ -709,9 +713,14 @@ export const FamilySubscriptionView: React.FC<{ onBack?: () => void }> = ({ onBa
                   ]}
                   testID={`conflict-warning-${member.user_id}`}
                 >
-                  <Text style={[styles.conflictAlertTitle, { color: colors.warning }]}>
-                    ⚠️ Dietary Preference Conflict
-                  </Text>
+                  <View
+                    style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 }}
+                  >
+                    <Icon name="alert" size={16} color={colors.warning} />
+                    <Text style={[styles.conflictAlertTitle, { color: colors.warning }]}>
+                      Dietary Preference Conflict
+                    </Text>
+                  </View>
                   {conflict.reasons.map((r, i) => (
                     <Text key={i} style={[styles.conflictAlertReason, { color: colors.warning }]}>
                       • {r}
@@ -1180,8 +1189,18 @@ export const FamilySubscriptionView: React.FC<{ onBack?: () => void }> = ({ onBa
           })}
         </View>
 
-        {/* 2. Member plans Section (Above the Calendar) */}
-        <View style={{ marginTop: 24 }}>
+        {/* 2. Member plans Section (Above the Calendar) in Card with light background */}
+        <Card
+          variant="flat"
+          style={[
+            styles.memberPlansSectionCard,
+            {
+              backgroundColor: colors.bgSubtle,
+              borderColor: colors.borderLight,
+              borderRadius: radii.xl,
+            },
+          ]}
+        >
           <View style={styles.sectionHeaderRowBetween}>
             <View>
               <Text style={[styles.sectionHeading, { color: colors.textPrimary }]}>
@@ -1251,6 +1270,18 @@ export const FamilySubscriptionView: React.FC<{ onBack?: () => void }> = ({ onBa
                     styles.applySameBtn,
                     { backgroundColor: colors.bgPrimary, borderColor: colors.borderLight },
                   ]}
+                  onPress={() => confirmApplySamePlan('standard', 'kids')}
+                  testID="apply-all-kids-btn"
+                >
+                  <Text style={[styles.applySameBtnText, { color: colors.textPrimary }]}>
+                    Kids (₹999)
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.applySameBtn,
+                    { backgroundColor: colors.bgPrimary, borderColor: colors.borderLight },
+                  ]}
                   onPress={() => confirmApplySamePlan('custom')}
                   testID="apply-all-custom-btn"
                 >
@@ -1262,7 +1293,7 @@ export const FamilySubscriptionView: React.FC<{ onBack?: () => void }> = ({ onBa
             </View>
           )}
 
-          {/* Member Plan Cards (1 col mobile, 2-3 col web) */}
+          {/* Member Plan Cards (Stacked one below the other) */}
           <View style={styles.memberCardsContainer}>
             {coveredMembersList.map((member) => {
               const cfg = memberPlanConfigs[member.user_id] || {
@@ -1277,15 +1308,13 @@ export const FamilySubscriptionView: React.FC<{ onBack?: () => void }> = ({ onBa
                     DEFAULT_CUSTOM_PLAN_PRICE_PER_WEEK
                   : DEFAULT_CUSTOM_PLAN_PRICE_PER_WEEK;
 
-              const cardWidth = isWebOrDesktop ? (width > 1100 ? '31.5%' : '48.5%') : '100%';
-
               return (
                 <View
                   key={`plan-card-${member.user_id}`}
                   style={[
                     styles.memberPlanCard,
                     {
-                      width: cardWidth,
+                      width: '100%',
                       backgroundColor: colors.bgSurface,
                       borderColor: colors.borderLight,
                       borderRadius: radii.lg,
@@ -1343,7 +1372,7 @@ export const FamilySubscriptionView: React.FC<{ onBack?: () => void }> = ({ onBa
               );
             })}
           </View>
-        </View>
+        </Card>
 
         {/* 3. Weekly Meal Plan (Google Calendar Style Month Grid) */}
         <View style={{ marginTop: 28 }}>
@@ -1501,9 +1530,9 @@ export const FamilySubscriptionView: React.FC<{ onBack?: () => void }> = ({ onBa
                           {day.weekdayShort}
                         </Text>
                         {dayMeals.hasAnyConflict && (
-                          <Text style={styles.cellClashIcon} testID="cell-clash-icon">
-                            ⚠️
-                          </Text>
+                          <View style={styles.cellClashIcon} testID="cell-clash-icon">
+                            <Icon name="alert" size={10} color={colors.warning} />
+                          </View>
                         )}
                       </View>
 
@@ -1810,7 +1839,7 @@ export const FamilySubscriptionView: React.FC<{ onBack?: () => void }> = ({ onBa
                             marginTop: 2,
                           }}
                         >
-                          ⚠️ {conflict.reasons[0]}
+                          {conflict.reasons[0]}
                         </Text>
                       )}
                     </View>
@@ -2021,11 +2050,15 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '700',
   },
+  memberPlansSectionCard: {
+    padding: 16,
+    marginTop: 24,
+  },
   memberCardsContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+    flexDirection: 'column',
     gap: 12,
-    marginTop: 4,
+    marginTop: 8,
+    width: '100%',
   },
   memberPlanCard: {
     padding: 14,
@@ -2123,7 +2156,8 @@ const styles = StyleSheet.create({
     fontSize: 9,
   },
   cellClashIcon: {
-    fontSize: 9,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   cellThumbnailsRow: {
     flexDirection: 'row',

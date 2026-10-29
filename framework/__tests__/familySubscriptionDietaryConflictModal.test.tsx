@@ -147,7 +147,7 @@ describe('FamilySubscriptionView - Dietary Conflict Modal Dismissal', () => {
 
     // 3. Day Detail popup opens and displays Dietary Preference Conflict banner inside member section
     await waitFor(() => {
-      expect(getByText('⚠️ Dietary Preference Conflict')).toBeTruthy();
+      expect(getByText('Dietary Preference Conflict')).toBeTruthy();
       expect(getByText('• Non-vegetarian dish assigned to vegetarian member')).toBeTruthy();
       expect(getByText('Lucknowi Chicken Biryani')).toBeTruthy();
     });
@@ -158,7 +158,7 @@ describe('FamilySubscriptionView - Dietary Conflict Modal Dismissal', () => {
 
     // 5. The day detail conflict pop up MUST disappear
     await waitFor(() => {
-      expect(queryByText('⚠️ Dietary Preference Conflict')).toBeNull();
+      expect(queryByText('Dietary Preference Conflict')).toBeNull();
     });
 
     // 6. The Recipe Picker Modal MUST now be open
@@ -180,7 +180,7 @@ describe('FamilySubscriptionView - Dietary Conflict Modal Dismissal', () => {
     fireEvent.press(clashCells[0]!);
     await waitFor(() => {
       expect(getByText('Paneer Makhani Kit')).toBeTruthy();
-      expect(queryByText('⚠️ Dietary Preference Conflict')).toBeNull();
+      expect(queryByText('Dietary Preference Conflict')).toBeNull();
     });
   });
 });

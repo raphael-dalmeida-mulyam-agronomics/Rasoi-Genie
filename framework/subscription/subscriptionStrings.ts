@@ -24,6 +24,7 @@ export const subscriptionStrings = {
     highProteinTitle: 'High Protein Power',
     ketoTitle: 'Keto Low-Carb Gourmet',
     veganTitle: '100% Plant-Based Vegan',
+    kidsTitle: 'Kids Healthy Box',
     customTitle: 'Fully Custom 7-Day Plan',
     customSubtitle: 'Hand-pick your favourite recipe or kit for each day of the week.',
     applyStandardPlanBtn: 'Apply Standard Plan',
@@ -139,7 +140,7 @@ export const subscriptionStrings = {
     subtitle:
       'Subscribe to weekly fresh meal boxes for you and your family. Save up to 25% with free delivery and priority morning slots.',
     bullet1: 'Pre-portioned fresh ingredients & whole chef-ground masalas',
-    bullet2: 'High Protein, Keto, Vegan or 100% custom day-by-day plans',
+    bullet2: 'High Protein, Keto, Vegan, Kids or 100% custom day-by-day plans',
     bullet3: 'Pause, swap, or cancel anytime with zero cancellation fees',
     viewPlansBtn: 'View Subscription Plans',
     maybeLaterBtn: 'Maybe Later',
