@@ -257,7 +257,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 8,
     paddingHorizontal: 14,
-    borderRadius: 999,
+    borderRadius: 8,
     borderWidth: 1,
     zIndex: 9999,
   },
@@ -366,7 +366,7 @@ const styles = StyleSheet.create({
   activeBadge: {
     paddingVertical: 4,
     paddingHorizontal: 8,
-    borderRadius: 999,
+    borderRadius: 8,
   },
   activeBadgeText: {
     fontSize: 11,

@@ -578,7 +578,7 @@ export const CookModeView: React.FC<CookModeViewProps> = ({ orderId, initialKitI
                     width: 50,
                     height: 4,
                     backgroundColor: colors.bgSubtle,
-                    borderRadius: radii.pill,
+                    borderRadius: 999,
                     overflow: 'hidden',
                   }}
                 >
@@ -587,7 +587,7 @@ export const CookModeView: React.FC<CookModeViewProps> = ({ orderId, initialKitI
                       width: `${progressFraction * 100}%`,
                       height: '100%',
                       backgroundColor: colors.primary,
-                      borderRadius: radii.pill,
+                      borderRadius: 999,
                     }}
                   />
                 </View>

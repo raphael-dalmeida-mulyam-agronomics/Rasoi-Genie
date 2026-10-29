@@ -21,6 +21,7 @@ import { InAppDialogProvider } from '../framework/context/InAppDialogContext';
 import { WalletProvider } from '../framework/context/WalletContext';
 import { CookModeProvider } from '../framework/context/CookModeContext';
 import { FamilyProvider } from '../framework/context/FamilyContext';
+import { SubscriptionProvider } from '../framework/context/SubscriptionContext';
 import { ToastProvider } from '../framework/ui/Toast';
 import { SafeAreaProvider, initialWindowMetrics } from 'react-native-safe-area-context';
 import { Platform } from 'react-native';
@@ -76,19 +77,21 @@ function RootLayoutNav() {
         <ToastProvider>
           <AuthProvider>
             <FamilyProvider>
-              <PreferencesProvider>
-                <WishlistProvider>
-                  <WalletProvider>
-                    <CartProvider>
-                      <InAppDialogProvider>
-                        <CookModeProvider>
-                          <NavigationWithTheme />
-                        </CookModeProvider>
-                      </InAppDialogProvider>
-                    </CartProvider>
-                  </WalletProvider>
-                </WishlistProvider>
-              </PreferencesProvider>
+              <SubscriptionProvider>
+                <PreferencesProvider>
+                  <WishlistProvider>
+                    <WalletProvider>
+                      <CartProvider>
+                        <InAppDialogProvider>
+                          <CookModeProvider>
+                            <NavigationWithTheme />
+                          </CookModeProvider>
+                        </InAppDialogProvider>
+                      </CartProvider>
+                    </WalletProvider>
+                  </WishlistProvider>
+                </PreferencesProvider>
+              </SubscriptionProvider>
             </FamilyProvider>
           </AuthProvider>
         </ToastProvider>

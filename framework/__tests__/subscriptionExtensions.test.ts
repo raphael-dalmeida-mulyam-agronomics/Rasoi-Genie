@@ -1,0 +1,540 @@
+import {
+  calculatePerMemberSubscriptionTotal,
+  copyPlanToAllMembers,
+  validatePauseSelection,
+  calculateExtendedPeriodEnd,
+  calculateRemainingPauseAllowance,
+  isDateLockedForPause,
+  STANDARD_SUBSCRIPTION_PLANS,
+} from '../services/subscriptionPlans';
+import {
+  createAndActivateSubscription,
+  createSubscriptionPause,
+  processSubscriptionRenewal,
+  resetSubscriptionMockStore,
+  toggleAutoRenew,
+  applyPlanToAllMembers,
+} from '../services/subscriptionService';
+import {
+  SUBSCRIPTION_PAUSE_CONFIG,
+  SUBSCRIPTION_RENEWAL_CONFIG,
+} from '../subscription/subscriptionConfig';
+import { can } from '../family/permissions';
+
+describe('Subscription Extensions Test Suite', () => {
+  beforeEach(() => {
+    resetSubscriptionMockStore();
+  });
+
+  // ==========================================
+  // 1. Per-Member Pricing Pure Function
+  // ==========================================
+  describe('calculatePerMemberSubscriptionTotal', () => {
+    it('calculates total for mixed plans across family members', () => {
+      const members = [
+        {
+          planType: 'standard' as const,
+          standardPlanKey: 'high-protein' as const,
+          pricePerWeek: 1299,
+        },
+        { planType: 'standard' as const, standardPlanKey: 'keto' as const, pricePerWeek: 1499 },
+        { planType: 'standard' as const, standardPlanKey: 'vegan' as const, pricePerWeek: 1199 },
+        { planType: 'custom' as const, pricePerWeek: 1399 },
+      ];
+
+      const result = calculatePerMemberSubscriptionTotal({
+        members,
+        weeks: 1,
+      });
+
+      // 1299 + 1499 + 1199 + 1399 = 5396
+      expect(result.membersCount).toBe(4);
+      expect(result.weeks).toBe(1);
+      expect(result.subtotal).toBe(5396);
+      expect(result.discount).toBe(0);
+      expect(result.total).toBe(5396);
+      expect(result.memberBreakdown).toHaveLength(4);
+      expect(result.memberBreakdown[0]!.pricePerWeek).toBe(1299);
+      expect(result.memberBreakdown[1]!.pricePerWeek).toBe(1499);
+      expect(result.memberBreakdown[2]!.pricePerWeek).toBe(1199);
+      expect(result.memberBreakdown[3]!.pricePerWeek).toBe(1399);
+    });
+
+    it('multiplies member total by number of weeks in period', () => {
+      const members = [
+        {
+          planType: 'standard' as const,
+          standardPlanKey: 'high-protein' as const,
+          pricePerWeek: 1299,
+        },
+        { planType: 'standard' as const, standardPlanKey: 'vegan' as const, pricePerWeek: 1199 },
+      ];
+
+      // Weekly subtotal = 2498. For 4 weeks = 9992.
+      const result = calculatePerMemberSubscriptionTotal({
+        members,
+        weeks: 4,
+      });
+
+      expect(result.weeks).toBe(4);
+      expect(result.subtotal).toBe(9992);
+      expect(result.total).toBe(9992);
+      expect(result.memberBreakdown[0]!.totalForPeriod).toBe(1299 * 4);
+      expect(result.memberBreakdown[1]!.totalForPeriod).toBe(1199 * 4);
+    });
+
+    it('correctly applies discount up to subtotal cap', () => {
+      const members = [
+        {
+          planType: 'standard' as const,
+          standardPlanKey: 'high-protein' as const,
+          pricePerWeek: 1000,
+        },
+      ];
+
+      const withDiscount = calculatePerMemberSubscriptionTotal({
+        members,
+        weeks: 1,
+        discount: 250,
+      });
+      expect(withDiscount.subtotal).toBe(1000);
+      expect(withDiscount.discount).toBe(250);
+      expect(withDiscount.total).toBe(750);
+
+      // Oversized discount capped at subtotal
+      const cappedDiscount = calculatePerMemberSubscriptionTotal({
+        members,
+        weeks: 1,
+        discount: 2000,
+      });
+      expect(cappedDiscount.total).toBe(0);
+    });
+
+    it('handles zero members or invalid weeks safely', () => {
+      const empty = calculatePerMemberSubscriptionTotal({
+        members: [],
+        weeks: 2,
+      });
+      expect(empty.membersCount).toBe(0);
+      expect(empty.subtotal).toBe(0);
+      expect(empty.total).toBe(0);
+
+      const invalidWeeks = calculatePerMemberSubscriptionTotal({
+        members: [{ planType: 'custom' as const, pricePerWeek: 1000 }],
+        weeks: -1,
+      });
+      expect(invalidWeeks.weeks).toBe(1); // normalized to minimum 1
+      expect(invalidWeeks.total).toBe(1000);
+    });
+  });
+
+  // ==========================================
+  // 2. Same-Plan Copy Pure Function
+  // ==========================================
+  describe('copyPlanToAllMembers', () => {
+    it('copies target plan and standard key to all given member IDs', () => {
+      const memberIds = ['user_1', 'user_2', 'user_dep_3'];
+      const targetPlan = { planType: 'standard' as const, standardPlanKey: 'keto' as const };
+
+      const copied = copyPlanToAllMembers(targetPlan, memberIds, 'shared_all');
+
+      expect(Object.keys(copied)).toHaveLength(3);
+      memberIds.forEach((id) => {
+        expect(copied[id]).toEqual({
+          planType: 'standard',
+          standardPlanKey: 'keto',
+          planGroup: 'shared_all',
+        });
+      });
+    });
+
+    it('supports custom plan copying with custom plan group', () => {
+      const memberIds = ['m1', 'm2'];
+      const targetPlan = { planType: 'custom' as const, standardPlanKey: null };
+
+      const copied = copyPlanToAllMembers(targetPlan, memberIds, 'family_custom');
+
+      expect(copied['m1']).toEqual({
+        planType: 'custom',
+        standardPlanKey: null,
+        planGroup: 'family_custom',
+      });
+      expect(copied['m2']).toEqual({
+        planType: 'custom',
+        standardPlanKey: null,
+        planGroup: 'family_custom',
+      });
+    });
+
+    it('returns empty object when no member IDs are passed', () => {
+      const copied = copyPlanToAllMembers({ planType: 'custom' as const }, []);
+      expect(copied).toEqual({});
+    });
+  });
+
+  // ==========================================
+  // 3. Pause Limits & Edge Cases Validation
+  // ==========================================
+  describe('validatePauseSelection', () => {
+    const fixedNow = '2026-11-02T08:00:00Z';
+    const periodStart = '2026-11-01';
+    const periodEnd = '2026-11-30';
+
+    it('accepts a valid pause range within all rules', () => {
+      const res = validatePauseSelection({
+        startDate: '2026-11-06',
+        endDate: '2026-11-10', // 5 days
+        periodStart,
+        periodEnd,
+        now: fixedNow,
+        existingPauses: [],
+      });
+
+      expect(res.valid).toBe(true);
+      expect(res.daysCount).toBe(5);
+      expect(res.error).toBeUndefined();
+    });
+
+    it('enforces maximum 7 consecutive days limit', () => {
+      // 8 consecutive days: 2026-11-06 to 2026-11-13
+      const res = validatePauseSelection({
+        startDate: '2026-11-06',
+        endDate: '2026-11-13',
+        periodStart,
+        periodEnd,
+        now: fixedNow,
+      });
+
+      expect(res.valid).toBe(false);
+      expect(res.daysCount).toBe(8);
+      expect(res.error).toContain(
+        `longer than ${SUBSCRIPTION_PAUSE_CONFIG.MAX_CONSECUTIVE_PAUSE_DAYS} consecutive days`,
+      );
+
+      // Exactly 7 consecutive days is permitted
+      const exact7 = validatePauseSelection({
+        startDate: '2026-11-06',
+        endDate: '2026-11-12', // 7 days
+        periodStart,
+        periodEnd,
+        now: fixedNow,
+      });
+      expect(exact7.valid).toBe(true);
+      expect(exact7.daysCount).toBe(7);
+    });
+
+    it('rejects dates in the past or within 48-hour delivery cutoff window', () => {
+      // Past day
+      const pastRes = validatePauseSelection({
+        startDate: '2026-11-01',
+        endDate: '2026-11-03',
+        periodStart,
+        periodEnd,
+        now: fixedNow,
+      });
+      expect(pastRes.valid).toBe(false);
+      expect(pastRes.error).toContain('48-hour delivery cutoff window or in the past');
+
+      // Inside 48h cutoff (< 2026-11-04)
+      const cutoffRes = validatePauseSelection({
+        startDate: '2026-11-03',
+        endDate: '2026-11-05',
+        periodStart,
+        periodEnd,
+        now: fixedNow,
+      });
+      expect(cutoffRes.valid).toBe(false);
+      expect(cutoffRes.error).toContain('48-hour delivery cutoff window');
+    });
+
+    it('rejects paused days falling outside current billing period boundaries', () => {
+      // Start before period
+      const beforeRes = validatePauseSelection({
+        startDate: '2026-10-31',
+        endDate: '2026-11-05',
+        periodStart,
+        periodEnd,
+        now: '2026-10-25T00:00:00Z',
+      });
+      expect(beforeRes.valid).toBe(false);
+      expect(beforeRes.error).toContain('fall inside the current billing period');
+
+      // End after period
+      const afterRes = validatePauseSelection({
+        startDate: '2026-11-28',
+        endDate: '2026-12-02',
+        periodStart,
+        periodEnd,
+        now: fixedNow,
+      });
+      expect(afterRes.valid).toBe(false);
+      expect(afterRes.error).toContain('fall inside the current billing period');
+    });
+
+    it('enforces maximum 14 paused days per billing period', () => {
+      const existingPauses = [
+        { startDate: '2026-11-06', endDate: '2026-11-12', daysCount: 7 }, // 7 days used
+      ];
+
+      // Requesting another 7 days -> total 14: passes
+      const ok14 = validatePauseSelection({
+        startDate: '2026-11-15',
+        endDate: '2026-11-21', // 7 days
+        periodStart,
+        periodEnd,
+        now: fixedNow,
+        existingPauses,
+      });
+      expect(ok14.valid).toBe(true);
+
+      // Existing 10 days used in 1 range, requesting 5 days -> total 15: fails 14-day limit
+      const existing10 = [{ startDate: '2026-11-06', endDate: '2026-11-15', daysCount: 10 }];
+      const exceed14 = validatePauseSelection({
+        startDate: '2026-11-20',
+        endDate: '2026-11-24', // 5 days -> 15 total
+        periodStart,
+        periodEnd,
+        now: fixedNow,
+        existingPauses: existing10,
+      });
+      expect(exceed14.valid).toBe(false);
+      expect(exceed14.error).toContain(
+        `${SUBSCRIPTION_PAUSE_CONFIG.MAX_PAUSED_DAYS_PER_PERIOD} paused days left`,
+      );
+    });
+
+    it('enforces maximum 2 separate pause ranges per period', () => {
+      const existing2 = [
+        { startDate: '2026-11-05', endDate: '2026-11-07', daysCount: 3 },
+        { startDate: '2026-11-10', endDate: '2026-11-12', daysCount: 3 },
+      ];
+
+      const res = validatePauseSelection({
+        startDate: '2026-11-15',
+        endDate: '2026-11-17',
+        periodStart,
+        periodEnd,
+        now: fixedNow,
+        existingPauses: existing2,
+      });
+
+      expect(res.valid).toBe(false);
+      expect(res.error).toContain('Maximum 2 separate pause ranges allowed');
+    });
+
+    it('rejects overlapping ranges', () => {
+      const existing = [{ startDate: '2026-11-10', endDate: '2026-11-15', daysCount: 6 }];
+
+      // New range intersects existing range
+      const overlapRes = validatePauseSelection({
+        startDate: '2026-11-14',
+        endDate: '2026-11-18',
+        periodStart,
+        periodEnd,
+        now: fixedNow,
+        existingPauses: existing,
+      });
+
+      expect(overlapRes.valid).toBe(false);
+      expect(overlapRes.error).toContain('overlaps with an existing pause');
+    });
+
+    it('rejects inverted dates (end date before start date)', () => {
+      const res = validatePauseSelection({
+        startDate: '2026-11-15',
+        endDate: '2026-11-10',
+        periodStart,
+        periodEnd,
+        now: fixedNow,
+      });
+      expect(res.valid).toBe(false);
+      expect(res.error).toContain('earlier than start date');
+    });
+  });
+
+  // ==========================================
+  // 4. Period Extension Arithmetic
+  // ==========================================
+  describe('calculateExtendedPeriodEnd & allowance tracking', () => {
+    it('accurately extends period end date by paused days', () => {
+      const currentEnd = new Date('2026-11-15T00:00:00.000Z');
+      const extended5Days = calculateExtendedPeriodEnd(currentEnd, 5);
+
+      expect(extended5Days.toISOString()).toBe('2026-11-20T00:00:00.000Z');
+
+      const extended7Days = calculateExtendedPeriodEnd('2026-11-15T00:00:00.000Z', 7);
+      expect(extended7Days.toISOString()).toBe('2026-11-22T00:00:00.000Z');
+    });
+
+    it('calculates remaining pause allowance accurately', () => {
+      const pauses = [{ startDate: '2026-11-05', endDate: '2026-11-08', daysCount: 4 }];
+
+      const allowance = calculateRemainingPauseAllowance(pauses);
+      expect(allowance.totalAllowedDays).toBe(14);
+      expect(allowance.daysUsed).toBe(4);
+      expect(allowance.daysRemaining).toBe(10);
+      expect(allowance.maxRanges).toBe(2);
+      expect(allowance.rangesUsed).toBe(1);
+      expect(allowance.rangesRemaining).toBe(1);
+    });
+
+    it('identifies locked dates via isDateLockedForPause', () => {
+      const now = '2026-11-10T10:00:00Z'; // Cutoff 48h -> 2026-11-12
+      expect(isDateLockedForPause('2026-11-09', now)).toBe(true);
+      expect(isDateLockedForPause('2026-11-11', now)).toBe(true);
+      expect(isDateLockedForPause('2026-11-13', now)).toBe(false);
+    });
+  });
+
+  // ==========================================
+  // 5. Renewal State Machine & Idempotency
+  // ==========================================
+  describe('processSubscriptionRenewal', () => {
+    it('successfully advances period, retains plans, and resets retry counter on success', async () => {
+      const subRes = await createAndActivateSubscription({
+        ownerUserId: 'user_owner_101',
+        scope: 'family',
+        planType: 'custom',
+        amountPaid: 2498,
+        autoRenew: true,
+        members: [
+          {
+            id: 'm1',
+            name: 'Member 1',
+            isDependent: false,
+            planType: 'standard',
+            standardPlanKey: 'high-protein',
+            pricePerWeek: 1299,
+          },
+          {
+            id: 'm2',
+            name: 'Member 2',
+            isDependent: false,
+            planType: 'standard',
+            standardPlanKey: 'vegan',
+            pricePerWeek: 1199,
+          },
+        ],
+      });
+
+      expect(subRes.success).toBe(true);
+      const sub = subRes.subscription!;
+      expect(sub.renewal_attempts).toBe(0);
+      expect(sub.auto_renew).toBe(true);
+
+      const originalEnd = sub.period_end;
+      const renewRes = await processSubscriptionRenewal(sub.id);
+
+      expect(renewRes.success).toBe(true);
+      expect(renewRes.alreadyRenewed).toBe(false);
+      const renewed = renewRes.subscription!;
+      expect(renewed.status).toBe('active');
+      expect(renewed.period_start).toBe(originalEnd);
+      // Period end advanced by 7 days
+      const expectedEnd = new Date(
+        new Date(originalEnd).getTime() + 7 * 24 * 60 * 60 * 1000,
+      ).toISOString();
+      expect(renewed.period_end).toBe(expectedEnd);
+      expect(renewed.renewal_attempts).toBe(0);
+      expect(renewed.last_renewed_period_end).toBe(expectedEnd);
+    });
+
+    it('is idempotent: executing renewal twice for the same period does not double charge or advance', async () => {
+      const subRes = await createAndActivateSubscription({
+        ownerUserId: 'user_owner_idempotent',
+        scope: 'individual',
+        planType: 'standard',
+        standardPlanKey: 'high-protein',
+        amountPaid: 1299,
+        autoRenew: true,
+        members: [{ id: 'me', name: 'Me', isDependent: false }],
+      });
+
+      const sub = subRes.subscription!;
+
+      // First renewal
+      const firstRenew = await processSubscriptionRenewal(sub.id);
+      expect(firstRenew.success).toBe(true);
+      expect(firstRenew.alreadyRenewed).toBe(false);
+
+      // Immediate second renewal call for the exact same state
+      const secondRenew = await processSubscriptionRenewal(sub.id);
+      expect(secondRenew.success).toBe(true);
+      expect(secondRenew.alreadyRenewed).toBe(true);
+      expect(secondRenew.subscription?.period_end).toBe(firstRenew.subscription?.period_end);
+    });
+
+    it('retries on payment failure up to 3 times, then marks subscription as expired', async () => {
+      const subRes = await createAndActivateSubscription({
+        ownerUserId: 'user_retry_flow',
+        scope: 'individual',
+        planType: 'standard',
+        standardPlanKey: 'keto',
+        amountPaid: 1499,
+        autoRenew: true,
+        members: [{ id: 'me', name: 'Me', isDependent: false }],
+      });
+      const subId = subRes.subscription!.id;
+
+      // Failure Attempt 1
+      const fail1 = await processSubscriptionRenewal(subId, true);
+      expect(fail1.success).toBe(false);
+      expect(fail1.attempts).toBe(1);
+      expect(fail1.expired).toBe(false);
+      expect(fail1.subscription?.status).toBe('active');
+
+      // Failure Attempt 2
+      const fail2 = await processSubscriptionRenewal(subId, true);
+      expect(fail2.success).toBe(false);
+      expect(fail2.attempts).toBe(2);
+      expect(fail2.expired).toBe(false);
+
+      // Failure Attempt 3 -> Marks subscription as expired
+      const fail3 = await processSubscriptionRenewal(subId, true);
+      expect(fail3.success).toBe(false);
+      expect(fail3.attempts).toBe(3);
+      expect(fail3.expired).toBe(true);
+      expect(fail3.subscription?.status).toBe('expired');
+      expect(fail3.error).toContain('Maximum renewal attempts exceeded');
+    });
+
+    it('marks subscription as expired at period end when auto-renew is off', async () => {
+      const subRes = await createAndActivateSubscription({
+        ownerUserId: 'user_opt_out',
+        scope: 'individual',
+        planType: 'standard',
+        standardPlanKey: 'vegan',
+        amountPaid: 1199,
+        autoRenew: false, // Opted out
+        members: [{ id: 'me', name: 'Me', isDependent: false }],
+      });
+      const subId = subRes.subscription!.id;
+
+      const renewRes = await processSubscriptionRenewal(subId);
+      expect(renewRes.success).toBe(true);
+      expect(renewRes.expired).toBe(true);
+      expect(renewRes.subscription?.status).toBe('expired');
+    });
+  });
+
+  // ==========================================
+  // 6. Owner-Only Permissions Guard
+  // ==========================================
+  describe('Family permissions matrix for subscription', () => {
+    it('grants full subscription management solely to family owner', () => {
+      expect(can('owner', 'manage_family_subscription')).toBe(true);
+      expect(can('co_owner', 'manage_family_subscription')).toBe(false);
+      expect(can('member', 'manage_family_subscription')).toBe(false);
+      expect(can('dependent', 'manage_family_subscription')).toBe(false);
+      expect(can(null, 'manage_family_subscription')).toBe(false);
+    });
+
+    it('grants view_own_subscription_plan to all covered family roles', () => {
+      expect(can('owner', 'view_own_subscription_plan')).toBe(true);
+      expect(can('co_owner', 'view_own_subscription_plan')).toBe(true);
+      expect(can('member', 'view_own_subscription_plan')).toBe(true);
+      expect(can('dependent', 'view_own_subscription_plan')).toBe(true);
+      expect(can(null, 'view_own_subscription_plan')).toBe(false);
+    });
+  });
+});

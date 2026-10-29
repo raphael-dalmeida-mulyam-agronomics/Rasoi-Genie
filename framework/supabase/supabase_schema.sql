@@ -440,4 +440,181 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO anon, authentic
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO anon, authenticated, service_role;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON ROUTINES TO anon, authenticated, service_role;
 
+-- 14. WEEKLY MEAL SUBSCRIPTIONS
+CREATE TABLE IF NOT EXISTS public.subscriptions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  owner_user_id TEXT NOT NULL REFERENCES public.user_profiles(uid) ON DELETE CASCADE,
+  family_id UUID REFERENCES public.families(id) ON DELETE CASCADE,
+  scope TEXT NOT NULL CHECK (scope IN ('individual', 'family')),
+  plan_type TEXT NOT NULL CHECK (plan_type IN ('standard', 'custom')),
+  standard_plan_key TEXT,
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'active', 'paused', 'cancelled', 'expired')),
+  price_per_member_per_week NUMERIC NOT NULL DEFAULT 0,
+  member_count INTEGER NOT NULL DEFAULT 1,
+  amount_paid NUMERIC NOT NULL DEFAULT 0,
+  wallet_credits_applied NUMERIC NOT NULL DEFAULT 0,
+  payment_reference TEXT,
+  payment_method TEXT,
+  period_start TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  period_end TIMESTAMPTZ NOT NULL DEFAULT (NOW() + INTERVAL '7 days'),
+  auto_renew BOOLEAN NOT NULL DEFAULT true,
+  renewal_attempts INTEGER NOT NULL DEFAULT 0,
+  next_renewal_at TIMESTAMPTZ,
+  cancel_at_period_end BOOLEAN NOT NULL DEFAULT false,
+  last_renewed_period_end TIMESTAMPTZ,
+  region TEXT DEFAULT 'West',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_subscriptions_owner ON public.subscriptions(owner_user_id);
+CREATE INDEX IF NOT EXISTS idx_subscriptions_family ON public.subscriptions(family_id);
+CREATE INDEX IF NOT EXISTS idx_subscriptions_status ON public.subscriptions(status);
+CREATE INDEX IF NOT EXISTS idx_subscriptions_auto_renew ON public.subscriptions(auto_renew);
+CREATE INDEX IF NOT EXISTS idx_subscriptions_next_renewal ON public.subscriptions(next_renewal_at);
+CREATE INDEX IF NOT EXISTS idx_subscriptions_region ON public.subscriptions(region);
+
+CREATE TABLE IF NOT EXISTS public.subscription_members (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  subscription_id UUID NOT NULL REFERENCES public.subscriptions(id) ON DELETE CASCADE,
+  member_id TEXT NOT NULL,
+  member_name TEXT NOT NULL,
+  is_dependent BOOLEAN NOT NULL DEFAULT false,
+  plan_type TEXT NOT NULL DEFAULT 'standard' CHECK (plan_type IN ('standard', 'custom')),
+  standard_plan_key TEXT,
+  plan_group TEXT,
+  price_per_week NUMERIC NOT NULL DEFAULT 1299,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CONSTRAINT uq_sub_member UNIQUE (subscription_id, member_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_sub_members_sub_id ON public.subscription_members(subscription_id);
+CREATE INDEX IF NOT EXISTS idx_sub_members_plan_group ON public.subscription_members(plan_group);
+
+CREATE TABLE IF NOT EXISTS public.subscription_meals (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  subscription_id UUID NOT NULL REFERENCES public.subscriptions(id) ON DELETE CASCADE,
+  member_id TEXT NOT NULL,
+  weekday INTEGER NOT NULL CHECK (weekday >= 0 AND weekday <= 6),
+  meal_kit_id TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CONSTRAINT uq_sub_member_day UNIQUE (subscription_id, member_id, weekday)
+);
+
+CREATE INDEX IF NOT EXISTS idx_sub_meals_sub_id ON public.subscription_meals(subscription_id);
+
+ALTER TABLE public.subscriptions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.subscription_members ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.subscription_meals ENABLE ROW LEVEL SECURITY;
+CREATE TABLE IF NOT EXISTS public.subscription_pauses (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  subscription_id UUID NOT NULL REFERENCES public.subscriptions(id) ON DELETE CASCADE,
+  member_id TEXT,
+  start_date DATE NOT NULL,
+  end_date DATE NOT NULL,
+  days_count INTEGER NOT NULL GENERATED ALWAYS AS ((end_date - start_date) + 1) STORED,
+  created_by TEXT NOT NULL REFERENCES public.user_profiles(uid) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CONSTRAINT chk_pause_dates CHECK (end_date >= start_date),
+  CONSTRAINT chk_pause_max_consecutive CHECK ((end_date - start_date) + 1 <= 7)
+);
+
+CREATE INDEX IF NOT EXISTS idx_sub_pauses_sub_id ON public.subscription_pauses(subscription_id);
+CREATE INDEX IF NOT EXISTS idx_sub_pauses_member_id ON public.subscription_pauses(member_id);
+CREATE INDEX IF NOT EXISTS idx_sub_pauses_dates ON public.subscription_pauses(start_date, end_date);
+
+ALTER TABLE public.subscription_pauses ENABLE ROW LEVEL SECURITY;
+
+
+DROP POLICY IF EXISTS "Subscriptions owner manage policy" ON public.subscriptions;
+CREATE POLICY "Subscriptions owner manage policy"
+  ON public.subscriptions FOR ALL
+  USING (owner_user_id = auth.uid()::text OR owner_user_id = public.current_auth_email() OR public.is_super_admin())
+  WITH CHECK (owner_user_id = auth.uid()::text OR owner_user_id = public.current_auth_email() OR public.is_super_admin());
+
+DROP POLICY IF EXISTS "Subscriptions family members select policy" ON public.subscriptions;
+CREATE POLICY "Subscriptions family members select policy"
+  ON public.subscriptions FOR SELECT
+  USING (
+    owner_user_id = auth.uid()::text
+    OR (family_id IS NOT NULL AND EXISTS (
+      SELECT 1 FROM public.family_members fm
+      WHERE fm.family_id = subscriptions.family_id AND fm.user_id = auth.uid()::text
+    ))
+    OR public.is_super_admin()
+  );
+
+DROP POLICY IF EXISTS "Subscription members owner manage policy" ON public.subscription_members;
+CREATE POLICY "Subscription members owner manage policy"
+  ON public.subscription_members FOR ALL
+  USING (EXISTS (SELECT 1 FROM public.subscriptions s WHERE s.id = subscription_id AND (s.owner_user_id = auth.uid()::text OR public.is_super_admin())))
+  WITH CHECK (EXISTS (SELECT 1 FROM public.subscriptions s WHERE s.id = subscription_id AND (s.owner_user_id = auth.uid()::text OR public.is_super_admin())));
+
+DROP POLICY IF EXISTS "Subscription members family select policy" ON public.subscription_members;
+CREATE POLICY "Subscription members family select policy"
+  ON public.subscription_members FOR SELECT
+  USING (EXISTS (
+    SELECT 1 FROM public.subscriptions s
+    WHERE s.id = subscription_id
+      AND (
+        s.owner_user_id = auth.uid()::text
+        OR (s.family_id IS NOT NULL AND EXISTS (
+          SELECT 1 FROM public.family_members fm WHERE fm.family_id = s.family_id AND fm.user_id = auth.uid()::text
+        ))
+        OR public.is_super_admin()
+      )
+  ));
+
+DROP POLICY IF EXISTS "Subscription meals owner manage policy" ON public.subscription_meals;
+CREATE POLICY "Subscription meals owner manage policy"
+  ON public.subscription_meals FOR ALL
+  USING (EXISTS (SELECT 1 FROM public.subscriptions s WHERE s.id = subscription_id AND (s.owner_user_id = auth.uid()::text OR public.is_super_admin())))
+  WITH CHECK (EXISTS (SELECT 1 FROM public.subscriptions s WHERE s.id = subscription_id AND (s.owner_user_id = auth.uid()::text OR public.is_super_admin())));
+
+DROP POLICY IF EXISTS "Subscription meals family select policy" ON public.subscription_meals;
+CREATE POLICY "Subscription meals family select policy"
+  ON public.subscription_meals FOR SELECT
+  USING (EXISTS (
+    SELECT 1 FROM public.subscriptions s
+    WHERE s.id = subscription_id
+      AND (
+        s.owner_user_id = auth.uid()::text
+        OR (s.family_id IS NOT NULL AND EXISTS (
+          SELECT 1 FROM public.family_members fm WHERE fm.family_id = s.family_id AND fm.user_id = auth.uid()::text
+        ))
+        OR public.is_super_admin()
+      )
+  ));
+
+GRANT ALL ON TABLE public.subscriptions TO anon, authenticated, service_role;
+GRANT ALL ON TABLE public.subscription_members TO anon, authenticated, service_role;
+GRANT ALL ON TABLE public.subscription_meals TO anon, authenticated, service_role;
+
+DROP POLICY IF EXISTS "Subscription pauses owner manage policy" ON public.subscription_pauses;
+CREATE POLICY "Subscription pauses owner manage policy"
+  ON public.subscription_pauses FOR ALL
+  USING (EXISTS (SELECT 1 FROM public.subscriptions s WHERE s.id = subscription_id AND (s.owner_user_id = auth.uid()::text OR public.is_super_admin())))
+  WITH CHECK (EXISTS (SELECT 1 FROM public.subscriptions s WHERE s.id = subscription_id AND (s.owner_user_id = auth.uid()::text OR public.is_super_admin())));
+
+DROP POLICY IF EXISTS "Subscription pauses family select policy" ON public.subscription_pauses;
+CREATE POLICY "Subscription pauses family select policy"
+  ON public.subscription_pauses FOR SELECT
+  USING (EXISTS (
+    SELECT 1 FROM public.subscriptions s
+    WHERE s.id = subscription_id
+      AND (
+        s.owner_user_id = auth.uid()::text
+        OR (s.family_id IS NOT NULL AND EXISTS (
+          SELECT 1 FROM public.family_members fm WHERE fm.family_id = s.family_id AND fm.user_id = auth.uid()::text
+        ))
+        OR public.is_super_admin()
+      )
+  ));
+
+GRANT ALL ON TABLE public.subscription_pauses TO anon, authenticated, service_role;
+
+
+
 

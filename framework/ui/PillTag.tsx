@@ -1,4 +1,4 @@
-﻿import React from 'react';
+import React from 'react';
 import { TouchableOpacity, Text, StyleSheet, ViewStyle, TextStyle } from 'react-native';
 import { useTheme } from '../theme/ThemeContext';
 
@@ -92,6 +92,6 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     paddingHorizontal: 6,
     paddingVertical: 1,
-    borderRadius: 999,
+    borderRadius: 6,
   },
 });

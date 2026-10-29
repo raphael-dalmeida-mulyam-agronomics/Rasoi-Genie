@@ -1,4 +1,4 @@
-﻿import { PALETTES, DEFAULT_PALETTE_KEY, SPACING, RADII } from '../theme/tokens';
+import { PALETTES, DEFAULT_PALETTE_KEY, SPACING, RADII } from '../theme/tokens';
 
 describe('themeTokens', () => {
   it('has valid default palette with custom Indian spice colors', () => {
@@ -24,7 +24,7 @@ describe('themeTokens', () => {
 
   it('provides spacing and rounded radii tokens consistent with HelloFresh warmth', () => {
     expect(RADII.xl).toBeGreaterThanOrEqual(16);
-    expect(RADII.pill).toBe(999);
+    expect(RADII.pill).toBe(8);
     expect(SPACING.md).toBe(12);
   });
 

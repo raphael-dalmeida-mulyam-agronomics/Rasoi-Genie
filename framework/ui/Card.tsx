@@ -1,13 +1,22 @@
 import React from 'react';
-import { View, StyleSheet, ViewProps, ViewStyle, StyleProp } from 'react-native';
+import { View, TouchableOpacity, StyleSheet, ViewProps, ViewStyle, StyleProp } from 'react-native';
 import { useTheme } from '../theme/ThemeContext';
 
 export interface CardProps extends ViewProps {
   style?: StyleProp<ViewStyle>;
   variant?: 'elevated' | 'outlined' | 'flat' | 'warm';
+  onPress?: () => void;
+  activeOpacity?: number;
 }
 
-export const Card: React.FC<CardProps> = ({ children, style, variant = 'elevated', ...props }) => {
+export const Card: React.FC<CardProps> = ({
+  children,
+  style,
+  variant = 'elevated',
+  onPress,
+  activeOpacity = 0.8,
+  ...props
+}) => {
   const { colors, radii, shadows } = useTheme();
 
   const getVariantStyle = (): ViewStyle => {
@@ -41,8 +50,24 @@ export const Card: React.FC<CardProps> = ({ children, style, variant = 'elevated
     }
   };
 
+  const combinedStyle = [styles.base, { borderRadius: radii.xl }, getVariantStyle(), style];
+
+  if (onPress) {
+    const { onBlur, onFocus, ...touchableProps } = props as any;
+    return (
+      <TouchableOpacity
+        style={combinedStyle}
+        onPress={onPress}
+        activeOpacity={activeOpacity}
+        {...touchableProps}
+      >
+        {children}
+      </TouchableOpacity>
+    );
+  }
+
   return (
-    <View style={[styles.base, { borderRadius: radii.xl }, getVariantStyle(), style]} {...props}>
+    <View style={combinedStyle} {...props}>
       {children}
     </View>
   );

@@ -1,5 +1,5 @@
-import { router } from 'expo-router';
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { router, useLocalSearchParams } from 'expo-router';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   BackHandler,
@@ -567,6 +567,9 @@ const CatalogSections = React.memo(function CatalogSections({
   onDecrement,
   cardBasis,
   onSeeAllSection,
+  highlightedMemberId,
+  onDependentSectionLayout,
+  onCatalogLayout,
 }: {
   filteredKits: MealKit[];
   trendingKits: MealKit[];
@@ -592,8 +595,11 @@ const CatalogSections = React.memo(function CatalogSections({
   onDecrement?: (kit: MealKit) => void;
   cardBasis?: any;
   onSeeAllSection?: (section: 'trending' | 'foreign') => void;
+  highlightedMemberId?: string | null;
+  onDependentSectionLayout?: (userId: string, displayName: string, y: number) => void;
+  onCatalogLayout?: (y: number) => void;
 }) {
-  const { colors, radii } = useTheme();
+  const { colors, radii, isDark } = useTheme();
   const [visibleCount, setVisibleCount] = useState(12);
 
   // Reset visible count when filters change
@@ -652,7 +658,7 @@ const CatalogSections = React.memo(function CatalogSections({
   }, [recommendedKits, dedupedTrending, dedupedForeign]);
 
   return (
-    <>
+    <View onLayout={(e) => onCatalogLayout?.(e.nativeEvent.layout.y)}>
       {/* SECTION 3 — PROMOTED: when a dish category is active, show the grid first */}
       {selectedDishCategory !== 'All' && (
         <View style={styles.catalogSection}>
@@ -955,11 +961,33 @@ const CatalogSections = React.memo(function CatalogSections({
             subtitle = `Featuring ${member.display_name}'s favorite ${memberCuisines.slice(0, 2).join(' & ')} dishes`;
           }
 
+          const isTarget =
+            Boolean(highlightedMemberId) &&
+            (highlightedMemberId === member.user_id ||
+              highlightedMemberId?.toLowerCase() === member.display_name.toLowerCase());
+
           return (
             <View
               key={member.user_id || `${type}-${member.display_name}`}
-              style={styles.catalogSection}
+              style={[
+                styles.catalogSection,
+                isTarget && {
+                  borderColor: colors.primary,
+                  borderWidth: 2,
+                  borderRadius: radii.xl,
+                  backgroundColor: isDark ? 'rgba(234, 88, 12, 0.1)' : '#FFF7ED',
+                  paddingVertical: 12,
+                  paddingHorizontal: 8,
+                },
+              ]}
               testID={`recommended-section-${member.display_name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`}
+              onLayout={(e) => {
+                onDependentSectionLayout?.(
+                  member.user_id,
+                  member.display_name,
+                  e.nativeEvent.layout.y,
+                );
+              }}
             >
               <View style={styles.sectionHeaderRow}>
                 <View style={{ flex: 1 }}>
@@ -1076,12 +1104,16 @@ const CatalogSections = React.memo(function CatalogSections({
           </Text>
 
           {isSeedingCity ? (
-            <View style={styles.kitsGrid}>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.horizontalCardRow}
+            >
               <SkeletonRecipeCard />
               <SkeletonRecipeCard />
               <SkeletonRecipeCard />
               <SkeletonRecipeCard />
-            </View>
+            </ScrollView>
           ) : filteredKits.length === 0 ? (
             <View
               style={[
@@ -1108,42 +1140,32 @@ const CatalogSections = React.memo(function CatalogSections({
               </TouchableOpacity>
             </View>
           ) : (
-            <>
-              <View style={styles.kitsGrid}>
-                {displayedKits.map((kit) => (
-                  <MealKitCard
-                    key={kit.id}
-                    kit={kit}
-                    onPress={onOpenDetail}
-                    onQuickAdd={onQuickAdd}
-                    isFavorite={kit?.id ? (isInWishlist?.(kit.id) ?? false) : false}
-                    onToggleFavorite={onToggleFavorite}
-                    cartQuantity={getCartQuantity ? getCartQuantity(kit.id) : 0}
-                    onIncrement={onIncrement}
-                    onDecrement={onDecrement}
-                    cardBasis={cardBasis}
-                  />
-                ))}
-              </View>
-              {hasMore && (
-                <TouchableOpacity
-                  style={[
-                    styles.showMoreBtn,
-                    { borderColor: colors.primary, backgroundColor: colors.primary + '12' },
-                  ]}
-                  onPress={() => setVisibleCount((prev) => prev + 12)}
-                  activeOpacity={0.8}
-                >
-                  <Text style={[styles.showMoreBtnText, { color: colors.primary }]}>
-                    Show More ({filteredKits.length - visibleCount} more dishes)
-                  </Text>
-                </TouchableOpacity>
-              )}
-            </>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.horizontalCardRow}
+              snapToInterval={232}
+              decelerationRate="fast"
+            >
+              {filteredKits.map((kit) => (
+                <MealKitHorizontalCard
+                  key={kit.id}
+                  kit={kit}
+                  currentCity={currentCity}
+                  onPress={onOpenDetail}
+                  onQuickAdd={onQuickAdd}
+                  isFavorite={kit?.id ? (isInWishlist?.(kit.id) ?? false) : false}
+                  onToggleFavorite={onToggleFavorite}
+                  cartQuantity={getCartQuantity ? getCartQuantity(kit.id) : 0}
+                  onIncrement={onIncrement}
+                  onDecrement={onDecrement}
+                />
+              ))}
+            </ScrollView>
           )}
         </View>
       )}
-    </>
+    </View>
   );
 });
 
@@ -1158,6 +1180,68 @@ export const HomeScreenView: React.FC = () => {
 
   const { width: windowWidth } = useWindowDimensions();
   const [activePromoIndex, setActivePromoIndex] = useState(0);
+
+  // Deep-linking / auto-scroll to dependent recommendations section
+  const params = useLocalSearchParams<{ targetMemberId?: string; targetMemberName?: string }>();
+  const mainScrollRef = useRef<ScrollView>(null);
+  const catalogYRef = useRef(0);
+  const dependentSectionPositions = useRef<{ [key: string]: number }>({});
+  const [highlightedMemberId, setHighlightedMemberId] = useState<string | null>(null);
+
+  const handleCatalogLayout = useCallback((y: number) => {
+    catalogYRef.current = y;
+  }, []);
+
+  const handleDependentSectionLayout = useCallback(
+    (userId: string, displayName: string, relativeY: number) => {
+      dependentSectionPositions.current[userId] = relativeY;
+      dependentSectionPositions.current[displayName.toLowerCase()] = relativeY;
+
+      const targetId = params.targetMemberId;
+      const targetName = params.targetMemberName?.toLowerCase();
+
+      if (
+        (targetId && targetId === userId) ||
+        (targetName && targetName === displayName.toLowerCase())
+      ) {
+        setHighlightedMemberId(userId);
+        const scrollY = Math.max(0, catalogYRef.current + relativeY - 16);
+        setTimeout(() => {
+          mainScrollRef.current?.scrollTo({ y: scrollY, animated: true });
+        }, 120);
+      }
+    },
+    [params.targetMemberId, params.targetMemberName],
+  );
+
+  useEffect(() => {
+    const targetId = params.targetMemberId;
+    const targetName = params.targetMemberName?.toLowerCase();
+    if (!targetId && !targetName) return;
+
+    setHighlightedMemberId(targetId || null);
+
+    const checkAndScroll = () => {
+      const relY =
+        (targetId ? dependentSectionPositions.current[targetId] : undefined) ??
+        (targetName ? dependentSectionPositions.current[targetName] : undefined);
+
+      if (relY !== undefined && mainScrollRef.current) {
+        const scrollY = Math.max(0, catalogYRef.current + relY - 16);
+        mainScrollRef.current.scrollTo({ y: scrollY, animated: true });
+      }
+    };
+
+    const timer = setTimeout(checkAndScroll, 250);
+    return () => clearTimeout(timer);
+  }, [params.targetMemberId, params.targetMemberName]);
+
+  useEffect(() => {
+    if (highlightedMemberId) {
+      const timer = setTimeout(() => setHighlightedMemberId(null), 3500);
+      return () => clearTimeout(timer);
+    }
+  }, [highlightedMemberId]);
 
   const cardBasis = useMemo(() => {
     if (windowWidth >= 1024) return '23.5%';
@@ -1834,7 +1918,11 @@ export const HomeScreenView: React.FC = () => {
         </View>
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollBody}>
+      <ScrollView
+        ref={mainScrollRef}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollBody}
+      >
         {/* RESPONSIVE WRAPPER (Constrains content on wide screens to 1200px and centers it) */}
         <View style={styles.responsiveWrapper}>
           {/* SINGLE PRIORITY BANNER SLOT (Resume Cooking > Family Hub > Slim Kitchen Preferences) */}
@@ -2339,6 +2427,9 @@ export const HomeScreenView: React.FC = () => {
             onDecrement={handleCardDecrement}
             cardBasis={cardBasis}
             onSeeAllSection={handleSeeAllSection}
+            onCatalogLayout={handleCatalogLayout}
+            highlightedMemberId={highlightedMemberId}
+            onDependentSectionLayout={handleDependentSectionLayout}
           />
         </View>
       </ScrollView>
@@ -2713,7 +2804,7 @@ const styles = StyleSheet.create({
     gap: 5,
     paddingHorizontal: 10,
     paddingVertical: 5,
-    borderRadius: 999,
+    borderRadius: 8,
   },
   prefChipText: {
     fontSize: 11,
@@ -2813,7 +2904,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     paddingVertical: 4,
     paddingHorizontal: 10,
-    borderRadius: 999,
+    borderRadius: 8,
   },
   promoButtonText: {
     color: '#0F172A',
@@ -2940,7 +3031,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 12,
     paddingVertical: 6,
-    borderRadius: 999,
+    borderRadius: 8,
     borderWidth: 1,
   },
   sortBtnText: {
@@ -3087,7 +3178,7 @@ const styles = StyleSheet.create({
     gap: 5,
     paddingHorizontal: 14,
     paddingVertical: 8,
-    borderRadius: 999,
+    borderRadius: 8,
     borderWidth: 1,
   },
   compactFilterChipText: {
@@ -3315,7 +3406,7 @@ const styles = StyleSheet.create({
     gap: 4,
     paddingHorizontal: 10,
     paddingVertical: 4,
-    borderRadius: 999,
+    borderRadius: 8,
     borderWidth: 1,
   },
   activeFilterPillText: {
@@ -3375,7 +3466,7 @@ const styles = StyleSheet.create({
     gap: 4,
     paddingHorizontal: 8,
     paddingVertical: 5,
-    borderRadius: 999,
+    borderRadius: 8,
     borderWidth: 1,
   },
   familyHeaderChipText: {
@@ -3424,7 +3515,7 @@ const styles = StyleSheet.create({
     gap: 4,
     paddingHorizontal: 10,
     paddingVertical: 6,
-    borderRadius: 999,
+    borderRadius: 8,
   },
   familyTabActionText: {
     color: '#FFFFFF',

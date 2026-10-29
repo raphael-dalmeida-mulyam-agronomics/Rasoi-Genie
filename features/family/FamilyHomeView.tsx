@@ -255,6 +255,30 @@ export const FamilyHomeView: React.FC = () => {
                 )}
               </View>
             </TouchableOpacity>
+
+            {can(role, 'manage_family_subscription') && (
+              <TouchableOpacity
+                style={[
+                  styles.actionCard,
+                  {
+                    backgroundColor: colors.bgSurface,
+                    borderColor: colors.borderLight,
+                    borderRadius: radii.xl,
+                    ...shadows.card,
+                  },
+                ]}
+                onPress={() => router.push('/(tabs)/family/subscription' as any)}
+                activeOpacity={0.8}
+                testID="family-subscription-btn"
+              >
+                <View style={[styles.actionIconWrap, { backgroundColor: '#FFEDD5' }]}>
+                  <Icon name="calendar" size={18} color="#EA580C" />
+                </View>
+                <Text style={[styles.actionCardTitle, { color: colors.textPrimary }]}>
+                  {t.subscriptionBtn || 'Weekly Subscription'}
+                </Text>
+              </TouchableOpacity>
+            )}
           </View>
         )}
 

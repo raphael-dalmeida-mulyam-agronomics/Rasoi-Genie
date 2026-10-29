@@ -9,6 +9,7 @@ describe('Family Permissions Matrix: can(role, action)', () => {
       expect(can(null, 'invite_adult')).toBe(false);
       expect(can(null, 'view_family_cart')).toBe(false);
       expect(can(null, 'pay_family_cart')).toBe(false);
+      expect(can(null, 'view_own_subscription_plan')).toBe(false);
     });
   });
 
@@ -22,6 +23,8 @@ describe('Family Permissions Matrix: can(role, action)', () => {
       expect(can(role, 'revoke_link')).toBe(true);
       expect(can(role, 'reissue_link')).toBe(true);
       expect(can(role, 'manage_members')).toBe(true);
+      expect(can(role, 'manage_family_subscription')).toBe(true);
+      expect(can(role, 'view_own_subscription_plan')).toBe(true);
       expect(can(role, 'set_co_owner')).toBe(true);
       expect(can(role, 'remove_co_owner')).toBe(true);
       expect(can(role, 'remove_member', { isOwnerSelf: false })).toBe(true);
@@ -60,11 +63,19 @@ describe('Family Permissions Matrix: can(role, action)', () => {
       expect(can(role, 'pay_family_cart')).toBe(true);
     });
 
+    it('CANNOT manage family subscription but CAN view own plan', () => {
+      expect(can(role, 'manage_family_subscription')).toBe(false);
+      expect(can(role, 'view_own_subscription_plan')).toBe(true);
+    });
+
     it('CANNOT add or remove members or links', () => {
       expect(can(role, 'invite_adult')).toBe(false);
       expect(can(role, 'add_dependent_link')).toBe(false);
       expect(can(role, 'manage_links')).toBe(false);
       expect(can(role, 'manage_members')).toBe(false);
+      expect(can(role, 'manage_family_subscription')).toBe(false);
+      expect(can(role, 'view_own_subscription_plan')).toBe(true);
+      expect(can(role, 'manage_family_subscription')).toBe(false);
       expect(can(role, 'set_co_owner')).toBe(false);
       expect(can(role, 'remove_member')).toBe(false);
       expect(can(role, 'transfer_ownership')).toBe(false);
@@ -81,6 +92,8 @@ describe('Family Permissions Matrix: can(role, action)', () => {
 
     it('CAN edit and remove own items, and leave family', () => {
       expect(can(role, 'add_item')).toBe(true);
+      expect(can(role, 'manage_family_subscription')).toBe(false);
+      expect(can(role, 'view_own_subscription_plan')).toBe(true);
       expect(can(role, 'edit_own_item')).toBe(true);
       expect(can(role, 'remove_own_item')).toBe(true);
       expect(can(role, 'leave_family')).toBe(true);

@@ -15,6 +15,7 @@ import { Icon, AppIconName } from '../../framework/ui/Icon';
 export type AdminTab =
   | 'overview'
   | 'orders'
+  | 'subscriptions'
   | 'kits'
   | 'inventory'
   | 'analytics'
@@ -116,6 +117,11 @@ export const AdminNavigationMenu: React.FC<AdminNavigationMenuProps> = ({
           count: ordersCount,
           alertBadge: pendingApprovalCount > 0 ? `${pendingApprovalCount} Awaiting` : undefined,
           highlightAlert: pendingApprovalCount > 0,
+        },
+        {
+          id: 'subscriptions',
+          label: 'Subscriptions',
+          icon: 'time',
         },
         {
           id: 'kits',

@@ -1,33 +1,16 @@
-import React, { useState, useMemo, useEffect } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  Image,
-  Dimensions,
-} from 'react-native';
+import React, { useState, useMemo } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import { router } from 'expo-router';
 import { useTheme } from '../../framework/theme/ThemeContext';
 import { useFamily } from '../../framework/context/FamilyContext';
 import { FamilyMember } from '../../framework/services/familyService';
-import {
-  getMealKits,
-  MealKit,
-  DietTag,
-  subscribeToMealKits,
-} from '../../framework/services/mealKitsService';
+import { DietTag } from '../../framework/services/mealKitsService';
 import { BottomSheet } from '../../framework/ui/BottomSheet';
 import { Avatar } from '../../framework/ui/Avatar';
 import { RoleBadge } from '../../framework/ui/RoleBadge';
 import { Button } from '../../framework/ui/Button';
 import { Icon } from '../../framework/ui/Icon';
-import { Badge, getDietBadgeInfo } from '../../framework/ui/Badge';
 import { AddDependentSheet } from './AddDependentSheet';
-import { MealDetailModal } from '../meal-detail/MealDetailModal';
-import { UserDietaryPreferences } from '../../framework/context/PreferencesContext';
-
-const { width } = Dimensions.get('window');
 
 export interface DependentProfileSheetProps {
   visible: boolean;
@@ -42,20 +25,9 @@ export const DependentProfileSheet: React.FC<DependentProfileSheetProps> = ({
   onClose,
 }) => {
   const { colors, radii, shadows, isDark } = useTheme();
-  const { updateDependentPreferences, addFamilyItem, isOwner, isCoOwner, members } = useFamily();
+  const { isOwner, isCoOwner, members } = useFamily();
 
-  const [allKits, setAllKits] = useState<MealKit[]>([]);
   const [preferencesModalVisible, setPreferencesModalVisible] = useState(false);
-  const [selectedKitForDetail, setSelectedKitForDetail] = useState<MealKit | null>(null);
-  const [addedKitIds, setAddedKitIds] = useState<Set<string>>(new Set());
-  const [isAddingId, setIsAddingId] = useState<string | null>(null);
-
-  // Sync catalog
-  useEffect(() => {
-    setAllKits(getMealKits());
-    const unsub = subscribeToMealKits((updated) => setAllKits(updated));
-    return unsub;
-  }, []);
 
   // Sync latest member object from family context
   const currentMember = useMemo(() => {
@@ -78,101 +50,9 @@ export const DependentProfileSheet: React.FC<DependentProfileSheetProps> = ({
         ? ['Italian', 'North Indian']
         : ['North Indian', 'South Indian'];
 
-  // Allergen matching
-  const matchesAllergens = (kit: MealKit): boolean => {
-    if (!allergies || allergies.length === 0) return true;
-    const kitAllergens = (kit.allergens || []).map((a) => a.toLowerCase().trim());
-    return !allergies.some((userAllergy) => {
-      const u = userAllergy.toLowerCase().trim();
-      return kitAllergens.some((a) => a.includes(u) || u.includes(a));
-    });
-  };
-
-  // Diet matching
-  const matchesDiet = (kit: MealKit): boolean => {
-    if (!dietTypes || dietTypes.length === 0) return true;
-    return dietTypes.some((diet) => {
-      if (diet === 'veg') {
-        return (
-          kit.diet === 'veg' || (Array.isArray(kit.dietaryTags) && kit.dietaryTags.includes('veg'))
-        );
-      }
-      if (diet === 'nonveg') return kit.diet === 'nonveg';
-      return Array.isArray(kit.dietaryTags) && kit.dietaryTags.includes(diet);
-    });
-  };
-
-  // Recommended meal kits matching personal preferences
-  const recommendedKits = useMemo(() => {
-    if (!currentMember) return [];
-
-    const preferredSet = new Set(preferredCuisines.map((c) => c.toLowerCase().trim()));
-
-    const filtered = allKits
-      .filter((k): k is MealKit => Boolean(k && k.id))
-      // 1. Strict Allergen Filtering
-      .filter((k) => matchesAllergens(k))
-      // 2. Strict Diet Matching
-      .filter((k) => matchesDiet(k))
-      // 3. Strict Cuisine Matching (ONLY show meal kits that suit the user's cuisine preferences)
-      .filter((k) => {
-        if (!k.cuisine) return false;
-        if (preferredSet.size === 0) return true;
-        return preferredSet.has(k.cuisine.toLowerCase().trim());
-      })
-      // 4. Score & Sort: kid/senior friendly spice & rating
-      .sort((a, b) => {
-        let scoreA = 0;
-        let scoreB = 0;
-
-        // Spice level matching
-        if (currentMember.dependent_type === 'child') {
-          if (a.spiceLevel === 'Mild') scoreA += 8;
-          if (b.spiceLevel === 'Mild') scoreB += 8;
-        } else if (currentMember.dependent_type === 'senior') {
-          if (a.spiceLevel === 'Mild' || a.spiceLevel === 'Medium') scoreA += 6;
-          if (b.spiceLevel === 'Mild' || b.spiceLevel === 'Medium') scoreB += 6;
-        }
-
-        // Popularity / Rating
-        scoreA += a.rating || 0;
-        scoreB += b.rating || 0;
-
-        return scoreB - scoreA;
-      });
-
-    return filtered;
-  }, [allKits, currentMember, dietTypes, allergies, spiceTolerance, preferredCuisines]);
-
   if (!currentMember) return null;
 
   const isChild = currentMember.dependent_type === 'child';
-  const roleTitle = isChild ? 'Child Profile' : 'Senior Citizen Profile';
-
-  const handleAddToCart = async (kit: MealKit) => {
-    setIsAddingId(kit.id);
-    try {
-      const res = await addFamilyItem(
-        kit,
-        1,
-        kit.servings || 2,
-        (spiceTolerance as any) || 'Mild',
-        currentMember.user_id,
-      );
-      if (res.success) {
-        setAddedKitIds((prev) => new Set([...prev, kit.id]));
-      }
-    } finally {
-      setIsAddingId(null);
-    }
-  };
-
-  const handleSaveUpdatedPreferences = async (updated: UserDietaryPreferences) => {
-    if (member) {
-      await updateDependentPreferences(member.user_id, updated);
-      setPreferencesModalVisible(false);
-    }
-  };
 
   return (
     <>
@@ -308,173 +188,66 @@ export const DependentProfileSheet: React.FC<DependentProfileSheetProps> = ({
             </View>
           </View>
 
-          {/* Recommendations Header */}
-          <View style={styles.recHeaderRow}>
-            <View style={{ flex: 1 }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                <Icon name="sparkles" size={18} color="#059669" />
+          {/* Recommendations Banner & Home Redirect */}
+          <View
+            style={[
+              styles.recRedirectCard,
+              {
+                backgroundColor: isDark ? 'rgba(255, 255, 255, 0.04)' : colors.bgSurface,
+                borderColor: colors.borderLight,
+                borderRadius: radii.xl,
+                ...shadows.card,
+              },
+            ]}
+          >
+            <View style={styles.recHeaderRow}>
+              <View
+                style={[
+                  styles.recIconWrap,
+                  {
+                    backgroundColor: colors.primaryLight,
+                    borderRadius: radii.pill,
+                  },
+                ]}
+              >
+                <Icon name="sparkles" size={20} color={colors.primary} />
+              </View>
+              <View style={{ flex: 1 }}>
                 <Text style={[styles.recSectionTitle, { color: colors.textPrimary }]}>
-                  Recommended For {currentMember.display_name}
+                  Recommended for {currentMember.display_name}
+                </Text>
+                <Text style={[styles.recSectionSubtitle, { color: colors.textSecondary }]}>
+                  {isChild
+                    ? 'Child-friendly meals with mild spices & balanced nutrition'
+                    : 'Senior nutrition with easy digestion & customized spices'}
                 </Text>
               </View>
-              <Text style={[styles.recSectionSubtitle, { color: colors.textSecondary }]}>
-                {recommendedKits.length} meals matching dietary restrictions & taste
-              </Text>
             </View>
-            <View
-              style={[styles.countBadge, { backgroundColor: '#D1FAE5', borderRadius: radii.pill }]}
-            >
-              <Text style={styles.countBadgeText}>{recommendedKits.length}</Text>
-            </View>
+
+            <Text style={[styles.recCardDesc, { color: colors.textSecondary }]}>
+              {currentMember.display_name}’s personalized meal kit recommendations are featured
+              directly on your Home Feed.
+            </Text>
+
+            <Button
+              title={`View ${currentMember.display_name}'s Recommendations`}
+              icon={<Icon name="arrow-forward" size={16} color={colors.textInverse} />}
+              variant="primary"
+              size="md"
+              style={{ width: '100%', marginTop: 14 }}
+              onPress={() => {
+                onClose();
+                router.push({
+                  pathname: '/(tabs)',
+                  params: {
+                    targetMemberId: currentMember.user_id,
+                    targetMemberName: currentMember.display_name,
+                  },
+                } as any);
+              }}
+              testID="view-dependent-recommendations-btn"
+            />
           </View>
-
-          {/* Meal Kits List */}
-          {recommendedKits.length === 0 ? (
-            <View
-              style={[
-                styles.emptyBox,
-                {
-                  backgroundColor: colors.bgSurface,
-                  borderColor: colors.borderLight,
-                  borderRadius: radii.xl,
-                },
-              ]}
-            >
-              <Icon name="restaurant-outline" size={40} color={colors.textMuted} />
-              <Text style={[styles.emptyTitle, { color: colors.textPrimary }]}>
-                No Exact Matches
-              </Text>
-              <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>
-                We couldn't find meal kits strictly matching your cuisine, allergy, and diet
-                preferences.
-              </Text>
-              <Button
-                title="Adjust Preferences"
-                variant="outline"
-                size="md"
-                onPress={() => setPreferencesModalVisible(true)}
-                style={{ marginTop: 12 }}
-              />
-            </View>
-          ) : (
-            <View style={styles.kitsGrid}>
-              {recommendedKits.map((kit) => {
-                const dietBadge = getDietBadgeInfo(kit.diet);
-                const isAdded = addedKitIds.has(kit.id);
-                const isAdding = isAddingId === kit.id;
-
-                return (
-                  <TouchableOpacity
-                    key={kit.id}
-                    style={[
-                      styles.kitCard,
-                      {
-                        backgroundColor: colors.bgSurface,
-                        borderColor: colors.borderLight,
-                        borderRadius: radii.xl,
-                        ...shadows.card,
-                      },
-                    ]}
-                    onPress={() => setSelectedKitForDetail(kit)}
-                    activeOpacity={0.85}
-                  >
-                    {/* Kit Image */}
-                    <View style={styles.imageWrap}>
-                      <Image
-                        source={{
-                          uri:
-                            kit.heroImage ||
-                            'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=600',
-                        }}
-                        style={styles.kitImage}
-                        resizeMode="cover"
-                      />
-                      {/* Diet Tag */}
-                      <View style={styles.dietBadgeWrap}>
-                        <Badge
-                          label={dietBadge.label}
-                          variant={kit.diet === 'veg' ? 'success' : 'danger'}
-                          size="sm"
-                        />
-                      </View>
-                      {/* Rating */}
-                      <View
-                        style={[
-                          styles.ratingWrap,
-                          { backgroundColor: 'rgba(0,0,0,0.65)', borderRadius: radii.pill },
-                        ]}
-                      >
-                        <Icon name="star" size={12} color="#FBBF24" />
-                        <Text style={styles.ratingText}>{(kit.rating || 4.8).toFixed(1)}</Text>
-                      </View>
-                    </View>
-
-                    {/* Kit Content */}
-                    <View style={styles.kitContent}>
-                      <View style={styles.kitMetaRow}>
-                        <Text style={[styles.cuisineTag, { color: colors.primary }]}>
-                          {kit.cuisine || 'Specialty'}
-                        </Text>
-                        <Text style={[styles.prepTime, { color: colors.textMuted }]}>
-                          {kit.prepTimeMinutes ? `${kit.prepTimeMinutes} mins` : '20 mins'}
-                        </Text>
-                      </View>
-
-                      <Text
-                        style={[styles.kitTitle, { color: colors.textPrimary }]}
-                        numberOfLines={1}
-                      >
-                        {kit.name}
-                      </Text>
-
-                      <Text
-                        style={[styles.kitDesc, { color: colors.textSecondary }]}
-                        numberOfLines={2}
-                      >
-                        {kit.description}
-                      </Text>
-
-                      {/* Spice and Servings Row */}
-                      <View style={styles.tagPillRow}>
-                        <View style={[styles.miniPill, { backgroundColor: colors.bgSubtle }]}>
-                          <Text style={[styles.miniPillText, { color: colors.textSecondary }]}>
-                            {kit.spiceLevel || 'Mild'}
-                          </Text>
-                        </View>
-                        <View style={[styles.miniPill, { backgroundColor: colors.bgSubtle }]}>
-                          <Text style={[styles.miniPillText, { color: colors.textSecondary }]}>
-                            {kit.servings || 2} Servings
-                          </Text>
-                        </View>
-                      </View>
-
-                      {/* Price & Add to Family Cart */}
-                      <View style={styles.kitBottomRow}>
-                        <View>
-                          <Text style={[styles.priceLabel, { color: colors.textMuted }]}>
-                            Price
-                          </Text>
-                          <Text style={[styles.kitPrice, { color: colors.textPrimary }]}>
-                            ₹{kit.price}
-                          </Text>
-                        </View>
-
-                        <Button
-                          title={isAdded ? '✓ Added' : '+ Family Basket'}
-                          variant={isAdded ? 'secondary' : 'primary'}
-                          size="sm"
-                          loading={isAdding}
-                          onPress={() => handleAddToCart(kit)}
-                          disabled={isAdded}
-                          testID={`add-kit-to-family-basket-${kit.id}`}
-                        />
-                      </View>
-                    </View>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-          )}
         </ScrollView>
       </BottomSheet>
 
@@ -489,15 +262,6 @@ export const DependentProfileSheet: React.FC<DependentProfileSheetProps> = ({
           onClose();
         }}
       />
-
-      {/* Meal Detail Modal */}
-      {selectedKitForDetail && (
-        <MealDetailModal
-          visible={Boolean(selectedKitForDetail)}
-          kit={selectedKitForDetail}
-          onClose={() => setSelectedKitForDetail(null)}
-        />
-      )}
     </>
   );
 };
@@ -568,19 +332,36 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '700',
   },
+  recRedirectCard: {
+    padding: 16,
+    borderWidth: 1,
+    gap: 8,
+    marginBottom: 20,
+  },
+  recIconWrap: {
+    width: 38,
+    height: 38,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 6,
+  },
   recHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 14,
+    marginBottom: 6,
   },
   recSectionTitle: {
-    fontSize: 17,
+    fontSize: 16,
     fontWeight: '800',
   },
   recSectionSubtitle: {
     fontSize: 12,
     marginTop: 2,
+  },
+  recCardDesc: {
+    fontSize: 13,
+    lineHeight: 18,
+    marginTop: 4,
   },
   countBadge: {
     paddingHorizontal: 10,

@@ -23,6 +23,7 @@ import { DietaryPreferencesModal } from '../onboarding/DietaryPreferencesModal';
 import { NotificationsView } from '../notifications/NotificationsView';
 import { SupportView } from '../support/SupportView';
 import { SubscriptionPlanView } from '../subscription/SubscriptionPlanView';
+import { useSubscription } from '../../framework/context/SubscriptionContext';
 import { subscribeToPendingApprovalCount } from '../../framework/services/notificationService';
 import { useWallet } from '../../framework/context/WalletContext';
 import { useFamily } from '../../framework/context/FamilyContext';
@@ -41,6 +42,7 @@ export const ProfileView: React.FC = () => {
   const { preferences, defaultAddress, preferredPaymentMethod, setPreferredPaymentMethod } =
     usePreferences();
   const { availableBalance } = useWallet();
+  const { isSubscribed, activeSubscription } = useSubscription();
   const { family, role, members, invites, refreshFamily } = useFamily();
   const [pendingApprovalCount, setPendingApprovalCount] = useState<number>(0);
   const [paymentModalVisible, setPaymentModalVisible] = useState<boolean>(false);
@@ -294,6 +296,64 @@ export const ProfileView: React.FC = () => {
               Track & History
             </Text>
           </TouchableOpacity>
+        </View>
+
+        {/* SECTION: Weekly Meal Subscription Card */}
+        <View
+          style={[
+            styles.prefCard,
+            {
+              backgroundColor: colors.bgSurface,
+              borderRadius: radii.xl,
+              borderColor: isSubscribed ? colors.success : colors.primary + '50',
+              borderWidth: 1.5,
+              ...shadows.card,
+            },
+          ]}
+          testID="profile-subscription-card"
+        >
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+            <View
+              style={{
+                width: 44,
+                height: 44,
+                borderRadius: 22,
+                backgroundColor: isSubscribed ? '#D1FAE5' : colors.primaryLight,
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <Icon name="calendar" size={22} color={isSubscribed ? '#059669' : colors.primary} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
+                  Weekly Meal Subscription
+                </Text>
+                {isSubscribed ? (
+                  <Badge label="ACTIVE" variant="success" size="sm" />
+                ) : (
+                  <Badge label="SAVE 20%" variant="warning" size="sm" />
+                )}
+              </View>
+              <Text style={{ fontSize: 13, color: colors.textSecondary, marginTop: 2 }}>
+                {isSubscribed
+                  ? `${activeSubscription?.plan_type === 'standard' ? 'Curated Plan' : 'Custom 7-Day Plan'} • Active weekly box`
+                  : 'Chef-curated High Protein, Keto, Vegan, or Custom 7-day meal boxes.'}
+              </Text>
+            </View>
+          </View>
+
+          <Button
+            title={
+              isSubscribed ? 'Manage Subscription & Schedule' : 'Explore Weekly Subscription Plans'
+            }
+            variant={isSubscribed ? 'outline' : 'primary'}
+            size="md"
+            onPress={() => setSubView('subscription')}
+            style={{ marginTop: 14 }}
+            testID="open-subscription-plan-btn"
+          />
         </View>
 
         {/* SECTION: Family Card (Screen A) */}
@@ -562,10 +622,16 @@ export const ProfileView: React.FC = () => {
             onPress={() => setSubView('wishlist')}
           />
           <MenuRow
-            icon="refresh"
-            title="Recurring Meal Plan"
-            subtitle="Weekly automatic fresh kit box"
+            icon="calendar"
+            title="Weekly Meal Subscription"
+            subtitle={
+              isSubscribed
+                ? 'Manage active weekly meal box & 7-day schedule'
+                : 'Choose High Protein, Keto, Vegan or Custom 7-day box'
+            }
             onPress={() => setSubView('subscription')}
+            testID="profile-menu-subscription"
+            badge={isSubscribed ? 'Active' : '7-Day Plans'}
           />
           <MenuRow
             icon="chat"
@@ -745,7 +811,9 @@ const MenuRow: React.FC<{
   subtitle: string;
   onPress: () => void;
   isLast?: boolean;
-}> = ({ icon, title, subtitle, onPress, isLast }) => {
+  testID?: string;
+  badge?: string;
+}> = ({ icon, title, subtitle, onPress, isLast, testID, badge }) => {
   const { colors } = useTheme();
 
   return (
@@ -756,12 +824,18 @@ const MenuRow: React.FC<{
       ]}
       onPress={onPress}
       activeOpacity={0.7}
+      testID={testID}
     >
       <View style={{ width: 34, alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
         <Icon name={icon} size={20} color={colors.primary} />
       </View>
-      <View style={{ flex: 1 }}>
-        <Text style={[styles.menuTitle, { color: colors.textPrimary }]}>{title}</Text>
+      <View style={{ flex: 1, paddingRight: 8 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+          <Text style={[styles.menuTitle, { color: colors.textPrimary }]}>{title}</Text>
+          {badge && (
+            <Badge label={badge} variant={badge === 'Active' ? 'success' : 'primary'} size="sm" />
+          )}
+        </View>
         <Text style={[styles.menuSubtitle, { color: colors.textSecondary }]}>{subtitle}</Text>
       </View>
       <Icon name="chevron-right" size={16} color={colors.textMuted} />

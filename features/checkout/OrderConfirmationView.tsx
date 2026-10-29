@@ -21,6 +21,7 @@ import { buildReferralShareMessage } from '../../framework/services/referralServ
 import { useCookMode } from '../../framework/context/CookModeContext';
 import { useFamily } from '../../framework/context/FamilyContext';
 import { FamilyOrderBadge } from '../family/FamilyOrderBadge';
+import { SubscriptionPostOrderPopup } from '../subscription/SubscriptionPostOrderPopup';
 
 interface OrderConfirmationViewProps {
   order: Order;
@@ -486,6 +487,9 @@ export const OrderConfirmationView: React.FC<OrderConfirmationViewProps> = ({
           />
         </View>
       </ScrollView>
+
+      {/* Post-order Subscription Informational Popup */}
+      <SubscriptionPostOrderPopup isFamilyOwner={isFamilyOwner} />
     </View>
   );
 };

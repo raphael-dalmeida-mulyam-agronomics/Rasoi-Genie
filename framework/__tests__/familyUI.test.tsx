@@ -918,6 +918,49 @@ describe('Family Feature UI Test Suite', () => {
       expect(queryByText(/Ratatouille/i)).toBeNull();
       expect(queryByText(/Provencal/i)).toBeNull();
     });
+
+    it('renders a button that redirects the family owner to the home page to view dependent recommendations', async () => {
+      const handleClose = jest.fn();
+      const childMember: FamilyMember = {
+        family_id: 'fam_1',
+        user_id: 'user_child_1',
+        role: 'dependent',
+        dependent_type: 'child',
+        display_name: 'Aarav',
+        age: 9,
+        gender: 'Male',
+        joined_at: new Date().toISOString(),
+        preferences: {
+          dietTypes: ['veg'],
+          spiceTolerance: 'Mild',
+          preferredCuisines: ['Italian'],
+        },
+      };
+
+      const ctx: FamilyContextValue = {
+        ...createMockFamilyContext('owner'),
+        members: [...mockMembers, childMember],
+      };
+
+      const { getByTestId, getByText } = await renderWithProviders(
+        <DependentProfileSheet visible={true} member={childMember} onClose={handleClose} />,
+        ctx,
+      );
+
+      const redirectBtn = getByTestId('view-dependent-recommendations-btn');
+      expect(redirectBtn).toBeTruthy();
+      expect(getByText("View Aarav's Recommendations")).toBeTruthy();
+
+      fireEvent.press(redirectBtn);
+      expect(handleClose).toHaveBeenCalled();
+      expect(router.push).toHaveBeenCalledWith({
+        pathname: '/(tabs)',
+        params: {
+          targetMemberId: childMember.user_id,
+          targetMemberName: childMember.display_name,
+        },
+      });
+    });
   });
 
   // ─── 8. CartDestinationModal & Basket Move Actions ────────────────────

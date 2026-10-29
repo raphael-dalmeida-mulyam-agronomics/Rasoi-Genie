@@ -23,6 +23,7 @@ import { Card } from '../../framework/ui/Card';
 import { Badge } from '../../framework/ui/Badge';
 import { QuantityStepper } from '../../framework/ui/QuantityStepper';
 import { Icon } from '../../framework/ui/Icon';
+import { EmptyState } from '../../framework/ui/EmptyState';
 import { useHeaderTopPadding } from '../../framework/ui/ScreenHeader';
 import { CheckoutView } from '../checkout/CheckoutView';
 import { OrderConfirmationView } from '../checkout/OrderConfirmationView';
@@ -306,20 +307,18 @@ export const CartView: React.FC = () => {
             </View>
           )}
 
-          <View style={{ marginBottom: 16, marginTop: activeOrders.length > 0 ? 16 : 30 }}>
-            <Icon name="basket" size={64} color={colors.primary} />
-          </View>
-          <Text style={[styles.emptyBasketTitle, { color: colors.textPrimary }]}>
-            Your Cooking Basket is Empty
-          </Text>
-          <Text style={[styles.emptyBasketSubtitle, { color: colors.textSecondary }]}>
-            Discover restaurant-grade meal kits with authentic pre-portioned masalas!
-          </Text>
-          <Button
-            title="Explore Gourmet Meal Kits"
-            icon={<Icon name="restaurant" size={18} color="#FFFFFF" />}
-            style={{ marginTop: 20 }}
-            onPress={() => router.push('/' as any)}
+          <EmptyState
+            icon="basket-outline"
+            title="Your Cooking Basket is Empty"
+            description="Discover restaurant-grade meal kits with authentic pre-portioned masalas!"
+            actionTitle="Explore Gourmet Meal Kits"
+            onAction={() => router.push('/' as any)}
+            style={{
+              width: '100%',
+              maxWidth: 440,
+              marginTop: activeOrders && activeOrders.length > 0 ? 8 : 24,
+              ...shadows.card,
+            }}
           />
         </ScrollView>
       </View>
@@ -466,7 +465,7 @@ export const CartView: React.FC = () => {
               <View
                 style={[
                   styles.deliveryTrackBg,
-                  { backgroundColor: colors.bgSubtle, borderRadius: radii.pill },
+                  { backgroundColor: colors.bgSubtle, borderRadius: 999 },
                 ]}
               >
                 <View
@@ -475,7 +474,7 @@ export const CartView: React.FC = () => {
                     {
                       width: `${Math.min(100, Math.round((subtotal / 499) * 100))}%`,
                       backgroundColor: subtotal >= 499 ? colors.success : colors.primary,
-                      borderRadius: radii.pill,
+                      borderRadius: 999,
                     },
                   ]}
                 />
@@ -918,7 +917,13 @@ export const CartView: React.FC = () => {
             <View
               style={[
                 styles.sectionCard,
-                { backgroundColor: colors.bgSurface, borderRadius: radii.xl },
+                {
+                  backgroundColor: colors.bgSurface,
+                  borderRadius: radii.xl,
+                  borderColor: colors.borderLight,
+                  borderWidth: 1,
+                  ...shadows.card,
+                },
               ]}
             >
               <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
@@ -993,7 +998,7 @@ export const CartView: React.FC = () => {
           <Button
             testID="cart-proceed-checkout-btn"
             title="Proceed to Checkout"
-            icon={<Icon name="arrow-forward" size={18} color="#FFFFFF" />}
+            icon={<Icon name="arrow-forward" size={18} color={colors.textInverse} />}
             size="lg"
             style={{ flex: 1, marginLeft: 16 }}
             onPress={() => setFlowStep('checkout')}
@@ -1149,13 +1154,11 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     paddingHorizontal: 8,
     paddingVertical: 2,
-    borderRadius: 999,
+    borderRadius: 8,
   },
   deliveryTrackerCard: {
-    marginHorizontal: 16,
-    marginTop: 12,
-    marginBottom: 4,
-    padding: 14,
+    marginBottom: 16,
+    padding: 16,
   },
   deliveryTrackBg: {
     height: 6,
@@ -1322,7 +1325,7 @@ const styles = StyleSheet.create({
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: 'rgba(0,0,0,0.65)',
     justifyContent: 'center',
     alignItems: 'center',
     padding: 16,
@@ -1390,7 +1393,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingVertical: 8,
     borderBottomWidth: 1,
-    borderBottomColor: '#F1F5F9',
+    borderBottomColor: 'rgba(0,0,0,0.06)',
   },
   successLabel: {
     fontSize: 11,

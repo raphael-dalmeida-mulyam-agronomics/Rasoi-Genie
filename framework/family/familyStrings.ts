@@ -73,6 +73,7 @@ export const familyStrings = {
     addDependentBtn: 'Add Child or Senior',
     manageLinksBtn: 'Manage Links',
     approvalsBtn: (n: number) => `Approvals (${n})`,
+    subscriptionBtn: 'Weekly Meal Subscription',
     transferOwnershipBtn: 'Transfer Ownership',
     deleteFamilyBtn: 'Delete Family',
   },

@@ -114,7 +114,7 @@ export const SkeletonRowItem: React.FC<SkeletonCardProps> = ({ style }) => {
         style,
       ]}
     >
-      <Skeleton width={44} height={44} borderRadius={radii.pill} />
+      <Skeleton width={44} height={44} borderRadius={22} />
       <View style={{ flex: 1, gap: 6 }}>
         <Skeleton width="70%" height={16} />
         <Skeleton width="40%" height={12} />

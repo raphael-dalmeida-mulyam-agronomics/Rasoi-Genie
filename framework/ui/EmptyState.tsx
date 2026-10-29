@@ -43,7 +43,7 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
         style={[
           styles.iconCircle,
           {
-            backgroundColor: isDark ? 'rgba(235, 94, 40, 0.15)' : '#FFF7ED',
+            backgroundColor: isDark ? 'rgba(235, 94, 40, 0.15)' : colors.primaryLight,
           },
         ]}
       >

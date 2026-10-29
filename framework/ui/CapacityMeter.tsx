@@ -59,7 +59,7 @@ export const CapacityMeter: React.FC<CapacityMeterProps> = ({
           styles.track,
           {
             backgroundColor: isDark ? 'rgba(255, 255, 255, 0.1)' : colors.bgSubtle,
-            borderRadius: radii.pill,
+            borderRadius: 999,
           },
         ]}
       >
@@ -69,7 +69,7 @@ export const CapacityMeter: React.FC<CapacityMeterProps> = ({
             {
               width: `${Math.round(fraction * 100)}%`,
               backgroundColor: barColor,
-              borderRadius: radii.pill,
+              borderRadius: 999,
             },
           ]}
         />

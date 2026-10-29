@@ -28,7 +28,9 @@ export type FamilyAction =
   | 'pay_family_cart'
   | 'view_family_cart'
   | 'view_other_members_pricing'
-  | 'access_personal_features';
+  | 'access_personal_features'
+  | 'manage_family_subscription'
+  | 'view_own_subscription_plan';
 
 export interface PermissionContext {
   isOwnItem?: boolean;
@@ -62,6 +64,7 @@ export function can(
     case 'revoke_link':
     case 'reissue_link':
     case 'manage_members':
+    case 'manage_family_subscription':
     case 'set_co_owner':
     case 'remove_co_owner':
     case 'view_approvals':
@@ -106,6 +109,10 @@ export function can(
     case 'access_personal_features':
       // Dependents are locked to family shell (no personal basket, wallet, referral, account edits)
       return role !== 'dependent';
+
+    case 'view_own_subscription_plan':
+      // Any member of the family (owner, co_owner, member, dependent) can view their own plan
+      return Boolean(role);
 
     default:
       return false;

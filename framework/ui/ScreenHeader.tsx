@@ -9,6 +9,7 @@ import {
   StyleProp,
 } from 'react-native';
 import { SafeAreaInsetsContext, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useTheme } from '../theme/ThemeContext';
 import { Icon } from './Icon';
 
 /**
@@ -62,6 +63,7 @@ export const ScreenHeader: React.FC<ScreenHeaderProps> = ({
   backgroundColor,
   testID,
 }) => {
+  const { colors } = useTheme();
   const paddingTop = useHeaderTopPadding(8);
 
   return (
@@ -69,8 +71,7 @@ export const ScreenHeader: React.FC<ScreenHeaderProps> = ({
       testID={testID}
       style={[
         styles.headerBase,
-        { paddingTop },
-        backgroundColor ? { backgroundColor } : undefined,
+        { paddingTop, backgroundColor: backgroundColor || colors.bgSurface },
         style,
       ]}
     >
@@ -84,11 +85,11 @@ export const ScreenHeader: React.FC<ScreenHeaderProps> = ({
               accessibilityRole="button"
               accessibilityLabel="Go back"
             >
-              <Icon name="arrow-back" size={22} color="#18181B" />
+              <Icon name="arrow-back" size={22} color={colors.textPrimary} />
             </TouchableOpacity>
           )}
           {title && (
-            <Text style={styles.titleText} numberOfLines={1}>
+            <Text style={[styles.titleText, { color: colors.textPrimary }]} numberOfLines={1}>
               {title}
             </Text>
           )}

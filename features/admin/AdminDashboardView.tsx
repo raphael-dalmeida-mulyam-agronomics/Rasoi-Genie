@@ -141,6 +141,7 @@ import { AppIconName, Icon } from '../../framework/ui/Icon';
 import { AddMealKitWizardModal } from './AddMealKitWizardModal';
 import { AdminNavigationMenu, AdminTab } from './AdminNavigationMenu';
 import { AdminReferralsManagementView } from './AdminReferralsManagementView';
+import { AdminSubscriptionsManagementView } from './AdminSubscriptionsManagementView';
 import { AdminWalletsManagementView } from './AdminWalletsManagementView';
 import { InventoryManagementView } from './InventoryManagementView';
 import { RecipeCardPrintModal } from './RecipeCardPrintModal';
@@ -297,6 +298,11 @@ const TAB_HEADER_META: Record<AdminTab, { title: string; subtitle: string }> = {
   wallets: {
     title: 'Customer Wallets & Credits',
     subtitle: 'Issue promotional wallet credits, manage transactions, and track ledger balances',
+  },
+  subscriptions: {
+    title: 'Subscriptions Management',
+    subtitle:
+      'Manage individual & family meal subscriptions, auto-renewals, pauses, and regional metrics',
   },
   referrals: {
     title: 'Referral Programme',
@@ -5289,6 +5295,7 @@ export const AdminDashboardView: React.FC<{ onNavigateToLogin?: () => void }> = 
 
           {/* MODULE 10: REFERRALS ENGINE */}
           {activeTab === 'referrals' && <AdminReferralsManagementView />}
+          {activeTab === 'subscriptions' && <AdminSubscriptionsManagementView />}
         </ScrollView>
       </View>
 

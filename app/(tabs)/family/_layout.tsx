@@ -49,6 +49,13 @@ export default function FamilyLayout() {
           headerShown: true,
         }}
       />
+      <Stack.Screen
+        name="subscription"
+        options={{
+          title: 'Weekly Meal Subscription',
+          headerShown: false,
+        }}
+      />
     </Stack>
   );
 }
