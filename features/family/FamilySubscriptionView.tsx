@@ -80,6 +80,7 @@ export const FamilySubscriptionView: React.FC<{ onBack?: () => void }> = ({ onBa
     setMemberPlan,
     updateCoveredMembersList,
     addPause,
+    removePause,
     fetchPauses,
     pauses,
     toggleAutoRenewState,
@@ -440,7 +441,14 @@ export const FamilySubscriptionView: React.FC<{ onBack?: () => void }> = ({ onBa
       return next;
     });
 
+    // Custom recipe modification applies to this member only
+    setMemberPlanConfigs((prev) => ({
+      ...prev,
+      [memberId]: { planType: 'custom', standardPlanKey: null, planGroup: null },
+    }));
+
     if (isSubscribed && activeSubscription) {
+      await setMemberPlan(memberId, 'custom');
       await clearMeal(memberId, weekday);
     }
   };
@@ -453,21 +461,47 @@ export const FamilySubscriptionView: React.FC<{ onBack?: () => void }> = ({ onBa
     setLocalMeals((prev) => ({ ...prev, [key]: kitId }));
     setPickerModalVisible(false);
 
+    // If owner customized their own recipe, only owner's plan is Custom.
+    // If owner customized another member's recipe, only that member's plan is Custom.
+    setMemberPlanConfigs((prev) => ({
+      ...prev,
+      [member.user_id]: { planType: 'custom', standardPlanKey: null, planGroup: null },
+    }));
+
     if (isSubscribed && activeSubscription) {
+      await setMemberPlan(member.user_id, 'custom');
       await assignMeal(member.user_id, weekday, kitId);
     }
   };
 
-  // Pause single day
-  const handlePauseSingleDay = async (dateStr: string) => {
+  // Pause single day for individual member or entire family
+  const handlePauseSingleDay = async (
+    dateStr: string,
+    memberId: string | null = null,
+    targetName: string = 'Entire Family',
+  ) => {
     if (!activeSubscription) return;
-    const res = await addPause({ startDate: dateStr, endDate: dateStr });
+    const res = await addPause({ startDate: dateStr, endDate: dateStr, memberId });
     if (res.success) {
-      Alert.alert('Day Paused', `Deliveries on ${dateStr} have been paused.`);
+      Alert.alert(
+        'Delivery Paused',
+        `Deliveries on ${dateStr} have been paused for ${targetName}.`,
+      );
       setDayDetailVisible(false);
       fetchPauses();
     } else {
       Alert.alert('Pause Limit', res.error || 'Could not pause deliveries for this day.');
+    }
+  };
+
+  const handleResumePause = async (pauseId: string, targetName: string = 'Deliveries') => {
+    const res = await removePause(pauseId);
+    if (res.success) {
+      Alert.alert('Delivery Resumed', `${targetName} resumed for this date.`);
+      setDayDetailVisible(false);
+      fetchPauses();
+    } else {
+      Alert.alert('Resume Error', res.error || 'Could not resume delivery.');
     }
   };
 
@@ -723,48 +757,104 @@ export const FamilySubscriptionView: React.FC<{ onBack?: () => void }> = ({ onBa
 
               {/* Actions (Owner only) */}
               {isOwner && (
-                <View style={styles.memberActionButtonsRow}>
-                  <Button
-                    title="Change Recipe"
-                    variant="primary"
-                    size="sm"
-                    onPress={() => {
-                      setSelectedCell({
-                        member,
-                        weekday: selectedDayItem.weekdayIndex,
-                        currentKit: kit,
-                      });
-                      setDayDetailVisible(false);
-                      setPickerModalVisible(true);
-                    }}
-                    style={{ flex: 1, marginRight: 8 }}
-                    testID="cell-change-recipe-btn"
-                  />
-                  {kit ? (
+                <View>
+                  <View style={styles.memberActionButtonsRow}>
                     <Button
-                      title="Clear"
-                      variant="outline"
-                      size="sm"
-                      onPress={() =>
-                        handleClearMealForMemberDay(member.user_id, selectedDayItem.weekdayIndex)
-                      }
-                      testID="cell-clear-recipe-btn"
-                    />
-                  ) : (
-                    <Button
-                      title="Add a meal"
-                      variant="secondary"
+                      title="Change Recipe"
+                      variant="primary"
                       size="sm"
                       onPress={() => {
                         setSelectedCell({
                           member,
                           weekday: selectedDayItem.weekdayIndex,
+                          currentKit: kit,
                         });
                         setDayDetailVisible(false);
                         setPickerModalVisible(true);
                       }}
-                      testID="cell-add-meal-btn"
+                      style={{ flex: 1, marginRight: 8 }}
+                      testID="cell-change-recipe-btn"
                     />
+                    {kit ? (
+                      <Button
+                        title="Clear"
+                        variant="outline"
+                        size="sm"
+                        onPress={() =>
+                          handleClearMealForMemberDay(member.user_id, selectedDayItem.weekdayIndex)
+                        }
+                        testID="cell-clear-recipe-btn"
+                      />
+                    ) : (
+                      <Button
+                        title="Add a meal"
+                        variant="secondary"
+                        size="sm"
+                        onPress={() => {
+                          setSelectedCell({
+                            member,
+                            weekday: selectedDayItem.weekdayIndex,
+                          });
+                          setDayDetailVisible(false);
+                          setPickerModalVisible(true);
+                        }}
+                        testID="cell-add-meal-btn"
+                      />
+                    )}
+                  </View>
+
+                  {/* Per-Member Pause Toggle (Family Plan) */}
+                  {activeSubscription && (
+                    <View
+                      style={{
+                        marginTop: 8,
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        justifyContent: 'flex-end',
+                        gap: 6,
+                      }}
+                    >
+                      {(() => {
+                        const memberPause = pauses.find(
+                          (p) =>
+                            (p.member_id === member.user_id || !p.member_id) &&
+                            selectedDayItem.dateStr >= p.start_date &&
+                            selectedDayItem.dateStr <= p.end_date,
+                        );
+                        if (memberPause) {
+                          if (!memberPause.member_id) {
+                            return <Badge label="Paused (Family)" variant="warning" size="sm" />;
+                          }
+                          return (
+                            <Button
+                              title="Resume Member"
+                              variant="outline"
+                              size="sm"
+                              onPress={() => handleResumePause(memberPause.id, member.display_name)}
+                              testID={`member-resume-btn-${member.user_id}`}
+                            />
+                          );
+                        }
+                        if (!selectedDayItem.isLocked) {
+                          return (
+                            <Button
+                              title="Pause Member"
+                              variant="outline"
+                              size="sm"
+                              onPress={() =>
+                                handlePauseSingleDay(
+                                  selectedDayItem.dateStr,
+                                  member.user_id,
+                                  member.display_name,
+                                )
+                              }
+                              testID={`member-pause-btn-${member.user_id}`}
+                            />
+                          );
+                        }
+                        return null;
+                      })()}
+                    </View>
                   )}
                 </View>
               )}
@@ -772,35 +862,69 @@ export const FamilySubscriptionView: React.FC<{ onBack?: () => void }> = ({ onBa
           );
         })}
 
-        {/* Day Pause Toggle (Owner only) */}
+        {/* Whole Family Pause Section (Owner only) */}
         {isOwner && activeSubscription && (
           <View style={[styles.dayPauseBox, { borderTopColor: colors.borderLight }]}>
             <Text style={[styles.dayPauseTitle, { color: colors.textPrimary }]}>
-              Pause Deliveries for This Date
+              Whole Family Pause for This Date
             </Text>
-            {selectedDayItem.isLocked ? (
-              <Text style={{ fontSize: 12, color: colors.textMuted, marginTop: 4 }}>
-                Locked (within 48 hours cutoff window or in the past).
-              </Text>
-            ) : selectedDayItem.isPaused ? (
-              <View style={styles.dayPausedNotice}>
-                <Icon name="pause-circle" size={16} color={colors.warning} />
-                <Text
-                  style={{ fontSize: 13, color: colors.warning, fontWeight: '700', marginLeft: 6 }}
-                >
-                  Deliveries are paused on this day.
-                </Text>
-              </View>
-            ) : (
-              <Button
-                title="Pause Deliveries on This Day"
-                variant="outline"
-                size="sm"
-                onPress={() => handlePauseSingleDay(selectedDayItem.dateStr)}
-                style={{ marginTop: 8 }}
-                testID="day-detail-pause-btn"
-              />
-            )}
+            {(() => {
+              const wholeFamilyPause = pauses.find(
+                (p) =>
+                  !p.member_id &&
+                  selectedDayItem.dateStr >= p.start_date &&
+                  selectedDayItem.dateStr <= p.end_date,
+              );
+
+              if (selectedDayItem.isLocked) {
+                return (
+                  <Text style={{ fontSize: 12, color: colors.textMuted, marginTop: 4 }}>
+                    Locked (within 48 hours cutoff window or in the past).
+                  </Text>
+                );
+              }
+
+              if (wholeFamilyPause) {
+                return (
+                  <View style={{ marginTop: 6 }}>
+                    <View style={styles.dayPausedNotice}>
+                      <Icon name="pause-circle" size={16} color={colors.warning} />
+                      <Text
+                        style={{
+                          fontSize: 13,
+                          color: colors.warning,
+                          fontWeight: '700',
+                          marginLeft: 6,
+                        }}
+                      >
+                        Deliveries are paused for the entire family on this date.
+                      </Text>
+                    </View>
+                    <Button
+                      title="Resume Entire Family"
+                      variant="outline"
+                      size="sm"
+                      onPress={() => handleResumePause(wholeFamilyPause.id, 'Entire Family')}
+                      style={{ marginTop: 8 }}
+                      testID="family-resume-btn"
+                    />
+                  </View>
+                );
+              }
+
+              return (
+                <Button
+                  title="Pause Entire Family on This Day"
+                  variant="outline"
+                  size="sm"
+                  onPress={() =>
+                    handlePauseSingleDay(selectedDayItem.dateStr, null, 'Entire Family')
+                  }
+                  style={{ marginTop: 8 }}
+                  testID="day-detail-pause-btn"
+                />
+              );
+            })()}
           </View>
         )}
       </View>

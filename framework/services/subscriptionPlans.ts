@@ -330,6 +330,7 @@ export function copyPlanToAllMembers(
 export interface PauseDateRange {
   startDate: string | Date;
   endDate: string | Date;
+  memberId?: string | null;
   daysCount?: number;
 }
 
@@ -508,9 +509,32 @@ export function isDateLockedForPause(date: string | Date, now?: string | Date): 
 /**
  * Pure function: checks if a specific date is covered by any existing pause.
  */
-export function isDatePaused(date: string | Date, pauses: PauseDateRange[] = []): boolean {
+export function isDatePaused(
+  date: string | Date,
+  pauses: PauseDateRange[] = [],
+  memberId?: string | null,
+): boolean {
   const target = normalizeToDate(date);
   return pauses.some((p) => {
+    if (memberId && p.memberId && p.memberId !== memberId) {
+      return false;
+    }
+    const start = normalizeToDate(p.startDate);
+    const end = normalizeToDate(p.endDate);
+    return target >= start && target <= end;
+  });
+}
+
+/**
+ * Pure function: checks if a specific date has a pause applied to the entire family (memberId is null).
+ */
+export function isWholeFamilyDatePaused(
+  date: string | Date,
+  pauses: PauseDateRange[] = [],
+): boolean {
+  const target = normalizeToDate(date);
+  return pauses.some((p) => {
+    if (p.memberId) return false;
     const start = normalizeToDate(p.startDate);
     const end = normalizeToDate(p.endDate);
     return target >= start && target <= end;

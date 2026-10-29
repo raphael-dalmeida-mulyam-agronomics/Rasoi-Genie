@@ -3,13 +3,13 @@
 **Project:** RasoiGenie  
 **Branch:** `feature/family-weekly-meal-plan-calendar-redesign` (Merged to `main`)  
 **Status:** Completed, Verified with Automated Test Suites & Merged to `main`  
-**Quality Gates:** 50/50 test suites passed (405/405 tests passed), TypeScript clean (`tsc --noEmit` 0 errors), ESLint clean (0 errors)
+**Quality Gates:** 50/50 test suites passed (407/407 tests passed), TypeScript clean (`tsc --noEmit` 0 errors), ESLint clean (0 errors)
 
 ---
 
 ## Executive Summary
 
-Today's work centered on significantly expanding the RasoiGenie Weekly Meal Subscription feature across both customer-facing applications and backend administrative platforms. Key deliverables include per-member customized plans in a family subscription with plan copying and sharing capabilities, a full-month interactive pause calendar with active subscription highlighting and dual-enforced constraints, a weekly auto-renewal state machine with automated retries and idempotency watermarks, a regionally-scoped administrative management dashboard with audited cancellation RPCs, header branding modernization with the official Rasoi Genie logo, and a complete redesign of the Family Hub "Weekly Meal Matrix" into a responsive Google Calendar–style "Weekly Meal Plan" month grid with member plan configuration cards and a rich day detail popup.
+Today's work centered on significantly expanding the RasoiGenie Weekly Meal Subscription feature across both customer-facing applications and backend administrative platforms. Key deliverables include per-member customized plans in a family subscription with plan copying and sharing capabilities, a full-month interactive pause calendar with active subscription highlighting and dual-enforced constraints, a weekly auto-renewal state machine with automated retries and idempotency watermarks, a regionally-scoped administrative management dashboard with audited cancellation RPCs, header branding modernization with the official Rasoi Genie logo, and a complete redesign of the Family Hub "Weekly Meal Matrix" into a responsive Google Calendar–style "Weekly Meal Plan" month grid with member plan configuration cards, per-member vs whole-family pause controls, granular plan switching, and a rich day detail popup.
 
 ---
 
@@ -118,6 +118,9 @@ Today's work centered on significantly expanding the RasoiGenie Weekly Meal Subs
   - Includes a running total (`"Total per week: ₹X for N members"`) recalculating dynamically via `calculatePerMemberSubscriptionTotal`.
   - Added `"Apply to everyone"` quick action buttons with confirmation alert (`applyPlanToAllConfirmTitle`) to broadcast a plan to all covered members.
   - Implemented an overwrite confirmation prompt (`overwriteCustomPicksTitle`) if a member already has custom recipe selections before replacing them.
+- **Granular Custom Plan Switching on Recipe Edit**:
+  - If the owner customizes a recipe for themselves, only the owner's plan updates to **Custom Plan**, while all other members' plans remain intact.
+  - If the owner customizes a recipe for another family member, only that family member's plan updates to **Custom Plan**, while the owner's and other members' plans remain intact.
 - **Responsive Google Calendar–Style Month Grid**:
   - Replaced the member × weekday table and horizontal scrollview with an equal square cell month grid (`aspectRatio: 1`) that fits all phone screens without horizontal scrolling.
   - Displays weekday header row (`Mon` through `Sun`) **ONCE only** in the header.
@@ -130,11 +133,13 @@ Today's work centered on significantly expanding the RasoiGenie Weekly Meal Subs
 - **Day Detail Popup (BottomSheet on mobile, Modal on web)**:
   - Tapping any calendar day cell opens the Day Detail popup with the full formatted date title (e.g. `"Thursday, 29 October"`).
   - Contains sections for each covered member with their avatar, name, role badge, active plan chip, and assigned kit card with cuisine/protein info (or an `"Add a meal"` empty state).
-  - Owner-only actions: `"Change Recipe"` / `"Swap"`, `"Clear"`, and a day pause toggle (respecting 48-hour cutoff and pause limits).
+  - Owner-only actions: `"Change Recipe"` / `"Swap"`, `"Clear"`, and granular pause controls:
+    - **Individual Member Pause**: Owner can pause deliveries on that date for a single member (`memberId`), or resume deliveries.
+    - **Whole Family Pause**: Dedicated section at the bottom allowing the owner to pause or resume deliveries on that date for the entire household (`memberId: null`).
   - Dietary clash warning banner displayed inside the affected member's section explaining the exact reason, replacing the old card conflict badge.
 - **Pure Helper Functions & Testing**:
   - Created `framework/services/familyMealPlanCalendarHelpers.ts` with pure functions: `buildMonthCalendarGrid`, `mapMealsForDay`, `getWeekdayIndex`, `formatDateKey`, and `formatDayAccessibilityLabel`.
-  - Added unit test suite `framework/__tests__/familyMealPlanCalendarHelpers.test.ts` (12 tests covering leap years, month boundaries, Monday start, out-of-period, pauses, overflow, and clashes).
+  - Added unit test suite `framework/__tests__/familyMealPlanCalendarHelpers.test.ts` (14 tests covering leap years, month boundaries, Monday start, out-of-period, pauses, overflow, clashes, and member-specific pause evaluations).
   - Updated `framework/__tests__/familySubscriptionDietaryConflictModal.test.tsx` to verify month cell clash indicator, popup conflict banner, and swap dismissal.
 
 ---
@@ -142,13 +147,13 @@ Today's work centered on significantly expanding the RasoiGenie Weekly Meal Subs
 ### 7. Quality Assurance & Test Verification
 
 - **Automated Test Results**:
-  - `framework/__tests__/familyMealPlanCalendarHelpers.test.ts`: **12/12 passed** (pure calendar helpers, leap years, overflow, clash detection).
+  - `framework/__tests__/familyMealPlanCalendarHelpers.test.ts`: **14/14 passed** (pure calendar helpers, leap years, overflow, clash detection, member-specific pause evaluations).
   - `framework/__tests__/familySubscriptionDietaryConflictModal.test.tsx`: **1/1 passed** (month grid day popup & swap dismissal).
   - `framework/__tests__/subscriptionExtensions.test.ts`: **24/24 passed** (per-member pricing, same-plan copy, 5 pause limits, period extension, renewal state machine, idempotency, family permissions).
   - `framework/__tests__/familyPermissions.test.ts`: **16/16 passed** (`manage_family_subscription` vs `view_own_subscription_plan`).
   - `framework/__tests__/subscriptionPlans.test.ts`: **5/5 passed**.
   - `framework/__tests__/subscriptionContext.test.tsx`: **7/7 passed**.
-  - Whole repository test suite: **50/50 test suites passed, 405/405 tests passed**.
+  - Whole repository test suite: **50/50 test suites passed, 407/407 tests passed**.
 - **Static Analysis & Linting**:
   - TypeScript compilation (`npx tsc --noEmit`): **0 errors, clean build**.
   - ESLint (`npm run lint`): **0 errors**.

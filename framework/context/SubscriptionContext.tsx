@@ -15,6 +15,7 @@ import {
   SubscriptionMember,
   SubscriptionPause,
   createSubscriptionPause,
+  removeSubscriptionPause,
   fetchSubscriptionPauses,
   toggleAutoRenew,
   applyPlanToAllMembers,
@@ -58,6 +59,7 @@ export interface SubscriptionContextValue {
     endDate: string;
     memberId?: string | null;
   }) => Promise<{ success: boolean; pause?: SubscriptionPause; error?: string }>;
+  removePause: (pauseId: string) => Promise<{ success: boolean; error?: string }>;
   fetchPauses: () => Promise<SubscriptionPause[]>;
   toggleAutoRenewState: (autoRenew: boolean) => Promise<{ success: boolean; error?: string }>;
   applySamePlanToAll: (
@@ -291,6 +293,17 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
     [activeSubscription, effectiveUserId, refreshSubscription],
   );
 
+  const removePause = useCallback(
+    async (pauseId: string) => {
+      const res = await removeSubscriptionPause(pauseId);
+      if (res.success) {
+        await refreshSubscription();
+      }
+      return res;
+    },
+    [refreshSubscription],
+  );
+
   const fetchPauses = useCallback(async () => {
     if (!activeSubscription) return [];
     const res = await fetchSubscriptionPauses(activeSubscription.id);
@@ -378,6 +391,7 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
       setMemberPlan,
       updateCoveredMembersList,
       addPause,
+      removePause,
       fetchPauses,
       toggleAutoRenewState,
       applySamePlanToAll,
@@ -402,6 +416,7 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
       updateCoveredMembersList,
       pauses,
       addPause,
+      removePause,
       fetchPauses,
       toggleAutoRenewState,
       applySamePlanToAll,
@@ -431,6 +446,7 @@ const defaultSubscriptionFallback: SubscriptionContextValue = {
   setMemberPlan: async () => ({ success: false, error: 'No subscription provider' }),
   updateCoveredMembersList: async () => ({ success: false, error: 'No subscription provider' }),
   addPause: async () => ({ success: false, error: 'No subscription provider' }),
+  removePause: async () => ({ success: false, error: 'No subscription provider' }),
   fetchPauses: async () => [],
   toggleAutoRenewState: async () => ({ success: false, error: 'No subscription provider' }),
   applySamePlanToAll: async () => ({ success: false, error: 'No subscription provider' }),

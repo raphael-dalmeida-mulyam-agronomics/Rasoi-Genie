@@ -184,6 +184,9 @@ export interface DayMemberMealItem {
   kit?: MealKit;
   hasConflict: boolean;
   conflictReasons: string[];
+  isPaused?: boolean;
+  isFamilyPause?: boolean;
+  pauseId?: string;
 }
 
 export interface MapMealsForDayParams {
@@ -192,6 +195,8 @@ export interface MapMealsForDayParams {
   weekdayIndex: number;
   getMealKitById: (id: string) => MealKit | undefined;
   filterToMemberId?: string | null;
+  pauses?: Array<{ id?: string; startDate: string; endDate: string; memberId?: string | null }>;
+  currentDate?: Date | string | null;
 }
 
 export interface DayMealsSummary {
@@ -218,11 +223,38 @@ export function mapMealsForDay(params: MapMealsForDayParams): DayMealsSummary {
     const kit = kitId ? getMealKitById(kitId) : undefined;
     const conflict = kit ? checkDietaryConflict(member, kit) : { hasConflict: false, reasons: [] };
 
+    let isPaused = false;
+    let isFamilyPause = false;
+    let pauseId: string | undefined = undefined;
+
+    if (params.currentDate && params.pauses) {
+      const dateStr =
+        typeof params.currentDate === 'string'
+          ? params.currentDate.split('T')[0]!
+          : formatDateKey(params.currentDate);
+
+      const matchingPause = params.pauses.find((p) => {
+        const coversDate = dateStr >= p.startDate && dateStr <= p.endDate;
+        const coversMember =
+          p.memberId === null || p.memberId === undefined || p.memberId === member.user_id;
+        return coversDate && coversMember;
+      });
+
+      if (matchingPause) {
+        isPaused = true;
+        pauseId = matchingPause.id;
+        isFamilyPause = !matchingPause.memberId;
+      }
+    }
+
     return {
       member,
       kit,
       hasConflict: conflict.hasConflict,
       conflictReasons: conflict.reasons,
+      isPaused,
+      isFamilyPause,
+      pauseId,
     };
   });
 

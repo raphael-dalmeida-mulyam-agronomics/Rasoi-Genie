@@ -5,6 +5,7 @@ import {
   mapMealsForDay,
   formatDayAccessibilityLabel,
 } from '../services/familyMealPlanCalendarHelpers';
+import { isDatePaused, isWholeFamilyDatePaused } from '../services/subscriptionPlans';
 import { FamilyMember } from '../services/familyService';
 import { MealKit } from '../services/mealKitsService';
 
@@ -119,11 +120,6 @@ describe('familyMealPlanCalendarHelpers', () => {
       // Oct 30 (within 48h) -> locked
       const tomorrow = grid.weeks.flat().find((d) => d.dateStr === '2026-10-30');
       expect(tomorrow?.isLocked).toBe(true);
-
-      // Future date > 48h -> not locked
-      const future = grid.weeks.flat().find((d) => d.dateStr === '2026-10-31');
-      // Depending on cutoff (48h from Oct 29 10am is Oct 31 10am)
-      // Let's check Nov or later in month if available
     });
   });
 
@@ -269,6 +265,57 @@ describe('familyMealPlanCalendarHelpers', () => {
       expect(result.allMemberMeals.length).toBe(1);
       expect(result.allMemberMeals[0]!.member.user_id).toBe('user2');
       expect(result.assignedMeals[0]!.kit?.name).toBe('Chicken Biryani');
+    });
+
+    it('identifies per-member pauses vs whole-family pauses accurately', () => {
+      const localMeals: Record<string, string> = {
+        user1_0: 'kit_paneer',
+        user2_0: 'kit_chicken',
+      };
+
+      // Only user2 is paused on 2026-10-26
+      const memberSpecificPauses = [
+        { id: 'p1', startDate: '2026-10-26', endDate: '2026-10-26', memberId: 'user2' },
+      ];
+
+      const result = mapMealsForDay({
+        members: mockMembers.slice(0, 2),
+        localMeals,
+        weekdayIndex: 0,
+        getMealKitById,
+        pauses: memberSpecificPauses,
+        currentDate: '2026-10-26',
+      });
+
+      const user1Meal = result.allMemberMeals.find((m) => m.member.user_id === 'user1');
+      const user2Meal = result.allMemberMeals.find((m) => m.member.user_id === 'user2');
+
+      expect(user1Meal?.isPaused).toBe(false);
+      expect(user2Meal?.isPaused).toBe(true);
+      expect(user2Meal?.isFamilyPause).toBe(false);
+      expect(user2Meal?.pauseId).toBe('p1');
+    });
+  });
+
+  describe('isDatePaused & isWholeFamilyDatePaused per-member evaluation', () => {
+    it('evaluates whole-family vs member-specific pauses correctly', () => {
+      const pauses = [
+        { startDate: '2026-10-20', endDate: '2026-10-20', memberId: null }, // whole family
+        { startDate: '2026-10-22', endDate: '2026-10-22', memberId: 'user_aarav' }, // aarav only
+      ];
+
+      // Oct 20: whole family paused
+      expect(isWholeFamilyDatePaused('2026-10-20', pauses)).toBe(true);
+      expect(isDatePaused('2026-10-20', pauses, 'user_aarav')).toBe(true);
+      expect(isDatePaused('2026-10-20', pauses, 'user_bhavna')).toBe(true);
+
+      // Oct 22: aarav paused, bhavna NOT paused, whole family NOT paused
+      expect(isWholeFamilyDatePaused('2026-10-22', pauses)).toBe(false);
+      expect(isDatePaused('2026-10-22', pauses, 'user_aarav')).toBe(true);
+      expect(isDatePaused('2026-10-22', pauses, 'user_bhavna')).toBe(false);
+
+      // Oct 25: unpaused date
+      expect(isDatePaused('2026-10-25', pauses, 'user_aarav')).toBe(false);
     });
   });
 

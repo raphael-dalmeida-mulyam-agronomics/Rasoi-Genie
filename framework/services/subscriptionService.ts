@@ -933,6 +933,33 @@ export async function createSubscriptionPause(input: CreateSubscriptionPauseInpu
 }
 
 /**
+ * Removes an existing subscription pause.
+ */
+export async function removeSubscriptionPause(
+  pauseId: string,
+): Promise<{ success: boolean; error?: string }> {
+  await loadLocalStores();
+  const pauseItem = inMemoryPauses.find((p) => p.id === pauseId);
+  if (!pauseItem) {
+    return { success: false, error: 'Pause record not found' };
+  }
+
+  if (isSupabaseLive()) {
+    try {
+      const supabase = getSupabaseClient();
+      await supabase.from('subscription_pauses').delete().eq('id', pauseId);
+    } catch (err: any) {
+      console.warn('[SubscriptionService] Error removing pause from Supabase:', err);
+    }
+  }
+
+  inMemoryPauses = inMemoryPauses.filter((p) => p.id !== pauseId);
+  await saveLocalStores();
+
+  return { success: true };
+}
+
+/**
  * Toggles auto_renew on a subscription (Owner only).
  * When toggled off, subscription remains active until period_end and then expires.
  */
