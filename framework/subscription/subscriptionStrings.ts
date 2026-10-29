@@ -46,6 +46,17 @@ export const subscriptionStrings = {
     hubCardBtn: 'Manage Meal Subscription',
     viewPlanBtn: 'View Active Subscription',
     ownerOnlyNotice: 'Only the family owner can subscribe, assign recipes, or modify billing.',
+    planHeading: 'Weekly Meal Plan',
+    planSubtitle: 'Tap any day to see or change what each member is eating.',
+    memberPlansHeading: 'Member plans',
+    applyPlanToAllConfirmTitle: (planName: string) => `Apply ${planName} to Everyone?`,
+    applyPlanToAllConfirmMsg:
+      'This will update weekly meals for all covered family members. You can still customize individual members afterwards.',
+    overwriteCustomPicksTitle: 'Change Plan & Overwrite Meals?',
+    overwriteCustomPicksMsg: (name: string) =>
+      `${name} has custom meal picks that will be updated to match the selected plan. Do you want to proceed?`,
+    totalPerWeekSummary: (amount: number, count: number) =>
+      `Total per week: ₹${amount.toLocaleString('en-IN')} for ${count} member${count > 1 ? 's' : ''}`,
     calendarTitle: 'Weekly Meal Schedule',
     calendarSubtitle: 'Tap any day cell to assign, swap, or clear that meal kit.',
     memberRowLabel: (name: string, roleOrType: string) => `${name} (${roleOrType})`,

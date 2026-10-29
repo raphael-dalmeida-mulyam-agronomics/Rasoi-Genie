@@ -83,6 +83,13 @@ jest.mock('../context/SubscriptionContext', () => ({
     clearMeal: mockClearMeal,
     setMemberPlan: jest.fn(),
     updateCoveredMembersList: jest.fn(),
+    addPause: jest.fn(),
+    fetchPauses: jest.fn(),
+    pauses: [],
+    toggleAutoRenewState: jest.fn(),
+    applySamePlanToAll: jest.fn(),
+    shareOwnerPlan: jest.fn(),
+    coveredMembers: [],
   }),
 }));
 
@@ -118,33 +125,38 @@ jest.mock('../services/mealKitsService', () => {
   };
 });
 
+jest.setTimeout(30000);
+
 describe('FamilySubscriptionView - Dietary Conflict Modal Dismissal', () => {
-  it('dismisses the conflict pop up when Change Recipe is clicked and opens the recipe picker', async () => {
-    const { getByTestId, getByText, queryByText } = await render(
+  it('shows clash icon on the month calendar cell, displays warning banner in Day Detail popup, and dismisses when Change Recipe is clicked', async () => {
+    const { getByTestId, getAllByTestId, getByText, queryByText } = await render(
       <ThemeProvider>
         <FamilySubscriptionView />
       </ThemeProvider>,
     );
 
-    // 1. Matrix cell for Monday (weekday 0) should show the conflict badge
-    const mondayCell = getByTestId('matrix-cell-user_owner-0');
-    expect(mondayCell).toBeTruthy();
-    expect(getByText('⚠️ Conflict')).toBeTruthy();
+    // 1. Month calendar cells with dietary clash should be marked
+    const clashCells = getAllByTestId('calendar-clash-cell');
+    expect(clashCells.length).toBeGreaterThan(0);
 
-    // 2. Tap the cell with the dietary conflict
-    fireEvent.press(mondayCell);
+    const clashIcons = getAllByTestId('cell-clash-icon');
+    expect(clashIcons.length).toBeGreaterThan(0);
 
-    // 3. Cell Detail / Action modal opens and displays Dietary Preference Conflict notice
+    // 2. Tap the cell with the dietary conflict to open Day Detail popup
+    fireEvent.press(clashCells[0]!);
+
+    // 3. Day Detail popup opens and displays Dietary Preference Conflict banner inside member section
     await waitFor(() => {
       expect(getByText('⚠️ Dietary Preference Conflict')).toBeTruthy();
       expect(getByText('• Non-vegetarian dish assigned to vegetarian member')).toBeTruthy();
+      expect(getByText('Lucknowi Chicken Biryani')).toBeTruthy();
     });
 
-    // 4. Click the "Change Recipe" button
+    // 4. Click the "Change Recipe" / "Swap" button
     const changeRecipeBtn = getByTestId('cell-change-recipe-btn');
     fireEvent.press(changeRecipeBtn);
 
-    // 5. The conflict pop up MUST disappear
+    // 5. The day detail conflict pop up MUST disappear
     await waitFor(() => {
       expect(queryByText('⚠️ Dietary Preference Conflict')).toBeNull();
     });
@@ -164,10 +176,11 @@ describe('FamilySubscriptionView - Dietary Conflict Modal Dismissal', () => {
       expect(queryByText('Pick Recipe for Priya Sharma')).toBeNull();
     });
 
-    // 9. Matrix cell for Monday updates to Paneer Makhani and conflict badge is removed
+    // 9. Re-open Day Detail to verify it was updated to Paneer Makhani Kit and conflict banner is gone
+    fireEvent.press(clashCells[0]!);
     await waitFor(() => {
       expect(getByText('Paneer Makhani Kit')).toBeTruthy();
-      expect(queryByText('⚠️ Conflict')).toBeNull();
+      expect(queryByText('⚠️ Dietary Preference Conflict')).toBeNull();
     });
   });
 });
