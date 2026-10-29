@@ -48,6 +48,7 @@ import { SUBSCRIPTION_RENEWAL_CONFIG } from '../../framework/subscription/subscr
 import {
   buildMonthCalendarGrid,
   mapMealsForDay,
+  buildShiftedMealSchedule,
   formatDayAccessibilityLabel,
   CalendarDayItem,
   formatDateKey,
@@ -246,6 +247,27 @@ export const FamilySubscriptionView: React.FC<{ onBack?: () => void }> = ({ onBa
       now: todayDate,
     });
   }, [activeSubscription, pauses, todayDate]);
+
+  // Daily shifted meal kit schedule: paused days are skipped and meals carry forward onto make-up days
+  const effectiveSchedule = useMemo(() => {
+    return buildShiftedMealSchedule({
+      periodStart: activeSubscription?.period_start,
+      periodEnd: activeSubscription?.period_end,
+      members: coveredMembersList,
+      localMeals,
+      pauses: pauses.map((p) => ({
+        startDate: p.start_date.split('T')[0] ?? p.start_date,
+        endDate: p.end_date.split('T')[0] ?? p.end_date,
+        memberId: p.member_id,
+      })),
+    });
+  }, [
+    activeSubscription?.period_start,
+    activeSubscription?.period_end,
+    coveredMembersList,
+    localMeals,
+    pauses,
+  ]);
 
   // Month grid computation
   const monthGrid = useMemo(() => {
@@ -474,7 +496,10 @@ export const FamilySubscriptionView: React.FC<{ onBack?: () => void }> = ({ onBa
     if (!selectedCell) return;
     const { member, weekday } = selectedCell;
     const key = `${member.user_id}_${weekday}`;
-    setLocalMeals((prev) => ({ ...prev, [key]: kitId }));
+    const dateKey = selectedDayItem?.dateStr
+      ? `${member.user_id}_${selectedDayItem.dateStr}`
+      : null;
+    setLocalMeals((prev) => ({ ...prev, [key]: kitId, ...(dateKey ? { [dateKey]: kitId } : {}) }));
     setPickerModalVisible(false);
 
     // If owner customized their own recipe, only owner's plan is Custom.
@@ -665,7 +690,11 @@ export const FamilySubscriptionView: React.FC<{ onBack?: () => void }> = ({ onBa
       <View style={styles.dayDetailContent}>
         {targetMembers.map((member) => {
           const key = `${member.user_id}_${selectedDayItem.weekdayIndex}`;
-          const kitId = localMeals[key];
+          const dateKey = selectedDayItem.dateStr;
+          const kitId =
+            (selectedDayItem.isInsidePeriod && effectiveSchedule[`${member.user_id}_${dateKey}`]) ||
+            localMeals[`${member.user_id}_${dateKey}`] ||
+            localMeals[key];
           const kit = kitId ? getMealKitById(kitId) : undefined;
           const conflict = kit
             ? checkDietaryConflict(member, kit)
@@ -1490,6 +1519,7 @@ export const FamilySubscriptionView: React.FC<{ onBack?: () => void }> = ({ onBa
                     ? mapMealsForDay({
                         members: coveredMembersList,
                         localMeals,
+                        effectiveSchedule,
                         weekdayIndex: day.weekdayIndex,
                         getMealKitById,
                         filterToMemberId: isOwner ? null : user?.uid,

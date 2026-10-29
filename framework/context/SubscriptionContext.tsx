@@ -17,6 +17,8 @@ import {
   createSubscriptionPause,
   removeSubscriptionPause,
   fetchSubscriptionPauses,
+  subscribeToSubscriptionPausesRealtime,
+  subscribeToSubscriptionRealtime,
   toggleAutoRenew,
   applyPlanToAllMembers,
   setMemberPlanGroup,
@@ -125,6 +127,24 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
   useEffect(() => {
     refreshSubscription();
   }, [refreshSubscription]);
+
+  // Real-time synchronization for pauses and subscription updates across devices & DB
+  useEffect(() => {
+    if (!activeSubscription?.id) return;
+
+    const unsubPauses = subscribeToSubscriptionPausesRealtime(activeSubscription.id, () => {
+      refreshSubscription();
+    });
+
+    const unsubSub = subscribeToSubscriptionRealtime(activeSubscription.id, () => {
+      refreshSubscription();
+    });
+
+    return () => {
+      unsubPauses();
+      unsubSub();
+    };
+  }, [activeSubscription?.id, refreshSubscription]);
 
   const isSubscribed = useMemo(() => {
     return Boolean(
@@ -307,6 +327,9 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
     async (pauseId: string) => {
       const res = await removeSubscriptionPause(pauseId);
       if (res.success) {
+        if (res.subscription) {
+          setActiveSubscription(res.subscription);
+        }
         await refreshSubscription();
       }
       return res;

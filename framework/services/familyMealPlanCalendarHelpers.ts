@@ -191,7 +191,8 @@ export interface DayMemberMealItem {
 
 export interface MapMealsForDayParams {
   members: FamilyMember[];
-  localMeals: Record<string, string>; // key: `${member_id}_${weekdayIndex}`
+  localMeals: Record<string, string>; // key: `${member_id}_${weekdayIndex}` or `${member_id}_${dateStr}`
+  effectiveSchedule?: Record<string, string>; // key: `${member_id}_${dateStr}`
   weekdayIndex: number;
   getMealKitById: (id: string) => MealKit | undefined;
   filterToMemberId?: string | null;
@@ -212,29 +213,29 @@ export interface DayMealsSummary {
  * Supports non-owner member filtering and computes overflow (+N) and clash indicators.
  */
 export function mapMealsForDay(params: MapMealsForDayParams): DayMealsSummary {
-  const { members, localMeals, weekdayIndex, getMealKitById, filterToMemberId } = params;
+  const { members, localMeals, effectiveSchedule, weekdayIndex, getMealKitById, filterToMemberId } =
+    params;
 
   const targetMembers = filterToMemberId
     ? members.filter((m) => m.user_id === filterToMemberId)
     : members;
 
   const allMemberMeals: DayMemberMealItem[] = targetMembers.map((member) => {
-    const kitId = localMeals[`${member.user_id}_${weekdayIndex}`];
-    const kit = kitId ? getMealKitById(kitId) : undefined;
-    const conflict = kit ? checkDietaryConflict(member, kit) : { hasConflict: false, reasons: [] };
+    let dateStr: string | null = null;
+    if (params.currentDate) {
+      dateStr =
+        typeof params.currentDate === 'string'
+          ? params.currentDate.split('T')[0]!
+          : formatDateKey(params.currentDate);
+    }
 
     let isPaused = false;
     let isFamilyPause = false;
     let pauseId: string | undefined = undefined;
 
-    if (params.currentDate && params.pauses) {
-      const dateStr =
-        typeof params.currentDate === 'string'
-          ? params.currentDate.split('T')[0]!
-          : formatDateKey(params.currentDate);
-
+    if (dateStr && params.pauses) {
       const matchingPause = params.pauses.find((p) => {
-        const coversDate = dateStr >= p.startDate && dateStr <= p.endDate;
+        const coversDate = dateStr! >= p.startDate && dateStr! <= p.endDate;
         const coversMember =
           p.memberId === null || p.memberId === undefined || p.memberId === member.user_id;
         return coversDate && coversMember;
@@ -246,6 +247,20 @@ export function mapMealsForDay(params: MapMealsForDayParams): DayMealsSummary {
         isFamilyPause = !matchingPause.memberId;
       }
     }
+
+    let kitId: string | undefined = undefined;
+    if (!isPaused) {
+      if (dateStr && effectiveSchedule && effectiveSchedule[`${member.user_id}_${dateStr}`]) {
+        kitId = effectiveSchedule[`${member.user_id}_${dateStr}`];
+      } else if (dateStr && localMeals[`${member.user_id}_${dateStr}`]) {
+        kitId = localMeals[`${member.user_id}_${dateStr}`];
+      } else {
+        kitId = localMeals[`${member.user_id}_${weekdayIndex}`];
+      }
+    }
+
+    const kit = kitId ? getMealKitById(kitId) : undefined;
+    const conflict = kit ? checkDietaryConflict(member, kit) : { hasConflict: false, reasons: [] };
 
     return {
       member,
@@ -297,4 +312,103 @@ export function formatDayAccessibilityLabel(
     label += ', dietary clash warning';
   }
   return label;
+}
+
+export interface BuildShiftedMealScheduleParams {
+  periodStart?: string | Date | null;
+  periodEnd?: string | Date | null;
+  members: FamilyMember[];
+  localMeals: Record<string, string>; // `${member_id}_${weekdayIndex}` or `${member_id}_${dateStr}`
+  pauses?: Array<{ startDate: string; endDate: string; memberId?: string | null }>;
+}
+
+/**
+ * Pure helper: Computes the daily shifted meal kit schedule for each member.
+ * When days are paused, deliveries stop on those days and the selected meal kits
+ * carry forward sequentially onto the extended make-up days so that every meal
+ * originally planned/paid for is delivered daily until all meals are fulfilled.
+ */
+export function buildShiftedMealSchedule(
+  params: BuildShiftedMealScheduleParams,
+): Record<string, string> {
+  const { periodStart, periodEnd, members, localMeals } = params;
+  if (!periodStart || !periodEnd) return {};
+
+  const startObj = typeof periodStart === 'string' ? new Date(periodStart) : new Date(periodStart);
+  const endObj = typeof periodEnd === 'string' ? new Date(periodEnd) : new Date(periodEnd);
+
+  startObj.setHours(0, 0, 0, 0);
+  endObj.setHours(0, 0, 0, 0);
+
+  const pauses = params.pauses || [];
+  const schedule: Record<string, string> = {};
+
+  // Build ordered array of all calendar dates from start to end
+  const calendarDates: Date[] = [];
+  const cur = new Date(startObj);
+  while (cur <= endObj) {
+    calendarDates.push(new Date(cur));
+    cur.setDate(cur.getDate() + 1);
+  }
+
+  for (const member of members) {
+    const isMemberPausedOnDate = (d: Date): boolean => {
+      const dStr = formatDateKey(d);
+      return pauses.some((p) => {
+        const coversMember =
+          p.memberId === null || p.memberId === undefined || p.memberId === member.user_id;
+        const s = p.startDate.split('T')[0] ?? p.startDate;
+        const e = p.endDate.split('T')[0] ?? p.endDate;
+        return coversMember && dStr >= s && dStr <= e;
+      });
+    };
+
+    // 7 planned meal kits for the 7 subscription days starting from periodStart weekday
+    const startWeekday = getWeekdayIndex(startObj);
+    const plannedMealKits: Array<string | undefined> = [];
+
+    for (let dayOffset = 0; dayOffset < 7; dayOffset++) {
+      const wIdx = (startWeekday + dayOffset) % 7;
+      const origD = new Date(startObj);
+      origD.setDate(origD.getDate() + dayOffset);
+      const origDStr = formatDateKey(origD);
+
+      const kitId =
+        localMeals[`${member.user_id}_${origDStr}`] || localMeals[`${member.user_id}_${wIdx}`];
+      plannedMealKits.push(kitId);
+    }
+
+    const unconsumedQueue = [...plannedMealKits];
+
+    for (const d of calendarDates) {
+      const dStr = formatDateKey(d);
+      const isPaused = isMemberPausedOnDate(d);
+
+      if (isPaused) {
+        continue;
+      }
+
+      // Date-specific override takes precedence
+      const manualOverride = localMeals[`${member.user_id}_${dStr}`];
+      if (manualOverride) {
+        schedule[`${member.user_id}_${dStr}`] = manualOverride;
+        if (unconsumedQueue.length > 0) {
+          unconsumedQueue.shift();
+        }
+      } else if (unconsumedQueue.length > 0) {
+        const nextKit = unconsumedQueue.shift();
+        if (nextKit) {
+          schedule[`${member.user_id}_${dStr}`] = nextKit;
+        }
+      } else {
+        const wIdx = getWeekdayIndex(d);
+        const fallbackKit = localMeals[`${member.user_id}_${wIdx}`];
+        if (fallbackKit) {
+          schedule[`${member.user_id}_${dStr}`] = fallbackKit;
+        }
+      }
+    }
+  }
+
+  return schedule;
 }

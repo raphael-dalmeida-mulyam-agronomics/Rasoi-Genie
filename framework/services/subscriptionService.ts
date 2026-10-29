@@ -5,6 +5,7 @@ import {
   SUBSCRIPTION_PLAN_PRICES,
 } from '../subscription/subscriptionConfig';
 import { getSupabaseClient } from '../supabase/client';
+import { subscribeToTable } from './realtimeService';
 import {
   calculateExtendedPeriodEnd,
   calculatePerMemberSubscriptionTotal,
@@ -935,6 +936,7 @@ export async function createSubscriptionPause(input: CreateSubscriptionPauseInpu
     inMemorySubs = inMemorySubs.map((s) => (s.id === sub.id ? updatedSub : s));
     inMemoryPauses.push(...createdPauses);
     await saveLocalStores();
+    notifySubscriptionPauseListeners(input.subscriptionId);
 
     return {
       success: true,
@@ -1017,6 +1019,7 @@ export async function createSubscriptionPause(input: CreateSubscriptionPauseInpu
   inMemorySubs = inMemorySubs.map((s) => (s.id === sub.id ? updatedSub : s));
   inMemoryPauses.push(newPause);
   await saveLocalStores();
+  notifySubscriptionPauseListeners(input.subscriptionId);
 
   return {
     success: true,
@@ -1031,26 +1034,63 @@ export async function createSubscriptionPause(input: CreateSubscriptionPauseInpu
  */
 export async function removeSubscriptionPause(
   pauseId: string,
-): Promise<{ success: boolean; error?: string }> {
+): Promise<{ success: boolean; subscription?: Subscription; error?: string }> {
   await loadLocalStores();
   const pauseItem = inMemoryPauses.find((p) => p.id === pauseId);
   if (!pauseItem) {
     return { success: false, error: 'Pause record not found' };
   }
 
+  const sub = inMemorySubs.find((s) => s.id === pauseItem.subscription_id);
+  let updatedSub: Subscription | undefined;
+
+  if (sub) {
+    const currentEnd = new Date(sub.period_end).getTime();
+    const newEndMs = currentEnd - pauseItem.days_count * 24 * 60 * 60 * 1000;
+    const newPeriodEnd = new Date(newEndMs).toISOString();
+
+    let newNextRenewal = sub.next_renewal_at;
+    if (sub.next_renewal_at) {
+      const currentRenewal = new Date(sub.next_renewal_at).getTime();
+      const newRenewalMs = currentRenewal - pauseItem.days_count * 24 * 60 * 60 * 1000;
+      newNextRenewal = new Date(newRenewalMs).toISOString();
+    }
+
+    updatedSub = {
+      ...sub,
+      period_end: newPeriodEnd,
+      next_renewal_at: newNextRenewal,
+      updated_at: new Date().toISOString(),
+    };
+  }
+
   if (isSupabaseLive()) {
     try {
       const supabase = getSupabaseClient();
       await supabase.from('subscription_pauses').delete().eq('id', pauseId);
+      if (updatedSub) {
+        await supabase
+          .from('subscriptions')
+          .update({
+            period_end: updatedSub.period_end,
+            next_renewal_at: updatedSub.next_renewal_at,
+            updated_at: updatedSub.updated_at,
+          })
+          .eq('id', updatedSub.id);
+      }
     } catch (err: any) {
       console.warn('[SubscriptionService] Error removing pause from Supabase:', err);
     }
   }
 
   inMemoryPauses = inMemoryPauses.filter((p) => p.id !== pauseId);
+  if (updatedSub) {
+    inMemorySubs = inMemorySubs.map((s) => (s.id === updatedSub!.id ? updatedSub! : s));
+  }
   await saveLocalStores();
+  notifySubscriptionPauseListeners(pauseItem.subscription_id);
 
-  return { success: true };
+  return { success: true, subscription: updatedSub };
 }
 
 /**
@@ -1308,4 +1348,76 @@ export async function setMemberPlanGroup(
 
   await saveLocalStores();
   return { success: true };
+}
+
+// ─── Realtime & Event Subscriptions for Pauses ──────────────────────────────
+type SubscriptionPauseListener = (subscriptionId: string) => void;
+const subscriptionPauseListeners = new Set<SubscriptionPauseListener>();
+
+export function subscribeToSubscriptionPauseEvents(
+  listener: SubscriptionPauseListener,
+): () => void {
+  subscriptionPauseListeners.add(listener);
+  return () => {
+    subscriptionPauseListeners.delete(listener);
+  };
+}
+
+export function notifySubscriptionPauseListeners(subscriptionId: string): void {
+  subscriptionPauseListeners.forEach((listener) => {
+    try {
+      listener(subscriptionId);
+    } catch (err) {
+      console.warn('[SubscriptionService] Error in pause listener:', err);
+    }
+  });
+}
+
+/**
+ * Subscribes to realtime updates for subscription_pauses in Supabase and in-app event bus.
+ */
+export function subscribeToSubscriptionPausesRealtime(
+  subscriptionId: string,
+  onChanged: () => void,
+): () => void {
+  const unsubInApp = subscribeToSubscriptionPauseEvents((subId) => {
+    if (subId === subscriptionId) {
+      onChanged();
+    }
+  });
+
+  if (!isSupabaseLive()) {
+    return unsubInApp;
+  }
+
+  const unsubSupabase = subscribeToTable<SubscriptionPause>({
+    table: 'subscription_pauses',
+    filter: `subscription_id=eq.${subscriptionId}`,
+    onInsert: () => onChanged(),
+    onUpdate: () => onChanged(),
+    onDelete: () => onChanged(),
+    onResync: onChanged,
+  });
+
+  return () => {
+    unsubInApp();
+    unsubSupabase();
+  };
+}
+
+/**
+ * Subscribes to realtime updates for the subscriptions table in Supabase.
+ */
+export function subscribeToSubscriptionRealtime(
+  subscriptionId: string,
+  onChanged: () => void,
+): () => void {
+  if (!isSupabaseLive()) return () => {};
+
+  return subscribeToTable<Subscription>({
+    table: 'subscriptions',
+    filter: `id=eq.${subscriptionId}`,
+    onUpdate: () => onChanged(),
+    onResync: onChanged,
+  });
 }

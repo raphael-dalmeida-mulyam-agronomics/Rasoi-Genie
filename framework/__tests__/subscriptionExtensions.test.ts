@@ -17,6 +17,9 @@ import {
   resetSubscriptionMockStore,
   toggleAutoRenew,
   applyPlanToAllMembers,
+  removeSubscriptionPause,
+  subscribeToSubscriptionPausesRealtime,
+  notifySubscriptionPauseListeners,
 } from '../services/subscriptionService';
 import {
   SUBSCRIPTION_PAUSE_CONFIG,
@@ -649,8 +652,8 @@ describe('Subscription Extensions Test Suite', () => {
   // ==========================================
   // 8. Next Delivery Carry-Over Computation
   // ==========================================
-  describe('calculateNextDeliveryInfo', () => {
-    it('returns the upcoming Monday when no pause exists', () => {
+  describe('calculateNextDeliveryInfo (Daily Deliveries)', () => {
+    it('returns today as next delivery when today is an active unpaused subscription day', () => {
       // Fixed Thursday 29 October 2026
       const fixedNow = new Date(2026, 9, 29, 12, 0, 0); // 29 Oct 2026
       const result = calculateNextDeliveryInfo({
@@ -660,18 +663,19 @@ describe('Subscription Extensions Test Suite', () => {
         now: fixedNow,
       });
 
-      expect(result.dateStr).toBe('2026-11-02');
-      expect(result.formattedDate).toBe('2 Nov');
-      expect(result.dayOfWeek).toBe('Monday');
+      expect(result.dateStr).toBe('2026-10-29');
+      expect(result.formattedDate).toBe('29 Oct');
+      expect(result.dayOfWeek).toBe('Thursday');
+      expect(result.isToday).toBe(true);
       expect(result.isCarriedOver).toBe(false);
       expect(result.carriedDaysCount).toBe(0);
-      expect(result.deliveryNote).toBe('Next Box: 2 Nov • Monday Morning Delivery');
+      expect(result.deliveryNote).toBe('Next Delivery: Today • Evening Dinner Delivery');
       expect(result.resumesNote).toBeUndefined();
     });
 
-    it('carries over delivery to next Monday when upcoming Monday is paused (e.g. 31 Oct - 4 Nov paused)', () => {
-      // Thursday 29 October 2026
-      const fixedNow = new Date(2026, 9, 29, 12, 0, 0);
+    it('advances to next unpaused day when currently in a pause and resumes daily deliveries (e.g. 31 Oct - 4 Nov paused)', () => {
+      // Current time is 31 Oct 2026 (first day of pause)
+      const fixedNow = new Date(2026, 9, 31, 10, 0, 0);
       const result = calculateNextDeliveryInfo({
         periodStart: '2026-10-29',
         periodEnd: '2026-11-10',
@@ -685,61 +689,106 @@ describe('Subscription Extensions Test Suite', () => {
         now: fixedNow,
       });
 
-      // Monday 2 Nov is inside the pause (31 Oct - 4 Nov), so carried over to 9 Nov
-      expect(result.dateStr).toBe('2026-11-09');
-      expect(result.formattedDate).toBe('9 Nov');
+      // 31 Oct to 4 Nov is paused, so next delivery resumes immediately on 5 Nov (Thursday)!
+      expect(result.dateStr).toBe('2026-11-05');
+      expect(result.formattedDate).toBe('5 Nov');
+      expect(result.dayOfWeek).toBe('Thursday');
       expect(result.isCarriedOver).toBe(true);
       expect(result.carriedDaysCount).toBe(5);
-      expect(result.deliveryNote).toBe('Next Box: 9 Nov • Monday Morning Delivery (Carried Over)');
-      expect(result.resumesNote).toBe('Deliveries resume on 5 Nov • 5 skipped days carried over');
+      expect(result.deliveryNote).toBe(
+        'Next Delivery: 5 Nov • Thursday Evening Delivery (Resumes after pause)',
+      );
+      expect(result.resumesNote).toBe('Deliveries resume on 5 Nov • 5 skipped meals carried over');
       expect(result.periodSummaryNote).toBe(
-        'Current Period: 29 Oct – 10 Nov (5 skipped days carried over)',
+        'Current Period: 29 Oct – 10 Nov (5 skipped meals carried over)',
       );
     });
 
-    it('keeps Monday delivery uncarried when pause is later in the week', () => {
-      const fixedNow = new Date(2026, 9, 29, 12, 0, 0); // 29 Oct 2026
+    it('delivers today on 5 Nov once the pause has ended and daily deliveries resume', () => {
+      const fixedNow = new Date(2026, 10, 5, 12, 0, 0); // 5 Nov 2026
       const result = calculateNextDeliveryInfo({
         periodStart: '2026-10-29',
-        periodEnd: '2026-11-07',
+        periodEnd: '2026-11-10',
         pauses: [
           {
-            startDate: '2026-11-04',
-            endDate: '2026-11-05',
-            daysCount: 2,
+            startDate: '2026-10-31',
+            endDate: '2026-11-04',
+            daysCount: 5,
           },
         ],
         now: fixedNow,
       });
 
-      // Monday 2 Nov is NOT paused
-      expect(result.dateStr).toBe('2026-11-02');
-      expect(result.formattedDate).toBe('2 Nov');
-      expect(result.isCarriedOver).toBe(true); // Total paused days > 0 marks carry-over active
-      expect(result.carriedDaysCount).toBe(2);
-      expect(result.deliveryNote).toBe('Next Box: 2 Nov • Monday Morning Delivery (Carried Over)');
-      expect(result.resumesNote).toBe('Deliveries resume on 6 Nov • 2 skipped days carried over');
+      expect(result.dateStr).toBe('2026-11-05');
+      expect(result.isToday).toBe(true);
+      expect(result.deliveryNote).toBe('Next Delivery: Today • Evening Dinner Delivery');
+      expect(result.resumesNote).toBe('Deliveries resume on 5 Nov • 5 skipped meals carried over');
     });
 
-    it('handles multi-week pause spanning consecutive Mondays', () => {
-      const fixedNow = new Date(2026, 9, 29, 12, 0, 0); // 29 Oct
+    it('handles non-contiguous paused days cleanly', () => {
+      // Today is Thu 29 Oct, pause is on Fri 30 Oct only
+      const fixedNow = new Date(2026, 9, 29, 12, 0, 0);
       const result = calculateNextDeliveryInfo({
         periodStart: '2026-10-29',
-        periodEnd: '2026-11-20',
+        periodEnd: '2026-11-06',
         pauses: [
           {
-            startDate: '2026-11-01',
-            endDate: '2026-11-12', // covers 2 Nov and 9 Nov
-            daysCount: 12,
+            startDate: '2026-10-30',
+            endDate: '2026-10-30',
+            daysCount: 1,
           },
         ],
         now: fixedNow,
       });
 
-      // 2 Nov and 9 Nov are paused, next unpaused is 16 Nov
-      expect(result.dateStr).toBe('2026-11-16');
-      expect(result.formattedDate).toBe('16 Nov');
-      expect(result.resumesNote).toBe('Deliveries resume on 13 Nov • 12 skipped days carried over');
+      expect(result.dateStr).toBe('2026-10-29');
+      expect(result.isToday).toBe(true);
+      expect(result.carriedDaysCount).toBe(1);
+      expect(result.resumesNote).toBe('Deliveries resume on 31 Oct • 1 skipped meal carried over');
+    });
+  });
+
+  // ==========================================
+  // 9. Realtime & Event Synchronization for Pauses
+  // ==========================================
+  describe('Realtime Subscription Pause Sync', () => {
+    it('notifies listeners when a pause is created or removed, restoring period on removal', async () => {
+      const subRes = await createAndActivateSubscription({
+        ownerUserId: 'user_realtime',
+        scope: 'individual',
+        planType: 'standard',
+        standardPlanKey: 'high-protein',
+        amountPaid: 1299,
+        autoRenew: true,
+        members: [{ id: 'me', name: 'Me', isDependent: false }],
+      });
+      const sub = subRes.subscription!;
+      const originalEnd = sub.period_end;
+
+      let callCount = 0;
+      const unsub = subscribeToSubscriptionPausesRealtime(sub.id, () => {
+        callCount++;
+      });
+
+      // 1. Create a pause
+      const pauseRes = await createSubscriptionPause({
+        subscriptionId: sub.id,
+        startDate: '2026-11-01',
+        endDate: '2026-11-02',
+        createdBy: 'user_realtime',
+      });
+
+      expect(pauseRes.success).toBe(true);
+      expect(callCount).toBe(1);
+      expect(pauseRes.subscription?.period_end).not.toBe(originalEnd);
+
+      // 2. Remove the pause -> period shrinks back and listener notified
+      const removeRes = await removeSubscriptionPause(pauseRes.pause!.id);
+      expect(removeRes.success).toBe(true);
+      expect(callCount).toBe(2);
+      expect(removeRes.subscription?.period_end).toBe(originalEnd);
+
+      unsub();
     });
   });
 });

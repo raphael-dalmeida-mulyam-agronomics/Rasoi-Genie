@@ -4,6 +4,7 @@ import {
   buildMonthCalendarGrid,
   mapMealsForDay,
   formatDayAccessibilityLabel,
+  buildShiftedMealSchedule,
 } from '../services/familyMealPlanCalendarHelpers';
 import { isDatePaused, isWholeFamilyDatePaused } from '../services/subscriptionPlans';
 import { FamilyMember } from '../services/familyService';
@@ -331,6 +332,113 @@ describe('familyMealPlanCalendarHelpers', () => {
 
       const labelConflict = formatDayAccessibilityLabel(date, 3, false, true);
       expect(labelConflict).toMatch(/dietary clash warning/);
+    });
+  });
+
+  describe('buildShiftedMealSchedule', () => {
+    const sampleMembers = [
+      { user_id: 'user_aarav', display_name: 'Aarav', role: 'owner' as const },
+    ] as any;
+
+    const sampleLocalMeals = {
+      user_aarav_0: 'kit_mon',
+      user_aarav_1: 'kit_tue',
+      user_aarav_2: 'kit_wed',
+      user_aarav_3: 'kit_thu',
+      user_aarav_4: 'kit_fri',
+      user_aarav_5: 'kit_sat',
+      user_aarav_6: 'kit_sun',
+    };
+
+    it('delivers 7 meals in original sequence when no pause exists', () => {
+      // Period: Thu 2026-10-29 to Wed 2026-11-04 (7 days)
+      const schedule = buildShiftedMealSchedule({
+        periodStart: '2026-10-29',
+        periodEnd: '2026-11-04',
+        members: sampleMembers,
+        localMeals: sampleLocalMeals,
+        pauses: [],
+      });
+
+      expect(schedule['user_aarav_2026-10-29']).toBe('kit_thu');
+      expect(schedule['user_aarav_2026-10-30']).toBe('kit_fri');
+      expect(schedule['user_aarav_2026-10-31']).toBe('kit_sat');
+      expect(schedule['user_aarav_2026-11-01']).toBe('kit_sun');
+      expect(schedule['user_aarav_2026-11-02']).toBe('kit_mon');
+      expect(schedule['user_aarav_2026-11-03']).toBe('kit_tue');
+      expect(schedule['user_aarav_2026-11-04']).toBe('kit_wed');
+    });
+
+    it('shifts skipped meals forward to make-up days when middle days are paused', () => {
+      // Period extended by 5 days: 2026-10-29 to 2026-11-09
+      // Paused: 2026-10-31 to 2026-11-04 (Sat through Wed = 5 days)
+      const schedule = buildShiftedMealSchedule({
+        periodStart: '2026-10-29',
+        periodEnd: '2026-11-09',
+        members: sampleMembers,
+        localMeals: sampleLocalMeals,
+        pauses: [{ startDate: '2026-10-31', endDate: '2026-11-04', memberId: null }],
+      });
+
+      // Thu & Fri delivered normally before pause
+      expect(schedule['user_aarav_2026-10-29']).toBe('kit_thu');
+      expect(schedule['user_aarav_2026-10-30']).toBe('kit_fri');
+
+      // Paused days have no meal assigned
+      expect(schedule['user_aarav_2026-10-31']).toBeUndefined();
+      expect(schedule['user_aarav_2026-11-01']).toBeUndefined();
+      expect(schedule['user_aarav_2026-11-02']).toBeUndefined();
+      expect(schedule['user_aarav_2026-11-03']).toBeUndefined();
+      expect(schedule['user_aarav_2026-11-04']).toBeUndefined();
+
+      // Make-up days (2026-11-05 to 2026-11-09) receive the 5 skipped meals daily!
+      expect(schedule['user_aarav_2026-11-05']).toBe('kit_sat'); // First skipped meal carries over
+      expect(schedule['user_aarav_2026-11-06']).toBe('kit_sun'); // Second skipped meal carries over
+      expect(schedule['user_aarav_2026-11-07']).toBe('kit_mon'); // Third skipped meal carries over
+      expect(schedule['user_aarav_2026-11-08']).toBe('kit_tue'); // Fourth skipped meal carries over
+      expect(schedule['user_aarav_2026-11-09']).toBe('kit_wed'); // Fifth skipped meal carries over
+    });
+
+    it('handles non-contiguous paused days cleanly', () => {
+      // Pause Friday (Oct 30) and Monday (Nov 2) -> 2 days paused
+      // Period extended by 2 days: 2026-10-29 to 2026-11-06
+      const schedule = buildShiftedMealSchedule({
+        periodStart: '2026-10-29',
+        periodEnd: '2026-11-06',
+        members: sampleMembers,
+        localMeals: sampleLocalMeals,
+        pauses: [
+          { startDate: '2026-10-30', endDate: '2026-10-30', memberId: null },
+          { startDate: '2026-11-02', endDate: '2026-11-02', memberId: null },
+        ],
+      });
+
+      expect(schedule['user_aarav_2026-10-29']).toBe('kit_thu');
+      expect(schedule['user_aarav_2026-10-30']).toBeUndefined(); // Friday paused
+      expect(schedule['user_aarav_2026-10-31']).toBe('kit_fri'); // Friday meal delivered Saturday
+      expect(schedule['user_aarav_2026-11-01']).toBe('kit_sat');
+      expect(schedule['user_aarav_2026-11-02']).toBeUndefined(); // Monday paused
+      expect(schedule['user_aarav_2026-11-03']).toBe('kit_sun');
+      expect(schedule['user_aarav_2026-11-04']).toBe('kit_mon');
+      expect(schedule['user_aarav_2026-11-05']).toBe('kit_tue');
+      expect(schedule['user_aarav_2026-11-06']).toBe('kit_wed');
+    });
+
+    it('honors manual date-specific kit overrides on carry-over days', () => {
+      const customMeals = {
+        ...sampleLocalMeals,
+        'user_aarav_2026-11-05': 'kit_custom_truffle', // user manually changed recipe on makeup day
+      };
+
+      const schedule = buildShiftedMealSchedule({
+        periodStart: '2026-10-29',
+        periodEnd: '2026-11-05',
+        members: sampleMembers,
+        localMeals: customMeals,
+        pauses: [{ startDate: '2026-10-31', endDate: '2026-10-31', memberId: null }],
+      });
+
+      expect(schedule['user_aarav_2026-11-05']).toBe('kit_custom_truffle');
     });
   });
 });
