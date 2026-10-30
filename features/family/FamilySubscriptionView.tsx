@@ -84,6 +84,8 @@ export const FamilySubscriptionView: React.FC<{ onBack?: () => void }> = ({ onBa
     updateCoveredMembersList,
     addPause,
     removePause,
+    unpauseDates,
+    unpauseDate,
     fetchPauses,
     pauses,
     toggleAutoRenewState,
@@ -535,6 +537,25 @@ export const FamilySubscriptionView: React.FC<{ onBack?: () => void }> = ({ onBa
     }
   };
 
+  const handleUnpauseSingleDay = async (
+    dateStr: string,
+    memberId: string | null = null,
+    targetName: string = 'Entire Family',
+  ) => {
+    if (!activeSubscription) return;
+    const res = await unpauseDate(dateStr, memberId);
+    if (res.success) {
+      Alert.alert(
+        'Delivery Unpaused',
+        `Deliveries on ${dateStr} have been unpaused for ${targetName}. Meal kits will continue sequentially.`,
+      );
+      setDayDetailVisible(false);
+      fetchPauses();
+    } else {
+      Alert.alert('Unpause Error', res.error || 'Could not unpause deliveries for this day.');
+    }
+  };
+
   const handleResumePause = async (pauseId: string, targetName: string = 'Deliveries') => {
     const res = await removePause(pauseId);
     if (res.success) {
@@ -874,13 +895,32 @@ export const FamilySubscriptionView: React.FC<{ onBack?: () => void }> = ({ onBa
                             return <Badge label="Paused (Family)" variant="warning" size="sm" />;
                           }
                           return (
-                            <Button
-                              title="Resume Member"
-                              variant="outline"
-                              size="sm"
-                              onPress={() => handleResumePause(memberPause.id, member.display_name)}
-                              testID={`member-resume-btn-${member.user_id}`}
-                            />
+                            <View style={{ flexDirection: 'row', gap: 6 }}>
+                              <Button
+                                title="Unpause Day"
+                                variant="outline"
+                                size="sm"
+                                onPress={() =>
+                                  handleUnpauseSingleDay(
+                                    selectedDayItem.dateStr,
+                                    member.user_id,
+                                    member.display_name,
+                                  )
+                                }
+                                testID={`member-unpause-btn-${member.user_id}`}
+                              />
+                              {memberPause.days_count > 1 && (
+                                <Button
+                                  title="Resume All"
+                                  variant="ghost"
+                                  size="sm"
+                                  onPress={() =>
+                                    handleResumePause(memberPause.id, member.display_name)
+                                  }
+                                  testID={`member-resume-btn-${member.user_id}`}
+                                />
+                              )}
+                            </View>
                           );
                         }
                         if (!selectedDayItem.isLocked) {
@@ -948,14 +988,26 @@ export const FamilySubscriptionView: React.FC<{ onBack?: () => void }> = ({ onBa
                         Deliveries are paused for the entire family on this date.
                       </Text>
                     </View>
-                    <Button
-                      title="Resume Entire Family"
-                      variant="outline"
-                      size="sm"
-                      onPress={() => handleResumePause(wholeFamilyPause.id, 'Entire Family')}
-                      style={{ marginTop: 8 }}
-                      testID="family-resume-btn"
-                    />
+                    <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
+                      <Button
+                        title="Unpause This Day"
+                        variant="outline"
+                        size="sm"
+                        onPress={() =>
+                          handleUnpauseSingleDay(selectedDayItem.dateStr, null, 'Entire Family')
+                        }
+                        testID="family-unpause-day-btn"
+                      />
+                      {wholeFamilyPause.days_count > 1 && (
+                        <Button
+                          title="Resume All Days"
+                          variant="ghost"
+                          size="sm"
+                          onPress={() => handleResumePause(wholeFamilyPause.id, 'Entire Family')}
+                          testID="family-resume-btn"
+                        />
+                      )}
+                    </View>
                   </View>
                 );
               }
@@ -1966,6 +2018,12 @@ export const FamilySubscriptionView: React.FC<{ onBack?: () => void }> = ({ onBa
           pauses={pauses}
           onSavePause={async (input) => {
             return await addPause(input);
+          }}
+          onUnpauseDate={async (dateStr, memberId) => {
+            return await unpauseDate(dateStr, memberId);
+          }}
+          onRemovePause={async (pauseId) => {
+            return await removePause(pauseId);
           }}
         />
       )}

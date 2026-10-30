@@ -20,6 +20,8 @@ import {
   removeSubscriptionPause,
   subscribeToSubscriptionPausesRealtime,
   notifySubscriptionPauseListeners,
+  unpauseSubscriptionDates,
+  fetchSubscriptionPauses,
 } from '../services/subscriptionService';
 import {
   SUBSCRIPTION_PAUSE_CONFIG,
@@ -789,6 +791,259 @@ describe('Subscription Extensions Test Suite', () => {
       expect(removeRes.subscription?.period_end).toBe(originalEnd);
 
       unsub();
+    });
+  });
+  // ==========================================
+  // 10. Unpausing Specific Subscription Dates (unpauseSubscriptionDates)
+  // ==========================================
+  describe('10. Unpausing Specific Subscription Dates', () => {
+    it('unpauses a single date from a 1-day pause, deleting the pause record and restoring period_end', async () => {
+      const subRes = await createAndActivateSubscription({
+        ownerUserId: 'user_unpause_1',
+        scope: 'individual',
+        planType: 'standard',
+        standardPlanKey: 'high-protein',
+        amountPaid: 1299,
+        autoRenew: true,
+        weeks: 4,
+        members: [{ id: 'me', name: 'Me', isDependent: false }],
+      });
+      const sub = subRes.subscription!;
+      const originalEnd = sub.period_end;
+
+      let listenerNotified = 0;
+      const unsub = subscribeToSubscriptionPausesRealtime(sub.id, () => {
+        listenerNotified++;
+      });
+
+      // Pause Nov 6 (safe outside 48h cutoff)
+      const pauseRes = await createSubscriptionPause({
+        subscriptionId: sub.id,
+        startDate: '2026-11-06',
+        endDate: '2026-11-06',
+        createdBy: 'user_unpause_1',
+      });
+      expect(pauseRes.success).toBe(true);
+      expect(listenerNotified).toBe(1);
+
+      // Unpause Nov 6
+      const unpauseRes = await unpauseSubscriptionDates({
+        subscriptionId: sub.id,
+        dates: ['2026-11-06'],
+        now: new Date('2026-11-01T10:00:00Z'),
+      });
+
+      expect(unpauseRes.success).toBe(true);
+      expect(unpauseRes.unpausedCount).toBe(1);
+      expect(unpauseRes.subscription?.period_end).toBe(originalEnd);
+      expect(listenerNotified).toBe(2);
+
+      const pausesAfter = await fetchSubscriptionPauses(sub.id);
+      expect(pausesAfter.pauses).toHaveLength(0);
+
+      unsub();
+    });
+
+    it('unpauses a middle date from a multi-day range, splitting it into two separate contiguous pause ranges', async () => {
+      const subRes = await createAndActivateSubscription({
+        ownerUserId: 'user_unpause_split',
+        scope: 'individual',
+        planType: 'standard',
+        standardPlanKey: 'high-protein',
+        amountPaid: 1299,
+        autoRenew: true,
+        weeks: 4,
+        members: [{ id: 'me', name: 'Me', isDependent: false }],
+      });
+      const sub = subRes.subscription!;
+      const originalEndMs = new Date(sub.period_end).getTime();
+
+      // Pause 5 days: Nov 5 to Nov 9
+      const pauseRes = await createSubscriptionPause({
+        subscriptionId: sub.id,
+        startDate: '2026-11-05',
+        endDate: '2026-11-09',
+        createdBy: 'user_unpause_split',
+      });
+      expect(pauseRes.success).toBe(true);
+      expect(new Date(pauseRes.subscription!.period_end).getTime()).toBe(
+        originalEndMs + 5 * 24 * 60 * 60 * 1000,
+      );
+
+      // Unpause middle date: Nov 7
+      const unpauseRes = await unpauseSubscriptionDates({
+        subscriptionId: sub.id,
+        dates: ['2026-11-07'],
+        now: new Date('2026-11-01T10:00:00Z'),
+      });
+
+      expect(unpauseRes.success).toBe(true);
+      expect(unpauseRes.unpausedCount).toBe(1);
+
+      // Period end contracted by 1 day (now +4 days instead of +5 days)
+      expect(new Date(unpauseRes.subscription!.period_end).getTime()).toBe(
+        originalEndMs + 4 * 24 * 60 * 60 * 1000,
+      );
+
+      // Verify pause is split into 2 ranges: Nov 5 - Nov 6 (2 days) & Nov 8 - Nov 9 (2 days)
+      const remainingPausesRes = await fetchSubscriptionPauses(sub.id);
+      expect(remainingPausesRes.pauses).toHaveLength(2);
+
+      const range1 = remainingPausesRes.pauses.find((p) => p.start_date === '2026-11-05');
+      const range2 = remainingPausesRes.pauses.find((p) => p.start_date === '2026-11-08');
+
+      expect(range1).toBeDefined();
+      expect(range1?.end_date).toBe('2026-11-06');
+      expect(range1?.days_count).toBe(2);
+
+      expect(range2).toBeDefined();
+      expect(range2?.end_date).toBe('2026-11-09');
+      expect(range2?.days_count).toBe(2);
+    });
+
+    it('unpauses boundary date (first day) from a range, updating start_date and contracting period', async () => {
+      const subRes = await createAndActivateSubscription({
+        ownerUserId: 'user_unpause_boundary',
+        scope: 'individual',
+        planType: 'standard',
+        standardPlanKey: 'high-protein',
+        amountPaid: 1299,
+        autoRenew: true,
+        weeks: 4,
+        members: [{ id: 'me', name: 'Me', isDependent: false }],
+      });
+      const sub = subRes.subscription!;
+      const originalEndMs = new Date(sub.period_end).getTime();
+
+      // Pause 3 days: Nov 5 to Nov 7
+      const pauseRes = await createSubscriptionPause({
+        subscriptionId: sub.id,
+        startDate: '2026-11-05',
+        endDate: '2026-11-07',
+        createdBy: 'user_unpause_boundary',
+      });
+      expect(pauseRes.success).toBe(true);
+
+      // Unpause start boundary: Nov 5
+      const unpauseRes = await unpauseSubscriptionDates({
+        subscriptionId: sub.id,
+        dates: ['2026-11-05'],
+        now: new Date('2026-11-01T10:00:00Z'),
+      });
+
+      expect(unpauseRes.success).toBe(true);
+      expect(unpauseRes.unpausedCount).toBe(1);
+
+      // Period contracted by 1 day (+2 days remaining)
+      expect(new Date(unpauseRes.subscription!.period_end).getTime()).toBe(
+        originalEndMs + 2 * 24 * 60 * 60 * 1000,
+      );
+
+      const remainingPausesRes = await fetchSubscriptionPauses(sub.id);
+      expect(remainingPausesRes.pauses).toHaveLength(1);
+      expect(remainingPausesRes.pauses[0]?.start_date).toBe('2026-11-06');
+      expect(remainingPausesRes.pauses[0]?.end_date).toBe('2026-11-07');
+      expect(remainingPausesRes.pauses[0]?.days_count).toBe(2);
+    });
+
+    it('rejects unpausing dates within 48-hour cutoff window or in the past', async () => {
+      const subRes = await createAndActivateSubscription({
+        ownerUserId: 'user_unpause_cutoff',
+        scope: 'individual',
+        planType: 'standard',
+        standardPlanKey: 'high-protein',
+        amountPaid: 1299,
+        autoRenew: true,
+        weeks: 4,
+        members: [{ id: 'me', name: 'Me', isDependent: false }],
+      });
+      const sub = subRes.subscription!;
+
+      // Simulate now = 2026-11-05
+      // Cutoff: today (5th), tomorrow (6th), day after (7th) locked
+      const res = await unpauseSubscriptionDates({
+        subscriptionId: sub.id,
+        dates: ['2026-11-06'],
+        now: new Date('2026-11-05T12:00:00Z'),
+      });
+
+      expect(res.success).toBe(false);
+      expect(res.error).toMatch(/48-hour delivery packing cutoff/);
+    });
+
+    it('returns error when dates are not currently paused', async () => {
+      const subRes = await createAndActivateSubscription({
+        ownerUserId: 'user_unpause_notpaused',
+        scope: 'individual',
+        planType: 'standard',
+        standardPlanKey: 'high-protein',
+        amountPaid: 1299,
+        autoRenew: true,
+        weeks: 4,
+        members: [{ id: 'me', name: 'Me', isDependent: false }],
+      });
+      const sub = subRes.subscription!;
+
+      const res = await unpauseSubscriptionDates({
+        subscriptionId: sub.id,
+        dates: ['2026-11-15'],
+        now: new Date('2026-11-01T10:00:00Z'),
+      });
+
+      expect(res.success).toBe(false);
+      expect(res.error).toMatch(/None of the specified dates are currently paused/);
+    });
+
+    it('unpauses member-specific pause without affecting other members or family pauses', async () => {
+      const subRes = await createAndActivateSubscription({
+        ownerUserId: 'user_family_unpause',
+        scope: 'family',
+        planType: 'standard',
+        standardPlanKey: 'high-protein',
+        amountPaid: 2598,
+        autoRenew: true,
+        weeks: 4,
+        members: [
+          { id: 'user_aarav', name: 'Aarav', isDependent: false },
+          { id: 'user_neha', name: 'Neha', isDependent: false },
+        ],
+      });
+      const sub = subRes.subscription!;
+
+      // Pause Nov 6 for Aarav only
+      const p1 = await createSubscriptionPause({
+        subscriptionId: sub.id,
+        startDate: '2026-11-06',
+        endDate: '2026-11-06',
+        memberId: 'user_aarav',
+        createdBy: 'user_family_unpause',
+      });
+      expect(p1.success).toBe(true);
+
+      // Pause Nov 6 for Neha only
+      const p2 = await createSubscriptionPause({
+        subscriptionId: sub.id,
+        startDate: '2026-11-06',
+        endDate: '2026-11-06',
+        memberId: 'user_neha',
+        createdBy: 'user_family_unpause',
+      });
+      expect(p2.success).toBe(true);
+
+      // Unpause Nov 6 for Aarav ONLY
+      const res = await unpauseSubscriptionDates({
+        subscriptionId: sub.id,
+        dates: ['2026-11-06'],
+        memberId: 'user_aarav',
+        now: new Date('2026-11-01T10:00:00Z'),
+      });
+
+      expect(res.success).toBe(true);
+      expect(res.unpausedCount).toBe(1);
+
+      const pausesAfter = await fetchSubscriptionPauses(sub.id);
+      expect(pausesAfter.pauses).toHaveLength(1);
+      expect(pausesAfter.pauses[0]?.member_id).toBe('user_neha');
     });
   });
 });

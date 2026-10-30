@@ -16,6 +16,7 @@ import {
   SubscriptionPause,
   createSubscriptionPause,
   removeSubscriptionPause,
+  unpauseSubscriptionDates,
   fetchSubscriptionPauses,
   subscribeToSubscriptionPausesRealtime,
   subscribeToSubscriptionRealtime,
@@ -63,6 +64,14 @@ export interface SubscriptionContextValue {
     memberId?: string | null;
   }) => Promise<{ success: boolean; pause?: SubscriptionPause; error?: string }>;
   removePause: (pauseId: string) => Promise<{ success: boolean; error?: string }>;
+  unpauseDates: (
+    dates: string[],
+    memberId?: string | null,
+  ) => Promise<{ success: boolean; subscription?: Subscription; error?: string }>;
+  unpauseDate: (
+    dateStr: string,
+    memberId?: string | null,
+  ) => Promise<{ success: boolean; subscription?: Subscription; error?: string }>;
   fetchPauses: () => Promise<SubscriptionPause[]>;
   toggleAutoRenewState: (autoRenew: boolean) => Promise<{ success: boolean; error?: string }>;
   applySamePlanToAll: (
@@ -337,6 +346,34 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
     [refreshSubscription],
   );
 
+  const unpauseDates = useCallback(
+    async (dates: string[], memberId?: string | null) => {
+      if (!activeSubscription) {
+        return { success: false, error: 'No active subscription' };
+      }
+      const res = await unpauseSubscriptionDates({
+        subscriptionId: activeSubscription.id,
+        dates,
+        memberId: memberId !== undefined ? memberId : null,
+      });
+      if (res.success) {
+        if (res.subscription) {
+          setActiveSubscription(res.subscription);
+        }
+        await refreshSubscription();
+      }
+      return res;
+    },
+    [activeSubscription, refreshSubscription],
+  );
+
+  const unpauseDate = useCallback(
+    async (dateStr: string, memberId?: string | null) => {
+      return await unpauseDates([dateStr], memberId);
+    },
+    [unpauseDates],
+  );
+
   const fetchPauses = useCallback(async () => {
     if (!activeSubscription) return [];
     const res = await fetchSubscriptionPauses(activeSubscription.id);
@@ -425,6 +462,8 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
       updateCoveredMembersList,
       addPause,
       removePause,
+      unpauseDates,
+      unpauseDate,
       fetchPauses,
       toggleAutoRenewState,
       applySamePlanToAll,
@@ -450,6 +489,8 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
       pauses,
       addPause,
       removePause,
+      unpauseDates,
+      unpauseDate,
       fetchPauses,
       toggleAutoRenewState,
       applySamePlanToAll,
@@ -480,6 +521,8 @@ const defaultSubscriptionFallback: SubscriptionContextValue = {
   updateCoveredMembersList: async () => ({ success: false, error: 'No subscription provider' }),
   addPause: async () => ({ success: false, error: 'No subscription provider' }),
   removePause: async () => ({ success: false, error: 'No subscription provider' }),
+  unpauseDates: async () => ({ success: false, error: 'No subscription provider' }),
+  unpauseDate: async () => ({ success: false, error: 'No subscription provider' }),
   fetchPauses: async () => [],
   toggleAutoRenewState: async () => ({ success: false, error: 'No subscription provider' }),
   applySamePlanToAll: async () => ({ success: false, error: 'No subscription provider' }),

@@ -46,6 +46,8 @@ export const SubscriptionPlanView: React.FC<{ onBack?: () => void }> = ({ onBack
     subscribe,
     assignMeal,
     addPause,
+    removePause,
+    unpauseDate,
     fetchPauses,
     pauses,
     toggleAutoRenewState,
@@ -770,6 +772,12 @@ export const SubscriptionPlanView: React.FC<{ onBack?: () => void }> = ({ onBack
           isOwner={true}
           onSavePause={async (input) => {
             return await addPause(input);
+          }}
+          onUnpauseDate={async (dateStr, memberId) => {
+            return await unpauseDate(dateStr, memberId);
+          }}
+          onRemovePause={async (pauseId) => {
+            return await removePause(pauseId);
           }}
         />
       )}

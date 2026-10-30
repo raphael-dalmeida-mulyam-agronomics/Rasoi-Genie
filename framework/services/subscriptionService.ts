@@ -24,6 +24,8 @@ import {
   SubscriptionStatus,
   validatePauseSelection,
   validateHighlightedPauseDays,
+  groupDatesIntoRanges,
+  enumerateDatesInRange,
 } from './subscriptionPlans';
 
 export interface Subscription {
@@ -961,10 +963,12 @@ export async function createSubscriptionPause(input: CreateSubscriptionPauseInpu
       startDate: p.start_date,
       endDate: p.end_date,
       daysCount: p.days_count,
+      memberId: p.member_id,
     })),
     periodStart: sub.period_start,
     periodEnd: sub.period_end,
     now: input.now,
+    memberId: input.memberId,
   });
 
   if (!validation.valid) {
@@ -1091,6 +1095,158 @@ export async function removeSubscriptionPause(
   notifySubscriptionPauseListeners(pauseItem.subscription_id);
 
   return { success: true, subscription: updatedSub };
+}
+
+export interface UnpauseSubscriptionDatesInput {
+  subscriptionId: string;
+  dates: string[]; // YYYY-MM-DD date strings
+  memberId?: string | null;
+  now?: Date | string;
+}
+
+export interface UnpauseSubscriptionDatesResult {
+  success: boolean;
+  subscription?: Subscription;
+  unpausedCount?: number;
+  newPauses?: SubscriptionPause[];
+  error?: string;
+}
+
+/**
+ * Unpauses specific delivery dates for a subscription or member (e.g. if paused by mistake).
+ * Splits or removes matching pause records, reduces extended period_end and next_renewal_at accordingly,
+ * updates the database and local stores in real time, and notifies active listeners so following
+ * meal kits continue on their proper calendar days.
+ */
+export async function unpauseSubscriptionDates(
+  input: UnpauseSubscriptionDatesInput,
+): Promise<UnpauseSubscriptionDatesResult> {
+  await loadLocalStores();
+  const sub = inMemorySubs.find((s) => s.id === input.subscriptionId);
+  if (!sub) {
+    return { success: false, error: 'Subscription not found' };
+  }
+
+  const nowObj = input.now ? new Date(input.now) : new Date();
+  const datesToUnpause = Array.from(new Set(input.dates.map((d) => d.split('T')[0] ?? d))).sort();
+  if (datesToUnpause.length === 0) {
+    return { success: false, error: 'No dates provided to unpause' };
+  }
+
+  // Prevent unpausing days within 48h fulfillment cutoff window or in the past
+  for (const dStr of datesToUnpause) {
+    const [y, m, d] = dStr.split('-').map(Number);
+    const dateObj = new Date(y!, m! - 1, d!);
+    if (isDateLockedForPause(dateObj, nowObj)) {
+      return {
+        success: false,
+        error: `Cannot unpause ${dStr} as it is in the past or within the 48-hour delivery packing cutoff window.`,
+      };
+    }
+  }
+
+  const existingPauses = inMemoryPauses.filter((p) => p.subscription_id === input.subscriptionId);
+  const pausesToDelete: string[] = [];
+  const pausesToInsert: SubscriptionPause[] = [];
+  let unpausedCount = 0;
+  const datesSet = new Set(datesToUnpause);
+
+  for (const p of existingPauses) {
+    const coversMember =
+      input.memberId === undefined
+        ? true
+        : input.memberId === null
+          ? p.member_id === null
+          : p.member_id === input.memberId || p.member_id === null;
+
+    if (!coversMember) continue;
+
+    const allDatesInP = enumerateDatesInRange(p.start_date, p.end_date);
+    const removedDates = allDatesInP.filter((d) => datesSet.has(d));
+    if (removedDates.length === 0) continue;
+
+    unpausedCount += removedDates.length;
+    pausesToDelete.push(p.id);
+
+    const remainingDates = allDatesInP.filter((d) => !datesSet.has(d));
+    if (remainingDates.length > 0) {
+      const newRanges = groupDatesIntoRanges(remainingDates);
+      for (const r of newRanges) {
+        pausesToInsert.push({
+          id: `spause_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+          subscription_id: sub.id,
+          member_id: p.member_id,
+          start_date: r.startDate,
+          end_date: r.endDate,
+          days_count: r.daysCount,
+          created_by: p.created_by,
+          created_at: new Date().toISOString(),
+        });
+      }
+    }
+  }
+
+  if (unpausedCount === 0) {
+    return {
+      success: false,
+      error: 'None of the specified dates are currently paused for this subscription/member.',
+    };
+  }
+
+  // Shrink extended period end and next renewal timestamp by the exact unpaused days count
+  const curEndMs = new Date(sub.period_end).getTime();
+  const newEndMs = curEndMs - unpausedCount * 24 * 60 * 60 * 1000;
+  const newPeriodEnd = new Date(newEndMs).toISOString();
+
+  let newNextRenewal = sub.next_renewal_at;
+  if (sub.next_renewal_at) {
+    const curRenewMs = new Date(sub.next_renewal_at).getTime();
+    const newRenewMs = curRenewMs - unpausedCount * 24 * 60 * 60 * 1000;
+    newNextRenewal = new Date(newRenewMs).toISOString();
+  }
+
+  const updatedSub: Subscription = {
+    ...sub,
+    period_end: newPeriodEnd,
+    next_renewal_at: newNextRenewal,
+    updated_at: new Date().toISOString(),
+  };
+
+  if (isSupabaseLive()) {
+    try {
+      const supabase = getSupabaseClient();
+      if (pausesToDelete.length > 0) {
+        await supabase.from('subscription_pauses').delete().in('id', pausesToDelete);
+      }
+      if (pausesToInsert.length > 0) {
+        await supabase.from('subscription_pauses').insert(pausesToInsert);
+      }
+      await supabase
+        .from('subscriptions')
+        .update({
+          period_end: updatedSub.period_end,
+          next_renewal_at: updatedSub.next_renewal_at,
+          updated_at: updatedSub.updated_at,
+        })
+        .eq('id', updatedSub.id);
+    } catch (err: any) {
+      console.warn('[SubscriptionService] Supabase error during unpause:', err);
+    }
+  }
+
+  inMemoryPauses = inMemoryPauses
+    .filter((p) => !pausesToDelete.includes(p.id))
+    .concat(pausesToInsert);
+  inMemorySubs = inMemorySubs.map((s) => (s.id === updatedSub.id ? updatedSub : s));
+  await saveLocalStores();
+  notifySubscriptionPauseListeners(sub.id);
+
+  return {
+    success: true,
+    subscription: updatedSub,
+    unpausedCount,
+    newPauses: inMemoryPauses.filter((p) => p.subscription_id === sub.id),
+  };
 }
 
 /**

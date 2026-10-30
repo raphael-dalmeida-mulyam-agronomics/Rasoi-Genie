@@ -39,6 +39,11 @@ export interface SubscriptionPauseCalendarModalProps {
     dates?: string[];
     memberId?: string | null;
   }) => Promise<{ success: boolean; error?: string }>;
+  onUnpauseDate?: (
+    dateStr: string,
+    memberId?: string | null,
+  ) => Promise<{ success: boolean; error?: string }>;
+  onRemovePause?: (pauseId: string) => Promise<{ success: boolean; error?: string }>;
 }
 
 const WEEKDAY_NAMES = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
@@ -52,6 +57,8 @@ export const SubscriptionPauseCalendarModal: React.FC<SubscriptionPauseCalendarM
   isOwner = true,
   pauses = [],
   onSavePause,
+  onUnpauseDate,
+  onRemovePause,
 }) => {
   const { colors, radii, shadows } = useTheme();
   const t = subscriptionStrings.pauseCalendar;
@@ -188,18 +195,44 @@ export const SubscriptionPauseCalendarModal: React.FC<SubscriptionPauseCalendarM
       return;
     }
 
-    if (
-      isDatePaused(
-        day,
-        pauses.map((p) => ({
-          startDate: p.start_date,
-          endDate: p.end_date,
-          memberId: p.member_id,
-        })),
-        selectedMemberId,
-      )
-    ) {
-      setErrorMessage('This date is already covered by an existing pause.');
+    const isPausedDay = isDatePaused(
+      day,
+      pauses.map((p) => ({
+        startDate: p.start_date,
+        endDate: p.end_date,
+        memberId: p.member_id,
+      })),
+      selectedMemberId,
+    );
+
+    if (isPausedDay) {
+      if (onUnpauseDate) {
+        const formattedDateText = day.toLocaleDateString('en-IN', {
+          weekday: 'short',
+          month: 'short',
+          day: 'numeric',
+        });
+        Alert.alert(
+          'Unpause Delivery',
+          `Deliveries on ${formattedDateText} are currently paused. Would you like to unpause this day and resume deliveries?`,
+          [
+            { text: 'Keep Paused', style: 'cancel' },
+            {
+              text: 'Unpause Day',
+              onPress: async () => {
+                setIsSubmitting(true);
+                const res = await onUnpauseDate(dateStr, selectedMemberId);
+                setIsSubmitting(false);
+                if (!res.success) {
+                  setErrorMessage(res.error || 'Failed to unpause day.');
+                }
+              },
+            },
+          ],
+        );
+      } else {
+        setErrorMessage('This date is already covered by an existing pause.');
+      }
       return;
     }
 
@@ -452,7 +485,7 @@ export const SubscriptionPauseCalendarModal: React.FC<SubscriptionPauseCalendarM
                   cellText = colors.textMuted;
                 }
 
-                const canTap = item.isActiveSubscription && !item.isLocked && !item.isPaused;
+                const canTap = item.isActiveSubscription && !item.isLocked;
 
                 return (
                   <TouchableOpacity
@@ -630,15 +663,45 @@ export const SubscriptionPauseCalendarModal: React.FC<SubscriptionPauseCalendarM
                 },
               ]}
             >
-              <View>
+              <View style={{ flex: 1, marginRight: 8 }}>
                 <Text style={[styles.pauseDatesText, { color: colors.textPrimary }]}>
-                  {p.start_date} → {p.end_date} ({p.days_count} days)
+                  {p.start_date} → {p.end_date} ({p.days_count} day{p.days_count === 1 ? '' : 's'})
                 </Text>
                 <Text style={{ fontSize: 11, color: colors.textSecondary }}>
                   {p.member_id ? `Member ID: ${p.member_id}` : 'Entire Household'}
                 </Text>
               </View>
-              <Badge label={t.pausedBadge} variant="warning" size="sm" />
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <Badge label={t.pausedBadge} variant="warning" size="sm" />
+                {onRemovePause && (
+                  <Button
+                    title="Resume"
+                    variant="outline"
+                    size="sm"
+                    onPress={() => {
+                      Alert.alert(
+                        'Resume Deliveries',
+                        `Resume all paused deliveries from ${p.start_date} to ${p.end_date}?`,
+                        [
+                          { text: 'Cancel', style: 'cancel' },
+                          {
+                            text: 'Resume Deliveries',
+                            onPress: async () => {
+                              setIsSubmitting(true);
+                              const res = await onRemovePause(p.id);
+                              setIsSubmitting(false);
+                              if (!res.success) {
+                                setErrorMessage(res.error || 'Failed to resume deliveries.');
+                              }
+                            },
+                          },
+                        ],
+                      );
+                    }}
+                    testID={`pause-resume-btn-${p.id}`}
+                  />
+                )}
+              </View>
             </View>
           ))}
         </View>

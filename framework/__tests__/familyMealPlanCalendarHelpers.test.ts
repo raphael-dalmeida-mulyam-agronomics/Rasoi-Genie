@@ -440,5 +440,44 @@ describe('familyMealPlanCalendarHelpers', () => {
 
       expect(schedule['user_aarav_2026-11-05']).toBe('kit_custom_truffle');
     });
+    it('contracts schedule and fulfills meals sequentially when a previously paused day is unpaused', () => {
+      // Originally 31 Oct - 4 Nov paused (5 days, period ended Nov 9).
+      // Customer unpauses Nov 2. Pauses split into: 31 Oct-1 Nov (2d) and 3 Nov-4 Nov (2d).
+      // Period contracts from Nov 9 to Nov 8.
+      const schedule = buildShiftedMealSchedule({
+        periodStart: '2026-10-29',
+        periodEnd: '2026-11-08',
+        members: sampleMembers,
+        localMeals: sampleLocalMeals,
+        pauses: [
+          { startDate: '2026-10-31', endDate: '2026-11-01', memberId: null },
+          { startDate: '2026-11-03', endDate: '2026-11-04', memberId: null },
+        ],
+      });
+
+      // Oct 29 & Oct 30 delivered
+      expect(schedule['user_aarav_2026-10-29']).toBe('kit_thu');
+      expect(schedule['user_aarav_2026-10-30']).toBe('kit_fri');
+
+      // Oct 31 & Nov 1 paused
+      expect(schedule['user_aarav_2026-10-31']).toBeUndefined();
+      expect(schedule['user_aarav_2026-11-01']).toBeUndefined();
+
+      // Nov 2 unpaused! Receives Saturday's meal
+      expect(schedule['user_aarav_2026-11-02']).toBe('kit_sat');
+
+      // Nov 3 & Nov 4 paused
+      expect(schedule['user_aarav_2026-11-03']).toBeUndefined();
+      expect(schedule['user_aarav_2026-11-04']).toBeUndefined();
+
+      // Make-up days deliver remaining meals sequentially up to contracted period end (Nov 8)
+      expect(schedule['user_aarav_2026-11-05']).toBe('kit_sun');
+      expect(schedule['user_aarav_2026-11-06']).toBe('kit_mon');
+      expect(schedule['user_aarav_2026-11-07']).toBe('kit_tue');
+      expect(schedule['user_aarav_2026-11-08']).toBe('kit_wed');
+
+      // Nov 9 is no longer needed or scheduled
+      expect(schedule['user_aarav_2026-11-09']).toBeUndefined();
+    });
   });
 });

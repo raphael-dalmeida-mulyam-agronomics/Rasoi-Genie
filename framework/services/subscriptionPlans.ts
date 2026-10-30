@@ -377,6 +377,7 @@ export interface ValidatePauseSelectionParams {
   periodStart: string | Date;
   periodEnd: string | Date;
   now?: string | Date;
+  memberId?: string | null;
 }
 
 export interface ValidatePauseSelectionResult {
@@ -459,6 +460,12 @@ export function validatePauseSelection(
 
   // Overlap check
   for (const ep of existing) {
+    if (params.memberId !== undefined && params.memberId !== null) {
+      const epMemberId = ep.memberId ?? null;
+      if (epMemberId !== null && epMemberId !== params.memberId) {
+        continue;
+      }
+    }
     const epStart = normalizeToDate(ep.startDate);
     const epEnd = normalizeToDate(ep.endDate);
     if (start <= epEnd && end >= epStart) {
@@ -624,6 +631,33 @@ export function groupDatesIntoRanges(
 
   ranges.push({ startDate: rangeStart, endDate: rangeEnd, daysCount: count });
   return ranges;
+}
+
+/**
+ * Pure function: Enumerates all date strings (YYYY-MM-DD) between startDate and endDate (inclusive).
+ */
+export function enumerateDatesInRange(startDate: string, endDate: string): string[] {
+  if (!startDate || !endDate) return [];
+  const startStr = startDate.split('T')[0] ?? startDate;
+  const endStr = endDate.split('T')[0] ?? endDate;
+  if (startStr > endStr) return [];
+
+  const dates: string[] = [];
+  const [sy, sm, sd] = startStr.split('-').map(Number);
+  const [ey, em, ed] = endStr.split('-').map(Number);
+  const cur = new Date(sy!, sm! - 1, sd!);
+  const end = new Date(ey!, em! - 1, ed!);
+  cur.setHours(0, 0, 0, 0);
+  end.setHours(0, 0, 0, 0);
+
+  while (cur <= end) {
+    const y = cur.getFullYear();
+    const m = String(cur.getMonth() + 1).padStart(2, '0');
+    const d = String(cur.getDate()).padStart(2, '0');
+    dates.push(`${y}-${m}-${d}`);
+    cur.setDate(cur.getDate() + 1);
+  }
+  return dates;
 }
 
 /**

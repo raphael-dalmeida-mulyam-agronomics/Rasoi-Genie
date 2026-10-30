@@ -1,9 +1,7 @@
-import React from 'react';
-import { render, fireEvent, waitFor } from '@testing-library/react-native';
+import { fireEvent, render, waitFor } from '@testing-library/react-native';
 import { FamilySubscriptionView } from '../../features/family/FamilySubscriptionView';
-import { ThemeProvider } from '../theme/ThemeContext';
 import { FamilyMember } from '../services/familyService';
-import { getMealKits } from '../services/mealKitsService';
+import { ThemeProvider } from '../theme/ThemeContext';
 
 jest.mock('react-native-safe-area-context', () => ({
   useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
