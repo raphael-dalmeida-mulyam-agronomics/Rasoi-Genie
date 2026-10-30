@@ -127,7 +127,7 @@ jest.setTimeout(30000);
 
 describe('FamilySubscriptionView - Dietary Conflict Modal Dismissal', () => {
   it('shows clash icon on the month calendar cell, displays warning banner in Day Detail popup, and dismisses when Change Recipe is clicked', async () => {
-    const { getByTestId, getAllByTestId, getByText, queryByText } = await render(
+    const { getByTestId, getAllByTestId, getByText, getAllByText, queryByText } = await render(
       <ThemeProvider>
         <FamilySubscriptionView />
       </ThemeProvider>,
@@ -147,7 +147,7 @@ describe('FamilySubscriptionView - Dietary Conflict Modal Dismissal', () => {
     await waitFor(() => {
       expect(getByText('Dietary Preference Conflict')).toBeTruthy();
       expect(getByText('• Non-vegetarian dish assigned to vegetarian member')).toBeTruthy();
-      expect(getByText('Lucknowi Chicken Biryani')).toBeTruthy();
+      expect(getAllByText('Lucknowi Chicken Biryani').length).toBeGreaterThan(0);
     });
 
     // 4. Click the "Change Recipe" / "Swap" button
@@ -177,7 +177,7 @@ describe('FamilySubscriptionView - Dietary Conflict Modal Dismissal', () => {
     // 9. Re-open Day Detail to verify it was updated to Paneer Makhani Kit and conflict banner is gone
     fireEvent.press(clashCells[0]!);
     await waitFor(() => {
-      expect(getByText('Paneer Makhani Kit')).toBeTruthy();
+      expect(getAllByText('Paneer Makhani Kit').length).toBeGreaterThan(0);
       expect(queryByText('Dietary Preference Conflict')).toBeNull();
     });
   });

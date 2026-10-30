@@ -31,7 +31,11 @@ import {
   calculateNextDeliveryInfo,
 } from '../../framework/services/subscriptionPlans';
 import { getMealKits, getMealKitById, MealKit } from '../../framework/services/mealKitsService';
-import { checkDietaryConflict } from '../../framework/family/dietaryConflicts';
+import {
+  checkDietaryConflict,
+  auditMemberWeeklyPlan,
+  auditStandardPlanForMember,
+} from '../../framework/family/dietaryConflicts';
 import { FamilyMember } from '../../framework/services/familyService';
 import { Badge } from '../../framework/ui/Badge';
 import { Button } from '../../framework/ui/Button';
@@ -418,6 +422,37 @@ export const FamilySubscriptionView: React.FC<{ onBack?: () => void }> = ({ onBa
         ? STANDARD_SUBSCRIPTION_PLANS[standardPlanKey]?.name
         : 'Custom Plan';
 
+    const clashingMembers =
+      planType === 'standard' && standardPlanKey
+        ? coveredMembersList.filter((m) => {
+            const audit = auditStandardPlanForMember(m, standardPlanKey, getMealKitById);
+            return audit.hasConflict;
+          })
+        : [];
+
+    if (clashingMembers.length > 0) {
+      const clashSummary = clashingMembers
+        .map((m) => {
+          const audit = auditStandardPlanForMember(m, standardPlanKey!, getMealKitById);
+          return `• ${m.display_name}: ${audit.reasons.join(', ')}`;
+        })
+        .join('\n');
+
+      Alert.alert(
+        `Dietary Warning: ${planName}`,
+        `This plan contains dishes that conflict with dietary preferences or allergies for:\n\n${clashSummary}\n\nDo you want to apply this plan to everyone anyway?`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Apply Anyway',
+            style: 'destructive',
+            onPress: () => handleApplySamePlan(planType, standardPlanKey),
+          },
+        ],
+      );
+      return;
+    }
+
     Alert.alert(
       t.familyCalendar.applyPlanToAllConfirmTitle(planName),
       t.familyCalendar.applyPlanToAllConfirmMsg,
@@ -601,11 +636,40 @@ export const FamilySubscriptionView: React.FC<{ onBack?: () => void }> = ({ onBa
 
   // Upfront Payment & Activation
   const handleStartSubscribe = () => {
-    if (remainingPayable <= 0) {
-      executeFamilySubscriptionPayment('WALLET_CREDIT');
-    } else {
-      setPaymentModalVisible(true);
+    const householdClashes = coveredMembersList.flatMap((m) => {
+      const audit = auditMemberWeeklyPlan(
+        m,
+        memberPlanConfigs[m.user_id],
+        localMeals,
+        getMealKitById,
+      );
+      if (audit.hasConflict) {
+        return [`• ${m.display_name}: ${audit.conflictReasons.join('; ')}`];
+      }
+      return [];
+    });
+
+    const proceed = () => {
+      if (remainingPayable <= 0) {
+        executeFamilySubscriptionPayment('WALLET_CREDIT');
+      } else {
+        setPaymentModalVisible(true);
+      }
+    };
+
+    if (householdClashes.length > 0) {
+      Alert.alert(
+        'Dietary Clashes Detected',
+        `Some dishes in your selected plans clash with member dietary restrictions:\n\n${householdClashes.join('\n')}\n\nWould you like to review and swap meals, or proceed with subscription?`,
+        [
+          { text: 'Review Meals', style: 'cancel' },
+          { text: 'Proceed Anyway', onPress: proceed },
+        ],
+      );
+      return;
     }
+
+    proceed();
   };
 
   const executeFamilySubscriptionPayment = async (paymentRef: string) => {
@@ -1492,6 +1556,42 @@ export const FamilySubscriptionView: React.FC<{ onBack?: () => void }> = ({ onBa
                     DEFAULT_CUSTOM_PLAN_PRICE_PER_WEEK
                   : DEFAULT_CUSTOM_PLAN_PRICE_PER_WEEK;
 
+              const audit = auditMemberWeeklyPlan(member, cfg, localMeals, getMealKitById);
+
+              const memberPlanOptions = PLAN_SEGMENTS.map((seg) => {
+                if (seg.value === 'custom') return seg;
+                const pAudit = auditStandardPlanForMember(
+                  member,
+                  seg.value as StandardPlanKey,
+                  getMealKitById,
+                );
+                return {
+                  ...seg,
+                  badgeCount: pAudit.hasConflict ? pAudit.conflictingMealsCount : undefined,
+                };
+              });
+
+              const memberPrefs = member.preferences;
+              const dietBadges: { label: string; variant: any }[] =
+                memberPrefs?.dietTypes?.map((d: string) => ({
+                  label:
+                    d === 'veg'
+                      ? 'Vegetarian'
+                      : d === 'vegan'
+                        ? 'Vegan'
+                        : d === 'keto'
+                          ? 'Keto'
+                          : d === 'jain'
+                            ? 'Jain'
+                            : d,
+                  variant: d === 'veg' ? 'veg' : d === 'vegan' ? 'vegan' : 'neutral',
+                })) || [];
+              const allergyBadges: { label: string; variant: 'warning' }[] =
+                memberPrefs?.allergies?.map((a: string) => ({
+                  label: `${a} Allergy`,
+                  variant: 'warning' as const,
+                })) || [];
+
               return (
                 <View
                   key={`plan-card-${member.user_id}`}
@@ -1500,7 +1600,7 @@ export const FamilySubscriptionView: React.FC<{ onBack?: () => void }> = ({ onBa
                     {
                       width: '100%',
                       backgroundColor: colors.bgSurface,
-                      borderColor: colors.borderLight,
+                      borderColor: audit.hasConflict ? colors.warning : colors.borderLight,
                       borderRadius: radii.lg,
                       ...shadows.card,
                     },
@@ -1510,10 +1610,32 @@ export const FamilySubscriptionView: React.FC<{ onBack?: () => void }> = ({ onBa
                   <View style={styles.memberPlanCardHeader}>
                     <Avatar name={member.display_name} id={member.user_id} size="md" />
                     <View style={{ flex: 1, marginLeft: 10 }}>
-                      <Text style={[styles.memberPlanName, { color: colors.textPrimary }]}>
-                        {member.display_name}
-                      </Text>
-                      <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2 }}>
+                      <View
+                        style={{
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          flexWrap: 'wrap',
+                        }}
+                      >
+                        <Text style={[styles.memberPlanName, { color: colors.textPrimary }]}>
+                          {member.display_name}
+                        </Text>
+                        <Text style={[styles.memberPlanPriceText, { color: colors.primary }]}>
+                          ₹{weeklyPrice.toLocaleString('en-IN')}/wk
+                        </Text>
+                      </View>
+
+                      {/* Role & Dietary Preferences Chips */}
+                      <View
+                        style={{
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          gap: 6,
+                          marginTop: 4,
+                          flexWrap: 'wrap',
+                        }}
+                      >
                         <Badge
                           label={
                             member.dependent_type
@@ -1525,17 +1647,29 @@ export const FamilySubscriptionView: React.FC<{ onBack?: () => void }> = ({ onBa
                           variant="neutral"
                           size="sm"
                         />
+                        {dietBadges.map((db: { label: string; variant: any }) => (
+                          <Badge key={db.label} label={db.label} variant={db.variant} size="sm" />
+                        ))}
+                        {allergyBadges.map((ab: { label: string; variant: 'warning' }) => (
+                          <Badge key={ab.label} label={ab.label} variant={ab.variant} size="sm" />
+                        ))}
                       </View>
                     </View>
                   </View>
 
                   <Text style={[styles.memberPlanSummary, { color: colors.textSecondary }]}>
-                    ₹{weeklyPrice.toLocaleString('en-IN')} / week • 7 dinners
+                    Plan:{' '}
+                    {activeSegmentVal === 'custom'
+                      ? 'Custom Plan'
+                      : STANDARD_SUBSCRIPTION_PLANS[activeSegmentVal as StandardPlanKey]?.name ||
+                        'Standard'}{' '}
+                    • 7 dinner boxes
                   </Text>
 
+                  {/* Plan Segment Picker with conflict indicators */}
                   {isOwner ? (
                     <SegmentedControl
-                      options={PLAN_SEGMENTS}
+                      options={memberPlanOptions}
                       selectedValue={activeSegmentVal}
                       onSelect={(val) => handleSelectMemberPlanSegment(member, val)}
                       style={{ marginTop: 8 }}
@@ -1552,6 +1686,213 @@ export const FamilySubscriptionView: React.FC<{ onBack?: () => void }> = ({ onBa
                       variant="primary"
                     />
                   )}
+
+                  {/* Dietary & Allergen Conflict Warning Banner */}
+                  {audit.hasConflict && (
+                    <View
+                      style={[
+                        styles.planClashBanner,
+                        { backgroundColor: colors.bgWarningSubtle, borderColor: colors.warning },
+                      ]}
+                      testID={`plan-dietary-warning-${member.user_id}`}
+                    >
+                      <View
+                        style={{
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          gap: 6,
+                          marginBottom: 4,
+                        }}
+                      >
+                        <Icon name="alert-circle" size={16} color={colors.warning} />
+                        <Text style={[styles.planClashTitle, { color: colors.warning }]}>
+                          Dietary & Allergen Clash ({audit.conflicts.length} meal
+                          {audit.conflicts.length > 1 ? 's' : ''})
+                        </Text>
+                      </View>
+                      {audit.conflictReasons.map((reason, idx) => (
+                        <Text
+                          key={`clash-${idx}`}
+                          style={[styles.planClashReason, { color: colors.warning }]}
+                        >
+                          • Plan conflict: {reason}
+                        </Text>
+                      ))}
+                      {member.preferences?.dietTypes?.includes('veg') &&
+                        activeSegmentVal === 'high-protein' &&
+                        isOwner && (
+                          <View style={{ marginTop: 8 }}>
+                            <Button
+                              title="Switch to Vegan Plan (0 Clashes)"
+                              size="sm"
+                              variant="outline"
+                              onPress={() => handleSelectMemberPlanSegment(member, 'vegan')}
+                              testID={`switch-safe-plan-${member.user_id}`}
+                            />
+                          </View>
+                        )}
+                    </View>
+                  )}
+
+                  {/* 7-Day Weekly Meal Delivery Schedule */}
+                  <View
+                    style={[
+                      styles.memberScheduleWrap,
+                      { backgroundColor: colors.bgPrimary, borderColor: colors.borderLight },
+                    ]}
+                    testID={`member-weekly-schedule-${member.user_id}`}
+                  >
+                    <View style={styles.memberScheduleHeaderRow}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                        <Icon name="calendar-outline" size={16} color={colors.primary} />
+                        <Text
+                          style={[styles.memberScheduleHeaderTitle, { color: colors.textPrimary }]}
+                        >
+                          Weekly Meal Delivery Menu
+                        </Text>
+                      </View>
+                      <Text
+                        style={{ fontSize: 11, color: colors.textSecondary, fontWeight: '600' }}
+                      >
+                        Mon – Sun
+                      </Text>
+                    </View>
+
+                    <View style={styles.planMealsList}>
+                      {audit.weeklyMeals.map((item) => (
+                        <View
+                          key={`plan-meal-${member.user_id}-${item.weekday}`}
+                          style={[
+                            styles.planMealItemRow,
+                            {
+                              backgroundColor: item.conflict.hasConflict
+                                ? colors.bgWarningSubtle
+                                : colors.bgSurface,
+                              borderColor: item.conflict.hasConflict
+                                ? colors.warning
+                                : colors.borderLight,
+                            },
+                          ]}
+                          testID={`plan-meal-row-${member.user_id}-${item.weekday}`}
+                        >
+                          {/* Weekday Column */}
+                          <View
+                            style={[styles.planMealDayCol, { backgroundColor: colors.bgSubtle }]}
+                          >
+                            <Text style={[styles.planMealDayShort, { color: colors.textPrimary }]}>
+                              {item.weekdayShort}
+                            </Text>
+                          </View>
+
+                          {/* Meal Kit Thumbnail */}
+                          {item.kit?.heroImage ? (
+                            <Image
+                              source={{ uri: item.kit.heroImage }}
+                              style={styles.planMealRowImg}
+                            />
+                          ) : (
+                            <View
+                              style={[
+                                styles.planMealRowImgPlaceholder,
+                                { backgroundColor: colors.bgSubtle },
+                              ]}
+                            >
+                              <Icon name="restaurant-outline" size={16} color={colors.textMuted} />
+                            </View>
+                          )}
+
+                          {/* Meal Info */}
+                          <View style={{ flex: 1, marginHorizontal: 8 }}>
+                            <Text
+                              style={[styles.planMealRowName, { color: colors.textPrimary }]}
+                              numberOfLines={1}
+                            >
+                              {item.kit?.name || 'No recipe assigned'}
+                            </Text>
+                            <View
+                              style={{
+                                flexDirection: 'row',
+                                alignItems: 'center',
+                                gap: 6,
+                                marginTop: 2,
+                                flexWrap: 'wrap',
+                              }}
+                            >
+                              {item.kit?.cuisine && (
+                                <Text
+                                  style={[styles.planMealRowMeta, { color: colors.textSecondary }]}
+                                >
+                                  {item.kit.cuisine}
+                                </Text>
+                              )}
+                              {item.kit?.diet && (
+                                <Badge
+                                  label={item.kit.diet.toUpperCase()}
+                                  variant={
+                                    item.kit.diet === 'veg'
+                                      ? 'veg'
+                                      : item.kit.diet === 'vegan'
+                                        ? 'vegan'
+                                        : 'nonveg'
+                                  }
+                                  size="sm"
+                                />
+                              )}
+                              {item.kit?.nutrition?.protein && (
+                                <Text
+                                  style={[
+                                    styles.planMealRowMeta,
+                                    { color: colors.primary, fontWeight: '700' },
+                                  ]}
+                                >
+                                  {item.kit.nutrition.protein}g protein
+                                </Text>
+                              )}
+                            </View>
+
+                            {/* Dietary Conflict Flag inside Day Row */}
+                            {item.conflict.hasConflict && (
+                              <View
+                                style={{
+                                  flexDirection: 'row',
+                                  alignItems: 'center',
+                                  gap: 4,
+                                  marginTop: 4,
+                                }}
+                                testID={`dietary-clash-pill-${member.user_id}-${item.weekday}`}
+                              >
+                                <Icon name="alert" size={12} color={colors.warning} />
+                                <Text
+                                  style={{ fontSize: 11, fontWeight: '700', color: colors.warning }}
+                                  numberOfLines={1}
+                                >
+                                  {item.conflict.reasons[0]}
+                                </Text>
+                              </View>
+                            )}
+                          </View>
+
+                          {/* Swap Button (Owner only) */}
+                          {isOwner && (
+                            <Button
+                              title="Swap"
+                              variant={item.conflict.hasConflict ? 'primary' : 'outline'}
+                              size="sm"
+                              onPress={() => {
+                                setSelectedCell({
+                                  member,
+                                  weekday: item.weekday,
+                                  currentKit: item.kit,
+                                });
+                                setPickerModalVisible(true);
+                              }}
+                              testID={`swap-meal-btn-${member.user_id}-${item.weekday}`}
+                            />
+                          )}
+                        </View>
+                      ))}
+                    </View>
+                  </View>
                 </View>
               );
             })}
@@ -1889,6 +2230,63 @@ export const FamilySubscriptionView: React.FC<{ onBack?: () => void }> = ({ onBa
             </TouchableOpacity>
 
             <View style={[styles.divider, { backgroundColor: colors.borderLight }]} />
+
+            {/* Dietary Clashes Warning Banner at Checkout */}
+            {(() => {
+              const householdClashes = coveredMembersList.flatMap((m) => {
+                const audit = auditMemberWeeklyPlan(
+                  m,
+                  memberPlanConfigs[m.user_id],
+                  localMeals,
+                  getMealKitById,
+                );
+                if (audit.hasConflict) {
+                  return [{ member: m, audit }];
+                }
+                return [];
+              });
+
+              if (householdClashes.length === 0) return null;
+
+              return (
+                <View
+                  style={[
+                    styles.checkoutClashCard,
+                    { backgroundColor: colors.bgWarningSubtle, borderColor: colors.warning },
+                  ]}
+                  testID="checkout-dietary-clash-warning"
+                >
+                  <View
+                    style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 }}
+                  >
+                    <Icon name="alert-circle" size={16} color={colors.warning} />
+                    <Text style={{ fontSize: 13, fontWeight: '700', color: colors.warning }}>
+                      Dietary & Allergen Clashes in Selected Plans
+                    </Text>
+                  </View>
+                  <Text style={{ fontSize: 12, color: colors.textPrimary, lineHeight: 18 }}>
+                    Some meals in your selected weekly plans clash with member dietary restrictions:
+                  </Text>
+                  {householdClashes.map(({ member, audit }) => (
+                    <Text
+                      key={member.user_id}
+                      style={{
+                        fontSize: 12,
+                        color: colors.warning,
+                        fontWeight: '600',
+                        marginTop: 2,
+                      }}
+                    >
+                      • {member.display_name}: {audit.conflictReasons.join('; ')}
+                    </Text>
+                  ))}
+                  <Text style={{ fontSize: 11, color: colors.textSecondary, marginTop: 4 }}>
+                    Tap "Swap" on any meal row above to replace conflicting dishes before
+                    subscribing.
+                  </Text>
+                </View>
+              );
+            })()}
 
             <View style={styles.totalRow}>
               <Text style={[styles.totalLabel, { color: colors.textPrimary }]}>
@@ -2289,6 +2687,89 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
     marginBottom: 6,
+  },
+  memberPlanPriceText: {
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  planClashBanner: {
+    marginTop: 10,
+    padding: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  planClashTitle: {
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  planClashReason: {
+    fontSize: 12,
+    marginTop: 2,
+    lineHeight: 16,
+  },
+  memberScheduleWrap: {
+    marginTop: 12,
+    padding: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
+  memberScheduleHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  memberScheduleHeaderTitle: {
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  planMealsList: {
+    gap: 6,
+  },
+  planMealItemRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  planMealDayCol: {
+    width: 36,
+    height: 36,
+    borderRadius: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  planMealDayShort: {
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  planMealRowImg: {
+    width: 42,
+    height: 42,
+    borderRadius: 6,
+    marginLeft: 6,
+  },
+  planMealRowImgPlaceholder: {
+    width: 42,
+    height: 42,
+    borderRadius: 6,
+    marginLeft: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  planMealRowName: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  planMealRowMeta: {
+    fontSize: 11,
+  },
+  checkoutClashCard: {
+    padding: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    marginBottom: 12,
   },
   monthNavRow: {
     flexDirection: 'row',
