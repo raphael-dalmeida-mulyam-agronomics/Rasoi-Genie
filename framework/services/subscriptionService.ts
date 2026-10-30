@@ -204,6 +204,24 @@ export async function fetchUserActiveSubscription(
         }
       }
 
+      if (!targetSub) {
+        // Check for latest cancelled subscription
+        const { data: cancelledSubs } = await supabase
+          .from('subscriptions')
+          .select('*')
+          .eq('owner_user_id', userId)
+          .eq('status', 'cancelled')
+          .order('updated_at', { ascending: false })
+          .limit(1);
+        if (cancelledSubs && cancelledSubs[0]) {
+          return {
+            subscription: cancelledSubs[0],
+            members: [],
+            meals: [],
+          };
+        }
+      }
+
       if (targetSub) {
         const [membersRes, mealsRes] = await Promise.all([
           supabase.from('subscription_members').select('*').eq('subscription_id', targetSub.id),
@@ -250,8 +268,30 @@ export async function fetchUserActiveSubscription(
     }
   }
 
+  // If no active or paused sub, check for most recently cancelled sub
+  if (!sub) {
+    const cancelledSubs = inMemorySubs
+      .filter(
+        (s) =>
+          (s.owner_user_id === userId || (familyId && s.family_id === familyId)) &&
+          s.status === 'cancelled',
+      )
+      .sort(
+        (a, b) =>
+          new Date(b.updated_at || b.created_at).getTime() -
+          new Date(a.updated_at || a.created_at).getTime(),
+      );
+    if (cancelledSubs.length > 0) {
+      sub = cancelledSubs[0];
+    }
+  }
+
   if (!sub) {
     return { subscription: null, members: [], meals: [] };
+  }
+
+  if (sub.status === 'cancelled') {
+    return { subscription: sub, members: [], meals: [] };
   }
 
   const members = inMemoryMembers.filter((m) => m.subscription_id === sub!.id);
@@ -490,6 +530,7 @@ export async function pauseSubscription(
 
   if (found) {
     await saveLocalStores();
+    notifySubscriptionPauseListeners(subscriptionId);
     return { success: true };
   }
   return { success: false, error: 'Subscription not found' };
@@ -525,6 +566,7 @@ export async function resumeSubscription(
 
   if (found) {
     await saveLocalStores();
+    notifySubscriptionPauseListeners(subscriptionId);
     return { success: true };
   }
   return { success: false, error: 'Subscription not found' };
@@ -564,6 +606,7 @@ export async function cancelSubscription(
 
   if (found) {
     await saveLocalStores();
+    notifySubscriptionPauseListeners(subscriptionId);
     return { success: true };
   }
   return { success: false, error: 'Subscription not found' };

@@ -229,6 +229,9 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
     const res = await cancelSubscriptionService(activeSubscription.id, effectiveUserId);
     if (res.success) {
       setActiveSubscription((prev) => (prev ? { ...prev, status: 'cancelled' } : null));
+      setAssignedMeals([]);
+      setCoveredMembers([]);
+      setPauses([]);
     }
     return res;
   }, [activeSubscription, effectiveUserId]);

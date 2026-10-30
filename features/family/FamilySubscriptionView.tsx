@@ -138,8 +138,13 @@ export const FamilySubscriptionView: React.FC<{ onBack?: () => void }> = ({ onBa
     return initial;
   });
 
+  const isCancelled = Boolean(activeSubscription && activeSubscription.status === 'cancelled');
+
   // Local assigned meals matrix: `${member_id}_${weekday}` -> kitId
   const [localMeals, setLocalMeals] = useState<Record<string, string>>(() => {
+    if (isCancelled) {
+      return {};
+    }
     const map: Record<string, string> = {};
     members.forEach((m) => {
       const template = resolvePlanMealKits('high-protein');
@@ -187,8 +192,14 @@ export const FamilySubscriptionView: React.FC<{ onBack?: () => void }> = ({ onBa
     }
   }, [coveredMembers]);
 
-  // Sync assigned meals from active subscription if present
+  // Sync assigned meals from active subscription if present, or clear if cancelled
   React.useEffect(() => {
+    if (isCancelled) {
+      setLocalMeals({});
+      setDayDetailVisible(false);
+      setSelectedDayItem(null);
+      return;
+    }
     if (assignedMeals && assignedMeals.length > 0) {
       const map: Record<string, string> = {};
       assignedMeals.forEach((meal) => {
@@ -196,7 +207,7 @@ export const FamilySubscriptionView: React.FC<{ onBack?: () => void }> = ({ onBa
       });
       setLocalMeals((prev) => ({ ...prev, ...map }));
     }
-  }, [assignedMeals]);
+  }, [assignedMeals, isCancelled]);
 
   // Pricing calculation via calculatePerMemberSubscriptionTotal
   const memberPlansList = useMemo(() => {
@@ -241,6 +252,21 @@ export const FamilySubscriptionView: React.FC<{ onBack?: () => void }> = ({ onBa
 
   // Intelligent Next Delivery Info with carry-over evaluation
   const nextDeliveryInfo = useMemo(() => {
+    if (isCancelled) {
+      return {
+        date: todayDate,
+        dateStr: '',
+        formattedDate: 'Cancelled',
+        dayOfWeek: '',
+        isToday: false,
+        isTomorrow: false,
+        isCarriedOver: false,
+        carriedDaysCount: 0,
+        deliveryNote: 'Subscription is cancelled. Deliveries have ended.',
+        resumesNote: undefined,
+        periodSummaryNote: undefined,
+      };
+    }
     return calculateNextDeliveryInfo({
       periodStart: activeSubscription?.period_start,
       periodEnd: activeSubscription?.period_end,
@@ -248,10 +274,13 @@ export const FamilySubscriptionView: React.FC<{ onBack?: () => void }> = ({ onBa
       pauses,
       now: todayDate,
     });
-  }, [activeSubscription, pauses, todayDate]);
+  }, [activeSubscription, pauses, todayDate, isCancelled]);
 
   // Daily shifted meal kit schedule: paused days are skipped and meals carry forward onto make-up days
   const effectiveSchedule = useMemo(() => {
+    if (isCancelled) {
+      return {};
+    }
     return buildShiftedMealSchedule({
       periodStart: activeSubscription?.period_start,
       periodEnd: activeSubscription?.period_end,
@@ -264,6 +293,7 @@ export const FamilySubscriptionView: React.FC<{ onBack?: () => void }> = ({ onBa
       })),
     });
   }, [
+    isCancelled,
     activeSubscription?.period_start,
     activeSubscription?.period_end,
     coveredMembersList,
@@ -273,6 +303,17 @@ export const FamilySubscriptionView: React.FC<{ onBack?: () => void }> = ({ onBa
 
   // Month grid computation
   const monthGrid = useMemo(() => {
+    if (isCancelled) {
+      return buildMonthCalendarGrid({
+        year: currentMonthDate.getFullYear(),
+        month: currentMonthDate.getMonth(),
+        periodStart: null,
+        periodEnd: null,
+        today: todayDate,
+        pauses: [],
+      });
+    }
+
     const periodStart =
       activeSubscription?.period_start ||
       formatDateKey(new Date(currentMonthDate.getFullYear(), currentMonthDate.getMonth(), 1));
@@ -288,7 +329,7 @@ export const FamilySubscriptionView: React.FC<{ onBack?: () => void }> = ({ onBa
       today: todayDate,
       pauses: (pauses || []).map((p) => ({ startDate: p.start_date, endDate: p.end_date })),
     });
-  }, [currentMonthDate, activeSubscription, todayDate, pauses]);
+  }, [currentMonthDate, activeSubscription, todayDate, pauses, isCancelled]);
 
   // Month navigation handlers
   const handlePrevMonth = () => {
@@ -467,7 +508,7 @@ export const FamilySubscriptionView: React.FC<{ onBack?: () => void }> = ({ onBa
 
   // Day cell tap
   const handleTapDayCell = (dayItem: CalendarDayItem) => {
-    if (!dayItem.date || !dayItem.isInsidePeriod) return;
+    if (isCancelled || !dayItem.date || !dayItem.isInsidePeriod) return;
     setSelectedDayItem(dayItem);
     setDayDetailVisible(true);
   };
@@ -652,7 +693,18 @@ export const FamilySubscriptionView: React.FC<{ onBack?: () => void }> = ({ onBa
   const handleCancelSub = () => {
     Alert.alert(t.checkout.confirmCancelTitle, t.checkout.confirmCancelMsg, [
       { text: 'Keep Plan', style: 'cancel' },
-      { text: 'Cancel Plan', style: 'destructive', onPress: () => cancel() },
+      {
+        text: 'Cancel Plan',
+        style: 'destructive',
+        onPress: async () => {
+          const res = await cancel();
+          if (res?.success) {
+            setLocalMeals({});
+            setDayDetailVisible(false);
+            setSelectedDayItem(null);
+          }
+        },
+      },
     ]);
   };
 
@@ -693,7 +745,7 @@ export const FamilySubscriptionView: React.FC<{ onBack?: () => void }> = ({ onBa
 
   // Day detail popup content renderer
   const renderDayDetailContent = () => {
-    if (!selectedDayItem) return null;
+    if (!selectedDayItem || isCancelled) return null;
     const targetMembers = isOwner
       ? coveredMembersList
       : coveredMembersList.filter((m) => m.user_id === user?.uid);
@@ -1075,6 +1127,39 @@ export const FamilySubscriptionView: React.FC<{ onBack?: () => void }> = ({ onBa
             <Icon name="information-circle" size={18} color={colors.textInfo} />
             <Text style={[styles.viewOnlyText, { color: colors.textInfo }]}>
               {t.perMember.viewOnlyNotice}
+            </Text>
+          </View>
+        )}
+
+        {/* Cancelled Subscription Status Card */}
+        {isCancelled && activeSubscription && (
+          <View
+            style={[
+              styles.activeSubCard,
+              {
+                backgroundColor: colors.bgSurface,
+                borderRadius: radii.xl,
+                borderColor: colors.borderLight,
+                ...shadows.card,
+              },
+            ]}
+            testID="family-cancelled-sub-card"
+          >
+            <View style={styles.subStatusRow}>
+              <View>
+                <Text style={[styles.subPlanName, { color: colors.textPrimary }]}>
+                  {family?.name || 'Family'} Weekly Subscription
+                </Text>
+                <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 2 }}>
+                  Subscription Cancelled • Deliveries have ended
+                </Text>
+              </View>
+              <Badge label="Cancelled" variant="neutral" />
+            </View>
+
+            <Text style={[styles.nextDeliveryText, { color: colors.textSecondary, marginTop: 8 }]}>
+              This plan has been cancelled. No meal kits will be delivered. You can start a new
+              subscription below at any time.
             </Text>
           </View>
         )}
@@ -1480,7 +1565,9 @@ export const FamilySubscriptionView: React.FC<{ onBack?: () => void }> = ({ onBa
               {t.familyCalendar.planHeading}
             </Text>
             <Text style={[styles.sectionSubtitle, { color: colors.textSecondary }]}>
-              {t.familyCalendar.planSubtitle}
+              {isCancelled
+                ? 'Your subscription is cancelled. No meal deliveries are scheduled.'
+                : t.familyCalendar.planSubtitle}
             </Text>
           </View>
 
@@ -1558,7 +1645,9 @@ export const FamilySubscriptionView: React.FC<{ onBack?: () => void }> = ({ onBa
                     );
                   }
 
-                  const dayMeals = day.isInsidePeriod
+                  const isCellActive = !isCancelled && day.isInsidePeriod;
+
+                  const dayMeals = isCellActive
                     ? mapMealsForDay({
                         members: coveredMembersList,
                         localMeals,
@@ -1582,7 +1671,7 @@ export const FamilySubscriptionView: React.FC<{ onBack?: () => void }> = ({ onBa
                         hasAnyConflict: false,
                       };
 
-                  const isTappable = day.isInsidePeriod;
+                  const isTappable = isCellActive;
                   const firstMemId = coveredMembersList[0]?.user_id || user?.uid || 'user_owner';
 
                   return (
@@ -1591,18 +1680,20 @@ export const FamilySubscriptionView: React.FC<{ onBack?: () => void }> = ({ onBa
                       style={[
                         styles.calendarDayCell,
                         {
-                          backgroundColor: !day.isInsidePeriod
+                          backgroundColor: !isCellActive
                             ? colors.bgSubtle
                             : day.isPaused
                               ? colors.bgWarningSubtle
                               : colors.bgSurface,
-                          borderColor: day.isPaused
-                            ? colors.warning
-                            : day.isToday
-                              ? colors.primary
-                              : colors.borderLight,
-                          borderWidth: day.isToday ? 2 : 1,
-                          opacity: !day.isInsidePeriod ? 0.35 : 1,
+                          borderColor: !isCellActive
+                            ? colors.borderLight
+                            : day.isPaused
+                              ? colors.warning
+                              : day.isToday
+                                ? colors.primary
+                                : colors.borderLight,
+                          borderWidth: day.isToday && isCellActive ? 2 : 1,
+                          opacity: !isCellActive ? 0.35 : 1,
                         },
                       ]}
                       onPress={() => handleTapDayCell(day)}
@@ -1612,7 +1703,7 @@ export const FamilySubscriptionView: React.FC<{ onBack?: () => void }> = ({ onBa
                       accessibilityLabel={formatDayAccessibilityLabel(
                         day.date,
                         dayMeals.assignedMeals.length,
-                        day.isPaused,
+                        day.isPaused && isCellActive,
                         dayMeals.hasAnyConflict,
                       )}
                       testID={
@@ -1627,7 +1718,8 @@ export const FamilySubscriptionView: React.FC<{ onBack?: () => void }> = ({ onBa
                           style={[
                             styles.cellDayNum,
                             {
-                              color: day.isToday ? colors.primary : colors.textPrimary,
+                              color:
+                                day.isToday && isCellActive ? colors.primary : colors.textPrimary,
                             },
                           ]}
                         >
@@ -1644,11 +1736,11 @@ export const FamilySubscriptionView: React.FC<{ onBack?: () => void }> = ({ onBa
                       </View>
 
                       {/* Paused state or Member Meal Thumbnails */}
-                      {day.isPaused ? (
+                      {isCellActive && day.isPaused ? (
                         <View style={styles.cellPausedBadgeWrap}>
                           <Badge label="Paused" variant="warning" size="sm" />
                         </View>
-                      ) : (
+                      ) : isCellActive ? (
                         <View style={styles.cellThumbnailsRow}>
                           {dayMeals.visibleMeals.map((item) => (
                             <View
@@ -1688,7 +1780,7 @@ export const FamilySubscriptionView: React.FC<{ onBack?: () => void }> = ({ onBa
                             </View>
                           )}
                         </View>
-                      )}
+                      ) : null}
                     </TouchableOpacity>
                   );
                 })}
@@ -1825,7 +1917,8 @@ export const FamilySubscriptionView: React.FC<{ onBack?: () => void }> = ({ onBa
       </ScrollView>
 
       {/* Day Detail Popup: Modal on Web/Desktop, BottomSheet on Mobile Phones */}
-      {selectedDayItem &&
+      {!isCancelled &&
+        selectedDayItem &&
         (isWebOrDesktop ? (
           <Modal
             visible={dayDetailVisible}
@@ -1994,7 +2087,7 @@ export const FamilySubscriptionView: React.FC<{ onBack?: () => void }> = ({ onBa
       )}
 
       {/* Pause Calendar Modal */}
-      {activeSubscription && (
+      {activeSubscription && !isCancelled && (
         <SubscriptionPauseCalendarModal
           visible={pauseModalVisible}
           onClose={() => setPauseModalVisible(false)}
