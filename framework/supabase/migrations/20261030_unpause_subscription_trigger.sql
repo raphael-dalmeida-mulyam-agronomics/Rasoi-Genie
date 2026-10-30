@@ -141,3 +141,4 @@ END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 GRANT EXECUTE ON FUNCTION public.rpc_unpause_subscription_dates TO authenticated, service_role;
+

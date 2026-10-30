@@ -526,10 +526,6 @@ export const FamilySubscriptionView: React.FC<{ onBack?: () => void }> = ({ onBa
     if (!activeSubscription) return;
     const res = await addPause({ startDate: dateStr, endDate: dateStr, memberId });
     if (res.success) {
-      Alert.alert(
-        'Delivery Paused',
-        `Deliveries on ${dateStr} have been paused for ${targetName}.`,
-      );
       setDayDetailVisible(false);
       fetchPauses();
     } else {
@@ -545,10 +541,6 @@ export const FamilySubscriptionView: React.FC<{ onBack?: () => void }> = ({ onBa
     if (!activeSubscription) return;
     const res = await unpauseDate(dateStr, memberId);
     if (res.success) {
-      Alert.alert(
-        'Delivery Unpaused',
-        `Deliveries on ${dateStr} have been unpaused for ${targetName}. Meal kits will continue sequentially.`,
-      );
       setDayDetailVisible(false);
       fetchPauses();
     } else {
@@ -559,7 +551,6 @@ export const FamilySubscriptionView: React.FC<{ onBack?: () => void }> = ({ onBa
   const handleResumePause = async (pauseId: string, targetName: string = 'Deliveries') => {
     const res = await removePause(pauseId);
     if (res.success) {
-      Alert.alert('Delivery Resumed', `${targetName} resumed for this date.`);
       setDayDetailVisible(false);
       fetchPauses();
     } else {

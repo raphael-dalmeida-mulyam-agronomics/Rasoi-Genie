@@ -1,13 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  ScrollView,
-  Platform,
-  Alert,
-} from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Platform } from 'react-native';
 import { useTheme } from '../../framework/theme/ThemeContext';
 import { Modal } from '../../framework/ui/Modal';
 import { BottomSheet } from '../../framework/ui/BottomSheet';
@@ -20,8 +12,6 @@ import {
   calculateRemainingPauseAllowance,
   isDateLockedForPause,
   isDatePaused,
-  validatePauseSelection,
-  validateHighlightedPauseDays,
 } from '../../framework/services/subscriptionPlans';
 import { Subscription, SubscriptionPause } from '../../framework/services/subscriptionService';
 
@@ -64,7 +54,7 @@ export const SubscriptionPauseCalendarModal: React.FC<SubscriptionPauseCalendarM
   const t = subscriptionStrings.pauseCalendar;
 
   const [selectedMemberId, setSelectedMemberId] = useState<string | null>(null);
-  const [selectedDates, setSelectedDates] = useState<string[]>([]);
+  const [busyDate, setBusyDate] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -143,7 +133,12 @@ export const SubscriptionPauseCalendarModal: React.FC<SubscriptionPauseCalendarM
       const isLocked = isDateLockedForPause(dateObj);
       const isPaused = isDatePaused(
         dateObj,
-        pauses.map((p) => ({ startDate: p.start_date, endDate: p.end_date })),
+        pauses.map((p) => ({
+          startDate: p.start_date,
+          endDate: p.end_date,
+          memberId: p.member_id,
+        })),
+        selectedMemberId,
       );
 
       allDays.push({
@@ -177,11 +172,16 @@ export const SubscriptionPauseCalendarModal: React.FC<SubscriptionPauseCalendarM
       groupedWeeks.push(allDays.slice(i, i + 7));
     }
     return groupedWeeks;
-  }, [currentMonth, subscription.period_start, subscription.period_end, pauses]);
+  }, [currentMonth, subscription.period_start, subscription.period_end, pauses, selectedMemberId]);
 
-  const handleSelectDay = (day: Date, isActiveSub: boolean) => {
+  // Asynchronous tap handler: directly pauses or unpauses the day without modal popups or submit buttons
+  const handleSelectDay = async (day: Date, isActiveSub: boolean) => {
     setErrorMessage(null);
     const dateStr = `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, '0')}-${String(day.getDate()).padStart(2, '0')}`;
+
+    if (busyDate || isSubmitting) {
+      return;
+    }
 
     if (!isActiveSub) {
       setErrorMessage('You can only pause days within your active weekly subscription period.');
@@ -206,92 +206,52 @@ export const SubscriptionPauseCalendarModal: React.FC<SubscriptionPauseCalendarM
     );
 
     if (isPausedDay) {
+      // Direct asynchronous unpause: no popup dialog required
       if (onUnpauseDate) {
-        const formattedDateText = day.toLocaleDateString('en-IN', {
-          weekday: 'short',
-          month: 'short',
-          day: 'numeric',
-        });
-        Alert.alert(
-          'Unpause Delivery',
-          `Deliveries on ${formattedDateText} are currently paused. Would you like to unpause this day and resume deliveries?`,
-          [
-            { text: 'Keep Paused', style: 'cancel' },
-            {
-              text: 'Unpause Day',
-              onPress: async () => {
-                setIsSubmitting(true);
-                const res = await onUnpauseDate(dateStr, selectedMemberId);
-                setIsSubmitting(false);
-                if (!res.success) {
-                  setErrorMessage(res.error || 'Failed to unpause day.');
-                }
-              },
-            },
-          ],
-        );
-      } else {
-        setErrorMessage('This date is already covered by an existing pause.');
-      }
-      return;
-    }
-
-    setSelectedDates((prev) => {
-      if (prev.includes(dateStr)) {
-        return prev.filter((d) => d !== dateStr);
-      } else {
-        if (prev.length >= allowance.daysRemaining) {
-          setErrorMessage(
-            `Pause allowance reached. You have ${allowance.daysRemaining} days left in your allowance.`,
-          );
-          return prev;
+        setIsSubmitting(true);
+        setBusyDate(dateStr);
+        try {
+          const res = await onUnpauseDate(dateStr, selectedMemberId);
+          if (!res.success) {
+            setErrorMessage(res.error || 'Failed to unpause day.');
+          }
+        } catch (err: any) {
+          setErrorMessage(err?.message || 'Error unpausing day.');
+        } finally {
+          setIsSubmitting(false);
+          setBusyDate(null);
         }
-        return [...prev, dateStr].sort();
+      } else {
+        setErrorMessage('Unpause is not available.');
       }
-    });
-  };
-
-  const handleSave = async () => {
-    if (selectedDates.length === 0) {
-      setErrorMessage('Please highlight at least one day to skip.');
       return;
     }
 
-    const validation = validateHighlightedPauseDays({
-      dates: selectedDates,
-      existingPauses: pauses.map((p) => ({
-        startDate: p.start_date,
-        endDate: p.end_date,
-        daysCount: p.days_count,
-        memberId: p.member_id,
-      })),
-      periodStart: subscription.period_start,
-      periodEnd: subscription.period_end,
-      memberId: selectedMemberId,
-    });
-
-    if (!validation.valid) {
-      setErrorMessage(validation.error || 'Invalid pause selection');
+    // Direct asynchronous pause: no "highlight days to skip" button press required
+    if (allowance.daysRemaining <= 0) {
+      setErrorMessage(
+        `Pause allowance reached. You have used all ${SUBSCRIPTION_PAUSE_CONFIG.MAX_PAUSED_DAYS_PER_PERIOD} paused days in your allowance.`,
+      );
       return;
     }
 
     setIsSubmitting(true);
-    setErrorMessage(null);
-
-    const res = await onSavePause({
-      dates: selectedDates,
-      startDate: selectedDates[0],
-      endDate: selectedDates[selectedDates.length - 1],
-      memberId: selectedMemberId,
-    });
-
-    setIsSubmitting(false);
-
-    if (res.success) {
-      setSelectedDates([]);
-      onClose();
-    } else {
-      setErrorMessage(res.error || 'Failed to save skipped days.');
+    setBusyDate(dateStr);
+    try {
+      const res = await onSavePause({
+        dates: [dateStr],
+        startDate: dateStr,
+        endDate: dateStr,
+        memberId: selectedMemberId,
+      });
+      if (!res.success) {
+        setErrorMessage(res.error || 'Failed to pause delivery for this day.');
+      }
+    } catch (err: any) {
+      setErrorMessage(err?.message || 'Error pausing delivery.');
+    } finally {
+      setIsSubmitting(false);
+      setBusyDate(null);
     }
   };
 
@@ -461,17 +421,13 @@ export const SubscriptionPauseCalendarModal: React.FC<SubscriptionPauseCalendarM
                 }
 
                 const dateStr = item.dateStr;
-                const isHighlighted = selectedDates.includes(dateStr);
+                const isBusy = busyDate === dateStr;
 
                 let cellBg = colors.bgSurface;
                 let cellBorder = colors.borderLight;
                 let cellText = colors.textPrimary;
 
-                if (isHighlighted) {
-                  cellBg = colors.primary;
-                  cellBorder = colors.primary;
-                  cellText = colors.textInverse;
-                } else if (item.isPaused) {
+                if (item.isPaused) {
                   cellBg = colors.bgWarningSubtle;
                   cellBorder = colors.warning;
                   cellText = colors.textWarning;
@@ -485,7 +441,7 @@ export const SubscriptionPauseCalendarModal: React.FC<SubscriptionPauseCalendarM
                   cellText = colors.textMuted;
                 }
 
-                const canTap = item.isActiveSubscription && !item.isLocked;
+                const canTap = item.isActiveSubscription && !item.isLocked && !isSubmitting;
 
                 return (
                   <TouchableOpacity
@@ -497,6 +453,7 @@ export const SubscriptionPauseCalendarModal: React.FC<SubscriptionPauseCalendarM
                         backgroundColor: cellBg,
                         borderColor: cellBorder,
                         borderRadius: radii.sm,
+                        opacity: isBusy ? 0.6 : 1,
                       },
                     ]}
                     disabled={!canTap}
@@ -507,18 +464,11 @@ export const SubscriptionPauseCalendarModal: React.FC<SubscriptionPauseCalendarM
                     <Text style={[styles.dayCellNum, { color: cellText }]}>{item.dayNum}</Text>
 
                     {/* Small Status Indicator */}
-                    {item.isPaused ? (
+                    {isBusy ? (
+                      <View style={[styles.busyDot, { backgroundColor: colors.primary }]} />
+                    ) : item.isPaused ? (
                       <Text style={[styles.miniStatusTag, { color: colors.textWarning }]}>
                         Paused
-                      </Text>
-                    ) : isHighlighted ? (
-                      <Text
-                        style={[
-                          styles.miniStatusTag,
-                          { color: colors.textInverse, fontWeight: '800' },
-                        ]}
-                      >
-                        Skip
                       </Text>
                     ) : item.isActiveSubscription ? (
                       <View style={[styles.activeDot, { backgroundColor: colors.success }]} />
@@ -561,69 +511,31 @@ export const SubscriptionPauseCalendarModal: React.FC<SubscriptionPauseCalendarM
             <View
               style={[
                 styles.legendSwatch,
-                { backgroundColor: colors.primary, borderColor: colors.primary },
-              ]}
-            />
-            <Text style={[styles.legendText, { color: colors.textPrimary }]}>
-              Highlighted to Skip
-            </Text>
-          </View>
-          <View style={styles.legendItem}>
-            <View
-              style={[
-                styles.legendSwatch,
                 { backgroundColor: colors.bgSubtle, borderColor: colors.borderLight },
               ]}
             />
             <Text style={[styles.legendText, { color: colors.textMuted }]}>Locked</Text>
           </View>
         </View>
-      </View>
 
-      {/* Highlighted Days to Skip Summary */}
-      {selectedDates.length > 0 && (
+        {/* Async Direct-Action Tip Box */}
         <View
           style={[
-            styles.selectedRangeBox,
+            styles.tipBox,
             {
-              backgroundColor: colors.bgInfoSubtle,
-              borderColor: colors.borderInfoSubtle,
-              borderRadius: radii.md,
+              backgroundColor: colors.bgSubtle,
+              borderColor: colors.borderLight,
+              borderRadius: radii.sm,
             },
           ]}
         >
-          <View
-            style={{
-              flexDirection: 'row',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              width: '100%',
-            }}
-          >
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 }}>
-              <Icon name="time" size={18} color={colors.info} />
-              <View style={{ flex: 1 }}>
-                <Text
-                  style={[styles.selectedRangeText, { color: colors.textInfo, fontWeight: '700' }]}
-                >
-                  {selectedDates.length} delivery day{selectedDates.length === 1 ? '' : 's'}{' '}
-                  highlighted to skip
-                </Text>
-                <Text style={{ fontSize: 11, color: colors.textSecondary, marginTop: 2 }}>
-                  Subscription carries on: period extended by +{selectedDates.length} day
-                  {selectedDates.length === 1 ? '' : 's'} to make up for skipped kits.
-                </Text>
-              </View>
-            </View>
-            <TouchableOpacity
-              onPress={() => setSelectedDates([])}
-              style={{ paddingHorizontal: 8, paddingVertical: 4 }}
-            >
-              <Text style={{ fontSize: 12, color: colors.primary, fontWeight: '700' }}>Clear</Text>
-            </TouchableOpacity>
-          </View>
+          <Icon name="sparkles" size={13} color={colors.primary} />
+          <Text style={[styles.tipText, { color: colors.textSecondary }]}>
+            Tap any active day to pause delivery, or tap a paused day to unpause. Following meals
+            carry over automatically.
+          </Text>
         </View>
-      )}
+      </View>
 
       {/* Error Message */}
       {errorMessage && (
@@ -678,25 +590,23 @@ export const SubscriptionPauseCalendarModal: React.FC<SubscriptionPauseCalendarM
                     title="Resume"
                     variant="outline"
                     size="sm"
-                    onPress={() => {
-                      Alert.alert(
-                        'Resume Deliveries',
-                        `Resume all paused deliveries from ${p.start_date} to ${p.end_date}?`,
-                        [
-                          { text: 'Cancel', style: 'cancel' },
-                          {
-                            text: 'Resume Deliveries',
-                            onPress: async () => {
-                              setIsSubmitting(true);
-                              const res = await onRemovePause(p.id);
-                              setIsSubmitting(false);
-                              if (!res.success) {
-                                setErrorMessage(res.error || 'Failed to resume deliveries.');
-                              }
-                            },
-                          },
-                        ],
-                      );
+                    loading={busyDate === `pause-${p.id}`}
+                    disabled={isSubmitting}
+                    onPress={async () => {
+                      setIsSubmitting(true);
+                      setBusyDate(`pause-${p.id}`);
+                      setErrorMessage(null);
+                      try {
+                        const res = await onRemovePause(p.id);
+                        if (!res.success) {
+                          setErrorMessage(res.error || 'Failed to resume deliveries.');
+                        }
+                      } catch (err: any) {
+                        setErrorMessage(err?.message || 'Error resuming deliveries.');
+                      } finally {
+                        setIsSubmitting(false);
+                        setBusyDate(null);
+                      }
                     }}
                     testID={`pause-resume-btn-${p.id}`}
                   />
@@ -706,31 +616,6 @@ export const SubscriptionPauseCalendarModal: React.FC<SubscriptionPauseCalendarM
           ))}
         </View>
       )}
-
-      {/* Action Buttons */}
-      <View style={styles.actionsRow}>
-        <Button
-          title={t.cancelBtn}
-          variant="outline"
-          size="md"
-          onPress={onClose}
-          style={{ flex: 1, marginRight: 8 }}
-        />
-        <Button
-          title={
-            selectedDates.length > 0
-              ? `Skip ${selectedDates.length} Day${selectedDates.length === 1 ? '' : 's'} & Carry On`
-              : 'Highlight Days to Skip'
-          }
-          variant="primary"
-          size="md"
-          loading={isSubmitting}
-          disabled={selectedDates.length === 0}
-          onPress={handleSave}
-          style={{ flex: 2 }}
-          testID="confirm-save-pause-btn"
-        />
-      </View>
     </View>
   );
 
@@ -864,6 +749,12 @@ const styles = StyleSheet.create({
     borderRadius: 3,
     marginTop: 2,
   },
+  busyDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    marginTop: 2,
+  },
   legendCard: {
     flexDirection: 'row',
     justifyContent: 'space-around',
@@ -887,17 +778,18 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '600',
   },
-  selectedRangeBox: {
+  tipBox: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 12,
-    borderWidth: 1,
-    marginBottom: 14,
     gap: 8,
+    padding: 10,
+    borderWidth: 1,
+    marginTop: 10,
   },
-  selectedRangeText: {
-    fontSize: 13,
-    fontWeight: '700',
+  tipText: {
+    fontSize: 11,
+    lineHeight: 15,
+    flex: 1,
   },
   errorBox: {
     padding: 10,
@@ -919,9 +811,5 @@ const styles = StyleSheet.create({
   pauseDatesText: {
     fontSize: 13,
     fontWeight: '700',
-  },
-  actionsRow: {
-    flexDirection: 'row',
-    marginTop: 8,
   },
 });

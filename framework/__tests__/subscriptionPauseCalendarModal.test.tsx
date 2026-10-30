@@ -77,4 +77,112 @@ describe('SubscriptionPauseCalendarModal', () => {
       expect(getByText(/October 2026/i)).toBeTruthy();
     });
   });
+  it('pauses an active day directly and asynchronously on tap without requiring any button press', async () => {
+    const handleClose = jest.fn();
+    const handleSavePause = jest.fn().mockResolvedValue({ success: true });
+
+    // Ensure dates are comfortably outside 48-hour cutoff window
+    const now = new Date();
+    const targetDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 5);
+    const subStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 3);
+    const subEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 15);
+
+    const dateStr = `${targetDate.getFullYear()}-${String(targetDate.getMonth() + 1).padStart(2, '0')}-${String(targetDate.getDate()).padStart(2, '0')}`;
+
+    const sub: Subscription = {
+      ...mockSubscription,
+      period_start: subStart.toISOString(),
+      period_end: subEnd.toISOString(),
+    };
+
+    const { getByTestId, queryByTestId, queryByText } = await render(
+      <ThemeProvider>
+        <SubscriptionPauseCalendarModal
+          visible={true}
+          onClose={handleClose}
+          subscription={sub}
+          pauses={[]}
+          onSavePause={handleSavePause}
+        />
+      </ThemeProvider>,
+    );
+
+    // 1. Verify "Highlight Days to Skip" and redundant close buttons do NOT exist
+    expect(queryByTestId('confirm-save-pause-btn')).toBeNull();
+    expect(queryByText('Highlight Days to Skip')).toBeNull();
+
+    // 2. Tap the active day cell directly
+    const dayCell = getByTestId(`pause-day-${dateStr}`);
+    expect(dayCell).toBeTruthy();
+
+    fireEvent.press(dayCell);
+
+    // 3. onSavePause must be triggered immediately and asynchronously
+    await waitFor(() => {
+      expect(handleSavePause).toHaveBeenCalledTimes(1);
+      expect(handleSavePause).toHaveBeenCalledWith({
+        dates: [dateStr],
+        startDate: dateStr,
+        endDate: dateStr,
+        memberId: null,
+      });
+    });
+  });
+
+  it('unpauses a paused day directly and asynchronously on tap without opening an alert popup', async () => {
+    const handleClose = jest.fn();
+    const handleSavePause = jest.fn().mockResolvedValue({ success: true });
+    const handleUnpauseDate = jest.fn().mockResolvedValue({ success: true });
+
+    const now = new Date();
+    const targetDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 6);
+    const subStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 3);
+    const subEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 15);
+
+    const dateStr = `${targetDate.getFullYear()}-${String(targetDate.getMonth() + 1).padStart(2, '0')}-${String(targetDate.getDate()).padStart(2, '0')}`;
+
+    const sub: Subscription = {
+      ...mockSubscription,
+      period_start: subStart.toISOString(),
+      period_end: subEnd.toISOString(),
+    };
+
+    const existingPauses = [
+      {
+        id: 'pause_test_1',
+        subscription_id: sub.id,
+        member_id: null,
+        start_date: dateStr,
+        end_date: dateStr,
+        days_count: 1,
+        created_by: 'user_1',
+        created_at: new Date().toISOString(),
+      },
+    ];
+
+    const { getByTestId } = await render(
+      <ThemeProvider>
+        <SubscriptionPauseCalendarModal
+          visible={true}
+          onClose={handleClose}
+          subscription={sub}
+          pauses={existingPauses}
+          onSavePause={handleSavePause}
+          onUnpauseDate={handleUnpauseDate}
+        />
+      </ThemeProvider>,
+    );
+
+    // Tap the paused day cell directly
+    const dayCell = getByTestId(`pause-day-${dateStr}`);
+    expect(dayCell).toBeTruthy();
+
+    fireEvent.press(dayCell);
+
+    // onUnpauseDate must be invoked directly and asynchronously
+    await waitFor(() => {
+      expect(handleUnpauseDate).toHaveBeenCalledTimes(1);
+      expect(handleUnpauseDate).toHaveBeenCalledWith(dateStr, null);
+    });
+  });
 });
