@@ -959,19 +959,25 @@ export const FamilySubscriptionView: React.FC<{ onBack?: () => void }> = ({ onBa
                 </View>
               )}
 
-              {/* Assigned Kit or Empty State */}
+              {/* Assigned Kit or Empty State (Clickable mealkit name pops up details) */}
               {kit ? (
-                <View
+                <TouchableOpacity
+                  activeOpacity={0.7}
+                  onPress={() => handleOpenMealDetail(kit)}
                   style={[
                     styles.dayKitCard,
                     { backgroundColor: colors.bgSubtle, borderColor: colors.borderLight },
                   ]}
+                  testID="day-detail-kit-card"
                 >
                   {kit.heroImage ? (
                     <Image source={{ uri: kit.heroImage }} style={styles.dayKitImg} />
                   ) : null}
                   <View style={{ flex: 1, marginLeft: 10 }}>
-                    <Text style={[styles.dayKitName, { color: colors.textPrimary }]}>
+                    <Text
+                      style={[styles.dayKitName, { color: colors.textPrimary }]}
+                      testID="day-detail-kit-name"
+                    >
                       {kit.name}
                     </Text>
                     <Text style={[styles.dayKitMeta, { color: colors.textSecondary }]}>
@@ -979,7 +985,7 @@ export const FamilySubscriptionView: React.FC<{ onBack?: () => void }> = ({ onBa
                       Protein
                     </Text>
                   </View>
-                </View>
+                </TouchableOpacity>
               ) : (
                 <View
                   style={[
@@ -998,16 +1004,6 @@ export const FamilySubscriptionView: React.FC<{ onBack?: () => void }> = ({ onBa
               {isOwner && (
                 <View>
                   <View style={styles.memberActionButtonsRow}>
-                    {kit && (
-                      <Button
-                        title="View Details"
-                        variant="outline"
-                        size="sm"
-                        onPress={() => handleOpenMealDetail(kit)}
-                        style={{ flex: 1, marginRight: 8 }}
-                        testID="cell-view-details-btn"
-                      />
-                    )}
                     <Button
                       title="Change Recipe"
                       variant="primary"
@@ -1890,6 +1886,7 @@ export const FamilySubscriptionView: React.FC<{ onBack?: () => void }> = ({ onBa
                               <Text
                                 style={[styles.planMealRowName, { color: colors.textPrimary }]}
                                 numberOfLines={1}
+                                testID={`plan-meal-name-${member.user_id}-${item.weekday}`}
                               >
                                 {item.kit?.name || 'No recipe assigned'}
                               </Text>
@@ -1964,33 +1961,22 @@ export const FamilySubscriptionView: React.FC<{ onBack?: () => void }> = ({ onBa
                             </View>
                           </TouchableOpacity>
 
-                          {/* Row Actions: View Details & Swap */}
-                          <View style={styles.planMealRowButtons}>
-                            {item.kit && (
-                              <Button
-                                title="View Details"
-                                variant="outline"
-                                size="sm"
-                                onPress={() => handleOpenMealDetail(item.kit)}
-                                testID={`view-meal-details-btn-${member.user_id}-${item.weekday}`}
-                              />
-                            )}
-                            {isOwner && (
-                              <Button
-                                title="Swap"
-                                variant={item.conflict.hasConflict ? 'primary' : 'outline'}
-                                size="sm"
-                                onPress={() => {
-                                  handleOpenPicker({
-                                    member,
-                                    weekday: item.weekday,
-                                    currentKit: item.kit,
-                                  });
-                                }}
-                                testID={`swap-meal-btn-${member.user_id}-${item.weekday}`}
-                              />
-                            )}
-                          </View>
+                          {/* Swap Button (Owner only) */}
+                          {isOwner && (
+                            <Button
+                              title="Swap"
+                              variant={item.conflict.hasConflict ? 'primary' : 'outline'}
+                              size="sm"
+                              onPress={() => {
+                                handleOpenPicker({
+                                  member,
+                                  weekday: item.weekday,
+                                  currentKit: item.kit,
+                                });
+                              }}
+                              testID={`swap-meal-btn-${member.user_id}-${item.weekday}`}
+                            />
+                          )}
                         </View>
                       ))}
                     </View>
@@ -2588,9 +2574,15 @@ export const FamilySubscriptionView: React.FC<{ onBack?: () => void }> = ({ onBa
                       </View>
                     )}
                     <View style={{ flex: 1, paddingHorizontal: 10 }}>
-                      <Text style={[styles.catalogKitName, { color: colors.textPrimary }]}>
-                        {kit.name}
-                      </Text>
+                      <TouchableOpacity
+                        activeOpacity={0.7}
+                        onPress={() => handleOpenMealDetail(kit)}
+                        testID={`picker-kit-name-${kit.id}`}
+                      >
+                        <Text style={[styles.catalogKitName, { color: colors.textPrimary }]}>
+                          {kit.name}
+                        </Text>
+                      </TouchableOpacity>
                       <Text style={[styles.catalogKitMeta, { color: colors.textSecondary }]}>
                         {kit.cuisine} • {kit.diet.toUpperCase()} • {kit.spiceLevel}
                       </Text>
@@ -2607,21 +2599,12 @@ export const FamilySubscriptionView: React.FC<{ onBack?: () => void }> = ({ onBa
                         </Text>
                       )}
                     </View>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                      <Button
-                        title="View Details"
-                        size="sm"
-                        variant="ghost"
-                        onPress={() => handleOpenMealDetail(kit)}
-                        testID={`picker-kit-details-btn-${kit.id}`}
-                      />
-                      <Button
-                        title="Select"
-                        size="sm"
-                        variant={conflict.hasConflict ? 'secondary' : 'primary'}
-                        onPress={() => handleSelectKitForCell(kit.id)}
-                      />
-                    </View>
+                    <Button
+                      title="Select"
+                      size="sm"
+                      variant={conflict.hasConflict ? 'secondary' : 'primary'}
+                      onPress={() => handleSelectKitForCell(kit.id)}
+                    />
                   </TouchableOpacity>
                 );
               })

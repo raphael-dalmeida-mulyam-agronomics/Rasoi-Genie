@@ -290,19 +290,22 @@ describe('FamilySubscriptionView - Meal Kit Plan Preview and Dietary Warnings', 
     expect(getByText('No meal kits found')).toBeTruthy();
   });
 
-  it('opens meal kit details modal when clicking View Details next to swap button', async () => {
+  it('opens meal kit details modal when clicking the mealkit name directly (no View Details button)', async () => {
     const { getByTestId, getAllByText, queryByTestId } = await render(
       <ThemeProvider>
         <FamilySubscriptionView />
       </ThemeProvider>,
     );
 
-    // Monday row for Priya Sharma has a "View Details" button
-    const viewDetailsBtn = getByTestId('view-meal-details-btn-user_owner-0');
-    expect(viewDetailsBtn).toBeTruthy();
+    // Verify "View Details" button was removed
+    expect(queryByTestId('view-meal-details-btn-user_owner-0')).toBeNull();
+
+    // Monday row for Priya Sharma: click the meal kit name directly
+    const mealName = getByTestId('plan-meal-name-user_owner-0');
+    expect(mealName).toBeTruthy();
 
     await act(async () => {
-      fireEvent.press(viewDetailsBtn);
+      fireEvent.press(mealName);
     });
 
     // Meal detail modal opens with the kit details and close button
@@ -321,32 +324,12 @@ describe('FamilySubscriptionView - Meal Kit Plan Preview and Dietary Warnings', 
     });
   });
 
-  it('opens meal kit details modal when tapping meal row or view details in catalog picker', async () => {
+  it('opens meal kit details modal when tapping meal name in catalog picker', async () => {
     const { getByTestId, getAllByText, queryByTestId } = await render(
       <ThemeProvider>
         <FamilySubscriptionView />
       </ThemeProvider>,
     );
-
-    // Tap the meal item cell for Priya Sharma Monday
-    const mealCell = getByTestId('plan-meal-cell-user_owner-0');
-    expect(mealCell).toBeTruthy();
-
-    await act(async () => {
-      fireEvent.press(mealCell);
-    });
-
-    expect(getByTestId('modal-close-detail-btn')).toBeTruthy();
-    expect(getAllByText(/Biryani/i).length).toBeGreaterThan(0);
-
-    // Close the detail modal
-    await act(async () => {
-      fireEvent.press(getByTestId('modal-close-detail-btn'));
-    });
-
-    await waitFor(() => {
-      expect(queryByTestId('modal-close-detail-btn')).toBeNull();
-    });
 
     // Open swap picker modal
     const swapBtn = getByTestId('swap-meal-btn-user_owner-0');
@@ -354,12 +337,15 @@ describe('FamilySubscriptionView - Meal Kit Plan Preview and Dietary Warnings', 
       fireEvent.press(swapBtn);
     });
 
-    // In picker modal, kit-101 has a "View Details" button
-    const pickerDetailsBtn = getByTestId('picker-kit-details-btn-kit-101');
-    expect(pickerDetailsBtn).toBeTruthy();
+    // In picker modal, "View Details" button is removed
+    expect(queryByTestId('picker-kit-details-btn-kit-101')).toBeNull();
+
+    // Clicking the mealkit name in picker modal opens details
+    const pickerKitName = getByTestId('picker-kit-name-kit-101');
+    expect(pickerKitName).toBeTruthy();
 
     await act(async () => {
-      fireEvent.press(pickerDetailsBtn);
+      fireEvent.press(pickerKitName);
     });
 
     // Detail modal opens for Paneer Butter Masala Kit
