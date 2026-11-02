@@ -75,6 +75,21 @@ jest.mock('../context/WalletContext', () => ({
   }),
 }));
 
+jest.mock('../context/CartContext', () => ({
+  useCart: () => ({ addItem: jest.fn() }),
+  CartProvider: ({ children }: any) => children,
+}));
+
+jest.mock('../context/WishlistContext', () => ({
+  useWishlist: () => ({ isInWishlist: jest.fn(() => false), toggleWishlist: jest.fn() }),
+  WishlistProvider: ({ children }: any) => children,
+}));
+
+jest.mock('../context/PreferencesContext', () => ({
+  usePreferences: () => ({ preferences: {} }),
+  PreferencesProvider: ({ children }: any) => children,
+}));
+
 const mockAssignMeal = jest.fn();
 const mockClearMeal = jest.fn();
 const mockSetMemberPlan = jest.fn();
@@ -273,6 +288,91 @@ describe('FamilySubscriptionView - Meal Kit Plan Preview and Dietary Warnings', 
     });
 
     expect(getByText('No meal kits found')).toBeTruthy();
+  });
+
+  it('opens meal kit details modal when clicking View Details next to swap button', async () => {
+    const { getByTestId, getAllByText, queryByTestId } = await render(
+      <ThemeProvider>
+        <FamilySubscriptionView />
+      </ThemeProvider>,
+    );
+
+    // Monday row for Priya Sharma has a "View Details" button
+    const viewDetailsBtn = getByTestId('view-meal-details-btn-user_owner-0');
+    expect(viewDetailsBtn).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.press(viewDetailsBtn);
+    });
+
+    // Meal detail modal opens with the kit details and close button
+    const closeBtn = getByTestId('modal-close-detail-btn');
+    expect(closeBtn).toBeTruthy();
+    expect(getAllByText(/Biryani/i).length).toBeGreaterThan(0);
+
+    // Close the detail modal
+    await act(async () => {
+      fireEvent.press(closeBtn);
+    });
+
+    // Detail modal should close
+    await waitFor(() => {
+      expect(queryByTestId('modal-close-detail-btn')).toBeNull();
+    });
+  });
+
+  it('opens meal kit details modal when tapping meal row or view details in catalog picker', async () => {
+    const { getByTestId, getAllByText, queryByTestId } = await render(
+      <ThemeProvider>
+        <FamilySubscriptionView />
+      </ThemeProvider>,
+    );
+
+    // Tap the meal item cell for Priya Sharma Monday
+    const mealCell = getByTestId('plan-meal-cell-user_owner-0');
+    expect(mealCell).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.press(mealCell);
+    });
+
+    expect(getByTestId('modal-close-detail-btn')).toBeTruthy();
+    expect(getAllByText(/Biryani/i).length).toBeGreaterThan(0);
+
+    // Close the detail modal
+    await act(async () => {
+      fireEvent.press(getByTestId('modal-close-detail-btn'));
+    });
+
+    await waitFor(() => {
+      expect(queryByTestId('modal-close-detail-btn')).toBeNull();
+    });
+
+    // Open swap picker modal
+    const swapBtn = getByTestId('swap-meal-btn-user_owner-0');
+    await act(async () => {
+      fireEvent.press(swapBtn);
+    });
+
+    // In picker modal, kit-101 has a "View Details" button
+    const pickerDetailsBtn = getByTestId('picker-kit-details-btn-kit-101');
+    expect(pickerDetailsBtn).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.press(pickerDetailsBtn);
+    });
+
+    // Detail modal opens for Paneer Butter Masala Kit
+    expect(getByTestId('modal-close-detail-btn')).toBeTruthy();
+    expect(getAllByText('Paneer Butter Masala Kit').length).toBeGreaterThan(0);
+
+    await act(async () => {
+      fireEvent.press(getByTestId('modal-close-detail-btn'));
+    });
+
+    await waitFor(() => {
+      expect(queryByTestId('modal-close-detail-btn')).toBeNull();
+    });
   });
 
   it('warns owner with an Alert when applying a plan to everyone if it creates dietary conflicts', async () => {

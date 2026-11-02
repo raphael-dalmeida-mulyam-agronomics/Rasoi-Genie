@@ -54,6 +54,7 @@ import { Icon } from '../../framework/ui/Icon';
 import { Modal } from '../../framework/ui/Modal';
 import { SegmentedControl } from '../../framework/ui/SegmentedControl';
 import { MockPaymentGatewayModal } from '../checkout/MockPaymentGatewayModal';
+import { MealDetailModal } from '../meal-detail/MealDetailModal';
 import { SubscriptionPauseCalendarModal } from '../subscription/SubscriptionPauseCalendarModal';
 
 const PLAN_SEGMENTS = [
@@ -172,6 +173,16 @@ export const FamilySubscriptionView: React.FC<{ onBack?: () => void }> = ({ onBa
   } | null>(null);
   const [catalogFilterDiet, setCatalogFilterDiet] = useState<string>('all');
   const [pickerSearchQuery, setPickerSearchQuery] = useState<string>('');
+
+  // Meal kit detail modal state
+  const [selectedDetailKit, setSelectedDetailKit] = useState<MealKit | null>(null);
+  const [detailModalVisible, setDetailModalVisible] = useState(false);
+
+  const handleOpenMealDetail = (kit: MealKit | null | undefined) => {
+    if (!kit) return;
+    setSelectedDetailKit(kit);
+    setDetailModalVisible(true);
+  };
 
   const handleOpenPicker = (cell: {
     member: FamilyMember;
@@ -987,6 +998,16 @@ export const FamilySubscriptionView: React.FC<{ onBack?: () => void }> = ({ onBa
               {isOwner && (
                 <View>
                   <View style={styles.memberActionButtonsRow}>
+                    {kit && (
+                      <Button
+                        title="View Details"
+                        variant="outline"
+                        size="sm"
+                        onPress={() => handleOpenMealDetail(kit)}
+                        style={{ flex: 1, marginRight: 8 }}
+                        testID="cell-view-details-btn"
+                      />
+                    )}
                     <Button
                       title="Change Recipe"
                       variant="primary"
@@ -1834,110 +1855,142 @@ export const FamilySubscriptionView: React.FC<{ onBack?: () => void }> = ({ onBa
                             </Text>
                           </View>
 
-                          {/* Meal Kit Thumbnail */}
-                          {item.kit?.heroImage ? (
-                            <Image
-                              source={{ uri: item.kit.heroImage }}
-                              style={styles.planMealRowImg}
-                            />
-                          ) : (
-                            <View
-                              style={[
-                                styles.planMealRowImgPlaceholder,
-                                { backgroundColor: colors.bgSubtle },
-                              ]}
-                            >
-                              <Icon name="restaurant-outline" size={16} color={colors.textMuted} />
-                            </View>
-                          )}
-
-                          {/* Meal Info */}
-                          <View style={{ flex: 1, marginHorizontal: 8 }}>
-                            <Text
-                              style={[styles.planMealRowName, { color: colors.textPrimary }]}
-                              numberOfLines={1}
-                            >
-                              {item.kit?.name || 'No recipe assigned'}
-                            </Text>
-                            <View
-                              style={{
-                                flexDirection: 'row',
-                                alignItems: 'center',
-                                gap: 6,
-                                marginTop: 2,
-                                flexWrap: 'wrap',
-                              }}
-                            >
-                              {item.kit?.cuisine && (
-                                <Text
-                                  style={[styles.planMealRowMeta, { color: colors.textSecondary }]}
-                                >
-                                  {item.kit.cuisine}
-                                </Text>
-                              )}
-                              {item.kit?.diet && (
-                                <Badge
-                                  label={item.kit.diet.toUpperCase()}
-                                  variant={
-                                    item.kit.diet === 'veg'
-                                      ? 'veg'
-                                      : item.kit.diet === 'vegan'
-                                        ? 'vegan'
-                                        : 'nonveg'
-                                  }
-                                  size="sm"
+                          {/* Meal Kit Thumbnail & Meal Info (Touchable to view details) */}
+                          <TouchableOpacity
+                            activeOpacity={item.kit ? 0.7 : 1}
+                            onPress={() => {
+                              if (item.kit) handleOpenMealDetail(item.kit);
+                            }}
+                            style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}
+                            testID={`plan-meal-cell-${member.user_id}-${item.weekday}`}
+                          >
+                            {/* Meal Kit Thumbnail */}
+                            {item.kit?.heroImage ? (
+                              <Image
+                                source={{ uri: item.kit.heroImage }}
+                                style={styles.planMealRowImg}
+                              />
+                            ) : (
+                              <View
+                                style={[
+                                  styles.planMealRowImgPlaceholder,
+                                  { backgroundColor: colors.bgSubtle },
+                                ]}
+                              >
+                                <Icon
+                                  name="restaurant-outline"
+                                  size={16}
+                                  color={colors.textMuted}
                                 />
-                              )}
-                              {item.kit?.nutrition?.protein && (
-                                <Text
-                                  style={[
-                                    styles.planMealRowMeta,
-                                    { color: colors.primary, fontWeight: '700' },
-                                  ]}
-                                >
-                                  {item.kit.nutrition.protein}g protein
-                                </Text>
-                              )}
-                            </View>
+                              </View>
+                            )}
 
-                            {/* Dietary Conflict Flag inside Day Row */}
-                            {item.conflict.hasConflict && (
+                            {/* Meal Info */}
+                            <View style={{ flex: 1, marginHorizontal: 8 }}>
+                              <Text
+                                style={[styles.planMealRowName, { color: colors.textPrimary }]}
+                                numberOfLines={1}
+                              >
+                                {item.kit?.name || 'No recipe assigned'}
+                              </Text>
                               <View
                                 style={{
                                   flexDirection: 'row',
                                   alignItems: 'center',
-                                  gap: 4,
-                                  marginTop: 4,
+                                  gap: 6,
+                                  marginTop: 2,
+                                  flexWrap: 'wrap',
                                 }}
-                                testID={`dietary-clash-pill-${member.user_id}-${item.weekday}`}
                               >
-                                <Icon name="alert" size={12} color={colors.warning} />
-                                <Text
-                                  style={{ fontSize: 11, fontWeight: '700', color: colors.warning }}
-                                  numberOfLines={1}
-                                >
-                                  {item.conflict.reasons[0]}
-                                </Text>
+                                {item.kit?.cuisine && (
+                                  <Text
+                                    style={[
+                                      styles.planMealRowMeta,
+                                      { color: colors.textSecondary },
+                                    ]}
+                                  >
+                                    {item.kit.cuisine}
+                                  </Text>
+                                )}
+                                {item.kit?.diet && (
+                                  <Badge
+                                    label={item.kit.diet.toUpperCase()}
+                                    variant={
+                                      item.kit.diet === 'veg'
+                                        ? 'veg'
+                                        : item.kit.diet === 'vegan'
+                                          ? 'vegan'
+                                          : 'nonveg'
+                                    }
+                                    size="sm"
+                                  />
+                                )}
+                                {item.kit?.nutrition?.protein && (
+                                  <Text
+                                    style={[
+                                      styles.planMealRowMeta,
+                                      { color: colors.primary, fontWeight: '700' },
+                                    ]}
+                                  >
+                                    {item.kit.nutrition.protein}g protein
+                                  </Text>
+                                )}
                               </View>
+
+                              {/* Dietary Conflict Flag inside Day Row */}
+                              {item.conflict.hasConflict && (
+                                <View
+                                  style={{
+                                    flexDirection: 'row',
+                                    alignItems: 'center',
+                                    gap: 4,
+                                    marginTop: 4,
+                                  }}
+                                  testID={`dietary-clash-pill-${member.user_id}-${item.weekday}`}
+                                >
+                                  <Icon name="alert" size={12} color={colors.warning} />
+                                  <Text
+                                    style={{
+                                      fontSize: 11,
+                                      fontWeight: '700',
+                                      color: colors.warning,
+                                    }}
+                                    numberOfLines={1}
+                                  >
+                                    {item.conflict.reasons[0]}
+                                  </Text>
+                                </View>
+                              )}
+                            </View>
+                          </TouchableOpacity>
+
+                          {/* Row Actions: View Details & Swap */}
+                          <View style={styles.planMealRowButtons}>
+                            {item.kit && (
+                              <Button
+                                title="View Details"
+                                variant="outline"
+                                size="sm"
+                                onPress={() => handleOpenMealDetail(item.kit)}
+                                testID={`view-meal-details-btn-${member.user_id}-${item.weekday}`}
+                              />
+                            )}
+                            {isOwner && (
+                              <Button
+                                title="Swap"
+                                variant={item.conflict.hasConflict ? 'primary' : 'outline'}
+                                size="sm"
+                                onPress={() => {
+                                  handleOpenPicker({
+                                    member,
+                                    weekday: item.weekday,
+                                    currentKit: item.kit,
+                                  });
+                                }}
+                                testID={`swap-meal-btn-${member.user_id}-${item.weekday}`}
+                              />
                             )}
                           </View>
-
-                          {/* Swap Button (Owner only) */}
-                          {isOwner && (
-                            <Button
-                              title="Swap"
-                              variant={item.conflict.hasConflict ? 'primary' : 'outline'}
-                              size="sm"
-                              onPress={() => {
-                                handleOpenPicker({
-                                  member,
-                                  weekday: item.weekday,
-                                  currentKit: item.kit,
-                                });
-                              }}
-                              testID={`swap-meal-btn-${member.user_id}-${item.weekday}`}
-                            />
-                          )}
                         </View>
                       ))}
                     </View>
@@ -2554,12 +2607,21 @@ export const FamilySubscriptionView: React.FC<{ onBack?: () => void }> = ({ onBa
                         </Text>
                       )}
                     </View>
-                    <Button
-                      title="Select"
-                      size="sm"
-                      variant={conflict.hasConflict ? 'secondary' : 'primary'}
-                      onPress={() => handleSelectKitForCell(kit.id)}
-                    />
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                      <Button
+                        title="View Details"
+                        size="sm"
+                        variant="ghost"
+                        onPress={() => handleOpenMealDetail(kit)}
+                        testID={`picker-kit-details-btn-${kit.id}`}
+                      />
+                      <Button
+                        title="Select"
+                        size="sm"
+                        variant={conflict.hasConflict ? 'secondary' : 'primary'}
+                        onPress={() => handleSelectKitForCell(kit.id)}
+                      />
+                    </View>
                   </TouchableOpacity>
                 );
               })
@@ -2614,6 +2676,18 @@ export const FamilySubscriptionView: React.FC<{ onBack?: () => void }> = ({ onBa
           }}
           onRemovePause={async (pauseId) => {
             return await removePause(pauseId);
+          }}
+        />
+      )}
+
+      {/* Meal Kit Detail Modal */}
+      {detailModalVisible && selectedDetailKit && (
+        <MealDetailModal
+          kit={selectedDetailKit}
+          visible={detailModalVisible}
+          onClose={() => {
+            setDetailModalVisible(false);
+            setSelectedDetailKit(null);
           }}
         />
       )}
@@ -2872,6 +2946,12 @@ const styles = StyleSheet.create({
   },
   planMealRowMeta: {
     fontSize: 11,
+  },
+  planMealRowButtons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    flexShrink: 0,
   },
   checkoutClashCard: {
     padding: 12,
