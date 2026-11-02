@@ -61,15 +61,39 @@ export function checkDietaryConflict(
     const isVegOnly = dietTypes.includes('veg') && !dietTypes.includes('nonveg');
     const isVeganOnly = dietTypes.includes('vegan');
     const isJainOnly = dietTypes.includes('jain');
+    const isKetoOnly = dietTypes.includes('keto');
 
-    if (isVegOnly && kit.diet === 'nonveg') {
+    const isNonVeg =
+      kit.diet === 'nonveg' ||
+      (kit.dietaryTags?.includes('nonveg') &&
+        !kit.dietaryTags?.includes('veg') &&
+        !kit.dietaryTags?.includes('vegan'));
+    if (isVegOnly && isNonVeg) {
       reasons.push('Non-vegetarian dish assigned to vegetarian member');
     }
-    if (isVeganOnly && kit.diet !== 'vegan' && !kit.dietaryTags?.includes('vegan')) {
+
+    const isVegan =
+      kit.diet === 'vegan' ||
+      kit.dietaryTags?.includes('vegan') ||
+      kit.tags?.some((t) => t.toLowerCase() === 'vegan' || t.toLowerCase() === 'diet: vegan');
+    if (isVeganOnly && !isVegan) {
       reasons.push('Non-vegan dish assigned to vegan member');
     }
-    if (isJainOnly && !kit.dietaryTags?.includes('jain')) {
+
+    const isJain =
+      kit.diet === 'jain' ||
+      kit.dietaryTags?.includes('jain') ||
+      kit.tags?.some((t) => t.toLowerCase() === 'jain' || t.toLowerCase() === 'diet: jain');
+    if (isJainOnly && !isJain) {
       reasons.push('Non-Jain ingredients assigned to Jain preference');
+    }
+
+    const isKeto =
+      kit.diet === 'keto' ||
+      kit.dietaryTags?.includes('keto') ||
+      kit.tags?.some((t) => t.toLowerCase() === 'keto' || t.toLowerCase() === 'diet: keto');
+    if (isKetoOnly && !isKeto) {
+      reasons.push('Non-keto dish assigned to keto preference');
     }
   }
 

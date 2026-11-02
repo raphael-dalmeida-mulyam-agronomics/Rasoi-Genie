@@ -5,6 +5,9 @@ import {
   resolvePlanMealKits,
   WEEKDAYS,
 } from '../services/subscriptionPlans';
+import { checkDietaryConflict } from '../family/dietaryConflicts';
+import { FamilyMember } from '../services/familyService';
+import { getMealKitById } from '../services/mealKitsService';
 
 describe('Subscription Plan Catalog Validity Tests', () => {
   it('contains the 4 standard weekly plans: High Protein, Keto, Vegan, and Kids', () => {
@@ -68,5 +71,84 @@ describe('Subscription Plan Catalog Validity Tests', () => {
     expect(WEEKDAYS).toHaveLength(7);
     expect(WEEKDAYS[0]!.full).toBe('Monday');
     expect(WEEKDAYS[6]!.full).toBe('Sunday');
+  });
+
+  describe('Dietary Tags and Dietary Conflict Verification', () => {
+    it('every meal kit in the Vegan weekly plan has diet vegan and both veg and vegan in dietaryTags', () => {
+      const resolvedVegan = resolvePlanMealKits('vegan');
+      expect(resolvedVegan).toHaveLength(7);
+
+      resolvedVegan.forEach((dayMeal) => {
+        const kit = dayMeal.mealKit;
+        expect(kit).toBeDefined();
+        expect(kit!.diet).toBe('vegan');
+        expect(kit!.dietaryTags).toContain('vegan');
+        expect(kit!.dietaryTags).toContain('veg');
+      });
+    });
+
+    it('pure evaluator produces 0 conflicts across all 7 days of the vegan plan for a vegan member', () => {
+      const veganMember: FamilyMember = {
+        family_id: 'fam_test',
+        user_id: 'user_vegan',
+        role: 'member',
+        display_name: 'Vegan Member',
+        joined_at: new Date().toISOString(),
+        preferences: {
+          dietTypes: ['vegan'],
+        },
+      };
+
+      const resolvedVegan = resolvePlanMealKits('vegan');
+      expect(resolvedVegan).toHaveLength(7);
+
+      resolvedVegan.forEach((dayMeal) => {
+        const conflict = checkDietaryConflict(veganMember, dayMeal.mealKit);
+        expect(conflict.hasConflict).toBe(false);
+        expect(conflict.reasons).toEqual([]);
+      });
+    });
+
+    it('pure evaluator produces 0 conflicts across all 7 days of the vegan plan for a vegetarian member', () => {
+      const vegMember: FamilyMember = {
+        family_id: 'fam_test',
+        user_id: 'user_veg',
+        role: 'member',
+        display_name: 'Vegetarian Member',
+        joined_at: new Date().toISOString(),
+        preferences: {
+          dietTypes: ['veg'],
+        },
+      };
+
+      const resolvedVegan = resolvePlanMealKits('vegan');
+      expect(resolvedVegan).toHaveLength(7);
+
+      resolvedVegan.forEach((dayMeal) => {
+        const conflict = checkDietaryConflict(vegMember, dayMeal.mealKit);
+        expect(conflict.hasConflict).toBe(false);
+        expect(conflict.reasons).toEqual([]);
+      });
+    });
+
+    it('pure evaluator correctly raises conflict when a vegetarian meal kit containing dairy is evaluated for a vegan member', () => {
+      const veganMember: FamilyMember = {
+        family_id: 'fam_test',
+        user_id: 'user_vegan',
+        role: 'member',
+        display_name: 'Vegan Member',
+        joined_at: new Date().toISOString(),
+        preferences: {
+          dietTypes: ['vegan'],
+        },
+      };
+
+      const paneerKit = getMealKitById('kit-101'); // Paneer Butter Masala (veg with dairy)
+      expect(paneerKit).toBeDefined();
+
+      const conflict = checkDietaryConflict(veganMember, paneerKit);
+      expect(conflict.hasConflict).toBe(true);
+      expect(conflict.reasons).toContain('Non-vegan dish assigned to vegan member');
+    });
   });
 });

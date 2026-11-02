@@ -981,8 +981,18 @@ export const FamilySubscriptionView: React.FC<{ onBack?: () => void }> = ({ onBa
                       {kit.name}
                     </Text>
                     <Text style={[styles.dayKitMeta, { color: colors.textSecondary }]}>
-                      {kit.cuisine} • {kit.diet.toUpperCase()} • {kit.nutrition?.protein || 20}g
-                      Protein
+                      {kit.cuisine} •{' '}
+                      {Array.from(
+                        new Set([
+                          kit.diet,
+                          ...(kit.dietaryTags || []).filter(
+                            (d) => d === 'veg' || d === 'vegan' || d === 'nonveg',
+                          ),
+                        ]),
+                      )
+                        .map((d) => d.toUpperCase())
+                        .join(' / ')}{' '}
+                      • {kit.nutrition?.protein || 20}g Protein
                     </Text>
                   </View>
                 </TouchableOpacity>
@@ -1909,7 +1919,25 @@ export const FamilySubscriptionView: React.FC<{ onBack?: () => void }> = ({ onBa
                                     {item.kit.cuisine}
                                   </Text>
                                 )}
-                                {item.kit?.diet && (
+                                {item.kit?.dietaryTags && item.kit.dietaryTags.length > 0 ? (
+                                  Array.from(
+                                    new Set([
+                                      item.kit.diet,
+                                      ...item.kit.dietaryTags.filter(
+                                        (d) => d === 'veg' || d === 'vegan' || d === 'nonveg',
+                                      ),
+                                    ]),
+                                  ).map((dt) => (
+                                    <Badge
+                                      key={dt}
+                                      label={dt.toUpperCase()}
+                                      variant={
+                                        dt === 'veg' ? 'veg' : dt === 'vegan' ? 'vegan' : 'nonveg'
+                                      }
+                                      size="sm"
+                                    />
+                                  ))
+                                ) : item.kit?.diet ? (
                                   <Badge
                                     label={item.kit.diet.toUpperCase()}
                                     variant={
@@ -1921,7 +1949,7 @@ export const FamilySubscriptionView: React.FC<{ onBack?: () => void }> = ({ onBa
                                     }
                                     size="sm"
                                   />
-                                )}
+                                ) : null}
                                 {item.kit?.nutrition?.protein && (
                                   <Text
                                     style={[
@@ -2584,7 +2612,18 @@ export const FamilySubscriptionView: React.FC<{ onBack?: () => void }> = ({ onBa
                         </Text>
                       </TouchableOpacity>
                       <Text style={[styles.catalogKitMeta, { color: colors.textSecondary }]}>
-                        {kit.cuisine} • {kit.diet.toUpperCase()} • {kit.spiceLevel}
+                        {kit.cuisine} •{' '}
+                        {Array.from(
+                          new Set([
+                            kit.diet,
+                            ...(kit.dietaryTags || []).filter(
+                              (d) => d === 'veg' || d === 'vegan' || d === 'nonveg',
+                            ),
+                          ]),
+                        )
+                          .map((d) => d.toUpperCase())
+                          .join(' / ')}{' '}
+                        • {kit.spiceLevel}
                       </Text>
                       {conflict.hasConflict && (
                         <Text

@@ -284,12 +284,19 @@ export const MealDetailModal: React.FC<MealDetailModalProps> = ({
                 style={styles.heroImage}
                 resizeMode="cover"
               />
-              {/* Diet Pill */}
-              <View style={styles.floatingBadge}>
-                {(() => {
-                  const badge = getDietBadgeInfo(kit.diet);
-                  return <Badge label={badge.label} variant={badge.variant} />;
-                })()}
+              {/* Diet Pill(s) */}
+              <View style={[styles.floatingBadge, { flexDirection: 'row', gap: 6 }]}>
+                {Array.from(
+                  new Set([
+                    kit.diet,
+                    ...(kit.dietaryTags || []).filter(
+                      (d) => d === 'veg' || d === 'vegan' || d === 'nonveg',
+                    ),
+                  ]),
+                ).map((dt) => {
+                  const badge = getDietBadgeInfo(dt as any);
+                  return <Badge key={dt} label={badge.label} variant={badge.variant} />;
+                })}
               </View>
 
               {/* Thumbnail Row */}

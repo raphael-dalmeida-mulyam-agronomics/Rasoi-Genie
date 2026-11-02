@@ -275,11 +275,21 @@ export function parseCategorizedTags(tags?: string[]): CategorizedTag[] {
     }
     // Strip any legacy 'Tag: ' prefix from older data
     const cleanLabel = t.replace(/^Tag:\s*/i, '');
+    const cleanLower = cleanLabel.toLowerCase();
+    const isDietary = ['veg', 'vegan', 'keto', 'jain', 'gluten-free'].includes(cleanLower);
+    if (isDietary) {
+      return {
+        category: 'diet',
+        prefix: 'Diet',
+        label: cleanLabel.toUpperCase(),
+        variant: cleanLower === 'vegan' || cleanLower === 'veg' ? 'success' : 'accent',
+      };
+    }
     return {
       category: 'specialty',
       prefix: 'Tag',
       label: cleanLabel,
-      variant: cleanLabel.toLowerCase() === 'trending' ? 'warning' : 'accent',
+      variant: cleanLower === 'trending' ? 'warning' : 'accent',
     };
   });
 }
@@ -371,7 +381,7 @@ const BASE_INITIAL_MEAL_KITS: MealKit[] = [
     dishCategory: 'Street Food',
     spiceLevel: 'Spicy',
     difficulty: 'Easy',
-    dietaryTags: ['veg'],
+    dietaryTags: ['veg', 'gluten-free'],
     isTrending: false,
     availableRegions: ['North', 'South', 'West', 'East'],
     cities: [],
@@ -1090,7 +1100,7 @@ const BASE_INITIAL_MEAL_KITS: MealKit[] = [
         stepNumber: 2,
         title: 'Simmer Keto Tikka Masala Sauce',
         instruction:
-          'In a saucepan, heat 1 tsp butter. Add Low-Carb Tomato Confit Puree (120g), Sachet 2: Tikka Masala Gravy Seasoning, and Coconut Cream (60ml). Simmer on low heat for 5 minutes until creamy and fragrant.',
+          'In a saucepan, heat 1 tsp olive oil or coconut oil. Add Low-Carb Tomato Confit Puree (120g), Sachet 2: Tikka Masala Gravy Seasoning, and Coconut Cream (60ml). Simmer on low heat for 5 minutes until creamy and fragrant.',
         timerSeconds: 300,
         imageUrl:
           'https://images.unsplash.com/photo-1547592180-85f173990554?auto=format&fit=crop&w=800&q=80',
@@ -2097,7 +2107,7 @@ const BASE_INITIAL_MEAL_KITS: MealKit[] = [
     servings: 2,
     prepTimeMinutes: 10,
     cookTimeMinutes: 15,
-    diet: 'veg',
+    diet: 'vegan',
     cuisine: 'Mexican',
     dishCategory: 'Burritos & Bowls',
     spiceLevel: 'Medium',
@@ -2354,7 +2364,7 @@ const BASE_INITIAL_MEAL_KITS: MealKit[] = [
     servings: 2,
     prepTimeMinutes: 8,
     cookTimeMinutes: 20,
-    diet: 'veg',
+    diet: 'vegan',
     cuisine: 'Mediterranean',
     dishCategory: 'Soups & Stews',
     spiceLevel: 'Mild',
@@ -2496,7 +2506,7 @@ const BASE_INITIAL_MEAL_KITS: MealKit[] = [
     servings: 2,
     prepTimeMinutes: 10,
     cookTimeMinutes: 25,
-    diet: 'veg',
+    diet: 'vegan',
     cuisine: 'European',
     dishCategory: 'Soups & Stews',
     spiceLevel: 'Mild',
@@ -2624,7 +2634,7 @@ const BASE_INITIAL_MEAL_KITS: MealKit[] = [
     servings: 2,
     prepTimeMinutes: 5,
     cookTimeMinutes: 18,
-    diet: 'veg',
+    diet: 'vegan',
     cuisine: 'North Indian',
     dishCategory: 'Soups & Stews',
     spiceLevel: 'Mild',
@@ -2693,9 +2703,9 @@ const BASE_INITIAL_MEAL_KITS: MealKit[] = [
       },
       {
         stepNumber: 3,
-        title: 'Prepare Sizzling Aromatic Desi Ghee Tadka',
+        title: 'Prepare Sizzling Aromatic Mustard Oil Tadka',
         instruction:
-          'In a small tadka pan, heat Desi Ghee (20g). Empty Sachet 1: Roasted Cumin & Black Salt Tadka (Bhuna Jeera, Kala Namak, Garam Masala) and sizzle for 30 seconds until aromatic.',
+          'In a small tadka pan, heat Mustard Oil (15ml). Empty Sachet 1: Roasted Cumin & Black Salt Tadka (Bhuna Jeera, Kala Namak, Garam Masala) and sizzle for 30 seconds until aromatic.',
         timerSeconds: 30,
         imageUrl:
           'https://images.unsplash.com/photo-1505576399279-565b52d4ac71?auto=format&fit=crop&w=800&q=80',
@@ -2894,7 +2904,7 @@ const BASE_INITIAL_MEAL_KITS: MealKit[] = [
     servings: 2,
     prepTimeMinutes: 12,
     cookTimeMinutes: 18,
-    diet: 'veg',
+    diet: 'vegan',
     cuisine: 'Indo-Chinese',
     dishCategory: 'Street Food',
     spiceLevel: 'Medium',
@@ -3042,7 +3052,7 @@ const BASE_INITIAL_MEAL_KITS: MealKit[] = [
     dishCategory: 'Biryani & Rice',
     spiceLevel: 'Medium',
     difficulty: 'Chef Special',
-    dietaryTags: ['veg', 'jain'],
+    dietaryTags: ['veg', 'jain', 'gluten-free'],
     isTrending: true,
     availableRegions: ['North', 'South', 'West', 'East'],
     cities: [],
@@ -3437,12 +3447,12 @@ const BASE_INITIAL_MEAL_KITS: MealKit[] = [
     servings: 2,
     prepTimeMinutes: 8,
     cookTimeMinutes: 15,
-    diet: 'veg',
+    diet: 'vegan',
     cuisine: 'Maharashtrian',
     dishCategory: 'Street Food',
     spiceLevel: 'Fiery',
     difficulty: 'Easy',
-    dietaryTags: ['veg'],
+    dietaryTags: ['veg', 'vegan'],
     isTrending: true,
     availableRegions: ['West', 'South', 'North', 'East'],
     cities: ['Pune'],
@@ -3522,9 +3532,9 @@ const BASE_INITIAL_MEAL_KITS: MealKit[] = [
       },
       {
         stepNumber: 3,
-        title: 'Butter-Toast Fresh Pune Ladi Pav',
+        title: 'Toast Fresh Pune Ladi Pav',
         instruction:
-          'Warm Fresh Pune Bakery Ladi Pav (4 pcs) on a hot tawa with 1 tbsp butter for 2 minutes until warm, soft, and lightly toasted.',
+          'Warm Fresh Pune Bakery Ladi Pav (4 pcs) on a hot tawa with 1 tbsp plant-based butter or oil for 2 minutes until warm, soft, and lightly toasted.',
         timerSeconds: 120,
         imageUrl:
           'https://images.unsplash.com/photo-1586190848861-99aa4a171e90?auto=format&fit=crop&w=800&q=80',
@@ -3581,12 +3591,12 @@ const BASE_INITIAL_MEAL_KITS: MealKit[] = [
     servings: 2,
     prepTimeMinutes: 10,
     cookTimeMinutes: 18,
-    diet: 'veg',
+    diet: 'vegan',
     cuisine: 'Maharashtrian',
     dishCategory: 'Curries & Gravies',
     spiceLevel: 'Spicy',
     difficulty: 'Easy',
-    dietaryTags: ['veg', 'gluten-free'],
+    dietaryTags: ['veg', 'vegan', 'gluten-free'],
     isTrending: true,
     availableRegions: ['West', 'South', 'North', 'East'],
     cities: ['Pune'],
@@ -3668,7 +3678,7 @@ const BASE_INITIAL_MEAL_KITS: MealKit[] = [
         stepNumber: 3,
         title: 'Prepare Pounded Garlic Thecha',
         instruction:
-          'In a small bowl, mix Sachet 2: Authentic Maharashtrian Thecha Masala (roasted peanuts, dry garlic, coarse cumin) with 1 tsp hot oil or ghee into a coarse, fiery green chutney condiment.',
+          'In a small bowl, mix Sachet 2: Authentic Maharashtrian Thecha Masala (roasted peanuts, dry garlic, coarse cumin) with 1 tsp hot groundnut oil into a coarse, fiery green chutney condiment.',
         timerSeconds: 60,
         imageUrl:
           'https://images.unsplash.com/photo-1505576399279-565b52d4ac71?auto=format&fit=crop&w=800&q=80',
@@ -3682,7 +3692,7 @@ const BASE_INITIAL_MEAL_KITS: MealKit[] = [
         timerSeconds: 240,
         imageUrl:
           'https://images.unsplash.com/photo-1586190848861-99aa4a171e90?auto=format&fit=crop&w=800&q=80',
-        tip: 'A little fresh white butter (loni) melted over hot bhakri is heaven on a plate.',
+        tip: 'A little fresh cold-pressed groundnut oil or plant butter drizzled over hot bhakri is heaven on a plate.',
       },
     ],
     reviews: [
