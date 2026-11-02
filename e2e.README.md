@@ -23,13 +23,13 @@ Real SMS and Email delivery cannot be driven in automated CI environments. Authe
 
 ### Known Seeded Test Accounts
 
-| Role | Email | Display Name | Permissions |
-|---|---|---|---|
-| **Admin** | `admin@mulyam.in` | Admin Tester | Full Admin Control Center (`/admin`), order approvals, chef moderation |
-| **Chef** | `chef@rasoigenie.com` | Chef Sanjeev Test | Chef Studio (`/chef`), meal kit recipe submissions |
-| **Customer** | `customer@example.com` | Rahul Customer | Browse, customize portions/spice, apply coupons, place orders |
-| **Referrer** | `referrer@example.com` | Pooja Referrer | Referral code sharing (`RASOIREF99`), wallet credit rewards |
-| **Referee** | `referee@example.com` | Aman Referee | New customer onboarding, referral qualification |
+| Role         | Email                  | Display Name      | Permissions                                                            |
+| ------------ | ---------------------- | ----------------- | ---------------------------------------------------------------------- |
+| **Admin**    | `admin@mulyam.in`      | Admin Tester      | Full Admin Control Center (`/admin`), order approvals, chef moderation |
+| **Chef**     | `chef@rasoigenie.com`  | Chef Sanjeev Test | Chef Studio (`/chef`), meal kit recipe submissions                     |
+| **Customer** | `customer@example.com` | Rahul Customer    | Browse, customize portions/spice, apply coupons, place orders          |
+| **Referrer** | `referrer@example.com` | Pooja Referrer    | Referral code sharing (`RASOIREF99`), wallet credit rewards            |
+| **Referee**  | `referee@example.com`  | Aman Referee      | New customer onboarding, referral qualification                        |
 
 ---
 
@@ -64,16 +64,19 @@ e2e/
 ## 4. Running Tests Locally
 
 ### Run All E2E Tests Headlessly
+
 ```bash
 npm run test:e2e
 ```
 
 ### Run Tests with Interactive UI
+
 ```bash
 npm run test:e2e:ui
 ```
 
 ### Run a Specific Flow
+
 ```bash
 npx playwright test e2e/flows/browse-and-order.spec.ts
 npx playwright test e2e/flows/order-rejection.spec.ts
@@ -82,6 +85,7 @@ npx playwright test e2e/flows/referral-credit.spec.ts
 ```
 
 ### Inspect Test Reports
+
 ```bash
 npx playwright show-report
 ```
@@ -91,7 +95,8 @@ npx playwright show-report
 ## 5. CI / GitHub Actions
 
 The workflow in `.github/workflows/e2e.yml`:
-1. Checks out the code and sets up Node.js 20.
+
+1. Checks out the code and sets up Node.js 22.
 2. Installs dependencies using `npm ci --legacy-peer-deps`.
 3. Downloads the Playwright Chromium browser binary.
 4. Executes `globalSetup`, which seeds test data into Supabase and Firebase.

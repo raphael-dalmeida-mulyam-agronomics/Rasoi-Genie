@@ -1,6 +1,16 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { CONFIG } from '../config';
 
+// Polyfill global WebSocket in build-time / SSR Node.js runtimes (e.g. Expo web static rendering)
+// preventing RealtimeClient constructor errors when evaluated outside a browser.
+if (typeof globalThis !== 'undefined' && typeof (globalThis as any).WebSocket === 'undefined') {
+  try {
+    (globalThis as any).WebSocket = class DummyWebSocket {} as any;
+  } catch {
+    // Ignore in frozen global contexts
+  }
+}
+
 let clientInstance: SupabaseClient | null = null;
 let currentAuthToken: string | null = null;
 
