@@ -762,6 +762,7 @@ describe('Subscription Extensions Test Suite', () => {
         standardPlanKey: 'high-protein',
         amountPaid: 1299,
         autoRenew: true,
+        weeks: 4,
         members: [{ id: 'me', name: 'Me', isDependent: false }],
       });
       const sub = subRes.subscription!;
@@ -775,8 +776,8 @@ describe('Subscription Extensions Test Suite', () => {
       // 1. Create a pause
       const pauseRes = await createSubscriptionPause({
         subscriptionId: sub.id,
-        startDate: '2026-11-01',
-        endDate: '2026-11-02',
+        startDate: '2026-11-10',
+        endDate: '2026-11-11',
         createdBy: 'user_realtime',
       });
 

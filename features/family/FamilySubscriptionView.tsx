@@ -1,62 +1,60 @@
-import React, { useState, useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
   Alert,
   Image,
-  Dimensions,
   Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
   useWindowDimensions,
+  View,
 } from 'react-native';
-import { useTheme } from '../../framework/theme/ThemeContext';
 import { useAuth } from '../../framework/context/AuthContext';
 import { useFamily } from '../../framework/context/FamilyContext';
-import { useWallet } from '../../framework/context/WalletContext';
 import { useSubscription } from '../../framework/context/SubscriptionContext';
-import { can } from '../../framework/family/permissions';
+import { useWallet } from '../../framework/context/WalletContext';
 import {
-  WEEKDAYS,
-  STANDARD_SUBSCRIPTION_PLANS,
-  StandardPlanKey,
-  PlanType,
-  DEFAULT_CUSTOM_PLAN_PRICE_PER_WEEK,
-  calculatePerMemberSubscriptionTotal,
-  copyPlanToAllMembers,
-  resolvePlanMealKits,
-  isDateLockedForPause,
-  isDatePaused,
-  calculateNextDeliveryInfo,
-} from '../../framework/services/subscriptionPlans';
-import { getMealKits, getMealKitById, MealKit } from '../../framework/services/mealKitsService';
-import {
-  checkDietaryConflict,
   auditMemberWeeklyPlan,
   auditStandardPlanForMember,
+  checkDietaryConflict,
 } from '../../framework/family/dietaryConflicts';
-import { FamilyMember } from '../../framework/services/familyService';
-import { Badge } from '../../framework/ui/Badge';
-import { Button } from '../../framework/ui/Button';
-import { Icon } from '../../framework/ui/Icon';
-import { Modal } from '../../framework/ui/Modal';
-import { BottomSheet } from '../../framework/ui/BottomSheet';
-import { Card } from '../../framework/ui/Card';
-import { Avatar } from '../../framework/ui/Avatar';
-import { SegmentedControl } from '../../framework/ui/SegmentedControl';
-import { subscriptionStrings } from '../../framework/subscription/subscriptionStrings';
-import { MockPaymentGatewayModal } from '../checkout/MockPaymentGatewayModal';
-import { SubscriptionPauseCalendarModal } from '../subscription/SubscriptionPauseCalendarModal';
-import { SUBSCRIPTION_RENEWAL_CONFIG } from '../../framework/subscription/subscriptionConfig';
+import { can } from '../../framework/family/permissions';
 import {
   buildMonthCalendarGrid,
-  mapMealsForDay,
   buildShiftedMealSchedule,
-  formatDayAccessibilityLabel,
   CalendarDayItem,
   formatDateKey,
+  formatDayAccessibilityLabel,
+  mapMealsForDay,
 } from '../../framework/services/familyMealPlanCalendarHelpers';
+import { FamilyMember } from '../../framework/services/familyService';
+import { getMealKitById, getMealKits, MealKit } from '../../framework/services/mealKitsService';
+import {
+  calculateNextDeliveryInfo,
+  calculatePerMemberSubscriptionTotal,
+  copyPlanToAllMembers,
+  DEFAULT_CUSTOM_PLAN_PRICE_PER_WEEK,
+  PlanType,
+  resolvePlanMealKits,
+  STANDARD_SUBSCRIPTION_PLANS,
+  StandardPlanKey,
+  WEEKDAYS,
+} from '../../framework/services/subscriptionPlans';
+import { SUBSCRIPTION_RENEWAL_CONFIG } from '../../framework/subscription/subscriptionConfig';
+import { subscriptionStrings } from '../../framework/subscription/subscriptionStrings';
+import { useTheme } from '../../framework/theme/ThemeContext';
+import { Avatar } from '../../framework/ui/Avatar';
+import { Badge } from '../../framework/ui/Badge';
+import { BottomSheet } from '../../framework/ui/BottomSheet';
+import { Button } from '../../framework/ui/Button';
+import { Card } from '../../framework/ui/Card';
+import { Icon } from '../../framework/ui/Icon';
+import { Modal } from '../../framework/ui/Modal';
+import { SegmentedControl } from '../../framework/ui/SegmentedControl';
+import { MockPaymentGatewayModal } from '../checkout/MockPaymentGatewayModal';
+import { SubscriptionPauseCalendarModal } from '../subscription/SubscriptionPauseCalendarModal';
 
 const PLAN_SEGMENTS = [
   { value: 'high-protein', label: 'High Protein' },
@@ -173,6 +171,60 @@ export const FamilySubscriptionView: React.FC<{ onBack?: () => void }> = ({ onBa
     currentKit?: MealKit;
   } | null>(null);
   const [catalogFilterDiet, setCatalogFilterDiet] = useState<string>('all');
+  const [pickerSearchQuery, setPickerSearchQuery] = useState<string>('');
+
+  const handleOpenPicker = (cell: {
+    member: FamilyMember;
+    weekday: number;
+    currentKit?: MealKit;
+  }) => {
+    setSelectedCell(cell);
+    setPickerSearchQuery('');
+    setCatalogFilterDiet('all');
+    setPickerModalVisible(true);
+  };
+
+  const handleClosePicker = () => {
+    setPickerModalVisible(false);
+    setPickerSearchQuery('');
+    setCatalogFilterDiet('all');
+  };
+
+  const filteredKits = useMemo(() => {
+    return allKits.filter((k) => {
+      // 1. Diet filter
+      const matchesDiet =
+        catalogFilterDiet === 'all'
+          ? true
+          : k.diet === catalogFilterDiet || k.dietaryTags?.includes(catalogFilterDiet as any);
+
+      if (!matchesDiet) return false;
+
+      // 2. Search query filter
+      if (!pickerSearchQuery.trim()) return true;
+
+      const q = pickerSearchQuery.trim().toLowerCase();
+      const matchesName = k.name?.toLowerCase().includes(q);
+      const matchesHindi = k.hindiName ? k.hindiName.toLowerCase().includes(q) : false;
+      const matchesCuisine = k.cuisine ? k.cuisine.toLowerCase().includes(q) : false;
+      const matchesTag = k.dietaryTags?.some((t) => t.toLowerCase().includes(q));
+      const matchesDietTag = k.diet ? k.diet.toLowerCase().includes(q) : false;
+      const matchesDesc = k.description ? k.description.toLowerCase().includes(q) : false;
+      const matchesIngredient = k.ingredients?.some((ing) => ing.name.toLowerCase().includes(q));
+      const matchesAllergen = k.allergens?.some((al) => al.toLowerCase().includes(q));
+
+      return Boolean(
+        matchesName ||
+        matchesHindi ||
+        matchesCuisine ||
+        matchesTag ||
+        matchesDietTag ||
+        matchesDesc ||
+        matchesIngredient ||
+        matchesAllergen,
+      );
+    });
+  }, [allKits, catalogFilterDiet, pickerSearchQuery]);
 
   // Payment state
   const [paymentModalVisible, setPaymentModalVisible] = useState(false);
@@ -578,7 +630,7 @@ export const FamilySubscriptionView: React.FC<{ onBack?: () => void }> = ({ onBa
       ? `${member.user_id}_${selectedDayItem.dateStr}`
       : null;
     setLocalMeals((prev) => ({ ...prev, [key]: kitId, ...(dateKey ? { [dateKey]: kitId } : {}) }));
-    setPickerModalVisible(false);
+    handleClosePicker();
 
     // If owner customized their own recipe, only owner's plan is Custom.
     // If owner customized another member's recipe, only that member's plan is Custom.
@@ -940,13 +992,12 @@ export const FamilySubscriptionView: React.FC<{ onBack?: () => void }> = ({ onBa
                       variant="primary"
                       size="sm"
                       onPress={() => {
-                        setSelectedCell({
+                        setDayDetailVisible(false);
+                        handleOpenPicker({
                           member,
                           weekday: selectedDayItem.weekdayIndex,
                           currentKit: kit,
                         });
-                        setDayDetailVisible(false);
-                        setPickerModalVisible(true);
                       }}
                       style={{ flex: 1, marginRight: 8 }}
                       testID="cell-change-recipe-btn"
@@ -967,12 +1018,11 @@ export const FamilySubscriptionView: React.FC<{ onBack?: () => void }> = ({ onBa
                         variant="secondary"
                         size="sm"
                         onPress={() => {
-                          setSelectedCell({
+                          setDayDetailVisible(false);
+                          handleOpenPicker({
                             member,
                             weekday: selectedDayItem.weekdayIndex,
                           });
-                          setDayDetailVisible(false);
-                          setPickerModalVisible(true);
                         }}
                         testID="cell-add-meal-btn"
                       />
@@ -1879,12 +1929,11 @@ export const FamilySubscriptionView: React.FC<{ onBack?: () => void }> = ({ onBa
                               variant={item.conflict.hasConflict ? 'primary' : 'outline'}
                               size="sm"
                               onPress={() => {
-                                setSelectedCell({
+                                handleOpenPicker({
                                   member,
                                   weekday: item.weekday,
                                   currentKit: item.kit,
                                 });
-                                setPickerModalVisible(true);
                               }}
                               testID={`swap-meal-btn-${member.user_id}-${item.weekday}`}
                             />
@@ -2345,66 +2394,118 @@ export const FamilySubscriptionView: React.FC<{ onBack?: () => void }> = ({ onBa
       {/* Recipe Catalog Picker Modal */}
       <Modal
         visible={pickerModalVisible}
-        onClose={() => setPickerModalVisible(false)}
+        onClose={handleClosePicker}
         animationType="slide"
+        title={selectedCell ? `Pick Recipe for ${selectedCell.member.display_name}` : 'Pick Recipe'}
+        subtitle={
+          selectedCell ? `${WEEKDAYS[selectedCell.weekday || 0]?.full} Dinner Box` : undefined
+        }
+        containerStyle={styles.pickerModalContainer}
         testID="recipe-picker-modal"
       >
-        <View style={[styles.pickerContainer, { backgroundColor: colors.bgPrimary }]}>
+        <View style={styles.pickerContentWrapper}>
+          {/* Search Input Bar */}
           <View
             style={[
-              styles.pickerHeader,
-              { backgroundColor: colors.bgSurface, borderBottomColor: colors.borderLight },
+              styles.pickerSearchBar,
+              {
+                backgroundColor: colors.bgSubtle,
+                borderColor: colors.borderLight,
+                borderRadius: radii.md,
+              },
             ]}
           >
-            <View>
-              <Text style={[styles.pickerTitle, { color: colors.textPrimary }]}>
-                Pick Recipe for {selectedCell?.member.display_name}
-              </Text>
-              <Text style={{ fontSize: 12, color: colors.textSecondary }}>
-                {WEEKDAYS[selectedCell?.weekday || 0]?.full} Dinner Box
-              </Text>
-            </View>
-            <TouchableOpacity onPress={() => setPickerModalVisible(false)}>
-              <Icon name="close" size={24} color={colors.textPrimary} />
-            </TouchableOpacity>
+            <Icon name="search" size={18} color={colors.textMuted} style={{ marginRight: 8 }} />
+            <TextInput
+              style={[styles.pickerSearchInput, { color: colors.textPrimary }]}
+              placeholder="Search meal kits by name, cuisine, ingredients..."
+              placeholderTextColor={colors.textMuted}
+              value={pickerSearchQuery}
+              onChangeText={setPickerSearchQuery}
+              returnKeyType="search"
+              autoCapitalize="none"
+              autoCorrect={false}
+              testID="recipe-picker-search-input"
+            />
+            {pickerSearchQuery.length > 0 && (
+              <TouchableOpacity
+                onPress={() => setPickerSearchQuery('')}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                style={{ padding: 4 }}
+                accessibilityRole="button"
+                accessibilityLabel="Clear recipe search"
+                testID="recipe-picker-clear-search-btn"
+              >
+                <Icon name="close" size={16} color={colors.textMuted} />
+              </TouchableOpacity>
+            )}
           </View>
 
           {/* Diet Filter Chips */}
-          <View style={styles.dietFilterRow}>
-            {['all', 'veg', 'nonveg', 'vegan', 'keto'].map((diet) => (
-              <TouchableOpacity
-                key={`diet-${diet}`}
-                style={[
-                  styles.filterChip,
-                  {
-                    backgroundColor: catalogFilterDiet === diet ? colors.primary : colors.bgSurface,
-                    borderColor: catalogFilterDiet === diet ? colors.primary : colors.borderLight,
-                  },
-                ]}
-                onPress={() => setCatalogFilterDiet(diet)}
-              >
-                <Text
-                  style={{
-                    fontSize: 12,
-                    fontWeight: '700',
-                    color: catalogFilterDiet === diet ? colors.textInverse : colors.textPrimary,
-                  }}
+          <View style={styles.pickerDietFilterRow}>
+            {['all', 'veg', 'nonveg', 'vegan', 'keto'].map((diet) => {
+              const isSelected = catalogFilterDiet === diet;
+              return (
+                <TouchableOpacity
+                  key={`diet-${diet}`}
+                  style={[
+                    styles.pickerFilterChip,
+                    {
+                      backgroundColor: isSelected ? colors.primary : colors.bgSurface,
+                      borderColor: isSelected ? colors.primary : colors.borderLight,
+                    },
+                  ]}
+                  onPress={() => setCatalogFilterDiet(diet)}
+                  testID={`picker-diet-filter-${diet}`}
                 >
-                  {diet.toUpperCase()}
-                </Text>
-              </TouchableOpacity>
-            ))}
+                  <Text
+                    style={{
+                      fontSize: 12,
+                      fontWeight: '700',
+                      color: isSelected ? colors.textInverse : colors.textPrimary,
+                    }}
+                  >
+                    {diet.toUpperCase()}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
           </View>
 
-          <ScrollView contentContainerStyle={styles.pickerScroll}>
-            {allKits
-              .filter((k) =>
-                catalogFilterDiet === 'all'
-                  ? true
-                  : k.diet === catalogFilterDiet ||
-                    k.dietaryTags?.includes(catalogFilterDiet as any),
-              )
-              .map((kit) => {
+          {/* Scrollable Meal Kits List */}
+          <ScrollView
+            style={styles.pickerScrollView}
+            contentContainerStyle={styles.pickerScrollContent}
+            showsVerticalScrollIndicator={true}
+            keyboardShouldPersistTaps="handled"
+            testID="recipe-picker-scroll-view"
+          >
+            {filteredKits.length === 0 ? (
+              <View style={styles.pickerEmptyState}>
+                <Icon name="search-outline" size={32} color={colors.textMuted} />
+                <Text style={[styles.pickerEmptyTitle, { color: colors.textPrimary }]}>
+                  No meal kits found
+                </Text>
+                <Text style={[styles.pickerEmptySubtitle, { color: colors.textSecondary }]}>
+                  {pickerSearchQuery.trim()
+                    ? `No recipes match "${pickerSearchQuery}". Try another search or filter.`
+                    : 'No meal kits available for the selected diet filter.'}
+                </Text>
+                {(pickerSearchQuery.length > 0 || catalogFilterDiet !== 'all') && (
+                  <Button
+                    title="Reset Filters"
+                    variant="outline"
+                    size="sm"
+                    onPress={() => {
+                      setPickerSearchQuery('');
+                      setCatalogFilterDiet('all');
+                    }}
+                    style={{ marginTop: 12 }}
+                  />
+                )}
+              </View>
+            ) : (
+              filteredKits.map((kit) => {
                 const conflict = selectedCell
                   ? checkDietaryConflict(selectedCell.member, kit)
                   : { hasConflict: false, reasons: [] };
@@ -2426,7 +2527,13 @@ export const FamilySubscriptionView: React.FC<{ onBack?: () => void }> = ({ onBa
                   >
                     {kit.heroImage ? (
                       <Image source={{ uri: kit.heroImage }} style={styles.catalogImg} />
-                    ) : null}
+                    ) : (
+                      <View
+                        style={[styles.catalogImgPlaceholder, { backgroundColor: colors.bgSubtle }]}
+                      >
+                        <Icon name="restaurant-outline" size={20} color={colors.textMuted} />
+                      </View>
+                    )}
                     <View style={{ flex: 1, paddingHorizontal: 10 }}>
                       <Text style={[styles.catalogKitName, { color: colors.textPrimary }]}>
                         {kit.name}
@@ -2455,7 +2562,8 @@ export const FamilySubscriptionView: React.FC<{ onBack?: () => void }> = ({ onBa
                     />
                   </TouchableOpacity>
                 );
-              })}
+              })
+            )}
           </ScrollView>
         </View>
       </Modal>
@@ -3022,36 +3130,43 @@ const styles = StyleSheet.create({
     marginTop: 8,
     lineHeight: 16,
   },
-  pickerContainer: {
-    flex: 1,
-    paddingTop: 45,
+  pickerModalContainer: {
+    maxWidth: 620,
+    maxHeight: '90%',
   },
-  pickerHeader: {
+  pickerContentWrapper: {
+    width: '100%',
+  },
+  pickerSearchBar: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingBottom: 14,
-    borderBottomWidth: 1,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginBottom: 12,
   },
-  pickerTitle: {
-    fontSize: 16,
-    fontWeight: '800',
+  pickerSearchInput: {
+    flex: 1,
+    fontSize: 14,
+    padding: 0,
   },
-  dietFilterRow: {
+  pickerDietFilterRow: {
     flexDirection: 'row',
     gap: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
+    marginBottom: 12,
+    flexWrap: 'wrap',
   },
-  filterChip: {
+  pickerFilterChip: {
     paddingVertical: 6,
     paddingHorizontal: 12,
     borderRadius: 16,
     borderWidth: 1,
   },
-  pickerScroll: {
-    padding: 16,
+  pickerScrollView: {
+    maxHeight: 460,
+  },
+  pickerScrollContent: {
+    paddingBottom: 16,
   },
   catalogCard: {
     flexDirection: 'row',
@@ -3065,6 +3180,13 @@ const styles = StyleSheet.create({
     height: 55,
     borderRadius: 8,
   },
+  catalogImgPlaceholder: {
+    width: 55,
+    height: 55,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   catalogKitName: {
     fontSize: 14,
     fontWeight: '700',
@@ -3072,6 +3194,23 @@ const styles = StyleSheet.create({
   catalogKitMeta: {
     fontSize: 12,
     marginTop: 2,
+  },
+  pickerEmptyState: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 36,
+    paddingHorizontal: 16,
+  },
+  pickerEmptyTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    marginTop: 10,
+  },
+  pickerEmptySubtitle: {
+    fontSize: 13,
+    textAlign: 'center',
+    marginTop: 4,
+    lineHeight: 18,
   },
   subAutoRenewRow: {
     flexDirection: 'row',

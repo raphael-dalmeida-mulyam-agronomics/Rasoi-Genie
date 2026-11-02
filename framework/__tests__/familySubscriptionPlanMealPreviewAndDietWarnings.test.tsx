@@ -218,6 +218,63 @@ describe('FamilySubscriptionView - Meal Kit Plan Preview and Dietary Warnings', 
     });
   });
 
+  it('filters meal kits with searchbar and supports clearing query and scrolling in swap modal', async () => {
+    const { getByTestId, queryByTestId, getByText } = await render(
+      <ThemeProvider>
+        <FamilySubscriptionView />
+      </ThemeProvider>,
+    );
+
+    // Press swap button on Monday
+    const swapMondayBtn = getByTestId('swap-meal-btn-user_owner-0');
+    await act(async () => {
+      fireEvent.press(swapMondayBtn);
+    });
+
+    // 1. Modal header contains the heading in the larger box
+    expect(getByText('Pick Recipe for Priya Sharma')).toBeTruthy();
+
+    // 2. ScrollView container for meal kits is present
+    const scrollView = getByTestId('recipe-picker-scroll-view');
+    expect(scrollView).toBeTruthy();
+
+    // 3. Search bar is present
+    const searchInput = getByTestId('recipe-picker-search-input');
+    expect(searchInput).toBeTruthy();
+
+    // Initially, both Paneer Butter Masala (kit-101) and Biryani (kit-102) exist
+    expect(getByTestId('catalog-kit-kit-101')).toBeTruthy();
+    expect(getByTestId('catalog-kit-kit-102')).toBeTruthy();
+
+    // 4. Type "Biryani" in search input
+    await act(async () => {
+      fireEvent.changeText(searchInput, 'Biryani');
+    });
+
+    // Now Biryani should match, and Paneer Butter Masala should be filtered out
+    expect(getByTestId('catalog-kit-kit-102')).toBeTruthy();
+    expect(queryByTestId('catalog-kit-kit-101')).toBeNull();
+
+    // 5. Clear button appears
+    const clearBtn = getByTestId('recipe-picker-clear-search-btn');
+    expect(clearBtn).toBeTruthy();
+
+    // 6. Press clear button to restore all kits
+    await act(async () => {
+      fireEvent.press(clearBtn);
+    });
+
+    expect(getByTestId('catalog-kit-kit-101')).toBeTruthy();
+    expect(getByTestId('catalog-kit-kit-102')).toBeTruthy();
+
+    // 7. Type non-matching search to test empty state
+    await act(async () => {
+      fireEvent.changeText(searchInput, 'xyznomatch12345');
+    });
+
+    expect(getByText('No meal kits found')).toBeTruthy();
+  });
+
   it('warns owner with an Alert when applying a plan to everyone if it creates dietary conflicts', async () => {
     const alertSpy = jest.spyOn(Alert, 'alert');
 
