@@ -7,4 +7,5 @@ module.exports = {
   },
   testPathIgnorePatterns: ['/node_modules/', '/.expo/', '/e2e/'],
   testTimeout: 45000,
+  maxWorkers: '50%',
 };
