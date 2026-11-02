@@ -73,6 +73,14 @@ export class ChefStudioPage {
     const submitBtn = this.page.getByTestId('chef-submit-recipe-btn');
     await submitBtn.waitFor({ state: 'visible', timeout: 5000 });
     await submitBtn.click();
-    await this.page.waitForTimeout(1500);
+    await this.page.waitForTimeout(1000);
+
+    const okBtn = this.page
+      .getByRole('button', { name: 'OK' })
+      .or(this.page.getByText('OK', { exact: true }));
+    if (await okBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
+      await okBtn.click();
+      await this.page.waitForTimeout(400);
+    }
   }
 }

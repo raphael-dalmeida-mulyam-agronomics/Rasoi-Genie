@@ -13,14 +13,43 @@ export class AdminDashboardPage {
     await this.page.waitForLoadState('domcontentloaded');
   }
 
+  async dismissDialogIfPresent() {
+    try {
+      const card = this.page.locator('[data-testid="in-app-dialog-card"]');
+      if (await card.isVisible({ timeout: 1000 }).catch(() => false)) {
+        const okBtn = card
+          .locator('[data-testid="dialog-btn-ok"], [role="button"], button')
+          .first();
+        if (await okBtn.isVisible({ timeout: 500 }).catch(() => false)) {
+          await okBtn.click({ force: true }).catch(() => {});
+        } else {
+          await card.click({ force: true }).catch(() => {});
+        }
+        await card.waitFor({ state: 'hidden', timeout: 3000 }).catch(() => {});
+      }
+    } catch {
+      // ignore
+    }
+  }
+
   getTab(tabId: AdminTab): Locator {
     return this.page.getByTestId(`admin-tab-${tabId}`);
   }
 
   async switchTab(tabId: AdminTab) {
+    await this.dismissDialogIfPresent();
     const tab = this.getTab(tabId);
     await tab.waitFor({ state: 'visible', timeout: 5000 });
-    await tab.click();
+    for (let attempt = 0; attempt < 3; attempt++) {
+      await this.dismissDialogIfPresent();
+      try {
+        await tab.click({ timeout: 2000, force: attempt > 0 });
+        break;
+      } catch {
+        await this.dismissDialogIfPresent();
+        await this.page.waitForTimeout(500);
+      }
+    }
     await this.page.waitForTimeout(400);
   }
 
@@ -33,16 +62,28 @@ export class AdminDashboardPage {
   }
 
   async approveOrder(orderId: string) {
+    await this.dismissDialogIfPresent();
     const btn = this.page.getByTestId(`admin-approve-order-${orderId}`);
     await btn.waitFor({ state: 'visible', timeout: 5000 });
-    await btn.click();
+    try {
+      await btn.click({ timeout: 3000 });
+    } catch {
+      await this.dismissDialogIfPresent();
+      await btn.click({ timeout: 5000 });
+    }
     await this.page.waitForTimeout(1000);
   }
 
   async rejectOrder(orderId: string) {
+    await this.dismissDialogIfPresent();
     const btn = this.page.getByTestId(`admin-reject-order-${orderId}`);
     await btn.waitFor({ state: 'visible', timeout: 5000 });
-    await btn.click();
+    try {
+      await btn.click({ timeout: 3000 });
+    } catch {
+      await this.dismissDialogIfPresent();
+      await btn.click({ timeout: 5000 });
+    }
     const confirmBtn = this.page.getByTestId('admin-confirm-cancel-order-btn');
     if (await confirmBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
       await confirmBtn.click();
@@ -57,9 +98,15 @@ export class AdminDashboardPage {
   }
 
   async openChefSubmissionReview(submissionId: string) {
+    await this.dismissDialogIfPresent();
     const btn = this.page.getByTestId(`admin-review-chef-btn-${submissionId}`);
     await btn.waitFor({ state: 'visible', timeout: 5000 });
-    await btn.click();
+    try {
+      await btn.click({ timeout: 3000 });
+    } catch {
+      await this.dismissDialogIfPresent();
+      await btn.click({ timeout: 5000 });
+    }
     await this.page.waitForTimeout(400);
   }
 

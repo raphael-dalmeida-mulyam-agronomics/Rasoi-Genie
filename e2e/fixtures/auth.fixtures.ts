@@ -90,6 +90,9 @@ export async function seedBrowserSession(page: Page, user: TestUserAccount) {
       window.localStorage.setItem(authKey, JSON.stringify(authData));
       window.localStorage.setItem(profileKey, JSON.stringify(profileData));
       window.localStorage.setItem('@rasoi_user_location', JSON.stringify(locData));
+      window.localStorage.setItem('@rasoi_user_location_v1', JSON.stringify(locData));
+      window.localStorage.setItem('@rasoi_has_seen_welcome_v1', 'true');
+      window.localStorage.setItem('@rasoi_legacy_data_purged_v1', 'true');
       window.localStorage.setItem('@rasoi_guest_preferences_v1', JSON.stringify(guestData));
       window.localStorage.setItem('@rasoi_verified_guest_contact_v1', JSON.stringify(contactData));
     },

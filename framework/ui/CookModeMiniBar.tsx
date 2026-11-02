@@ -48,7 +48,7 @@ export const CookModeMiniBar: React.FC = () => {
       });
 
   // If currently inside the full-screen cook mode route, hide the docked mini-bar
-  if (pathname && pathname.startsWith('/cook')) {
+  if (pathname && (pathname.startsWith('/cook') || pathname.startsWith('/cart'))) {
     return null;
   }
 

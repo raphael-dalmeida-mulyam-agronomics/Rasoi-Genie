@@ -13,7 +13,7 @@ export class HomePage {
   }
 
   getMealKitCard(kitId: string): Locator {
-    return this.page.getByTestId(`meal-kit-card-${kitId}`);
+    return this.page.getByTestId(`meal-kit-card-${kitId}`).first();
   }
 
   async selectMealKit(kitId: string) {

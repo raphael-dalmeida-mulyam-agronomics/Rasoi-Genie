@@ -410,6 +410,7 @@ const MealKitHorizontalCard = React.memo(function MealKitHorizontalCard({
 
   return (
     <TouchableOpacity
+      testID={`meal-kit-card-${kit.id}`}
       style={[
         styles.horizontalCard,
         {

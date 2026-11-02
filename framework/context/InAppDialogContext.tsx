@@ -376,6 +376,7 @@ export const InAppDialogProvider: React.FC<{ children: React.ReactNode }> = ({ c
                         }
                       >
                         <Button
+                          testID={btn.text === 'OK' ? 'dialog-btn-ok' : `dialog-btn-${idx}`}
                           title={btn.text}
                           variant={btnVariant}
                           size="md"

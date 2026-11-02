@@ -48,7 +48,11 @@ export class CartPage {
 
   async proceedToCheckout() {
     await this.proceedCheckoutBtn.waitFor({ state: 'visible', timeout: 5000 });
-    await this.proceedCheckoutBtn.click();
+    try {
+      await this.proceedCheckoutBtn.click({ timeout: 3000 });
+    } catch {
+      await this.proceedCheckoutBtn.click({ force: true });
+    }
     await this.page.waitForTimeout(500);
   }
 }

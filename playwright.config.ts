@@ -5,7 +5,7 @@ import path from 'path';
 // Load test environment variables
 dotenv.config({ path: path.resolve(__dirname, '.env.test') });
 
-const PORT = process.env.PORT || 8081;
+const PORT = process.env.PORT || 8085;
 const BASE_URL = process.env.BASE_URL || `http://localhost:${PORT}`;
 
 export default defineConfig({
@@ -40,9 +40,9 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: 'npx expo start --web --port 8081',
+    command: `npx serve -s dist -l ${PORT}`,
     url: BASE_URL,
-    timeout: 120 * 1000, // Metro bundler cold start buffer
+    timeout: 60 * 1000,
     reuseExistingServer: !process.env.CI,
     stdout: 'pipe',
     stderr: 'pipe',

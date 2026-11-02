@@ -47,11 +47,11 @@ test.describe('Flow 2: Dual-Context Order Approval and Rejection', () => {
 
     // Sync persisted order state from customer context to admin context
     const ordersStorage = await customerPage.evaluate(() =>
-      localStorage.getItem('rasoi_persisted_orders_v2'),
+      localStorage.getItem('@rasoi_persisted_orders'),
     );
     if (ordersStorage) {
       await adminPage.addInitScript(({ key, val }) => localStorage.setItem(key, val), {
-        key: 'rasoi_persisted_orders_v2',
+        key: '@rasoi_persisted_orders',
         val: ordersStorage,
       });
     }
@@ -69,16 +69,16 @@ test.describe('Flow 2: Dual-Context Order Approval and Rejection', () => {
 
     // Sync updated order state from admin context back to customer context
     const updatedOrders = await adminPage.evaluate(() =>
-      localStorage.getItem('rasoi_persisted_orders_v2'),
+      localStorage.getItem('@rasoi_persisted_orders'),
     );
     const approvedOrders = await adminPage.evaluate(() =>
-      localStorage.getItem('rasoi_approved_orders'),
+      localStorage.getItem('@rasoi_approved_order_ids'),
     );
     if (updatedOrders) {
       await customerPage.evaluate(
         ({ orders, approved }) => {
-          localStorage.setItem('rasoi_persisted_orders_v2', orders);
-          if (approved) localStorage.setItem('rasoi_approved_orders', approved);
+          localStorage.setItem('@rasoi_persisted_orders', orders);
+          if (approved) localStorage.setItem('@rasoi_approved_order_ids', approved);
         },
         { orders: updatedOrders, approved: approvedOrders },
       );
@@ -117,7 +117,7 @@ test.describe('Flow 2: Dual-Context Order Approval and Rejection', () => {
 
     // 1. Customer places order
     await home.goto();
-    await home.selectMealKit(TEST_MEAL_KITS[1]!.id);
+    await home.selectMealKit(TEST_MEAL_KITS[0]!.id);
     await home.addToCart();
 
     await cart.goto();
@@ -137,11 +137,11 @@ test.describe('Flow 2: Dual-Context Order Approval and Rejection', () => {
 
     // Sync persisted order state from customer context to admin context
     const ordersStorage = await customerPage.evaluate(() =>
-      localStorage.getItem('rasoi_persisted_orders_v2'),
+      localStorage.getItem('@rasoi_persisted_orders'),
     );
     if (ordersStorage) {
       await adminPage.addInitScript(({ key, val }) => localStorage.setItem(key, val), {
-        key: 'rasoi_persisted_orders_v2',
+        key: '@rasoi_persisted_orders',
         val: ordersStorage,
       });
     }
@@ -157,11 +157,11 @@ test.describe('Flow 2: Dual-Context Order Approval and Rejection', () => {
 
     // Sync updated order state from admin context back to customer context
     const updatedOrders = await adminPage.evaluate(() =>
-      localStorage.getItem('rasoi_persisted_orders_v2'),
+      localStorage.getItem('@rasoi_persisted_orders'),
     );
     if (updatedOrders) {
       await customerPage.evaluate(
-        (orders) => localStorage.setItem('rasoi_persisted_orders_v2', orders),
+        (orders) => localStorage.setItem('@rasoi_persisted_orders', orders),
         updatedOrders,
       );
     }
@@ -169,6 +169,14 @@ test.describe('Flow 2: Dual-Context Order Approval and Rejection', () => {
     // 4. Customer verifies status reflection
     await customerPage.reload({ waitUntil: 'domcontentloaded' });
     await customerPage.waitForLoadState('domcontentloaded');
+
+    const previousTab = customerPage
+      .getByTestId('orders-tab-previous')
+      .or(customerPage.getByText(/Previous/i))
+      .first();
+    await previousTab.waitFor({ state: 'visible', timeout: 5000 });
+    await previousTab.click();
+    await customerPage.waitForTimeout(500);
 
     const customerStatusBadge = customerPage.getByTestId(`order-status-badge-${orderId}`);
     await expect(customerStatusBadge).toBeVisible({ timeout: 10000 });

@@ -39,15 +39,19 @@ export const AppLoadingCoverScreen: React.FC<AppLoadingCoverScreenProps> = ({
   onDone,
   isAppReady = true,
 }) => {
-  if (
-    (typeof process !== 'undefined' &&
-      (process.env.EXPO_PUBLIC_ENV === 'test' || process.env.NODE_ENV === 'test')) ||
-    (typeof window !== 'undefined' &&
-      (Boolean((window as any).__E2E__) ||
-        window.localStorage?.getItem('@rasoi_e2e_mode') === 'true'))
-  ) {
-    return null;
-  }
+  const [isE2E, setIsE2E] = useState(false);
+
+  useEffect(() => {
+    if (
+      (typeof process !== 'undefined' &&
+        (process.env.EXPO_PUBLIC_ENV === 'test' || process.env.NODE_ENV === 'test')) ||
+      (typeof window !== 'undefined' &&
+        (Boolean((window as any).__E2E__) ||
+          window.localStorage?.getItem('@rasoi_e2e_mode') === 'true'))
+    ) {
+      setIsE2E(true);
+    }
+  }, []);
 
   const [visible, setVisible] = useState(true);
 
@@ -117,7 +121,7 @@ export const AppLoadingCoverScreen: React.FC<AppLoadingCoverScreenProps> = ({
     };
   }, [isAppReady, minDurationMs, slideDurationMs, translateY, onDone]);
 
-  if (!visible) {
+  if (isE2E || !visible) {
     return null;
   }
 

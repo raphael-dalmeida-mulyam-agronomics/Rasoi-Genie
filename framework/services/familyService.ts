@@ -340,6 +340,11 @@ export function resetLocalFamilyStoreForTesting(): void {
 }
 
 export function isMockEnabled(): boolean {
+  if (
+    typeof window !== 'undefined' &&
+    ((window as any).__E2E__ || window.localStorage?.getItem('@rasoi_e2e_mode') === 'true')
+  )
+    return true;
   if (process.env.NODE_ENV === 'test') return true;
   if (process.env.EXPO_PUBLIC_ENABLE_MOCK_API === 'true') return true;
   if (process.env.EXPO_PUBLIC_ENABLE_MOCK_API === 'false') return false;

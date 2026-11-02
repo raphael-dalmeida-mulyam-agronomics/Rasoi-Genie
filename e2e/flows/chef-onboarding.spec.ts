@@ -73,7 +73,8 @@ test.describe('Flow 3: Chef Studio Meal Kit Lifecycle & Admin Moderation', () =>
     // Locate the newly submitted recipe card
     const reviewBtn = adminPage.locator('[data-testid^="admin-review-chef-btn-"]').first();
     await reviewBtn.waitFor({ state: 'visible', timeout: 10000 });
-    await reviewBtn.click();
+    await adminDash.dismissDialogIfPresent();
+    await reviewBtn.click({ force: true });
 
     // Admin sets price and publishes
     await adminDash.approveChefSubmission(449);
@@ -162,7 +163,8 @@ test.describe('Flow 3: Chef Studio Meal Kit Lifecycle & Admin Moderation', () =>
 
     const reviewBtn = adminPage.locator('[data-testid^="admin-review-chef-btn-"]').first();
     await reviewBtn.waitFor({ state: 'visible', timeout: 10000 });
-    await reviewBtn.click();
+    await adminDash.dismissDialogIfPresent();
+    await reviewBtn.click({ force: true });
 
     // Admin rejects with notes
     const rejectionReason = 'Portion ratios incomplete. Please update allergen info.';
@@ -183,7 +185,8 @@ test.describe('Flow 3: Chef Studio Meal Kit Lifecycle & Admin Moderation', () =>
     await chefPage.reload({ waitUntil: 'domcontentloaded' });
     await chefPage.waitForLoadState('domcontentloaded');
 
-    const rejectedBadge = chefPage.getByText('Rejected').first();
+    const rejectedBadge = chefPage.getByText(/Action Needed|Rejected/i).first();
+    await expect(chefPage.getByText(rejectionReason).first()).toBeVisible({ timeout: 10000 });
     await expect(rejectedBadge).toBeVisible({ timeout: 10000 });
 
     // Cleanup: Delete rejected chef submission

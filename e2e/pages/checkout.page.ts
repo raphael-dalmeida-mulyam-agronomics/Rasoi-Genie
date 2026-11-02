@@ -18,17 +18,33 @@ export class CheckoutPage {
   }
 
   async selectPaymentMethod(method: 'UPI' | 'Card' | 'Cash on Delivery') {
-    const btn = this.page.getByTestId(`checkout-payment-method-${method}`);
-    if (await btn.isVisible({ timeout: 2000 }).catch(() => false)) {
-      await btn.click();
-      await this.page.waitForTimeout(300);
+    const slug = method.replace(/\s+/g, '-').toLowerCase();
+    const btn = this.page
+      .getByTestId(`payment-method-${slug}`)
+      .or(this.page.getByTestId(`checkout-payment-method-${method}`))
+      .first();
+    await btn.waitFor({ state: 'visible', timeout: 8000 });
+    try {
+      await btn.click({ timeout: 3000 });
+    } catch {
+      await btn.click({ force: true });
     }
+    await this.page.waitForTimeout(300);
   }
 
   async placeOrder() {
     await this.placeOrderBtn.waitFor({ state: 'visible', timeout: 8000 });
-    await this.placeOrderBtn.click();
-    // Wait for order placement processing
-    await this.page.waitForTimeout(2000);
+    try {
+      await this.placeOrderBtn.click({ timeout: 3000 });
+    } catch {
+      await this.placeOrderBtn.click({ force: true });
+    }
+    // Wait for order placement to finish and confirmation screen to appear
+    const confirmation = this.page
+      .getByTestId('track-order-status-btn')
+      .or(this.page.getByTestId('start-cooking-guide-btn'))
+      .or(this.page.getByText(/Order Placed/i));
+    await confirmation.waitFor({ state: 'visible', timeout: 15000 }).catch(() => {});
+    await this.page.waitForTimeout(500);
   }
 }

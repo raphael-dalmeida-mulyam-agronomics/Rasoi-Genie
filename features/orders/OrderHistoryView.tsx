@@ -159,7 +159,9 @@ export const OrderHistoryView: React.FC = () => {
       if (ord.transactionId) seenTxns.add(ord.transactionId);
       deduped.push(ord);
     }
-    return deduped;
+    return deduped.sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+    );
   }, [orders, user, guestLocalOrders]);
 
   // Cancelled orders that the user has not dismissed yet
@@ -528,6 +530,7 @@ export const OrderHistoryView: React.FC = () => {
           style={[styles.tabToggle, { backgroundColor: colors.bgSubtle, borderRadius: radii.pill }]}
         >
           <TouchableOpacity
+            testID="orders-tab-active"
             style={[
               styles.tabBtn,
               {
@@ -549,6 +552,7 @@ export const OrderHistoryView: React.FC = () => {
           </TouchableOpacity>
 
           <TouchableOpacity
+            testID="orders-tab-previous"
             style={[
               styles.tabBtn,
               {

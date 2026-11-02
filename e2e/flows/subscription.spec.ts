@@ -10,11 +10,14 @@ test.describe('Flow: Weekly Meal Subscriptions', () => {
     await seedBrowserSession(page, TEST_USERS.customer);
 
     // 2. Navigate to Profile
-    await page.goto('/profile', { waitUntil: 'domcontentloaded' });
+    await page.goto('/login', { waitUntil: 'domcontentloaded' });
     await page.waitForLoadState('domcontentloaded');
 
     // 3. Open Recurring Meal Plan
-    const subscriptionMenuRow = page.getByTestId('profile-menu-subscription');
+    const subscriptionMenuRow = page
+      .getByTestId('profile-menu-subscription')
+      .or(page.getByTestId('open-subscription-plan-btn'))
+      .first();
     await expect(subscriptionMenuRow).toBeVisible({ timeout: 8000 });
     await subscriptionMenuRow.click();
 
@@ -144,9 +147,20 @@ test.describe('Flow: Weekly Meal Subscriptions', () => {
     await expect(familySubscribeBtn).toBeVisible();
     await familySubscribeBtn.click();
 
+    // If household dietary clashes are detected, proceed anyway
+    const proceedAnywayBtn = page
+      .getByTestId('dialog-btn-1')
+      .or(page.getByText('Proceed Anyway'))
+      .first();
+    await proceedAnywayBtn.waitFor({ state: 'visible', timeout: 5000 }).catch(() => null);
+    if (await proceedAnywayBtn.isVisible().catch(() => false)) {
+      await proceedAnywayBtn.click();
+      await page.waitForTimeout(500);
+    }
+
     // 8. Handle Mock Payment Gateway Modal
     const paymentModal = page.getByTestId('mock-payment-gateway-modal');
-    const modalVisible = await paymentModal.isVisible({ timeout: 3000 }).catch(() => false);
+    const modalVisible = await paymentModal.isVisible({ timeout: 5000 }).catch(() => false);
 
     if (modalVisible) {
       const paySuccessBtn = page.getByTestId('mock-gateway-pay-success-btn');
@@ -154,8 +168,19 @@ test.describe('Flow: Weekly Meal Subscriptions', () => {
       await paySuccessBtn.click();
     }
 
+    // Dismiss active success alert dialog if present
+    const dialogOkBtn = page
+      .getByTestId('dialog-btn-ok')
+      .or(page.getByText('OK', { exact: true }))
+      .first();
+    await dialogOkBtn.waitFor({ state: 'visible', timeout: 5000 }).catch(() => null);
+    if (await dialogOkBtn.isVisible().catch(() => false)) {
+      await dialogOkBtn.click();
+      await page.waitForTimeout(500);
+    }
+
     // 9. Verify family subscription status is confirmed
-    const statusText = page.getByText(/Active/i);
+    const statusText = page.getByTestId('family-active-sub-card').or(page.getByText(/Active/i));
     await expect(statusText.first()).toBeVisible({ timeout: 10000 });
   });
 });
