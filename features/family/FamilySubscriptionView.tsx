@@ -17,6 +17,7 @@ import { useSubscription } from '../../framework/context/SubscriptionContext';
 import { useWallet } from '../../framework/context/WalletContext';
 import {
   auditMemberWeeklyPlan,
+  formatCandidateDietaryReason,
   auditStandardPlanForMember,
   checkDietaryConflict,
 } from '../../framework/family/dietaryConflicts';
@@ -200,6 +201,16 @@ export const FamilySubscriptionView: React.FC<{ onBack?: () => void }> = ({ onBa
     setPickerSearchQuery('');
     setCatalogFilterDiet('all');
   };
+
+  const selectedMemberWeeklyAudit = useMemo(() => {
+    if (!selectedCell) return null;
+    const cfg = memberPlanConfigs[selectedCell.member.user_id] || {
+      planType: 'standard',
+      standardPlanKey: 'high-protein',
+      planGroup: null,
+    };
+    return auditMemberWeeklyPlan(selectedCell.member, cfg, localMeals, getMealKitById);
+  }, [selectedCell, memberPlanConfigs, localMeals]);
 
   const filteredKits = useMemo(() => {
     return allKits.filter((k) => {
@@ -2577,6 +2588,16 @@ export const FamilySubscriptionView: React.FC<{ onBack?: () => void }> = ({ onBa
                   ? checkDietaryConflict(selectedCell.member, kit)
                   : { hasConflict: false, reasons: [] };
 
+                const assignedDays =
+                  selectedMemberWeeklyAudit?.weeklyMeals
+                    .filter((m) => m.kit?.id === kit.id && m.weekday !== selectedCell?.weekday)
+                    .map((m) => m.weekdayShort) || [];
+
+                const isAlreadyInPlan = assignedDays.length > 0;
+                const isCurrentDayMeal = selectedMemberWeeklyAudit?.weeklyMeals.some(
+                  (m) => m.kit?.id === kit.id && m.weekday === selectedCell?.weekday,
+                );
+
                 return (
                   <TouchableOpacity
                     key={kit.id}
@@ -2584,7 +2605,11 @@ export const FamilySubscriptionView: React.FC<{ onBack?: () => void }> = ({ onBa
                       styles.catalogCard,
                       {
                         backgroundColor: colors.bgSurface,
-                        borderColor: conflict.hasConflict ? colors.warning : colors.borderLight,
+                        borderColor: conflict.hasConflict
+                          ? colors.warning
+                          : isAlreadyInPlan
+                            ? '#F59E0B'
+                            : colors.borderLight,
                         borderRadius: radii.lg,
                       },
                     ]}
@@ -2625,16 +2650,58 @@ export const FamilySubscriptionView: React.FC<{ onBack?: () => void }> = ({ onBa
                           .join(' / ')}{' '}
                         • {kit.spiceLevel}
                       </Text>
-                      {conflict.hasConflict && (
+
+                      {isAlreadyInPlan && (
+                        <View
+                          style={[
+                            styles.alreadyInPlanBadge,
+                            { backgroundColor: '#FEF3C7', borderColor: '#F59E0B' },
+                          ]}
+                          testID={`already-in-plan-badge-${kit.id}`}
+                        >
+                          <Icon
+                            name="alert-circle"
+                            size={12}
+                            color="#B45309"
+                            style={{ marginRight: 4 }}
+                          />
+                          <Text style={[styles.alreadyInPlanText, { color: '#B45309' }]}>
+                            Already in plan ({assignedDays.join(', ')})
+                          </Text>
+                        </View>
+                      )}
+
+                      {isCurrentDayMeal && (
+                        <View
+                          style={[
+                            styles.alreadyInPlanBadge,
+                            { backgroundColor: colors.bgSubtle, borderColor: colors.borderLight },
+                          ]}
+                          testID={`current-selection-badge-${kit.id}`}
+                        >
+                          <Icon
+                            name="checkmark-circle"
+                            size={12}
+                            color={colors.primary}
+                            style={{ marginRight: 4 }}
+                          />
+                          <Text style={[styles.alreadyInPlanText, { color: colors.textSecondary }]}>
+                            Currently selected
+                          </Text>
+                        </View>
+                      )}
+
+                      {conflict.hasConflict && conflict.reasons[0] && (
                         <Text
                           style={{
                             fontSize: 11,
                             color: colors.warning,
                             fontWeight: '700',
-                            marginTop: 2,
+                            marginTop: 3,
                           }}
+                          testID={`picker-diet-conflict-${kit.id}`}
                         >
-                          {conflict.reasons[0]}
+                          {formatCandidateDietaryReason(conflict.reasons[0])}
                         </Text>
                       )}
                     </View>
@@ -3231,6 +3298,20 @@ const styles = StyleSheet.create({
     fontSize: 11,
     marginTop: 8,
     lineHeight: 16,
+  },
+  alreadyInPlanBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 2,
+    paddingHorizontal: 6,
+    borderRadius: 6,
+    borderWidth: 1,
+    alignSelf: 'flex-start',
+    marginTop: 4,
+  },
+  alreadyInPlanText: {
+    fontSize: 11,
+    fontWeight: '700',
   },
   pickerModalContainer: {
     maxWidth: 620,

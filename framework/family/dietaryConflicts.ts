@@ -119,6 +119,31 @@ const FULL_DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Satu
  * Audits all 7 meals for a member under their current or chosen plan configuration,
  * returning the daily resolved meal kits and any dietary/allergen conflicts.
  */
+
+/**
+ * Formats a dietary conflict reason for a candidate meal kit in the swap picker modal,
+ * avoiding the phrasing "assigned to" since the dish has not yet been selected.
+ */
+export function formatCandidateDietaryReason(reason: string): string {
+  const rLower = reason.toLowerCase();
+  if (
+    rLower.includes('non-vegetarian') ||
+    (rLower.includes('vegetarian') && rLower.includes('assigned'))
+  ) {
+    return "Dish does not match user's diet: Vegetarian";
+  }
+  if (rLower.includes('non-vegan') || (rLower.includes('vegan') && rLower.includes('assigned'))) {
+    return "Dish does not match user's diet: Vegan";
+  }
+  if (rLower.includes('non-jain') || (rLower.includes('jain') && rLower.includes('assigned'))) {
+    return "Dish does not match user's diet: Jain";
+  }
+  if (rLower.includes('non-keto') || (rLower.includes('keto') && rLower.includes('assigned'))) {
+    return "Dish does not match user's diet: Keto";
+  }
+  return reason;
+}
+
 export function auditMemberWeeklyPlan(
   member: FamilyMember,
   cfg: { planType: PlanType; standardPlanKey?: StandardPlanKey | null } | undefined,

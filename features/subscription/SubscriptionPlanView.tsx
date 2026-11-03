@@ -29,6 +29,7 @@ import { Button } from '../../framework/ui/Button';
 import { Icon } from '../../framework/ui/Icon';
 import { subscriptionStrings } from '../../framework/subscription/subscriptionStrings';
 import { MockPaymentGatewayModal } from '../checkout/MockPaymentGatewayModal';
+import { MealDetailModal } from '../meal-detail/MealDetailModal';
 import { SubscriptionPauseCalendarModal } from './SubscriptionPauseCalendarModal';
 import { SUBSCRIPTION_RENEWAL_CONFIG } from '../../framework/subscription/subscriptionConfig';
 
@@ -83,6 +84,19 @@ export const SubscriptionPlanView: React.FC<{ onBack?: () => void }> = ({ onBack
     SUBSCRIPTION_RENEWAL_CONFIG.DEFAULT_AUTO_RENEW,
   );
   const [pauseModalVisible, setPauseModalVisible] = useState(false);
+
+  // Preview modal state
+  const [previewPlanKey, setPreviewPlanKey] = useState<StandardPlanKey | null>(null);
+
+  // Meal kit detail modal state
+  const [selectedDetailKit, setSelectedDetailKit] = useState<MealKit | null>(null);
+  const [detailModalVisible, setDetailModalVisible] = useState(false);
+
+  const handleOpenMealDetail = (kit: MealKit | null | undefined) => {
+    if (!kit) return;
+    setSelectedDetailKit(kit);
+    setDetailModalVisible(true);
+  };
 
   // Determine current active plan rate
   const activeStandardPlan = STANDARD_SUBSCRIPTION_PLANS[selectedStandardKey];
@@ -455,7 +469,7 @@ export const SubscriptionPlanView: React.FC<{ onBack?: () => void }> = ({ onBack
             {STANDARD_PLANS_LIST.map((plan) => {
               const isSelected = selectedStandardKey === plan.key;
               return (
-                <TouchableOpacity
+                <View
                   key={plan.key}
                   style={[
                     styles.planCard,
@@ -467,39 +481,69 @@ export const SubscriptionPlanView: React.FC<{ onBack?: () => void }> = ({ onBack
                       ...shadows.card,
                     },
                   ]}
-                  onPress={() => setSelectedStandardKey(plan.key)}
-                  activeOpacity={0.88}
-                  testID={`standard-plan-${plan.key}`}
                 >
-                  <View style={styles.planTopRow}>
-                    <View style={{ flex: 1, paddingRight: 8 }}>
-                      <Text style={[styles.planTitle, { color: colors.textPrimary }]}>
-                        {plan.name}
-                      </Text>
-                      <Text style={[styles.planSub, { color: colors.textSecondary }]}>
-                        {plan.tagline}
-                      </Text>
+                  <TouchableOpacity
+                    onPress={() => setSelectedStandardKey(plan.key)}
+                    activeOpacity={0.88}
+                    testID={`standard-plan-${plan.key}`}
+                  >
+                    <View style={styles.planTopRow}>
+                      <View style={{ flex: 1, paddingRight: 8 }}>
+                        <Text style={[styles.planTitle, { color: colors.textPrimary }]}>
+                          {plan.name}
+                        </Text>
+                        <Text style={[styles.planSub, { color: colors.textSecondary }]}>
+                          {plan.tagline}
+                        </Text>
+                      </View>
+                      <Badge label={plan.badge} variant="primary" size="sm" />
                     </View>
-                    <Badge label={plan.badge} variant="primary" size="sm" />
-                  </View>
 
-                  <Text style={[styles.highlightNutrition, { color: colors.primary }]}>
-                    {plan.highlightNutrition}
-                  </Text>
+                    <Text style={[styles.highlightNutrition, { color: colors.primary }]}>
+                      {plan.highlightNutrition}
+                    </Text>
+                  </TouchableOpacity>
 
-                  <View style={styles.planPricingRow}>
-                    <Text style={[styles.weeklyPrice, { color: colors.primary }]}>
-                      ₹{plan.pricePerMemberPerWeek}
-                      <Text style={{ fontSize: 13, color: colors.textMuted }}>
-                        {' '}
-                        / member / week
+                  <View style={styles.planCardFooter}>
+                    <TouchableOpacity
+                      onPress={() => setSelectedStandardKey(plan.key)}
+                      style={styles.planPricingRow}
+                    >
+                      <Text style={[styles.weeklyPrice, { color: colors.primary }]}>
+                        ₹{plan.pricePerMemberPerWeek}
+                        <Text style={{ fontSize: 13, color: colors.textMuted }}>
+                          {' '}
+                          / member / week
+                        </Text>
                       </Text>
-                    </Text>
-                    <Text style={[styles.origWeeklyPrice, { color: colors.textMuted }]}>
-                      ₹{plan.originalPricePerMemberPerWeek}
-                    </Text>
+                      <Text style={[styles.origWeeklyPrice, { color: colors.textMuted }]}>
+                        ₹{plan.originalPricePerMemberPerWeek}
+                      </Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={[
+                        styles.previewMenuButton,
+                        {
+                          borderColor: colors.primary,
+                          backgroundColor: isSelected
+                            ? colors.primaryLight + '25'
+                            : colors.bgPrimary,
+                        },
+                      ]}
+                      onPress={() => setPreviewPlanKey(plan.key)}
+                      testID={`preview-menu-btn-${plan.key}`}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Preview 7-day menu for ${plan.name}`}
+                    >
+                      <Icon name="calendar" size={14} color={colors.primary} />
+                      <Text style={[styles.previewMenuButtonText, { color: colors.primary }]}>
+                        Preview 7-Day Menu
+                      </Text>
+                      <Icon name="chevron-right" size={14} color={colors.primary} />
+                    </TouchableOpacity>
                   </View>
-                </TouchableOpacity>
+                </View>
               );
             })}
           </View>
@@ -558,12 +602,23 @@ export const SubscriptionPlanView: React.FC<{ onBack?: () => void }> = ({ onBack
                       <Image source={{ uri: kit.heroImage }} style={styles.kitThumbnail} />
                     ) : null}
                     <View style={{ flex: 1 }}>
-                      <Text
-                        style={[styles.kitName, { color: colors.textPrimary }]}
-                        numberOfLines={1}
+                      <TouchableOpacity
+                        onPress={(e) => {
+                          e?.stopPropagation?.();
+                          handleOpenMealDetail(kit);
+                        }}
+                        testID={`plan-kit-name-${kit.id}`}
                       >
-                        {kit.name}
-                      </Text>
+                        <Text
+                          style={[
+                            styles.kitName,
+                            { color: colors.textPrimary, textDecorationLine: 'underline' },
+                          ]}
+                          numberOfLines={1}
+                        >
+                          {kit.name}
+                        </Text>
+                      </TouchableOpacity>
                       <Text style={[styles.kitMeta, { color: colors.textSecondary }]}>
                         {kit.cuisine} • {kit.nutrition?.protein || 20}g Protein • {kit.spiceLevel}
                       </Text>
@@ -765,7 +820,6 @@ export const SubscriptionPlanView: React.FC<{ onBack?: () => void }> = ({ onBack
             {
               user_id: user?.uid || 'me',
               display_name: user?.displayName || 'Me',
-              role: 'owner',
             } as any,
           ]}
           pauses={pauses}
@@ -778,6 +832,237 @@ export const SubscriptionPlanView: React.FC<{ onBack?: () => void }> = ({ onBack
           }}
           onRemovePause={async (pauseId) => {
             return await removePause(pauseId);
+          }}
+        />
+      )}
+
+      {/* 7-Day Plan Meals Preview Modal */}
+      {previewPlanKey && (
+        <Modal
+          visible={!!previewPlanKey}
+          animationType="slide"
+          onRequestClose={() => setPreviewPlanKey(null)}
+        >
+          {(() => {
+            const plan = STANDARD_SUBSCRIPTION_PLANS[previewPlanKey];
+            const isSelected = selectedStandardKey === previewPlanKey;
+
+            return (
+              <View
+                style={[styles.modalContainer, { backgroundColor: colors.bgPrimary }]}
+                testID="plan-menu-preview-modal"
+              >
+                {/* Modal Top Header */}
+                <View
+                  style={[
+                    styles.modalHeader,
+                    { backgroundColor: colors.bgSurface, borderBottomColor: colors.borderLight },
+                  ]}
+                >
+                  <View style={{ flex: 1, paddingRight: 12 }}>
+                    <View
+                      style={{
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        gap: 8,
+                        marginBottom: 2,
+                      }}
+                    >
+                      <Text style={[styles.modalHeaderTitle, { color: colors.textPrimary }]}>
+                        {plan.name}
+                      </Text>
+                      <Badge label={plan.badge} variant="primary" size="sm" />
+                    </View>
+                    <Text style={{ fontSize: 12, color: colors.textSecondary }} numberOfLines={1}>
+                      {plan.tagline}
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    onPress={() => setPreviewPlanKey(null)}
+                    testID="close-preview-menu-modal-btn"
+                    accessibilityLabel="Close preview"
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                  >
+                    <Icon name="close" size={24} color={colors.textPrimary} />
+                  </TouchableOpacity>
+                </View>
+
+                {/* Banner summary */}
+                <View
+                  style={[
+                    styles.previewPlanBanner,
+                    {
+                      backgroundColor: colors.bgSurface,
+                      borderColor: colors.borderLight,
+                    },
+                  ]}
+                >
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontSize: 13, fontWeight: '700', color: colors.primary }}>
+                      {plan.highlightNutrition}
+                    </Text>
+                    <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 2 }}>
+                      ₹{plan.pricePerMemberPerWeek} / member / week • 7 curated recipes
+                    </Text>
+                  </View>
+                  {isSelected && <Badge label="Active Plan" variant="success" size="sm" />}
+                </View>
+
+                {/* Scrollable list of 7 days */}
+                <ScrollView contentContainerStyle={styles.modalScroll}>
+                  <Text style={[styles.previewSectionTitle, { color: colors.textPrimary }]}>
+                    7-Day Curated Menu
+                  </Text>
+                  <Text style={{ fontSize: 12, color: colors.textMuted, marginBottom: 12 }}>
+                    Tap any meal name to inspect ingredients, macros, and chef instructions.
+                  </Text>
+
+                  {WEEKDAYS.map((day) => {
+                    const assignment = plan.weeklyMeals.find((m) => m.weekday === day.index);
+                    const kit = assignment ? getMealKitById(assignment.mealKitId) : undefined;
+
+                    return (
+                      <View
+                        key={`preview-day-${day.index}`}
+                        style={[
+                          styles.previewDayCard,
+                          {
+                            backgroundColor: colors.bgSurface,
+                            borderColor: colors.borderLight,
+                            borderRadius: radii.lg,
+                          },
+                        ]}
+                        testID={`preview-day-row-${day.index}`}
+                      >
+                        <View
+                          style={[styles.previewDayBadge, { backgroundColor: colors.primaryLight }]}
+                        >
+                          <Text style={[styles.previewDayBadgeText, { color: colors.primaryDark }]}>
+                            {day.short}
+                          </Text>
+                          <Text
+                            style={{ fontSize: 9, color: colors.primaryDark, fontWeight: '600' }}
+                          >
+                            Day {day.index + 1}
+                          </Text>
+                        </View>
+
+                        {kit ? (
+                          <View style={{ flex: 1 }}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                              {kit.heroImage ? (
+                                <Image
+                                  source={{ uri: kit.heroImage }}
+                                  style={styles.previewKitImage}
+                                />
+                              ) : null}
+                              <View style={{ flex: 1, paddingLeft: 10 }}>
+                                <TouchableOpacity
+                                  onPress={() => handleOpenMealDetail(kit)}
+                                  activeOpacity={0.7}
+                                  testID={`preview-kit-name-${kit.id}`}
+                                >
+                                  <Text
+                                    style={[
+                                      styles.previewKitName,
+                                      { color: colors.primary, textDecorationLine: 'underline' },
+                                    ]}
+                                    numberOfLines={2}
+                                  >
+                                    {kit.name}
+                                  </Text>
+                                </TouchableOpacity>
+                                <Text
+                                  style={[styles.previewKitMeta, { color: colors.textSecondary }]}
+                                >
+                                  {kit.cuisine} • {kit.diet.toUpperCase()} • {kit.spiceLevel}
+                                </Text>
+                              </View>
+                            </View>
+
+                            {kit.nutrition && (
+                              <View style={styles.previewNutrientRow}>
+                                <Text
+                                  style={[
+                                    styles.previewNutrientText,
+                                    { color: colors.textSecondary },
+                                  ]}
+                                >
+                                  {kit.nutrition.calories} kcal
+                                </Text>
+                                <Text style={{ color: colors.textMuted }}>•</Text>
+                                <Text
+                                  style={[
+                                    styles.previewNutrientText,
+                                    { color: colors.textSecondary },
+                                  ]}
+                                >
+                                  {kit.nutrition.protein}g protein
+                                </Text>
+                                <Text style={{ color: colors.textMuted }}>•</Text>
+                                <Text
+                                  style={[
+                                    styles.previewNutrientText,
+                                    { color: colors.textSecondary },
+                                  ]}
+                                >
+                                  {kit.nutrition.carbs}g carbs
+                                </Text>
+                              </View>
+                            )}
+                          </View>
+                        ) : (
+                          <Text style={{ fontSize: 13, color: colors.textMuted }}>
+                            No meal scheduled
+                          </Text>
+                        )}
+                      </View>
+                    );
+                  })}
+                </ScrollView>
+
+                {/* Modal Footer */}
+                <View
+                  style={[
+                    styles.previewModalFooter,
+                    {
+                      backgroundColor: colors.bgSurface,
+                      borderTopColor: colors.borderLight,
+                    },
+                  ]}
+                >
+                  <Button
+                    title={isSelected ? 'Selected Plan' : 'Select This Plan'}
+                    variant={isSelected ? 'secondary' : 'primary'}
+                    onPress={() => {
+                      setSelectedStandardKey(previewPlanKey);
+                      setSelectedPlanType('standard');
+                      setPreviewPlanKey(null);
+                    }}
+                    style={{ flex: 1, marginRight: 8 }}
+                    testID="preview-modal-select-plan-btn"
+                  />
+                  <Button
+                    title="Close"
+                    variant="outline"
+                    onPress={() => setPreviewPlanKey(null)}
+                    testID="preview-modal-close-btn"
+                  />
+                </View>
+              </View>
+            );
+          })()}
+        </Modal>
+      )}
+
+      {/* Meal Kit Detail Modal (shared with meal click) */}
+      {detailModalVisible && selectedDetailKit && (
+        <MealDetailModal
+          kit={selectedDetailKit}
+          visible={detailModalVisible}
+          onClose={() => {
+            setDetailModalVisible(false);
+            setSelectedDetailKit(null);
           }}
         />
       )}
@@ -915,6 +1200,87 @@ const styles = StyleSheet.create({
   planCard: {
     padding: 16,
     marginBottom: 12,
+  },
+  planCardFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 10,
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  previewMenuButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    gap: 4,
+  },
+  previewMenuButtonText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  previewPlanBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+  },
+  previewSectionTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+    marginBottom: 4,
+  },
+  previewDayCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 10,
+    borderWidth: 1,
+    marginBottom: 10,
+  },
+  previewDayBadge: {
+    width: 44,
+    height: 44,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 10,
+  },
+  previewDayBadgeText: {
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  previewKitImage: {
+    width: 44,
+    height: 44,
+    borderRadius: 6,
+  },
+  previewKitName: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  previewKitMeta: {
+    fontSize: 12,
+    marginTop: 2,
+  },
+  previewNutrientRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 4,
+  },
+  previewNutrientText: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  previewModalFooter: {
+    flexDirection: 'row',
+    padding: 16,
+    borderTopWidth: 1,
   },
   planTopRow: {
     flexDirection: 'row',

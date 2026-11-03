@@ -410,4 +410,32 @@ describe('FamilySubscriptionView - Meal Kit Plan Preview and Dietary Warnings', 
       expect.any(Array),
     );
   });
+
+  it('displays candidate dietary clash message and already-in-plan badge in swap picker modal', async () => {
+    const { getByTestId, getByText } = await render(
+      <ThemeProvider>
+        <FamilySubscriptionView />
+      </ThemeProvider>,
+    );
+
+    // Swap Monday meal for Priya Sharma (who is vegetarian)
+    const swapMondayBtn = getByTestId('swap-meal-btn-user_owner-0');
+    await act(async () => {
+      fireEvent.press(swapMondayBtn);
+    });
+
+    // 1. Verify candidate non-veg kit displays "Dish does not match user's diet: Vegetarian"
+    const biryaniConflict = getByTestId('picker-diet-conflict-kit-102');
+    expect(biryaniConflict).toBeTruthy();
+    expect(biryaniConflict.props.children).toBe("Dish does not match user's diet: Vegetarian");
+
+    // 2. Monday currently has Chicken Biryani (kit-102)
+    expect(getByTestId('current-selection-badge-kit-102')).toBeTruthy();
+
+    // 3. Tuesday in High Protein plan has Prawns Ghee Roast (kit-104)
+    // In the picker modal for Monday, kit-104 should show "Already in plan (Tue)"
+    const alreadyInPlanBadge = getByTestId('already-in-plan-badge-kit-104');
+    expect(alreadyInPlanBadge).toBeTruthy();
+    expect(getByText(/Already in plan \(Tue\)/)).toBeTruthy();
+  });
 });
