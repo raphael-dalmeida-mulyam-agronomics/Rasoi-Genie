@@ -30,12 +30,21 @@ test.describe('Flow: Weekly Meal Subscriptions', () => {
     await expect(ketoCard).toBeVisible();
     await expect(veganCard).toBeVisible();
 
-    // 5. Select Keto plan
+    // 5. Select Keto plan and preview 7-day curated menu
     await ketoCard.click();
+    const previewBtn = page.getByTestId('preview-menu-btn-keto');
+    await expect(previewBtn).toBeVisible();
+    await previewBtn.click();
 
-    // 6. Verify 7-day weekly schedule cells are rendered
-    const mondayCell = page.getByTestId('day-cell-0');
-    await expect(mondayCell).toBeVisible();
+    // 6. Verify 7-day preview modal opens with daily meals
+    const previewModal = page.getByTestId('plan-menu-preview-modal');
+    await expect(previewModal).toBeVisible();
+    const mondayPreviewRow = page.getByTestId('preview-day-row-0');
+    await expect(mondayPreviewRow).toBeVisible();
+
+    // Select plan from modal
+    const selectPlanBtn = page.getByTestId('preview-modal-select-plan-btn');
+    await selectPlanBtn.click();
 
     // 7. Verify Upfront Subscribe Button and click it
     const subscribeBtn = page.getByTestId('subscribe-upfront-btn');

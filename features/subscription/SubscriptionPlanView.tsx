@@ -413,9 +413,9 @@ export const SubscriptionPlanView: React.FC<{ onBack?: () => void }> = ({ onBack
           </View>
         )}
 
-        {/* Section 1: Plan Type Switcher */}
+        {/* Plan Type Switcher */}
         <Text style={[styles.sectionHeading, { color: colors.textPrimary }]}>
-          1. Choose Your Plan Style
+          Choose Your Plan Style
         </Text>
 
         <View style={styles.planTypeTabs}>
@@ -549,94 +549,86 @@ export const SubscriptionPlanView: React.FC<{ onBack?: () => void }> = ({ onBack
           </View>
         )}
 
-        {/* Section 2: 7-Day Meal Schedule Grid */}
-        <View style={{ marginTop: 20 }}>
-          <View style={styles.mealPickerHeader}>
-            <Text style={[styles.sectionHeading, { color: colors.textPrimary }]}>
-              2. 7-Day Weekly Meal Schedule
+        {/* Custom Day-by-Day Meal Schedule Grid (only rendered when Custom Plan is selected) */}
+        {selectedPlanType === 'custom' && (
+          <View style={{ marginTop: 20 }}>
+            <View style={styles.mealPickerHeader}>
+              <Text style={[styles.sectionHeading, { color: colors.textPrimary }]}>
+                Customize Your 7-Day Meal Schedule
+              </Text>
+              <Badge label="Custom Plan" variant="neutral" size="sm" />
+            </View>
+            <Text style={[styles.sectionSubtitle, { color: colors.textSecondary }]}>
+              Pick your preferred meal kit for each day of the week.
             </Text>
-            <Badge
-              label={selectedPlanType === 'standard' ? activeStandardPlan.name : 'Custom Plan'}
-              variant="neutral"
-              size="sm"
-            />
-          </View>
-          <Text style={[styles.sectionSubtitle, { color: colors.textSecondary }]}>
-            {selectedPlanType === 'standard'
-              ? 'Included in this curated weekly box. Tap any day to swap with another recipe.'
-              : 'Pick your preferred meal kit for each day of the week.'}
-          </Text>
 
-          {WEEKDAYS.map((day) => {
-            const kitId =
-              selectedPlanType === 'standard'
-                ? activeStandardPlan.weeklyMeals.find((m) => m.weekday === day.index)?.mealKitId ||
-                  customDays[day.index]
-                : customDays[day.index];
-            const kit = kitId ? getMealKitById(kitId) : undefined;
+            {WEEKDAYS.map((day) => {
+              const kitId = customDays[day.index];
+              const kit = kitId ? getMealKitById(kitId) : undefined;
 
-            return (
-              <TouchableOpacity
-                key={`weekday-${day.index}`}
-                style={[
-                  styles.dayRow,
-                  {
-                    backgroundColor: colors.bgSurface,
-                    borderColor: colors.borderLight,
-                    borderRadius: radii.lg,
-                  },
-                ]}
-                onPress={() => handleOpenKitPicker(day.index)}
-                activeOpacity={0.8}
-                testID={`day-cell-${day.index}`}
-              >
-                <View style={[styles.dayBadge, { backgroundColor: colors.primaryLight }]}>
-                  <Text style={[styles.dayBadgeText, { color: colors.primaryDark }]}>
-                    {day.short}
-                  </Text>
-                </View>
-
-                {kit ? (
-                  <View style={styles.dayKitInfo}>
-                    {kit.heroImage ? (
-                      <Image source={{ uri: kit.heroImage }} style={styles.kitThumbnail} />
-                    ) : null}
-                    <View style={{ flex: 1 }}>
-                      <TouchableOpacity
-                        onPress={(e) => {
-                          e?.stopPropagation?.();
-                          handleOpenMealDetail(kit);
-                        }}
-                        testID={`plan-kit-name-${kit.id}`}
-                      >
-                        <Text
-                          style={[
-                            styles.kitName,
-                            { color: colors.textPrimary, textDecorationLine: 'underline' },
-                          ]}
-                          numberOfLines={1}
-                        >
-                          {kit.name}
-                        </Text>
-                      </TouchableOpacity>
-                      <Text style={[styles.kitMeta, { color: colors.textSecondary }]}>
-                        {kit.cuisine} • {kit.nutrition?.protein || 20}g Protein • {kit.spiceLevel}
-                      </Text>
-                    </View>
-                  </View>
-                ) : (
-                  <View style={styles.emptyDayWrap}>
-                    <Text style={{ fontSize: 13, color: colors.textMuted }}>
-                      + Tap to pick meal
+              return (
+                <TouchableOpacity
+                  key={`weekday-${day.index}`}
+                  style={[
+                    styles.dayRow,
+                    {
+                      backgroundColor: colors.bgSurface,
+                      borderColor: colors.borderLight,
+                      borderRadius: radii.lg,
+                    },
+                  ]}
+                  onPress={() => handleOpenKitPicker(day.index)}
+                  activeOpacity={0.8}
+                  testID={`day-cell-${day.index}`}
+                >
+                  <View style={[styles.dayBadge, { backgroundColor: colors.primaryLight }]}>
+                    <Text style={[styles.dayBadgeText, { color: colors.primaryDark }]}>
+                      {day.short}
                     </Text>
                   </View>
-                )}
 
-                <Icon name="swap" size={16} color={colors.primary} />
-              </TouchableOpacity>
-            );
-          })}
-        </View>
+                  {kit ? (
+                    <View style={styles.dayKitInfo}>
+                      {kit.heroImage ? (
+                        <Image source={{ uri: kit.heroImage }} style={styles.kitThumbnail} />
+                      ) : null}
+                      <View style={{ flex: 1 }}>
+                        <TouchableOpacity
+                          onPress={(e) => {
+                            e?.stopPropagation?.();
+                            handleOpenMealDetail(kit);
+                          }}
+                          testID={`plan-kit-name-${kit.id}`}
+                        >
+                          <Text
+                            style={[
+                              styles.kitName,
+                              { color: colors.textPrimary, textDecorationLine: 'underline' },
+                            ]}
+                            numberOfLines={1}
+                          >
+                            {kit.name}
+                          </Text>
+                        </TouchableOpacity>
+                        <Text style={[styles.kitMeta, { color: colors.textSecondary }]}>
+                          {kit.cuisine} • {kit.nutrition?.protein || 20}g Protein • {kit.spiceLevel}
+                        </Text>
+                      </View>
+                    </View>
+                  ) : (
+                    <View style={styles.emptyDayWrap}>
+                      <Text style={{ fontSize: 13, color: colors.textMuted }}>
+                        + Tap to pick meal
+                      </Text>
+                    </View>
+                  )}
+
+                  <Icon name="swap-horizontal" size={16} color={colors.primary} />
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        )}
 
         {/* Section 3: Pricing & Upfront Checkout */}
         {!isSubscribed && (

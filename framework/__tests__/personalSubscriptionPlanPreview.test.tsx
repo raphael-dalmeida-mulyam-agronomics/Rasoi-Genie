@@ -189,10 +189,26 @@ describe('Personal SubscriptionPlanView - 7-Day Menu Preview & Details', () => {
     });
   });
 
-  test('tapping meal kit name in Section 2 schedule opens meal kit details modal', async () => {
+  test('does not show numbered headings or Section 2 in standard plan mode', async () => {
+    const { queryByText, getByText } = await renderComponent();
+
+    // "1." is removed from heading
+    expect(queryByText('1. Choose Your Plan Style')).toBeNull();
+    expect(getByText('Choose Your Plan Style')).toBeTruthy();
+
+    // "2. 7-Day Weekly Meal Schedule" is removed
+    expect(queryByText(/2\.\s*7-Day Weekly Meal Schedule/i)).toBeNull();
+  });
+
+  test('switching to custom plan shows customize schedule and allows opening meal kit details', async () => {
     const { getByTestId, getAllByText } = await renderComponent();
 
-    // Day 0 default is kit-102 (Hyderabadi Dum Chicken Biryani)
+    // Switch to Custom Day-by-Day tab
+    await act(async () => {
+      fireEvent.press(getByTestId('tab-custom-plan'));
+    });
+
+    // Day 0 default custom kit is kit-102 (Hyderabadi Dum Chicken Biryani)
     const mealNameLink = getByTestId('plan-kit-name-kit-102');
     expect(mealNameLink).toBeTruthy();
 
